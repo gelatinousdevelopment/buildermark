@@ -6,7 +6,7 @@ A Go HTTP server that stores conversation ratings in SQLite.
 
 ```bash
 cd web/server
-go run .
+go run ./cmd/zrate
 ```
 
 Server starts on [http://localhost:7022](http://localhost:7022).
@@ -52,6 +52,12 @@ HTML dashboard showing recent ratings. Auto-refreshes every 30s.
 ## Build
 
 ```bash
-go build -o zrate-server .
+go build -o zrate-server ./cmd/zrate
 ./zrate-server
+```
+
+## Test
+
+```bash
+go test ./...
 ```

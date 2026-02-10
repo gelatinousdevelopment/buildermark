@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zrate — Ratings Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 2rem; }
+  h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #58a6ff; }
+  .meta { font-size: 0.85rem; color: #8b949e; margin-bottom: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 0.6rem 1rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  td { font-size: 0.9rem; }
+  tr:hover td { background: #161b22; }
+  .rating { font-weight: 700; }
+  .r0, .r1 { color: #f85149; }
+  .r2, .r3 { color: #d29922; }
+  .r4, .r5 { color: #3fb950; }
+  .note { color: #8b949e; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv { font-family: monospace; font-size: 0.8rem; color: #8b949e; }
+  .empty { padding: 3rem; text-align: center; color: #484f58; }
+</style>
+</head>
+<body>
+<h1>zrate Dashboard</h1>
+<p class="meta">Auto-refreshes every 30s &middot; <span id="count">0</span> ratings</p>
+<table>
+  <thead>
+    <tr><th>Rating</th><th>Note</th><th>Conversation</th><th>Time</th></tr>
+  </thead>
+  <tbody id="tbody">
+    <tr><td colspan="4" class="empty">Loading...</td></tr>
+  </tbody>
+</table>
+<script>
+async function load() {
+  try {
+    const res = await fetch('/api/v1/ratings?limit=100');
+    const json = await res.json();
+    if (!json.ok) return;
+    const data = json.data;
+    document.getElementById('count').textContent = data.length;
+    const tbody = document.getElementById('tbody');
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">No ratings yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(r => {
+      const d = new Date(r.createdAt);
+      const time = d.toLocaleString();
+      const conv = r.conversationId.length > 12 ? r.conversationId.slice(0, 12) + '...' : r.conversationId;
+      return '<tr>' +
+        '<td class="rating r' + r.rating + '">' + r.rating + '/5</td>' +
+        '<td class="note">' + esc(r.note || '—') + '</td>' +
+        '<td class="conv" title="' + esc(r.conversationId) + '">' + esc(conv) + '</td>' +
+        '<td>' + esc(time) + '</td>' +
+        '</tr>';
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load ratings:', e);
+  }
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
