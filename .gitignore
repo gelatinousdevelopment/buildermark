@@ -1,0 +1,5 @@
+.data
+
+# Editor/IDE
+.vscode/
+.zed/
