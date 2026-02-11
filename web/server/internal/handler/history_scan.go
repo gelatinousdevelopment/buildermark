@@ -26,8 +26,7 @@ func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+	if !requireJSON(w, r) {
 		return
 	}
 

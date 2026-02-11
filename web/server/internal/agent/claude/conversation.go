@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // conversationEntry represents a single entry in a Claude conversation JSONL file.
@@ -175,8 +176,8 @@ func titleFromPrompt(text string) string {
 }
 
 func truncateTitle(s string) string {
-	if len(s) > maxTitleLen {
-		return s[:maxTitleLen] + "..."
+	if utf8.RuneCountInString(s) > maxTitleLen {
+		return string([]rune(s)[:maxTitleLen]) + "..."
 	}
 	return s
 }

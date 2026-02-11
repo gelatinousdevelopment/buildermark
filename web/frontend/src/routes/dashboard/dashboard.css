@@ -1,3 +1,15 @@
+:root {
+	--accent-color: #0066cc;
+}
+
+html,
+body {
+	font-family: Arial, sans-serif;
+	font-size: 14px;
+	margin: 0;
+	padding: 0;
+}
+
 /* Layout */
 
 .dashboard-header {
@@ -53,31 +65,34 @@
 
 /* Tables */
 
-table {
+table.data {
 	width: 100%;
 	border-collapse: collapse;
 	margin-bottom: 1rem;
 }
 
-th,
-td {
-	text-align: left;
-	padding: 0.4rem 0.75rem;
+table.data tr {
 	border-bottom: 1px solid #eee;
 }
 
-th {
+table.data th,
+table.data td {
+	text-align: left;
+	padding: 0.4rem 0.75rem;
+}
+
+table.data th {
 	font-weight: 600;
 	color: #666;
 	font-size: 0.85rem;
 }
 
-td a {
+table.data td a {
 	color: #0066cc;
 	text-decoration: none;
 }
 
-td a:hover {
+table.data td a:hover {
 	text-decoration: underline;
 }
 

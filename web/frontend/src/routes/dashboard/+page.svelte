@@ -86,7 +86,7 @@
 			{#if project.conversations.length === 0}
 				<p>No conversations.</p>
 			{:else}
-				<table>
+				<table class="data">
 					<thead>
 						<tr>
 							<th>Conversation</th>

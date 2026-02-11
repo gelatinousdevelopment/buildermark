@@ -3,6 +3,8 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
+	"mime"
 	"net/http"
 
 	"github.com/davidcann/zrate/web/server/internal/agent"
@@ -36,9 +38,28 @@ type jsonEnvelope struct {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("error encoding JSON response: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"ok":false,"error":"internal error"}`))
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	w.Write(data)
+}
+
+// requireJSON checks that the request Content-Type is application/json,
+// writing an error response and returning false if not.
+func requireJSON(w http.ResponseWriter, r *http.Request) bool {
+	mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mt != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		return false
+	}
+	return true
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {

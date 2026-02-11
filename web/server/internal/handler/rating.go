@@ -19,8 +19,7 @@ type createRatingRequest struct {
 }
 
 func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
-	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+	if !requireJSON(w, r) {
 		return
 	}
 
@@ -56,6 +55,12 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve real session in the background, then collect and store all conversation turns.
 	go func(ratingID, fallbackCID string, ratingVal int, note, agent string) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("panic in session resolution: %v", r)
+			}
+		}()
+
 		if s.Agents == nil {
 			return
 		}
@@ -72,11 +77,11 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := db.UpdateConversationID(context.Background(), s.DB, ratingID, result.SessionID); err != nil {
+		ctx := context.Background()
+
+		if err := db.UpdateConversationID(ctx, s.DB, ratingID, result.SessionID); err != nil {
 			log.Printf("error updating conversation_id: %v", err)
 		}
-
-		ctx := context.Background()
 
 		projectPath := result.Project
 		if projectPath == "" {

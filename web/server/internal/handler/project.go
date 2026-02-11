@@ -21,8 +21,7 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetProjectIgnored(w http.ResponseWriter, r *http.Request) {
-	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+	if !requireJSON(w, r) {
 		return
 	}
 

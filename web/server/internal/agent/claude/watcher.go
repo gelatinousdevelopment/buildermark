@@ -38,23 +38,24 @@ func (a *Agent) Run(ctx context.Context) {
 // ScanSince reads the entire file and imports entries with timestamps after
 // the given cutoff. This is used by the API to trigger a historical scan.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
-	entries, _ := a.readFrom(0)
-	cutoffMs := since.UnixMilli()
-	var filtered []historyEntry
-	for _, e := range entries {
-		if e.Timestamp >= cutoffMs {
-			filtered = append(filtered, e)
-		}
-	}
-	if len(filtered) > 0 {
-		a.processEntries(ctx, filtered)
-	}
-	log.Printf("claude watcher: manual scan processed %d entries (since %s)", len(filtered), since.Format(time.RFC3339))
-	return len(filtered)
+	n := a.doScan(ctx, since, false)
+	log.Printf("claude watcher: manual scan processed %d entries (since %s)", n, since.Format(time.RFC3339))
+	return n
 }
 
-// scanSince reads the entire file and processes only entries newer than the cutoff.
+// scanSince reads the entire file and processes only entries newer than the cutoff,
+// then updates the file offset so subsequent polls start from the end.
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
+	n := a.doScan(ctx, since, true)
+	if n > 0 {
+		log.Printf("claude watcher: initial scan processed %d entries", n)
+	}
+}
+
+// doScan reads the entire file and processes entries newer than the cutoff.
+// If updateOffset is true, it advances the file offset so subsequent polls
+// start from the end of the file.
+func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool) int {
 	entries, newOffset := a.readFrom(0)
 	cutoffMs := since.UnixMilli()
 	var filtered []historyEntry
@@ -65,9 +66,11 @@ func (a *Agent) scanSince(ctx context.Context, since time.Time) {
 	}
 	if len(filtered) > 0 {
 		a.processEntries(ctx, filtered)
-		log.Printf("claude watcher: initial scan processed %d entries (of %d total)", len(filtered), len(entries))
 	}
-	a.offset = newOffset
+	if updateOffset {
+		a.offset = newOffset
+	}
+	return len(filtered)
 }
 
 // poll reads new data appended since the last read. If the file shrank
