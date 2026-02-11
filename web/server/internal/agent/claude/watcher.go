@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -266,5 +267,36 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		if err := db.InsertTurns(ctx, a.db, turns); err != nil {
 			log.Printf("claude watcher: insert turns for session %s: %v", sid, err)
 		}
+
+		// Reconcile orphaned ratings: if any entry in this session is a /zrate
+		// command, find the corresponding orphaned rating and re-link it.
+		for _, e := range g.entries {
+			if !strings.HasPrefix(e.Display, "/zrate ") {
+				continue
+			}
+			rating, note := parseZrateDisplay(e.Display)
+			if rating < 0 {
+				continue
+			}
+			if err := db.ReconcileOrphanedRating(ctx, a.db, rating, note, e.Timestamp, sid); err != nil {
+				log.Printf("claude watcher: reconcile rating for session %s: %v", sid, err)
+			}
+		}
 	}
+}
+
+// parseZrateDisplay parses "/zrate 4 optional note" into (4, "optional note").
+// Returns (-1, "") if the format is invalid.
+func parseZrateDisplay(display string) (int, string) {
+	rest := strings.TrimPrefix(display, "/zrate ")
+	parts := strings.SplitN(rest, " ", 2)
+	rating, err := strconv.Atoi(parts[0])
+	if err != nil || rating < 0 || rating > 5 {
+		return -1, ""
+	}
+	note := ""
+	if len(parts) > 1 {
+		note = parts[1]
+	}
+	return rating, note
 }

@@ -1048,6 +1048,67 @@ func TestBackfillTitles(t *testing.T) {
 	}
 }
 
+// --- parseZrateDisplay tests ---
+
+func TestParseZrateDisplay(t *testing.T) {
+	tests := []struct {
+		display    string
+		wantRating int
+		wantNote   string
+	}{
+		{"/zrate 4 great work", 4, "great work"},
+		{"/zrate 0", 0, ""},
+		{"/zrate 5", 5, ""},
+		{"/zrate 3 ", 3, ""},
+		{"/zrate abc", -1, ""},
+		{"/zrate 6", -1, ""},
+		{"/zrate -1", -1, ""},
+	}
+	for _, tt := range tests {
+		rating, note := parseZrateDisplay(tt.display)
+		if rating != tt.wantRating || note != tt.wantNote {
+			t.Errorf("parseZrateDisplay(%q) = (%d, %q), want (%d, %q)",
+				tt.display, rating, note, tt.wantRating, tt.wantNote)
+		}
+	}
+}
+
+func TestWatcherReconcileOrphanedRating(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	now := time.Now()
+
+	// Insert an orphaned rating (no matching conversation).
+	orphanedConvID := "orphaned-conv-id"
+	_, err := db.InsertRating(context.Background(), database, orphanedConvID, 4, "nice", "")
+	if err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	// Write history entries including a /zrate entry for the real session.
+	realSessionID := "real-sess-id"
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "hello", Timestamp: now.UnixMilli() - 5000, SessionID: realSessionID, Project: "/proj/a", Type: "user"},
+		{Display: "/zrate 4 nice", Timestamp: now.UnixMilli(), SessionID: realSessionID, Project: "/proj/a", Type: "user"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Verify the orphaned rating was reconciled to the real session.
+	var convID string
+	err = database.QueryRow("SELECT conversation_id FROM ratings WHERE conversation_id = ?", realSessionID).Scan(&convID)
+	if err != nil {
+		t.Fatalf("query reconciled rating: %v", err)
+	}
+	if convID != realSessionID {
+		t.Errorf("conversation_id = %q, want %q", convID, realSessionID)
+	}
+}
+
 // --- Watcher stores agent name correctly ---
 
 func TestWatcherStoresAgentName(t *testing.T) {

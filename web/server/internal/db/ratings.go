@@ -81,3 +81,40 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 
 	return ratings, rows.Err()
 }
+
+// ReconcileOrphanedRating finds an orphaned rating (whose conversation_id has no
+// matching row in conversations) that matches the given rating value, note, and
+// timestamp within 60 seconds, then updates it to point to realSessionID.
+func ReconcileOrphanedRating(ctx context.Context, db *sql.DB, rating int, note string, historyTimestampMs int64, realSessionID string) error {
+	// Convert history timestamp to time.Time for comparison with created_at.
+	historyTime := time.UnixMilli(historyTimestampMs).UTC()
+	windowStart := historyTime.Add(-60 * time.Second)
+	windowEnd := historyTime.Add(60 * time.Second)
+
+	var ratingID string
+	err := db.QueryRowContext(ctx, `
+		SELECT r.id FROM ratings r
+		LEFT JOIN conversations c ON r.conversation_id = c.id
+		WHERE c.id IS NULL
+		  AND r.rating = ?
+		  AND r.note = ?
+		  AND r.created_at >= ?
+		  AND r.created_at <= ?
+		ORDER BY ABS(CAST(strftime('%s', r.created_at) AS INTEGER) - CAST(strftime('%s', ?) AS INTEGER)) ASC
+		LIMIT 1`,
+		rating, note, windowStart, windowEnd, historyTime,
+	).Scan(&ratingID)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find orphaned rating: %w", err)
+	}
+
+	_, err = db.ExecContext(ctx, "UPDATE ratings SET conversation_id = ? WHERE id = ?", realSessionID, ratingID)
+	if err != nil {
+		return fmt.Errorf("update orphaned rating: %w", err)
+	}
+
+	return nil
+}

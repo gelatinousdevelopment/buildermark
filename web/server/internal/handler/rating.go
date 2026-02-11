@@ -66,10 +66,14 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 
 		result := res.ResolveSession(ratingVal, note, fallbackCID)
 
-		if result.SessionID != fallbackCID {
-			if err := db.UpdateConversationID(context.Background(), s.DB, ratingID, result.SessionID); err != nil {
-				log.Printf("error updating conversation_id: %v", err)
-			}
+		if result.SessionID == fallbackCID {
+			// Resolution failed — don't create phantom conversation/project.
+			// The watcher will reconcile the orphaned rating when it sees the /zrate entry.
+			return
+		}
+
+		if err := db.UpdateConversationID(context.Background(), s.DB, ratingID, result.SessionID); err != nil {
+			log.Printf("error updating conversation_id: %v", err)
 		}
 
 		ctx := context.Background()

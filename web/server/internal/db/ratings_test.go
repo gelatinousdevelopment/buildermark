@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestInsertRating(t *testing.T) {
@@ -87,5 +88,132 @@ func TestUpdateConversationID(t *testing.T) {
 	}
 	if ratings[0].ConversationID != "new-conv" {
 		t.Errorf("ConversationID = %q, want %q", ratings[0].ConversationID, "new-conv")
+	}
+}
+
+func TestReconcileOrphanedRating(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	// Insert a rating with a conversation_id that has no matching conversation row (orphaned).
+	orphanedConvID := "orphaned-conv-id"
+	r, err := InsertRating(ctx, database, orphanedConvID, 4, "great work", "")
+	if err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	// The history timestamp should be close to the rating's created_at.
+	historyTs := r.CreatedAt.UnixMilli()
+	realSessionID := "real-session-id"
+
+	if err := ReconcileOrphanedRating(ctx, database, 4, "great work", historyTs, realSessionID); err != nil {
+		t.Fatalf("ReconcileOrphanedRating: %v", err)
+	}
+
+	// Verify the rating was updated.
+	ratings, err := ListRatings(ctx, database, 1)
+	if err != nil {
+		t.Fatalf("ListRatings: %v", err)
+	}
+	if len(ratings) != 1 {
+		t.Fatalf("got %d ratings, want 1", len(ratings))
+	}
+	if ratings[0].ConversationID != realSessionID {
+		t.Errorf("ConversationID = %q, want %q", ratings[0].ConversationID, realSessionID)
+	}
+}
+
+func TestReconcileOrphanedRating_NoMatchWrongRating(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	orphanedConvID := "orphaned-conv-id"
+	r, err := InsertRating(ctx, database, orphanedConvID, 4, "note", "")
+	if err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	// Try to reconcile with a different rating value — should not match.
+	if err := ReconcileOrphanedRating(ctx, database, 3, "note", r.CreatedAt.UnixMilli(), "real-session"); err != nil {
+		t.Fatalf("ReconcileOrphanedRating: %v", err)
+	}
+
+	ratings, _ := ListRatings(ctx, database, 1)
+	if ratings[0].ConversationID != orphanedConvID {
+		t.Errorf("rating should not have been reconciled, got ConversationID = %q", ratings[0].ConversationID)
+	}
+}
+
+func TestReconcileOrphanedRating_NoMatchWrongNote(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	orphanedConvID := "orphaned-conv-id"
+	r, err := InsertRating(ctx, database, orphanedConvID, 4, "note A", "")
+	if err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	// Try to reconcile with a different note — should not match.
+	if err := ReconcileOrphanedRating(ctx, database, 4, "note B", r.CreatedAt.UnixMilli(), "real-session"); err != nil {
+		t.Fatalf("ReconcileOrphanedRating: %v", err)
+	}
+
+	ratings, _ := ListRatings(ctx, database, 1)
+	if ratings[0].ConversationID != orphanedConvID {
+		t.Errorf("rating should not have been reconciled, got ConversationID = %q", ratings[0].ConversationID)
+	}
+}
+
+func TestReconcileOrphanedRating_NoMatchTimestampTooFar(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	orphanedConvID := "orphaned-conv-id"
+	_, err := InsertRating(ctx, database, orphanedConvID, 4, "note", "")
+	if err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	// Timestamp 2 minutes away — outside the 60-second window.
+	farTs := time.Now().Add(2 * time.Minute).UnixMilli()
+
+	if err := ReconcileOrphanedRating(ctx, database, 4, "note", farTs, "real-session"); err != nil {
+		t.Fatalf("ReconcileOrphanedRating: %v", err)
+	}
+
+	ratings, _ := ListRatings(ctx, database, 1)
+	if ratings[0].ConversationID != orphanedConvID {
+		t.Errorf("rating should not have been reconciled, got ConversationID = %q", ratings[0].ConversationID)
+	}
+}
+
+func TestReconcileOrphanedRating_SkipsNonOrphaned(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	// Create a project and conversation so the rating is NOT orphaned.
+	projectID, err := EnsureProject(ctx, database, "/some/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	convID := "linked-conv-id"
+	if err := EnsureConversation(ctx, database, convID, projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	r, err := InsertRating(ctx, database, convID, 4, "note", "")
+	if err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	// Try to reconcile — should not touch this rating because it's linked to a real conversation.
+	if err := ReconcileOrphanedRating(ctx, database, 4, "note", r.CreatedAt.UnixMilli(), "other-session"); err != nil {
+		t.Fatalf("ReconcileOrphanedRating: %v", err)
+	}
+
+	ratings, _ := ListRatings(ctx, database, 1)
+	if ratings[0].ConversationID != convID {
+		t.Errorf("non-orphaned rating should not have been reconciled, got ConversationID = %q", ratings[0].ConversationID)
 	}
 }
