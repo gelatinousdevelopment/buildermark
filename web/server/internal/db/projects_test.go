@@ -237,6 +237,112 @@ func TestGetProjectDetailWithRatings(t *testing.T) {
 	}
 }
 
+func TestListProjectsReturnsLabel(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	if _, err := EnsureProject(ctx, db, "/home/user/myproject"); err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	projects, err := ListProjects(ctx, db, false)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("got %d projects, want 1", len(projects))
+	}
+	if projects[0].Label != "myproject" {
+		t.Errorf("label = %q, want %q", projects[0].Label, "myproject")
+	}
+}
+
+func TestSetProjectLabel(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	if err := SetProjectLabel(ctx, db, pid, "My Project"); err != nil {
+		t.Fatalf("SetProjectLabel: %v", err)
+	}
+
+	detail, err := GetProjectDetail(ctx, db, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.Label != "My Project" {
+		t.Errorf("label = %q, want %q", detail.Label, "My Project")
+	}
+}
+
+func TestSetProjectLabelNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	err := SetProjectLabel(ctx, db, "nonexistent", "label")
+	if err == nil {
+		t.Fatal("expected error for nonexistent project")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestUpdateProjectGitID(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	if err := UpdateProjectGitID(ctx, db, pid, "abc123"); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	detail, err := GetProjectDetail(ctx, db, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.GitID != "abc123" {
+		t.Errorf("gitId = %q, want %q", detail.GitID, "abc123")
+	}
+}
+
+func TestListProjectsWithoutGitID(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid1, err := EnsureProject(ctx, db, "/project/a")
+	if err != nil {
+		t.Fatalf("EnsureProject a: %v", err)
+	}
+	if _, err := EnsureProject(ctx, db, "/project/b"); err != nil {
+		t.Fatalf("EnsureProject b: %v", err)
+	}
+
+	// Set git_id on the first project only.
+	if err := UpdateProjectGitID(ctx, db, pid1, "abc123"); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	projects, err := ListProjectsWithoutGitID(ctx, db)
+	if err != nil {
+		t.Fatalf("ListProjectsWithoutGitID: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("got %d projects, want 1", len(projects))
+	}
+	if projects[0].Path != "/project/b" {
+		t.Errorf("path = %q, want %q", projects[0].Path, "/project/b")
+	}
+}
+
 func TestGetProjectDetailNoConversations(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

@@ -80,9 +80,12 @@
 	{#each projects as project (project.id)}
 		<div class="project-section">
 			<div class="project-heading">
-				<h2>{project.path}</h2>
+				<h2>{project.label || project.path}</h2>
 				<button class="btn-sm" onclick={() => ignoreProject(project.id)}>Ignore</button>
 			</div>
+			{#if project.label}
+				<p class="project-path">{project.path}</p>
+			{/if}
 			{#if project.conversations.length === 0}
 				<p>No conversations.</p>
 			{:else}
@@ -127,7 +130,7 @@
 			<h3>Ignored Projects</h3>
 			{#each ignoredProjects as project (project.id)}
 				<div class="ignored-row">
-					<span>{project.path}</span>
+					<span>{project.label || project.path}</span>
 					<button class="btn-sm" onclick={() => trackProject(project.id)}>Track</button>
 				</div>
 			{/each}
@@ -151,6 +154,12 @@
 		font-size: 1.1rem;
 		margin: 0;
 		color: #333;
+	}
+
+	.project-path {
+		font-size: 0.8rem;
+		color: #999;
+		margin: 0 0 0.5rem 0;
 	}
 
 	.ignored-section {

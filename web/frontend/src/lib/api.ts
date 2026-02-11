@@ -28,6 +28,14 @@ export function setProjectIgnored(id: string, ignored: boolean): Promise<void> {
 	});
 }
 
+export function setProjectLabel(id: string, label: string): Promise<void> {
+	return api(`/api/v1/projects/${id}/label`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ label })
+	});
+}
+
 export function getProject(id: string): Promise<ProjectDetail> {
 	return api(`/api/v1/projects/${id}`);
 }

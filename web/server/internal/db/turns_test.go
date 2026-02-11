@@ -28,6 +28,25 @@ func TestEnsureProject(t *testing.T) {
 	}
 }
 
+func TestEnsureProjectSetsLabel(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	id, err := EnsureProject(ctx, db, "/home/user/myproject")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	var label string
+	err = db.QueryRow("SELECT label FROM projects WHERE id = ?", id).Scan(&label)
+	if err != nil {
+		t.Fatalf("query label: %v", err)
+	}
+	if label != "myproject" {
+		t.Errorf("label = %q, want %q", label, "myproject")
+	}
+}
+
 func TestEnsureProjectIdempotent(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

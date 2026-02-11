@@ -20,6 +20,7 @@ func (a *Agent) Run(ctx context.Context) {
 
 	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
 	a.backfillTitles(ctx)
+	a.backfillGitIDs(ctx)
 
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
@@ -31,6 +32,7 @@ func (a *Agent) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.poll(ctx)
+			a.backfillGitIDs(ctx)
 		}
 	}
 }
@@ -164,6 +166,30 @@ func (a *Agent) backfillTitles(ctx context.Context) {
 	}
 	if updated > 0 {
 		log.Printf("claude watcher: backfilled %d conversation titles", updated)
+	}
+}
+
+// backfillGitIDs finds all projects without a git_id and attempts to
+// resolve it from the git root commit.
+func (a *Agent) backfillGitIDs(ctx context.Context) {
+	projects, err := db.ListProjectsWithoutGitID(ctx, a.db)
+	if err != nil {
+		log.Printf("claude watcher: list projects without git_id: %v", err)
+		return
+	}
+
+	updated := 0
+	for _, p := range projects {
+		if gitID := resolveGitID(p.Path); gitID != "" {
+			if err := db.UpdateProjectGitID(ctx, a.db, p.ID, gitID); err != nil {
+				log.Printf("claude watcher: update git_id for %s: %v", p.ID, err)
+				continue
+			}
+			updated++
+		}
+	}
+	if updated > 0 {
+		log.Printf("claude watcher: backfilled %d project git_ids", updated)
 	}
 }
 

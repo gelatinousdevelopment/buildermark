@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 
 	"github.com/google/uuid"
 )
@@ -30,7 +31,7 @@ func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error)
 	}
 
 	id = uuid.New().String()
-	_, err = db.ExecContext(ctx, "INSERT OR IGNORE INTO projects (id, path) VALUES (?, ?)", id, path)
+	_, err = db.ExecContext(ctx, "INSERT OR IGNORE INTO projects (id, path, label) VALUES (?, ?, ?)", id, path, filepath.Base(path))
 	if err != nil {
 		return "", fmt.Errorf("insert project: %w", err)
 	}

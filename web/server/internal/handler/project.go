@@ -54,6 +54,45 @@ func (s *Server) handleSetProjectIgnored(w http.ResponseWriter, r *http.Request)
 	writeSuccess(w, http.StatusOK, nil)
 }
 
+func (s *Server) handleSetProjectLabel(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "project id is required")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+
+	var body struct {
+		Label string `json:"label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if body.Label == "" {
+		writeError(w, http.StatusBadRequest, "label must not be empty")
+		return
+	}
+
+	if err := db.SetProjectLabel(r.Context(), s.DB, id, body.Label); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		log.Printf("error setting project label: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to update project")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, nil)
+}
+
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {

@@ -1,12 +1,16 @@
 export interface Project {
 	id: string;
 	path: string;
+	label: string;
+	gitId: string;
 	ignored: boolean;
 }
 
 export interface ProjectDetail {
 	id: string;
 	path: string;
+	label: string;
+	gitId: string;
 	ignored: boolean;
 	conversations: ConversationWithRatings[];
 }

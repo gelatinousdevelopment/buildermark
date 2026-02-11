@@ -315,3 +315,127 @@ func TestSetProjectIgnoredInvalidBody(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
+
+func TestSetProjectLabel(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"label": "My Project"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+pid+"/label", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !env.OK {
+		t.Error("ok = false, want true")
+	}
+
+	// Verify the label was set.
+	detail, err := db.GetProjectDetail(ctx, s.DB, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.Label != "My Project" {
+		t.Errorf("label = %q, want %q", detail.Label, "My Project")
+	}
+}
+
+func TestSetProjectLabelNotFound(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	body, _ := json.Marshal(map[string]string{"label": "Test"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/nonexistent/label", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestSetProjectLabelEmpty(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"label": ""})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+pid+"/label", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestListProjectsHasLabel(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	if _, err := db.EnsureProject(ctx, s.DB, "/home/user/myproject"); err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	data := env.Data.([]any)
+	first := data[0].(map[string]any)
+	if first["label"] != "myproject" {
+		t.Errorf("label = %v, want %q", first["label"], "myproject")
+	}
+}
+
+func TestGetProjectHasLabel(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/home/user/myproject")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+pid, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	data := env.Data.(map[string]any)
+	if data["label"] != "myproject" {
+		t.Errorf("label = %v, want %q", data["label"], "myproject")
+	}
+}
