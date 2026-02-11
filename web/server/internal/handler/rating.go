@@ -48,13 +48,53 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve real Claude Code sessionId in the background.
+	// Resolve real Claude Code sessionId in the background, then
+	// collect and store all conversation turns.
 	go func(ratingID, fallbackCID string, ratingVal int, note string) {
-		resolved := history.ResolveSessionID(ratingVal, note, fallbackCID)
-		if resolved != fallbackCID {
-			if err := db.UpdateConversationID(context.Background(), s.DB, ratingID, resolved); err != nil {
+		result := history.ResolveSession(ratingVal, note, fallbackCID)
+
+		if result.SessionID != fallbackCID {
+			if err := db.UpdateConversationID(context.Background(), s.DB, ratingID, result.SessionID); err != nil {
 				log.Printf("error updating conversation_id: %v", err)
 			}
+		}
+
+		if len(result.Entries) == 0 {
+			return
+		}
+
+		ctx := context.Background()
+
+		projectPath := result.Project
+		if projectPath == "" {
+			projectPath = "unknown"
+		}
+
+		projectID, err := db.EnsureProject(ctx, s.DB, projectPath)
+		if err != nil {
+			log.Printf("error ensuring project: %v", err)
+			return
+		}
+
+		if err := db.EnsureConversation(ctx, s.DB, result.SessionID, projectID, "claude"); err != nil {
+			log.Printf("error ensuring conversation: %v", err)
+			return
+		}
+
+		turns := make([]db.Turn, len(result.Entries))
+		for i, e := range result.Entries {
+			turns[i] = db.Turn{
+				Timestamp:      e.Timestamp,
+				ProjectID:      projectID,
+				ConversationID: result.SessionID,
+				Role:           e.Role,
+				Content:        e.Display,
+				RawJSON:        e.RawJSON,
+			}
+		}
+
+		if err := db.InsertTurns(ctx, s.DB, turns); err != nil {
+			log.Printf("error inserting turns: %v", err)
 		}
 	}(rating.ID, req.ConversationID, req.Rating, req.Note)
 

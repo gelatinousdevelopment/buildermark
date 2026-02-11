@@ -3,3 +3,4 @@
 # Editor/IDE
 .vscode/
 .zed/
+.DS_Store
