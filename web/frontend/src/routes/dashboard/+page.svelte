@@ -10,14 +10,35 @@
 	let loading = $state(true);
 	let error: string | null = $state(null);
 
+	function latestRatingTimestamp(project: ProjectDetail): string {
+		let latest = '';
+		for (const conv of project.conversations) {
+			for (const r of conv.ratings) {
+				if (r.createdAt > latest) latest = r.createdAt;
+			}
+		}
+		return latest;
+	}
+
+	function sortByRecentRating(list: ProjectDetail[]): ProjectDetail[] {
+		return list.slice().sort((a, b) => {
+			const ta = latestRatingTimestamp(a);
+			const tb = latestRatingTimestamp(b);
+			if (ta && !tb) return -1;
+			if (!ta && tb) return 1;
+			if (ta !== tb) return tb.localeCompare(ta);
+			return a.path.localeCompare(b.path);
+		});
+	}
+
 	async function load() {
 		const [active, ignored] = await Promise.all([listProjects(false), listProjects(true)]);
 		const [activeDetails, ignoredDetails] = await Promise.all([
 			Promise.all(active.map((p) => getProject(p.id))),
 			Promise.all(ignored.map((p) => getProject(p.id)))
 		]);
-		projects = activeDetails;
-		ignoredProjects = ignoredDetails;
+		projects = sortByRecentRating(activeDetails);
+		ignoredProjects = sortByRecentRating(ignoredDetails);
 	}
 
 	onMount(async () => {

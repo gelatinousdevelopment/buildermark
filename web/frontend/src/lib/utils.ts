@@ -7,6 +7,6 @@ export function shortId(id: string, len = 12): string {
 }
 
 export function fmtTime(t: string | number): string {
-	const d = typeof t === 'number' ? new Date(t) : new Date(t);
+	const d = new Date(t);
 	return d.toLocaleString();
 }
