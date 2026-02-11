@@ -16,7 +16,7 @@ func TestListProjects(t *testing.T) {
 		}
 	}
 
-	projects, err := ListProjects(ctx, db)
+	projects, err := ListProjects(ctx, db, false)
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestListProjectsEmpty(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	projects, err := ListProjects(ctx, db)
+	projects, err := ListProjects(ctx, db, false)
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
@@ -49,6 +49,99 @@ func TestListProjectsEmpty(t *testing.T) {
 	}
 	if len(projects) != 0 {
 		t.Errorf("got %d projects, want 0", len(projects))
+	}
+}
+
+func TestListProjectsFiltersByIgnored(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid1, err := EnsureProject(ctx, db, "/active/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	pid2, err := EnsureProject(ctx, db, "/ignored/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	// Ignore the second project.
+	if err := SetProjectIgnored(ctx, db, pid2, true); err != nil {
+		t.Fatalf("SetProjectIgnored: %v", err)
+	}
+
+	// Non-ignored should return only the active project.
+	active, err := ListProjects(ctx, db, false)
+	if err != nil {
+		t.Fatalf("ListProjects(false): %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("got %d non-ignored projects, want 1", len(active))
+	}
+	if active[0].ID != pid1 {
+		t.Errorf("active project id = %q, want %q", active[0].ID, pid1)
+	}
+
+	// Ignored should return only the ignored project.
+	ignored, err := ListProjects(ctx, db, true)
+	if err != nil {
+		t.Fatalf("ListProjects(true): %v", err)
+	}
+	if len(ignored) != 1 {
+		t.Fatalf("got %d ignored projects, want 1", len(ignored))
+	}
+	if ignored[0].ID != pid2 {
+		t.Errorf("ignored project id = %q, want %q", ignored[0].ID, pid2)
+	}
+	if !ignored[0].Ignored {
+		t.Error("expected Ignored = true")
+	}
+}
+
+func TestSetProjectIgnored(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	// Ignore the project.
+	if err := SetProjectIgnored(ctx, db, pid, true); err != nil {
+		t.Fatalf("SetProjectIgnored(true): %v", err)
+	}
+
+	// Verify it's ignored.
+	detail, err := GetProjectDetail(ctx, db, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if !detail.Ignored {
+		t.Error("expected Ignored = true after setting")
+	}
+
+	// Un-ignore the project.
+	if err := SetProjectIgnored(ctx, db, pid, false); err != nil {
+		t.Fatalf("SetProjectIgnored(false): %v", err)
+	}
+
+	detail, err = GetProjectDetail(ctx, db, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.Ignored {
+		t.Error("expected Ignored = false after unsetting")
+	}
+}
+
+func TestSetProjectIgnoredNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	err := SetProjectIgnored(ctx, db, "nonexistent", true)
+	if err == nil {
+		t.Fatal("expected error for nonexistent project")
 	}
 }
 
@@ -110,10 +203,10 @@ func TestGetProjectDetailWithRatings(t *testing.T) {
 	}
 
 	// Add ratings for this conversation.
-	if _, err := InsertRating(ctx, db, "conv-1", 4, "good"); err != nil {
+	if _, err := InsertRating(ctx, db, "conv-1", 4, "good", ""); err != nil {
 		t.Fatalf("InsertRating 1: %v", err)
 	}
-	if _, err := InsertRating(ctx, db, "conv-1", 5, "great"); err != nil {
+	if _, err := InsertRating(ctx, db, "conv-1", 5, "great", ""); err != nil {
 		t.Fatalf("InsertRating 2: %v", err)
 	}
 

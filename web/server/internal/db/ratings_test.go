@@ -9,7 +9,7 @@ func TestInsertRating(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	r, err := InsertRating(ctx, db, "conv-1", 4, "good work")
+	r, err := InsertRating(ctx, db, "conv-1", 4, "good work", "")
 	if err != nil {
 		t.Fatalf("InsertRating: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestListRatings(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		if _, err := InsertRating(ctx, db, "conv", i, ""); err != nil {
+		if _, err := InsertRating(ctx, db, "conv", i, "", ""); err != nil {
 			t.Fatalf("insert %d: %v", i, err)
 		}
 	}
@@ -69,7 +69,7 @@ func TestUpdateConversationID(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	r, err := InsertRating(ctx, db, "old-conv", 3, "")
+	r, err := InsertRating(ctx, db, "old-conv", 3, "", "")
 	if err != nil {
 		t.Fatalf("InsertRating: %v", err)
 	}

@@ -1,11 +1,5 @@
 import { PUBLIC_API_URL } from '$env/static/public';
-import type {
-	Project,
-	ProjectDetail,
-	Conversation,
-	ConversationDetail,
-	Rating
-} from './types';
+import type { Project, ProjectDetail, Conversation, ConversationDetail, Rating } from './types';
 
 interface Envelope<T> {
 	ok: boolean;
@@ -13,8 +7,8 @@ interface Envelope<T> {
 	error?: string;
 }
 
-async function api<T>(path: string): Promise<T> {
-	const res = await fetch(`${PUBLIC_API_URL}${path}`);
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+	const res = await fetch(`${PUBLIC_API_URL}${path}`, init);
 	const envelope: Envelope<T> = await res.json();
 	if (!envelope.ok) {
 		throw new Error(envelope.error ?? `API error: ${res.status}`);
@@ -22,8 +16,16 @@ async function api<T>(path: string): Promise<T> {
 	return envelope.data as T;
 }
 
-export function listProjects(): Promise<Project[]> {
-	return api('/api/v1/projects');
+export function listProjects(ignored = false): Promise<Project[]> {
+	return api(`/api/v1/projects?ignored=${ignored}`);
+}
+
+export function setProjectIgnored(id: string, ignored: boolean): Promise<void> {
+	return api(`/api/v1/projects/${id}/ignored`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ ignored })
+	});
 }
 
 export function getProject(id: string): Promise<ProjectDetail> {

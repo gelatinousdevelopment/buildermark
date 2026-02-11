@@ -8,15 +8,17 @@ import (
 
 // Project represents a row in the projects table.
 type Project struct {
-	ID   string `json:"id"`
-	Path string `json:"path"`
+	ID      string `json:"id"`
+	Path    string `json:"path"`
+	Ignored bool   `json:"ignored"`
 }
 
 // ProjectDetail is a project with its conversations and their ratings.
 type ProjectDetail struct {
-	ID            string                     `json:"id"`
-	Path          string                     `json:"path"`
-	Conversations []ConversationWithRatings  `json:"conversations"`
+	ID            string                    `json:"id"`
+	Path          string                    `json:"path"`
+	Ignored       bool                      `json:"ignored"`
+	Conversations []ConversationWithRatings `json:"conversations"`
 }
 
 // ConversationWithRatings is a conversation summary including its ratings.
@@ -26,9 +28,9 @@ type ConversationWithRatings struct {
 	Ratings []Rating `json:"ratings"`
 }
 
-// ListProjects returns all projects.
-func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
-	rows, err := db.QueryContext(ctx, "SELECT id, path FROM projects ORDER BY path")
+// ListProjects returns projects filtered by ignored status.
+func ListProjects(ctx context.Context, db *sql.DB, ignored bool) ([]Project, error) {
+	rows, err := db.QueryContext(ctx, "SELECT id, path, ignored FROM projects WHERE ignored = ? ORDER BY path", ignored)
 	if err != nil {
 		return nil, fmt.Errorf("query projects: %w", err)
 	}
@@ -37,7 +39,7 @@ func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
 	projects := []Project{}
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Path); err != nil {
+		if err := rows.Scan(&p.ID, &p.Path, &p.Ignored); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		projects = append(projects, p)
@@ -45,11 +47,27 @@ func ListProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
 	return projects, rows.Err()
 }
 
+// SetProjectIgnored sets the ignored flag on a project.
+func SetProjectIgnored(ctx context.Context, db *sql.DB, projectID string, ignored bool) error {
+	res, err := db.ExecContext(ctx, "UPDATE projects SET ignored = ? WHERE id = ?", ignored, projectID)
+	if err != nil {
+		return fmt.Errorf("update project ignored: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("project not found: %s", projectID)
+	}
+	return nil
+}
+
 // GetProjectDetail returns a project with all its conversations and each
 // conversation's ratings.
 func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*ProjectDetail, error) {
 	var p ProjectDetail
-	err := db.QueryRowContext(ctx, "SELECT id, path FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path)
+	err := db.QueryRowContext(ctx, "SELECT id, path, ignored FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path, &p.Ignored)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

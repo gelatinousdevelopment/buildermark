@@ -31,8 +31,8 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("expected version 2, got %d", version)
+	if version != 4 {
+		t.Errorf("expected version 4, got %d", version)
 	}
 
 	// Verify ratings table exists with expected columns.
@@ -69,7 +69,7 @@ func TestMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if count != 2 {
-		t.Errorf("expected 2 version rows after idempotent run, got %d", count)
+	if count != 4 {
+		t.Errorf("expected 4 version rows after idempotent run, got %d", count)
 	}
 }

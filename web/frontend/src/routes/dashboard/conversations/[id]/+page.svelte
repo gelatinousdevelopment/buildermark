@@ -79,3 +79,32 @@
 		{/if}
 	</div>
 {/if}
+
+<style>
+	.detail-section {
+		margin-bottom: 2rem;
+	}
+
+	.detail-section h3 {
+		font-size: 1rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.turn {
+		margin-bottom: 1rem;
+		padding: 0.75rem;
+		border: 1px solid #eee;
+		border-radius: 4px;
+	}
+
+	.turn-header {
+		font-size: 0.85rem;
+		color: #666;
+		margin-bottom: 0.25rem;
+	}
+
+	.turn-content {
+		white-space: pre-wrap;
+		font-size: 0.9rem;
+	}
+</style>

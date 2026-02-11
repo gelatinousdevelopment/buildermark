@@ -1,11 +1,13 @@
 export interface Project {
 	id: string;
 	path: string;
+	ignored: boolean;
 }
 
 export interface ProjectDetail {
 	id: string;
 	path: string;
+	ignored: boolean;
 	conversations: ConversationWithRatings[];
 }
 

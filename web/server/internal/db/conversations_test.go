@@ -76,7 +76,7 @@ func TestGetConversationDetail(t *testing.T) {
 	}
 
 	// Add a rating for this conversation.
-	if _, err := InsertRating(ctx, db, "conv-1", 5, "excellent"); err != nil {
+	if _, err := InsertRating(ctx, db, "conv-1", 5, "excellent", ""); err != nil {
 		t.Fatalf("InsertRating: %v", err)
 	}
 

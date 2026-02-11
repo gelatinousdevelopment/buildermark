@@ -98,7 +98,7 @@ func TestGetConversation(t *testing.T) {
 	if err := db.InsertTurns(ctx, s.DB, turns); err != nil {
 		t.Fatalf("InsertTurns: %v", err)
 	}
-	if _, err := db.InsertRating(ctx, s.DB, "conv-1", 4, "nice"); err != nil {
+	if _, err := db.InsertRating(ctx, s.DB, "conv-1", 4, "nice", ""); err != nil {
 		t.Fatalf("InsertRating: %v", err)
 	}
 
