@@ -97,11 +97,11 @@ func TestGetConversationDetail(t *testing.T) {
 	if len(detail.Turns) != 2 {
 		t.Fatalf("got %d turns, want 2", len(detail.Turns))
 	}
-	if detail.Turns[0].Content != "hello" {
-		t.Errorf("first turn content = %q, want %q", detail.Turns[0].Content, "hello")
+	if detail.Turns[0].Content != "hi" {
+		t.Errorf("first turn content = %q, want %q (most recent first)", detail.Turns[0].Content, "hi")
 	}
-	if detail.Turns[1].Role != "agent" {
-		t.Errorf("second turn role = %q, want %q", detail.Turns[1].Role, "agent")
+	if detail.Turns[1].Role != "user" {
+		t.Errorf("second turn role = %q, want %q", detail.Turns[1].Role, "user")
 	}
 	if len(detail.Ratings) != 1 {
 		t.Fatalf("got %d ratings, want 1", len(detail.Ratings))

@@ -109,10 +109,16 @@ func runMigrations(db *sql.DB) error {
 	return nil
 }
 
-// parseTime tries RFC3339Nano then falls back to bare SQLite format.
+// parseTime parses a timestamp string from SQLite. It handles RFC3339 formats
+// as well as SQLite's default format which uses a space instead of 'T'.
 func parseTime(s string) time.Time {
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
+		// SQLite stores timestamps with a space separator; convert to RFC3339.
+		t, err = time.Parse(time.RFC3339Nano, strings.Replace(s, " ", "T", 1))
+	}
+	if err != nil {
+		// Bare SQLite format without timezone.
 		t, _ = time.Parse("2006-01-02 15:04:05", s)
 	}
 	return t

@@ -103,7 +103,7 @@
 									</a>
 								</td>
 								<td>{conv.agent}</td>
-								<td>
+								<td class="ratings">
 									{#if conv.ratings.length > 0}
 										{#each conv.ratings as r (r.id)}
 											<span title={r.analysis ? `${r.note}\n\nAnalysis: ${r.analysis}` : r.note}
@@ -174,5 +174,11 @@
 		padding: 0.3rem 0;
 		font-size: 0.85rem;
 		color: #888;
+	}
+
+	.ratings {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 </style>

@@ -89,7 +89,6 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 	defer convRows.Close()
 
 	var convIDs []string
-	convMap := map[string]*ConversationWithRatings{}
 	p.Conversations = []ConversationWithRatings{}
 
 	for convRows.Next() {
@@ -100,10 +99,16 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 		c.Ratings = []Rating{}
 		p.Conversations = append(p.Conversations, c)
 		convIDs = append(convIDs, c.ID)
-		convMap[c.ID] = &p.Conversations[len(p.Conversations)-1]
 	}
 	if err := convRows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate conversations: %w", err)
+	}
+
+	// Build map after the slice is fully populated to avoid stale pointers
+	// from slice reallocation during append.
+	convMap := make(map[string]*ConversationWithRatings, len(p.Conversations))
+	for i := range p.Conversations {
+		convMap[p.Conversations[i].ID] = &p.Conversations[i]
 	}
 
 	// Fetch ratings for all conversations in this project.

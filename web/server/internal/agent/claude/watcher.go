@@ -178,7 +178,37 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			continue
 		}
 
-		turns := make([]db.Turn, 0, len(g.entries))
+		turns := make([]db.Turn, 0, len(g.entries)+1)
+
+		// Check conversation file for a first prompt that history.jsonl may have missed
+		// (e.g. plan-mode auto-submissions).
+		if firstText, firstTs := readFirstPrompt(a.home, g.project, sid); firstText != "" {
+			alreadyPresent := false
+			for _, e := range g.entries {
+				if e.Display == firstText {
+					alreadyPresent = true
+					break
+				}
+			}
+			if !alreadyPresent {
+				rawJSON, _ := json.Marshal(map[string]any{
+					"display":   firstText,
+					"timestamp": firstTs,
+					"sessionId": sid,
+					"project":   g.project,
+					"source":    "conversation_file",
+				})
+				turns = append(turns, db.Turn{
+					Timestamp:      firstTs,
+					ProjectID:      projectID,
+					ConversationID: sid,
+					Role:           "user",
+					Content:        firstText,
+					RawJSON:        string(rawJSON),
+				})
+			}
+		}
+
 		for _, e := range g.entries {
 			role := "user"
 			if e.Type == "assistant" {

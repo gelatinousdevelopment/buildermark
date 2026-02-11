@@ -67,9 +67,9 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		return nil, fmt.Errorf("query conversation: %w", err)
 	}
 
-	// Fetch turns ordered chronologically.
+	// Fetch turns ordered by most recent first.
 	turnRows, err := db.QueryContext(ctx,
-		"SELECT id, timestamp, conversation_id, role, content FROM turns WHERE conversation_id = ? ORDER BY timestamp",
+		"SELECT id, timestamp, conversation_id, role, content FROM turns WHERE conversation_id = ? ORDER BY timestamp DESC",
 		conversationID,
 	)
 	if err != nil {

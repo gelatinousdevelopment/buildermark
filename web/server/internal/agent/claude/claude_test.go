@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -552,6 +553,256 @@ func TestSearchHistoryTailBytes(t *testing.T) {
 	if sid != "sess-target" {
 		t.Errorf("sessionID = %q, want %q", sid, "sess-target")
 	}
+}
+
+// --- Conversation file (first prompt) tests ---
+
+func TestReadFirstPromptStringContent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a mock conversation JSONL file.
+	projectPath := "/proj/a"
+	sessionID := "sess-plan"
+	dirName := "-proj-a"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	lines := []string{
+		`{"type":"file-history-snapshot","messageId":"abc"}`,
+		`{"type":"user","timestamp":"2026-02-11T09:50:03.662Z","message":{"content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}`,
+		`{"type":"user","timestamp":"2026-02-11T09:50:03.659Z","message":{"content":"Implement the following plan:\n\n# Fix the bug"}}`,
+		`{"type":"assistant","timestamp":"2026-02-11T09:50:07.250Z","message":{"content":"I will fix the bug."}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\n", joinLines(lines))), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	text, ts := readFirstPrompt(tmpDir, projectPath, sessionID)
+	if text == "" {
+		t.Fatal("expected first prompt, got empty")
+	}
+	if !containsSubstring(text, "Implement the following plan") {
+		t.Errorf("text = %q, want to contain %q", text, "Implement the following plan")
+	}
+	if ts == 0 {
+		t.Error("expected non-zero timestamp")
+	}
+}
+
+func TestReadFirstPromptArrayContent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	projectPath := "/proj/b"
+	sessionID := "sess-normal"
+	dirName := "-proj-b"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	lines := []string{
+		`{"type":"user","timestamp":"2026-02-11T10:00:00.000Z","message":{"content":[{"type":"text","text":"<local-command-caveat>skip this</local-command-caveat>"}]}}`,
+		`{"type":"user","timestamp":"2026-02-11T10:00:01.000Z","message":{"content":[{"type":"text","text":"Fix the login bug"}]}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\n", joinLines(lines))), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	text, ts := readFirstPrompt(tmpDir, projectPath, sessionID)
+	if text != "Fix the login bug" {
+		t.Errorf("text = %q, want %q", text, "Fix the login bug")
+	}
+	if ts == 0 {
+		t.Error("expected non-zero timestamp")
+	}
+}
+
+func TestReadFirstPromptMissingFile(t *testing.T) {
+	text, ts := readFirstPrompt(t.TempDir(), "/proj/missing", "sess-none")
+	if text != "" || ts != 0 {
+		t.Errorf("expected empty result for missing file, got %q %d", text, ts)
+	}
+}
+
+func TestReadFirstPromptSkipsSystemMessages(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	projectPath := "/proj/c"
+	sessionID := "sess-sys"
+	dirName := "-proj-c"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	lines := []string{
+		`{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"content":[{"type":"text","text":"<command-name>/clear</command-name>"}]}}`,
+		`{"type":"user","timestamp":"2026-01-01T00:00:01.000Z","message":{"content":[{"type":"text","text":"<local-command-stdout></local-command-stdout>"}]}}`,
+		`{"type":"user","timestamp":"2026-01-01T00:00:02.000Z","message":{"content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}`,
+		`{"type":"user","timestamp":"2026-01-01T00:00:03.000Z","message":{"content":[{"type":"text","text":"The real first prompt"}]}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\n", joinLines(lines))), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	text, _ := readFirstPrompt(tmpDir, projectPath, sessionID)
+	if text != "The real first prompt" {
+		t.Errorf("text = %q, want %q", text, "The real first prompt")
+	}
+}
+
+func TestExtractUserTextString(t *testing.T) {
+	raw := json.RawMessage(`"hello world"`)
+	if text := extractUserText(raw); text != "hello world" {
+		t.Errorf("text = %q, want %q", text, "hello world")
+	}
+}
+
+func TestExtractUserTextArray(t *testing.T) {
+	raw := json.RawMessage(`[{"type":"text","text":"from array"}]`)
+	if text := extractUserText(raw); text != "from array" {
+		t.Errorf("text = %q, want %q", text, "from array")
+	}
+}
+
+func TestExtractUserTextToolResult(t *testing.T) {
+	raw := json.RawMessage(`[{"type":"tool_result","tool_use_id":"abc"}]`)
+	if text := extractUserText(raw); text != "" {
+		t.Errorf("text = %q, want empty", text)
+	}
+}
+
+func TestExtractUserTextEmpty(t *testing.T) {
+	if text := extractUserText(nil); text != "" {
+		t.Errorf("text = %q, want empty", text)
+	}
+}
+
+func TestIsSystemMessage(t *testing.T) {
+	tests := []struct {
+		text string
+		want bool
+	}{
+		{"<local-command-caveat>...", true},
+		{"<command-name>/clear</command-name>", true},
+		{"<system-reminder>...", true},
+		{"[Request interrupted by user for tool use]", true},
+		{"[]", true},
+		{"Fix the bug", false},
+		{"Implement the following plan:", false},
+		{"<div>html content</div>", false},
+	}
+	for _, tt := range tests {
+		if got := isSystemMessage(tt.text); got != tt.want {
+			t.Errorf("isSystemMessage(%q) = %v, want %v", tt.text, got, tt.want)
+		}
+	}
+}
+
+func TestProcessEntriesAddsFirstPromptFromConversationFile(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	// Create a conversation file with a plan-mode first prompt.
+	projectPath := "/proj/plan"
+	sessionID := "sess-plan-test"
+	dirName := "-proj-plan"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Use realistic timestamps: plan prompt at T, /zrate 10 minutes later.
+	planTime := time.Date(2026, 2, 11, 9, 50, 0, 0, time.UTC)
+	rateTime := planTime.Add(10 * time.Minute)
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	convLines := []string{
+		fmt.Sprintf(`{"type":"user","timestamp":"%s","message":{"content":"Implement the plan: fix the bug"}}`, planTime.Format(time.RFC3339Nano)),
+		fmt.Sprintf(`{"type":"assistant","timestamp":"%s","message":{"content":"OK"}}`, planTime.Add(time.Second).Format(time.RFC3339Nano)),
+	}
+	if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\n", joinLines(convLines))), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	// History only has a later prompt (the initial plan prompt is missing from history).
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "/zrate 5 great", Timestamp: rateTime.UnixMilli(), SessionID: sessionID, Project: projectPath, Type: "user"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Should have 2 turns: the first prompt from the conversation file + the /zrate from history.
+	if n := countRows(t, database, "turns"); n != 2 {
+		t.Errorf("turns = %d, want 2", n)
+	}
+
+	// Verify the first prompt was inserted with correct content.
+	var content string
+	err := database.QueryRow(
+		"SELECT content FROM turns WHERE conversation_id = ? ORDER BY timestamp LIMIT 1",
+		sessionID,
+	).Scan(&content)
+	if err != nil {
+		t.Fatalf("query first turn: %v", err)
+	}
+	if !containsSubstring(content, "Implement the plan") {
+		t.Errorf("first turn content = %q, want to contain %q", content, "Implement the plan")
+	}
+}
+
+func TestProcessEntriesDoesNotDuplicateFirstPrompt(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	// Create a conversation file where the first prompt matches a history entry.
+	projectPath := "/proj/dup"
+	sessionID := "sess-dup-test"
+	dirName := "-proj-dup"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-02-11T10:00:00.000Z","message":{"content":[{"type":"text","text":"Fix the login bug"}]}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\n", joinLines(convLines))), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	// History has the same first prompt.
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "Fix the login bug", Timestamp: 1000, SessionID: sessionID, Project: projectPath, Type: "user"},
+		{Display: "follow up", Timestamp: 2000, SessionID: sessionID, Project: projectPath, Type: "user"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Should have exactly 2 turns (no duplicate).
+	if n := countRows(t, database, "turns"); n != 2 {
+		t.Errorf("turns = %d, want 2", n)
+	}
+}
+
+func joinLines(lines []string) string {
+	return fmt.Sprintf("%s", strings.Join(lines, "\n"))
+}
+
+func containsSubstring(s, substr string) bool {
+	return strings.Contains(s, substr)
 }
 
 // --- Watcher stores agent name correctly ---
