@@ -21,7 +21,7 @@ func TestListConversations(t *testing.T) {
 		}
 	}
 
-	conversations, err := ListConversations(ctx, db)
+	conversations, err := ListConversations(ctx, db, 100)
 	if err != nil {
 		t.Fatalf("ListConversations: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestListConversationsEmpty(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	conversations, err := ListConversations(ctx, db)
+	conversations, err := ListConversations(ctx, db, 100)
 	if err != nil {
 		t.Fatalf("ListConversations: %v", err)
 	}

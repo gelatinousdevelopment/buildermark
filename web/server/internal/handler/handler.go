@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/davidcann/zrate/web/server/internal/history"
+	"github.com/davidcann/zrate/web/server/internal/agent"
 )
 
 // Server holds dependencies shared across HTTP handlers.
 type Server struct {
-	DB      *sql.DB
-	Watcher *history.Watcher // may be nil if watcher is disabled
+	DB     *sql.DB
+	Agents *agent.Registry // may be nil if no agents are registered
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.

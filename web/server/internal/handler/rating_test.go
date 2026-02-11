@@ -38,6 +38,20 @@ func TestCreateRating(t *testing.T) {
 			wantOK:      true,
 		},
 		{
+			name:        "valid request with agent",
+			contentType: "application/json",
+			body:        map[string]any{"conversationId": "conv-1", "rating": 4, "note": "great", "agent": "claude"},
+			wantStatus:  http.StatusCreated,
+			wantOK:      true,
+		},
+		{
+			name:        "valid request with unknown agent",
+			contentType: "application/json",
+			body:        map[string]any{"conversationId": "conv-1", "rating": 3, "agent": "codex"},
+			wantStatus:  http.StatusCreated,
+			wantOK:      true,
+		},
+		{
 			name:        "missing conversationId",
 			contentType: "application/json",
 			body:        map[string]any{"rating": 3},

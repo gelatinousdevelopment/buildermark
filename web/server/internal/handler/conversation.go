@@ -3,12 +3,20 @@ package handler
 import (
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
 
 func (s *Server) handleListConversations(w http.ResponseWriter, r *http.Request) {
-	conversations, err := db.ListConversations(r.Context(), s.DB)
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	conversations, err := db.ListConversations(r.Context(), s.DB, limit)
 	if err != nil {
 		log.Printf("error listing conversations: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to list conversations")

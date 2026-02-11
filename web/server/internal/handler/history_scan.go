@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/davidcann/zrate/web/server/internal/history"
+	"github.com/davidcann/zrate/web/server/internal/agent"
 )
 
 type historyScanRequest struct {
 	// Timeframe is a Go duration string (e.g. "720h" for 30 days, "168h" for 1 week).
 	Timeframe string `json:"timeframe"`
+	// Agent optionally limits the scan to a single agent. If empty, all watchers are scanned.
+	Agent string `json:"agent"`
 }
 
 type historyScanResponse struct {
@@ -19,7 +21,7 @@ type historyScanResponse struct {
 }
 
 func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
-	if s.Watcher == nil {
+	if s.Agents == nil || len(s.Agents.Watchers()) == 0 {
 		writeError(w, http.StatusServiceUnavailable, "history watcher is not available")
 		return
 	}
@@ -38,7 +40,7 @@ func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Timeframe == "" {
-		req.Timeframe = history.DefaultScanWindow.String()
+		req.Timeframe = agent.DefaultScanWindow.String()
 	}
 
 	dur, err := time.ParseDuration(req.Timeframe)
@@ -48,7 +50,22 @@ func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	since := time.Now().Add(-dur)
-	count := s.Watcher.ScanSince(r.Context(), since)
+
+	var count int
+	if req.Agent != "" {
+		// Scan only the specified agent's watcher.
+		for _, w := range s.Agents.Watchers() {
+			if w.Name() == req.Agent {
+				count = w.ScanSince(r.Context(), since)
+				break
+			}
+		}
+	} else {
+		// Scan all watchers.
+		for _, w := range s.Agents.Watchers() {
+			count += w.ScanSince(r.Context(), since)
+		}
+	}
 
 	writeSuccess(w, http.StatusOK, historyScanResponse{
 		EntriesProcessed: count,

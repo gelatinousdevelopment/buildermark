@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
@@ -20,11 +21,18 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetProjectIgnored(w http.ResponseWriter, r *http.Request) {
+	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		return
+	}
+
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "project id is required")
 		return
 	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
 
 	var body struct {
 		Ignored bool `json:"ignored"`
@@ -35,6 +43,10 @@ func (s *Server) handleSetProjectIgnored(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := db.SetProjectIgnored(r.Context(), s.DB, id, body.Ignored); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
 		log.Printf("error setting project ignored: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to update project")
 		return

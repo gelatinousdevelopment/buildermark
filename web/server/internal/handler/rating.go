@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
-	"github.com/davidcann/zrate/web/server/internal/history"
 )
 
 type createRatingRequest struct {
@@ -16,6 +15,7 @@ type createRatingRequest struct {
 	Rating         int    `json:"rating"`
 	Note           string `json:"note"`
 	Analysis       string `json:"analysis"`
+	Agent          string `json:"agent"`
 }
 
 func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +42,11 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	agentName := req.Agent
+	if agentName == "" {
+		agentName = "claude"
+	}
+
 	rating, err := db.InsertRating(r.Context(), s.DB, req.ConversationID, req.Rating, req.Note, req.Analysis)
 	if err != nil {
 		log.Printf("error inserting rating: %v", err)
@@ -49,19 +54,22 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve real Claude Code sessionId in the background, then
-	// collect and store all conversation turns.
-	go func(ratingID, fallbackCID string, ratingVal int, note string) {
-		result := history.ResolveSession(ratingVal, note, fallbackCID)
+	// Resolve real session in the background, then collect and store all conversation turns.
+	go func(ratingID, fallbackCID string, ratingVal int, note, agent string) {
+		if s.Agents == nil {
+			return
+		}
+		res := s.Agents.Resolver(agent)
+		if res == nil {
+			return
+		}
+
+		result := res.ResolveSession(ratingVal, note, fallbackCID)
 
 		if result.SessionID != fallbackCID {
 			if err := db.UpdateConversationID(context.Background(), s.DB, ratingID, result.SessionID); err != nil {
 				log.Printf("error updating conversation_id: %v", err)
 			}
-		}
-
-		if len(result.Entries) == 0 {
-			return
 		}
 
 		ctx := context.Background()
@@ -77,8 +85,12 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := db.EnsureConversation(ctx, s.DB, result.SessionID, projectID, "claude"); err != nil {
+		if err := db.EnsureConversation(ctx, s.DB, result.SessionID, projectID, agent); err != nil {
 			log.Printf("error ensuring conversation: %v", err)
+			return
+		}
+
+		if len(result.Entries) == 0 {
 			return
 		}
 
@@ -97,7 +109,7 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		if err := db.InsertTurns(ctx, s.DB, turns); err != nil {
 			log.Printf("error inserting turns: %v", err)
 		}
-	}(rating.ID, req.ConversationID, req.Rating, req.Note)
+	}(rating.ID, req.ConversationID, req.Rating, req.Note, agentName)
 
 	writeSuccess(w, http.StatusCreated, rating)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 )
 
 // Conversation represents a row in the conversations table.
@@ -32,9 +31,13 @@ type ConversationDetail struct {
 	Ratings   []Rating   `json:"ratings"`
 }
 
-// ListConversations returns all conversations.
-func ListConversations(ctx context.Context, db *sql.DB) ([]Conversation, error) {
-	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent FROM conversations ORDER BY id")
+// ListConversations returns conversations, up to limit.
+func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversation, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent FROM conversations ORDER BY id LIMIT ?", limit)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -111,13 +114,4 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	}
 
 	return &c, nil
-}
-
-// parseTime tries RFC3339Nano then falls back to bare SQLite format.
-func parseTime(s string) time.Time {
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		t, _ = time.Parse("2006-01-02 15:04:05", s)
-	}
-	return t
 }

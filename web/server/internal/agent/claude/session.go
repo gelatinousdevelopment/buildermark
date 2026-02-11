@@ -1,4 +1,4 @@
-package history
+package claude
 
 import (
 	"encoding/json"
@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/davidcann/zrate/web/server/internal/agent"
 )
 
 type pastedContent struct {
@@ -18,43 +20,19 @@ type pastedContent struct {
 }
 
 type historyEntry struct {
-	Display        string                    `json:"display"`
-	Timestamp      int64                     `json:"timestamp"`
-	SessionID      string                    `json:"sessionId"`
-	Project        string                    `json:"project"`
-	Type           string                    `json:"type"`
-	PastedContents map[string]pastedContent  `json:"pastedContents"`
-}
-
-// Entry holds a single parsed history.jsonl line.
-type Entry struct {
-	Timestamp int64
-	SessionID string
-	Project   string
-	Role      string // "user" or "agent"
-	Display   string
-	RawJSON   string
-}
-
-// SessionResult is returned by ResolveSession with the matched sessionId
-// and all history entries belonging to that session.
-type SessionResult struct {
-	SessionID string
-	Project   string
-	Entries   []Entry
+	Display        string                   `json:"display"`
+	Timestamp      int64                    `json:"timestamp"`
+	SessionID      string                   `json:"sessionId"`
+	Project        string                   `json:"project"`
+	Type           string                   `json:"type"`
+	PastedContents map[string]pastedContent `json:"pastedContents"`
 }
 
 // ResolveSession polls history.jsonl for up to 5 seconds looking for a
 // /zrate entry that matches the given rating and note. When found it
 // collects every entry with the same sessionId and returns them all.
 // If no match is found the fallbackID is returned with no entries.
-func ResolveSession(rating int, note string, fallbackID string) *SessionResult {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return &SessionResult{SessionID: fallbackID}
-	}
-	histPath := filepath.Join(home, ".claude", "history.jsonl")
-
+func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agent.SessionResult {
 	expectedDisplay := fmt.Sprintf("/zrate %d", rating)
 	if note != "" {
 		expectedDisplay += " " + note
@@ -70,7 +48,7 @@ func ResolveSession(rating int, note string, fallbackID string) *SessionResult {
 	var sessionID string
 	deadline := time.Now().Add(maxWait)
 	for {
-		if sid, ok := searchHistory(histPath, expectedDisplay, tailBytes, maxAge); ok {
+		if sid, ok := searchHistory(a.path, expectedDisplay, tailBytes, maxAge); ok {
 			sessionID = sid
 			break
 		}
@@ -81,20 +59,20 @@ func ResolveSession(rating int, note string, fallbackID string) *SessionResult {
 	}
 
 	if sessionID == "" {
-		log.Printf("history: no match found for %q, using fallback", expectedDisplay)
-		return &SessionResult{SessionID: fallbackID}
+		log.Printf("claude session: no match found for %q, using fallback", expectedDisplay)
+		return &agent.SessionResult{SessionID: fallbackID}
 	}
 
-	log.Printf("history: matched entry with sessionId=%s", sessionID)
+	log.Printf("claude session: matched entry with sessionId=%s", sessionID)
 
-	entries := collectSessionEntries(home, histPath, sessionID)
+	entries := collectSessionEntries(a.home, a.path, sessionID)
 
 	project := ""
 	if len(entries) > 0 {
 		project = entries[0].Project
 	}
 
-	return &SessionResult{
+	return &agent.SessionResult{
 		SessionID: sessionID,
 		Project:   project,
 		Entries:   entries,
@@ -131,7 +109,6 @@ func searchHistory(path, expectedDisplay string, tailBytes int64, maxAge time.Du
 	lines := strings.Split(string(buf), "\n")
 	now := time.Now()
 
-	// iterate in reverse (most recent first)
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
@@ -145,7 +122,6 @@ func searchHistory(path, expectedDisplay string, tailBytes int64, maxAge time.Du
 
 		entryTime := time.UnixMilli(entry.Timestamp)
 		if now.Sub(entryTime) > maxAge {
-			// entries are chronological; older ones won't match either
 			break
 		}
 
@@ -159,15 +135,15 @@ func searchHistory(path, expectedDisplay string, tailBytes int64, maxAge time.Du
 
 // collectSessionEntries reads the full history file and returns every entry
 // whose sessionId matches the given id, ordered chronologically.
-func collectSessionEntries(home, path, sessionID string) []Entry {
+func collectSessionEntries(home, path, sessionID string) []agent.Entry {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Printf("history: error reading file for session collection: %v", err)
+		log.Printf("claude session: error reading file for session collection: %v", err)
 		return nil
 	}
 
 	lines := strings.Split(string(data), "\n")
-	var entries []Entry
+	var entries []agent.Entry
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -193,7 +169,7 @@ func collectSessionEntries(home, path, sessionID string) []Entry {
 			display = resolvePastedContents(home, display, entry.PastedContents)
 		}
 
-		entries = append(entries, Entry{
+		entries = append(entries, agent.Entry{
 			Timestamp: entry.Timestamp,
 			SessionID: entry.SessionID,
 			Project:   entry.Project,
@@ -219,7 +195,7 @@ func resolvePastedContents(home, display string, pasted map[string]pastedContent
 
 		content, err := os.ReadFile(cachePath)
 		if err != nil {
-			log.Printf("history: failed to read paste cache %s: %v", cachePath, err)
+			log.Printf("claude session: failed to read paste cache %s: %v", cachePath, err)
 			continue
 		}
 

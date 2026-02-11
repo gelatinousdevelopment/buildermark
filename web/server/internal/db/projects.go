@@ -3,8 +3,14 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"sort"
+	"time"
 )
+
+// ErrNotFound is returned when a requested record does not exist.
+var ErrNotFound = errors.New("not found")
 
 // Project represents a row in the projects table.
 type Project struct {
@@ -58,7 +64,7 @@ func SetProjectIgnored(ctx context.Context, db *sql.DB, projectID string, ignore
 		return fmt.Errorf("rows affected: %w", err)
 	}
 	if n == 0 {
-		return fmt.Errorf("project not found: %s", projectID)
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
 	}
 	return nil
 }
@@ -127,5 +133,27 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 		}
 	}
 
+	sort.SliceStable(p.Conversations, func(i, j int) bool {
+		ti := latestRatingTime(p.Conversations[i].Ratings)
+		tj := latestRatingTime(p.Conversations[j].Ratings)
+		if ti.IsZero() != tj.IsZero() {
+			return !ti.IsZero()
+		}
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return p.Conversations[i].ID < p.Conversations[j].ID
+	})
+
 	return &p, nil
+}
+
+func latestRatingTime(ratings []Rating) time.Time {
+	var latest time.Time
+	for _, r := range ratings {
+		if r.CreatedAt.After(latest) {
+			latest = r.CreatedAt
+		}
+	}
+	return latest
 }

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -142,6 +143,9 @@ func TestSetProjectIgnoredNotFound(t *testing.T) {
 	err := SetProjectIgnored(ctx, db, "nonexistent", true)
 	if err == nil {
 		t.Fatal("expected error for nonexistent project")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 

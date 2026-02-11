@@ -273,6 +273,29 @@ func TestSetProjectIgnored(t *testing.T) {
 	}
 }
 
+func TestSetProjectIgnoredNotFound(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	body, _ := json.Marshal(map[string]bool{"ignored": true})
+	req := httptest.NewRequest("POST", "/api/v1/projects/nonexistent/ignored", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.OK {
+		t.Error("ok = true, want false for not found project")
+	}
+}
+
 func TestSetProjectIgnoredInvalidBody(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
