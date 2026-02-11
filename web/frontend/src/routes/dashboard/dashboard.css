@@ -1,0 +1,119 @@
+.dashboard-header {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+	padding: 1rem 1.5rem;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.dashboard-header h1 {
+	margin: 0;
+	font-size: 1.25rem;
+}
+
+.dashboard-header nav {
+	display: flex;
+	gap: 1rem;
+}
+
+.dashboard-header nav a {
+	color: #555;
+	text-decoration: none;
+}
+
+.dashboard-header nav a:hover {
+	color: #000;
+}
+
+.dashboard-content {
+	padding: 1.5rem;
+	max-width: 960px;
+}
+
+.project-section {
+	margin-bottom: 2rem;
+}
+
+.project-section h2 {
+	font-size: 1.1rem;
+	margin-bottom: 0.5rem;
+	color: #333;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 1rem;
+}
+
+th,
+td {
+	text-align: left;
+	padding: 0.4rem 0.75rem;
+	border-bottom: 1px solid #eee;
+}
+
+th {
+	font-weight: 600;
+	color: #666;
+	font-size: 0.85rem;
+}
+
+td a {
+	color: #0066cc;
+	text-decoration: none;
+}
+
+td a:hover {
+	text-decoration: underline;
+}
+
+.breadcrumb {
+	margin-bottom: 1rem;
+	font-size: 0.9rem;
+	color: #666;
+}
+
+.breadcrumb a {
+	color: #0066cc;
+	text-decoration: none;
+}
+
+.breadcrumb a:hover {
+	text-decoration: underline;
+}
+
+.detail-section {
+	margin-bottom: 2rem;
+}
+
+.detail-section h3 {
+	font-size: 1rem;
+	margin-bottom: 0.5rem;
+}
+
+.turn {
+	margin-bottom: 1rem;
+	padding: 0.75rem;
+	border: 1px solid #eee;
+	border-radius: 4px;
+}
+
+.turn-header {
+	font-size: 0.85rem;
+	color: #666;
+	margin-bottom: 0.25rem;
+}
+
+.turn-content {
+	white-space: pre-wrap;
+	font-size: 0.9rem;
+}
+
+.loading {
+	color: #888;
+}
+
+.error {
+	color: #cc0000;
+}

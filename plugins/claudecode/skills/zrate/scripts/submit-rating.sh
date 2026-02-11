@@ -23,8 +23,10 @@ fi
 cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
 
 # --- build JSON payload ---
+analysis="${ANALYSIS:-}"
 note_esc=$(printf '%s' "$note" | sed 's/\\/\\\\/g; s/"/\\"/g')
-payload="{\"conversationId\":\"${cid}\",\"rating\":${rating},\"note\":\"${note_esc}\"}"
+analysis_esc=$(printf '%s' "$analysis" | sed 's/\\/\\\\/g; s/"/\\"/g')
+payload="{\"conversationId\":\"${cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\"}"
 
 # --- submit ---
 response=$(curl -s -X POST "${SERVER}/api/v1/rating" \

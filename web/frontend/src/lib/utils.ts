@@ -1,0 +1,12 @@
+export function stars(n: number, max = 5): string {
+	return '★'.repeat(n) + '☆'.repeat(max - n);
+}
+
+export function shortId(id: string, len = 12): string {
+	return id.length > len ? id.slice(0, len) + '…' : id;
+}
+
+export function fmtTime(t: string | number): string {
+	const d = typeof t === 'number' ? new Date(t) : new Date(t);
+	return d.toLocaleString();
+}

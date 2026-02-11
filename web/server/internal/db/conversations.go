@@ -88,7 +88,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 
 	// Fetch ratings.
 	ratRows, err := db.QueryContext(ctx,
-		"SELECT id, conversation_id, rating, note, created_at FROM ratings WHERE conversation_id = ? ORDER BY created_at DESC",
+		"SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id = ? ORDER BY created_at DESC",
 		conversationID,
 	)
 	if err != nil {
@@ -100,7 +100,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	for ratRows.Next() {
 		var r Rating
 		var createdAt string
-		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &createdAt); err != nil {
+		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan rating: %w", err)
 		}
 		r.CreatedAt = parseTime(createdAt)

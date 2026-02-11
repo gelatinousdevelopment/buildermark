@@ -15,6 +15,7 @@ type createRatingRequest struct {
 	ConversationID string `json:"conversationId"`
 	Rating         int    `json:"rating"`
 	Note           string `json:"note"`
+	Analysis       string `json:"analysis"`
 }
 
 func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rating, err := db.InsertRating(r.Context(), s.DB, req.ConversationID, req.Rating, req.Note)
+	rating, err := db.InsertRating(r.Context(), s.DB, req.ConversationID, req.Rating, req.Note, req.Analysis)
 	if err != nil {
 		log.Printf("error inserting rating: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create rating")

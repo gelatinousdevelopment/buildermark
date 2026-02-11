@@ -1,0 +1,1 @@
+ALTER TABLE ratings ADD COLUMN analysis TEXT NOT NULL DEFAULT '';

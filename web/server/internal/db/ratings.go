@@ -15,17 +15,18 @@ type Rating struct {
 	ConversationID string    `json:"conversationId"`
 	Rating         int       `json:"rating"`
 	Note           string    `json:"note"`
+	Analysis       string    `json:"analysis"`
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
 // InsertRating creates a new rating and returns the persisted record.
-func InsertRating(ctx context.Context, db *sql.DB, conversationID string, rating int, note string) (*Rating, error) {
+func InsertRating(ctx context.Context, db *sql.DB, conversationID string, rating int, note, analysis string) (*Rating, error) {
 	id := uuid.New().String()
 	now := time.Now().UTC()
 
 	_, err := db.ExecContext(ctx,
-		"INSERT INTO ratings (id, conversation_id, rating, note, created_at) VALUES (?, ?, ?, ?, ?)",
-		id, conversationID, rating, note, now,
+		"INSERT INTO ratings (id, conversation_id, rating, note, analysis, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		id, conversationID, rating, note, analysis, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert rating: %w", err)
@@ -36,6 +37,7 @@ func InsertRating(ctx context.Context, db *sql.DB, conversationID string, rating
 		ConversationID: conversationID,
 		Rating:         rating,
 		Note:           note,
+		Analysis:       analysis,
 		CreatedAt:      now,
 	}, nil
 }
@@ -56,7 +58,7 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 	}
 
 	rows, err := db.QueryContext(ctx,
-		"SELECT id, conversation_id, rating, note, created_at FROM ratings ORDER BY created_at DESC LIMIT ?",
+		"SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings ORDER BY created_at DESC LIMIT ?",
 		limit,
 	)
 	if err != nil {
@@ -68,7 +70,7 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 	for rows.Next() {
 		var r Rating
 		var createdAt string
-		if err := rows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &createdAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan rating: %w", err)
 		}
 

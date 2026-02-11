@@ -85,7 +85,7 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 	// Fetch ratings for all conversations in this project.
 	if len(convIDs) > 0 {
 		ratRows, err := db.QueryContext(ctx,
-			"SELECT id, conversation_id, rating, note, created_at FROM ratings WHERE conversation_id IN (SELECT id FROM conversations WHERE project_id = ?) ORDER BY created_at DESC",
+			"SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (SELECT id FROM conversations WHERE project_id = ?) ORDER BY created_at DESC",
 			projectID,
 		)
 		if err != nil {
@@ -96,7 +96,7 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 		for ratRows.Next() {
 			var r Rating
 			var createdAt string
-			if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &createdAt); err != nil {
+			if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 				return nil, fmt.Errorf("scan rating: %w", err)
 			}
 			r.CreatedAt = parseTime(createdAt)
