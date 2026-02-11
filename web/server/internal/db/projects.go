@@ -31,6 +31,7 @@ type ProjectDetail struct {
 type ConversationWithRatings struct {
 	ID      string   `json:"id"`
 	Agent   string   `json:"agent"`
+	Title   string   `json:"title"`
 	Ratings []Rating `json:"ratings"`
 }
 
@@ -82,7 +83,7 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 	}
 
 	// Fetch conversations for this project.
-	convRows, err := db.QueryContext(ctx, "SELECT id, agent FROM conversations WHERE project_id = ? ORDER BY id", projectID)
+	convRows, err := db.QueryContext(ctx, "SELECT id, agent, title FROM conversations WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -93,7 +94,7 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 
 	for convRows.Next() {
 		var c ConversationWithRatings
-		if err := convRows.Scan(&c.ID, &c.Agent); err != nil {
+		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		c.Ratings = []Rating{}

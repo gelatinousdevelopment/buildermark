@@ -99,7 +99,7 @@
 							<tr>
 								<td>
 									<a href={resolve('/dashboard/conversations/[id]', { id: conv.id })}>
-										{shortId(conv.id)}
+										{conv.title || shortId(conv.id)}
 									</a>
 								</td>
 								<td>{conv.agent}</td>

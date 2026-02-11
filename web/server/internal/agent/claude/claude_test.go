@@ -805,6 +805,249 @@ func containsSubstring(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
+// --- readSessionTitle tests ---
+
+func TestReadSessionTitleFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/a"
+	dirName := "-proj-a"
+	indexDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(indexDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	indexContent := `{"version":1,"entries":[{"sessionId":"sess-1","summary":"Fix the login bug"},{"sessionId":"sess-2","summary":"Add dark mode"}]}`
+	if err := os.WriteFile(filepath.Join(indexDir, "sessions-index.json"), []byte(indexContent), 0644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	title := readSessionTitle(tmpDir, projectPath, "sess-1")
+	if title != "Fix the login bug" {
+		t.Errorf("title = %q, want %q", title, "Fix the login bug")
+	}
+
+	title = readSessionTitle(tmpDir, projectPath, "sess-2")
+	if title != "Add dark mode" {
+		t.Errorf("title = %q, want %q", title, "Add dark mode")
+	}
+}
+
+func TestReadSessionTitleFallbackToFirstPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/a"
+	dirName := "-proj-a"
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// sessions-index.json exists but does NOT contain this session.
+	indexContent := `{"version":1,"entries":[{"sessionId":"sess-other","summary":"Other session"}]}`
+	if err := os.WriteFile(filepath.Join(projDir, "sessions-index.json"), []byte(indexContent), 0644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	// Create a conversation .jsonl file for the session.
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-02-11T10:00:00.000Z","message":{"content":[{"type":"text","text":"Fix the login bug"}]}}`,
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "sess-fallback.jsonl"), []byte(strings.Join(convLines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	title := readSessionTitle(tmpDir, projectPath, "sess-fallback")
+	if title != "Fix the login bug" {
+		t.Errorf("title = %q, want %q", title, "Fix the login bug")
+	}
+}
+
+func TestReadSessionTitleFallbackTruncatesLongPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/a"
+	dirName := "-proj-a"
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	longText := strings.Repeat("x", 200)
+	convLines := []string{
+		fmt.Sprintf(`{"type":"user","timestamp":"2026-02-11T10:00:00.000Z","message":{"content":[{"type":"text","text":"%s"}]}}`, longText),
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "sess-long.jsonl"), []byte(strings.Join(convLines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	title := readSessionTitle(tmpDir, projectPath, "sess-long")
+	if len(title) > maxTitleLen+3 {
+		t.Errorf("title length = %d, want <= %d", len(title), maxTitleLen+3)
+	}
+	if !strings.HasSuffix(title, "...") {
+		t.Errorf("expected truncated title to end with '...', got %q", title[len(title)-10:])
+	}
+}
+
+func TestReadSessionTitleFallbackUsesMarkdownHeading(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/a"
+	dirName := "-proj-a"
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-02-11T10:00:00.000Z","message":{"content":"Implement the following plan:\n\n# Add conversation title from Claude's sessions-index.json\n\n## Context\nMore details here"}}`,
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "sess-heading.jsonl"), []byte(strings.Join(convLines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	title := readSessionTitle(tmpDir, projectPath, "sess-heading")
+	if title != "Add conversation title from Claude's sessions-index.json" {
+		t.Errorf("title = %q, want %q", title, "Add conversation title from Claude's sessions-index.json")
+	}
+}
+
+func TestReadSessionTitleFallbackFirstLineWhenNoHeading(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/a"
+	dirName := "-proj-a"
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-02-11T10:00:00.000Z","message":{"content":"First line\nSecond line\nThird line"}}`,
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "sess-multi.jsonl"), []byte(strings.Join(convLines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	title := readSessionTitle(tmpDir, projectPath, "sess-multi")
+	if title != "First line" {
+		t.Errorf("title = %q, want %q", title, "First line")
+	}
+}
+
+func TestTitleFromPrompt(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"heading after preamble", "Implement the following plan:\n\n# Fix the bug\n\nDetails...", "Fix the bug"},
+		{"heading on first line", "# Quick fix", "Quick fix"},
+		{"no heading", "Just do this thing\nmore details", "Just do this thing"},
+		{"ignores h2", "Do this:\n\n## Not a title\nstuff", "Do this:"},
+		{"long title truncated", "# " + strings.Repeat("a", 200), strings.Repeat("a", 100) + "..."},
+		{"empty heading falls back", "# \nreal content", "#"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := titleFromPrompt(tt.input)
+			if got != tt.want {
+				t.Errorf("titleFromPrompt() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadSessionTitleMissingEverything(t *testing.T) {
+	title := readSessionTitle(t.TempDir(), "/proj/missing", "sess-1")
+	if title != "" {
+		t.Errorf("title = %q, want empty", title)
+	}
+}
+
+func TestProcessEntriesSetsTitle(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/titled"
+	sessionID := "sess-titled"
+	dirName := "-proj-titled"
+
+	// Create sessions-index.json with a summary for this session.
+	indexDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(indexDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	indexContent := fmt.Sprintf(`{"version":1,"entries":[{"sessionId":"%s","summary":"Refactor auth module"}]}`, sessionID)
+	if err := os.WriteFile(filepath.Join(indexDir, "sessions-index.json"), []byte(indexContent), 0644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "hello", Timestamp: 1000, SessionID: sessionID, Project: projectPath, Type: "user"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Verify the conversation title was set.
+	var title string
+	err := database.QueryRow("SELECT title FROM conversations WHERE id = ?", sessionID).Scan(&title)
+	if err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if title != "Refactor auth module" {
+		t.Errorf("title = %q, want %q", title, "Refactor auth module")
+	}
+}
+
+func TestBackfillTitles(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/backfill"
+	dirName := "-proj-backfill"
+
+	// First, create a conversation via processEntries WITHOUT a sessions-index.json.
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "hello", Timestamp: 1000, SessionID: "sess-bf", Project: projectPath, Type: "user"},
+	})
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Verify title is empty.
+	var title string
+	err := database.QueryRow("SELECT title FROM conversations WHERE id = 'sess-bf'").Scan(&title)
+	if err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if title != "" {
+		t.Fatalf("expected empty title before backfill, got %q", title)
+	}
+
+	// Now create the sessions-index.json.
+	indexDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(indexDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	indexContent := `{"version":1,"entries":[{"sessionId":"sess-bf","summary":"Backfilled title"}]}`
+	if err := os.WriteFile(filepath.Join(indexDir, "sessions-index.json"), []byte(indexContent), 0644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	// Run backfill.
+	a.backfillTitles(ctx)
+
+	// Verify title was set.
+	err = database.QueryRow("SELECT title FROM conversations WHERE id = 'sess-bf'").Scan(&title)
+	if err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if title != "Backfilled title" {
+		t.Errorf("title = %q, want %q", title, "Backfilled title")
+	}
+}
+
 // --- Watcher stores agent name correctly ---
 
 func TestWatcherStoresAgentName(t *testing.T) {

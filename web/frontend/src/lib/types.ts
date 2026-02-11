@@ -14,6 +14,7 @@ export interface ProjectDetail {
 export interface ConversationWithRatings {
 	id: string;
 	agent: string;
+	title: string;
 	ratings: Rating[];
 }
 
@@ -21,12 +22,14 @@ export interface Conversation {
 	id: string;
 	projectId: string;
 	agent: string;
+	title: string;
 }
 
 export interface ConversationDetail {
 	id: string;
 	projectId: string;
 	agent: string;
+	title: string;
 	turns: TurnRead[];
 	ratings: Rating[];
 }

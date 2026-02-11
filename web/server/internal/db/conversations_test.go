@@ -157,6 +157,85 @@ func TestGetConversationDetailEmptyTurnsAndRatings(t *testing.T) {
 	}
 }
 
+func TestListUntitledConversations(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	// Create two conversations: one with title, one without.
+	if err := EnsureConversation(ctx, db, "conv-titled", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	if err := UpdateConversationTitle(ctx, db, "conv-titled", "Has a title"); err != nil {
+		t.Fatalf("UpdateConversationTitle: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-untitled", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	untitled, err := ListUntitledConversations(ctx, db, "claude")
+	if err != nil {
+		t.Fatalf("ListUntitledConversations: %v", err)
+	}
+	if len(untitled) != 1 {
+		t.Fatalf("got %d untitled, want 1", len(untitled))
+	}
+	if untitled[0].ID != "conv-untitled" {
+		t.Errorf("untitled ID = %q, want %q", untitled[0].ID, "conv-untitled")
+	}
+	if untitled[0].ProjectPath != "/test/project" {
+		t.Errorf("untitled ProjectPath = %q, want %q", untitled[0].ProjectPath, "/test/project")
+	}
+}
+
+func TestUpdateConversationTitle(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-title", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// Title should default to empty.
+	detail, err := GetConversationDetail(ctx, db, "conv-title")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.Title != "" {
+		t.Errorf("initial title = %q, want empty", detail.Title)
+	}
+
+	// Update title.
+	if err := UpdateConversationTitle(ctx, db, "conv-title", "Fix the login bug"); err != nil {
+		t.Fatalf("UpdateConversationTitle: %v", err)
+	}
+
+	detail, err = GetConversationDetail(ctx, db, "conv-title")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.Title != "Fix the login bug" {
+		t.Errorf("title = %q, want %q", detail.Title, "Fix the login bug")
+	}
+
+	// Also check ListConversations returns title.
+	convs, err := ListConversations(ctx, db, 100)
+	if err != nil {
+		t.Fatalf("ListConversations: %v", err)
+	}
+	if len(convs) != 1 || convs[0].Title != "Fix the login bug" {
+		t.Errorf("ListConversations title = %q, want %q", convs[0].Title, "Fix the login bug")
+	}
+}
+
 func TestParseTimeRFC3339(t *testing.T) {
 	input := "2024-06-15T10:30:00.123456789Z"
 	got := parseTime(input)

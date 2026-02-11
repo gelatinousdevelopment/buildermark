@@ -11,6 +11,7 @@ type Conversation struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"projectId"`
 	Agent     string `json:"agent"`
+	Title     string `json:"title"`
 }
 
 // TurnRead is a turn as returned by read queries (excludes raw_json).
@@ -27,6 +28,7 @@ type ConversationDetail struct {
 	ID        string     `json:"id"`
 	ProjectID string     `json:"projectId"`
 	Agent     string     `json:"agent"`
+	Title     string     `json:"title"`
 	Turns     []TurnRead `json:"turns"`
 	Ratings   []Rating   `json:"ratings"`
 }
@@ -37,7 +39,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 		limit = 100
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent FROM conversations ORDER BY id LIMIT ?", limit)
+	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title FROM conversations ORDER BY id LIMIT ?", limit)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -46,7 +48,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 	conversations := []Conversation{}
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent); err != nil {
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		conversations = append(conversations, c)
@@ -58,8 +60,8 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID string) (*ConversationDetail, error) {
 	var c ConversationDetail
 	err := db.QueryRowContext(ctx,
-		"SELECT id, project_id, agent FROM conversations WHERE id = ?", conversationID,
-	).Scan(&c.ID, &c.ProjectID, &c.Agent)
+		"SELECT id, project_id, agent, title FROM conversations WHERE id = ?", conversationID,
+	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -114,4 +116,41 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	}
 
 	return &c, nil
+}
+
+// UntitledConversation is a conversation with an empty title, joined with its project path.
+type UntitledConversation struct {
+	ID          string
+	ProjectPath string
+}
+
+// ListUntitledConversations returns conversations that have an empty title for the given agent.
+func ListUntitledConversations(ctx context.Context, db *sql.DB, agent string) ([]UntitledConversation, error) {
+	rows, err := db.QueryContext(ctx,
+		"SELECT c.id, p.path FROM conversations c JOIN projects p ON c.project_id = p.id WHERE c.agent = ? AND c.title = ''",
+		agent,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query untitled conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var result []UntitledConversation
+	for rows.Next() {
+		var u UntitledConversation
+		if err := rows.Scan(&u.ID, &u.ProjectPath); err != nil {
+			return nil, fmt.Errorf("scan untitled conversation: %w", err)
+		}
+		result = append(result, u)
+	}
+	return result, rows.Err()
+}
+
+// UpdateConversationTitle sets the title on an existing conversation.
+func UpdateConversationTitle(ctx context.Context, db *sql.DB, conversationID, title string) error {
+	_, err := db.ExecContext(ctx, "UPDATE conversations SET title = ? WHERE id = ?", title, conversationID)
+	if err != nil {
+		return fmt.Errorf("update conversation title: %w", err)
+	}
+	return nil
 }

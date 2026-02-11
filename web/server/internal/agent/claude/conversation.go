@@ -99,6 +99,88 @@ func extractUserText(raw json.RawMessage) string {
 	return ""
 }
 
+// sessionsIndex represents the top-level structure of Claude's sessions-index.json.
+type sessionsIndex struct {
+	Entries []sessionsIndexEntry `json:"entries"`
+}
+
+// sessionsIndexEntry represents a single entry in Claude's sessions-index.json.
+type sessionsIndexEntry struct {
+	SessionID string `json:"sessionId"`
+	Summary   string `json:"summary"`
+}
+
+// maxTitleLen is the maximum character length for a title derived from the first prompt.
+const maxTitleLen = 100
+
+// readSessionTitle returns a title for the given session. It first checks
+// Claude's sessions-index.json for a summary. If the session is not indexed,
+// it falls back to extracting the first user prompt from the conversation
+// .jsonl file and truncating it.
+func readSessionTitle(home, projectPath, sessionID string) string {
+	dirName := strings.ReplaceAll(projectPath, "/", "-")
+
+	// Try sessions-index.json first.
+	indexPath := filepath.Join(home, ".claude", "projects", dirName, "sessions-index.json")
+	if data, err := os.ReadFile(indexPath); err == nil {
+		var idx sessionsIndex
+		if err := json.Unmarshal(data, &idx); err == nil {
+			for _, e := range idx.Entries {
+				if e.SessionID == sessionID {
+					if s := strings.TrimSpace(e.Summary); s != "" {
+						return s
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback: use the first user prompt from the conversation file.
+	text, _ := readFirstPrompt(home, projectPath, sessionID)
+	if text == "" {
+		return ""
+	}
+
+	return titleFromPrompt(text)
+}
+
+// maxHeadingScanLines is how many lines into the prompt we look for a markdown heading.
+const maxHeadingScanLines = 10
+
+// titleFromPrompt extracts a title from a user prompt. If a first-level
+// markdown heading (# Heading) appears in the first few lines, that heading
+// text is used. Otherwise the first line is used. The result is truncated to
+// maxTitleLen characters.
+func titleFromPrompt(text string) string {
+	lines := strings.SplitN(text, "\n", maxHeadingScanLines+1)
+	limit := len(lines)
+	if limit > maxHeadingScanLines {
+		limit = maxHeadingScanLines
+	}
+
+	// Look for a first-level markdown heading in the first few lines.
+	for _, line := range lines[:limit] {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# ") {
+			title := strings.TrimSpace(trimmed[2:])
+			if title != "" {
+				return truncateTitle(title)
+			}
+		}
+	}
+
+	// No heading found; use the first non-empty line.
+	first := strings.TrimSpace(lines[0])
+	return truncateTitle(first)
+}
+
+func truncateTitle(s string) string {
+	if len(s) > maxTitleLen {
+		return s[:maxTitleLen] + "..."
+	}
+	return s
+}
+
 // isSystemMessage returns true for system/meta messages that should be skipped
 // when looking for the first substantive user prompt.
 func isSystemMessage(text string) bool {

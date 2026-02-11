@@ -32,7 +32,7 @@
 {:else if error}
 	<p class="error">{error}</p>
 {:else if conversation}
-	<h2>Conversation {conversation.id}</h2>
+	<h2>{conversation.title || conversation.id}</h2>
 	<p>Agent: {conversation.agent} | Project: {conversation.projectId}</p>
 
 	<div class="detail-section">

@@ -18,6 +18,7 @@ func (a *Agent) Run(ctx context.Context) {
 	log.Printf("claude watcher: starting, monitoring %s", a.path)
 
 	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
+	a.backfillTitles(ctx)
 
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
@@ -138,6 +139,30 @@ func (a *Agent) readFrom(offset int64) ([]historyEntry, int64) {
 	return entries, offset + int64(n)
 }
 
+// backfillTitles finds all conversations with empty titles and attempts to
+// populate them from Claude's sessions-index.json files.
+func (a *Agent) backfillTitles(ctx context.Context) {
+	untitled, err := db.ListUntitledConversations(ctx, a.db, a.Name())
+	if err != nil {
+		log.Printf("claude watcher: list untitled conversations: %v", err)
+		return
+	}
+
+	updated := 0
+	for _, u := range untitled {
+		if title := readSessionTitle(a.home, u.ProjectPath, u.ID); title != "" {
+			if err := db.UpdateConversationTitle(ctx, a.db, u.ID, title); err != nil {
+				log.Printf("claude watcher: backfill title for %s: %v", u.ID, err)
+				continue
+			}
+			updated++
+		}
+	}
+	if updated > 0 {
+		log.Printf("claude watcher: backfilled %d conversation titles", updated)
+	}
+}
+
 // processEntries groups entries by sessionId and upserts projects,
 // conversations, and turns for each session.
 func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
@@ -176,6 +201,12 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		if err := db.EnsureConversation(ctx, a.db, sid, projectID, a.Name()); err != nil {
 			log.Printf("claude watcher: ensure conversation %s: %v", sid, err)
 			continue
+		}
+
+		if title := readSessionTitle(a.home, g.project, sid); title != "" {
+			if err := db.UpdateConversationTitle(ctx, a.db, sid, title); err != nil {
+				log.Printf("claude watcher: update title for %s: %v", sid, err)
+			}
 		}
 
 		turns := make([]db.Turn, 0, len(g.entries)+1)
