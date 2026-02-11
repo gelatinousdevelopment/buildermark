@@ -13,6 +13,7 @@ import (
 
 	"github.com/davidcann/zrate/web/server/internal/db"
 	"github.com/davidcann/zrate/web/server/internal/handler"
+	"github.com/davidcann/zrate/web/server/internal/history"
 )
 
 func main() {
@@ -31,9 +32,18 @@ func main() {
 	}
 	defer database.Close()
 
+	watchCtx, watchCancel := context.WithCancel(context.Background())
+	defer watchCancel()
+	watcher, err := history.NewWatcher(database)
+	if err != nil {
+		log.Printf("warning: history watcher disabled: %v", err)
+	} else {
+		go watcher.Run(watchCtx)
+	}
+
 	srv := &http.Server{
 		Addr:         *addr,
-		Handler:      (&handler.Server{DB: database}).Routes(),
+		Handler:      (&handler.Server{DB: database, Watcher: watcher}).Routes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -51,6 +61,7 @@ func main() {
 
 	<-done
 	log.Println("shutting down...")
+	watchCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

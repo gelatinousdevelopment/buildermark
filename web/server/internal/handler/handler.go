@@ -4,11 +4,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+
+	"github.com/davidcann/zrate/web/server/internal/history"
 )
 
 // Server holds dependencies shared across HTTP handlers.
 type Server struct {
-	DB *sql.DB
+	DB      *sql.DB
+	Watcher *history.Watcher // may be nil if watcher is disabled
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.
@@ -20,6 +23,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/{id}", s.handleGetProject)
 	mux.HandleFunc("GET /api/v1/conversations", s.handleListConversations)
 	mux.HandleFunc("GET /api/v1/conversations/{id}", s.handleGetConversation)
+	mux.HandleFunc("POST /api/v1/history/scan", s.handleHistoryScan)
 	mux.HandleFunc("GET /", s.handleDashboard)
 	return corsMiddleware(mux)
 }
