@@ -56,8 +56,16 @@ func EnsureConversation(ctx context.Context, db *sql.DB, conversationID, project
 	return nil
 }
 
+// dupWindowMs is the maximum timestamp difference (in milliseconds) within which
+// two turns with the same conversation, role, and content are considered duplicates.
+const dupWindowMs = 10_000 // 10 seconds
+
 // InsertTurns inserts multiple turns in a single transaction, skipping duplicates.
+// Duplicates are detected both within the batch (same conversation + role + content
+// within dupWindowMs) and against existing rows in the database.
 func InsertTurns(ctx context.Context, db *sql.DB, turns []Turn) error {
+	turns = deduplicateTurns(turns)
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -65,7 +73,13 @@ func InsertTurns(ctx context.Context, db *sql.DB, turns []Turn) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		"INSERT OR IGNORE INTO turns (id, timestamp, project_id, conversation_id, role, content, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		`INSERT OR IGNORE INTO turns (id, timestamp, project_id, conversation_id, role, content, raw_json)
+		 SELECT ?, ?, ?, ?, ?, ?, ?
+		 WHERE NOT EXISTS (
+		     SELECT 1 FROM turns
+		     WHERE conversation_id = ? AND role = ? AND content = ?
+		     AND ABS(timestamp - ?) < ?
+		 )`,
 	)
 	if err != nil {
 		return fmt.Errorf("prepare insert turn: %w", err)
@@ -73,10 +87,41 @@ func InsertTurns(ctx context.Context, db *sql.DB, turns []Turn) error {
 	defer stmt.Close()
 
 	for _, t := range turns {
-		if _, err := stmt.ExecContext(ctx, uuid.New().String(), t.Timestamp, t.ProjectID, t.ConversationID, t.Role, t.Content, t.RawJSON); err != nil {
+		if _, err := stmt.ExecContext(ctx,
+			uuid.New().String(), t.Timestamp, t.ProjectID, t.ConversationID, t.Role, t.Content, t.RawJSON,
+			t.ConversationID, t.Role, t.Content, t.Timestamp, dupWindowMs,
+		); err != nil {
 			return fmt.Errorf("insert turn: %w", err)
 		}
 	}
 
 	return tx.Commit()
+}
+
+// deduplicateTurns removes turns within the same conversation that have the same
+// role and content within dupWindowMs, keeping only the first occurrence.
+func deduplicateTurns(turns []Turn) []Turn {
+	type key struct {
+		conversationID string
+		role           string
+		content        string
+	}
+	seen := make(map[key]int64) // key -> first-seen timestamp
+	result := make([]Turn, 0, len(turns))
+	for _, t := range turns {
+		k := key{t.ConversationID, t.Role, t.Content}
+		if prevTs, ok := seen[k]; ok && absInt64(t.Timestamp-prevTs) < dupWindowMs {
+			continue
+		}
+		seen[k] = t.Timestamp
+		result = append(result, t)
+	}
+	return result
+}
+
+func absInt64(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

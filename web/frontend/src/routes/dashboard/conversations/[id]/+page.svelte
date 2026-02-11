@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getConversation } from '$lib/api';
+	import { getConversation, createRating } from '$lib/api';
 	import { stars, fmtTime } from '$lib/utils';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, TurnRead, Rating } from '$lib/types';
@@ -14,6 +14,41 @@
 	let conversation: ConversationDetail | null = $state(null);
 	let loading = $state(true);
 	let error: string | null = $state(null);
+
+	let inlineRatingTurnId: string | null = $state(null);
+	let inlineRatingValue: number = $state(0);
+	let inlineNote: string = $state('');
+	let inlineSubmitting: boolean = $state(false);
+	let inlineError: string | null = $state(null);
+
+	function openInlineRating(turnId: string, starValue: number) {
+		inlineRatingTurnId = turnId;
+		inlineRatingValue = starValue;
+		inlineNote = '';
+		inlineError = null;
+	}
+
+	function cancelInlineRating() {
+		inlineRatingTurnId = null;
+		inlineRatingValue = 0;
+		inlineNote = '';
+		inlineError = null;
+	}
+
+	async function submitInlineRating() {
+		if (!conversation || !inlineRatingTurnId || inlineRatingValue < 1) return;
+		inlineSubmitting = true;
+		inlineError = null;
+		try {
+			const newRating = await createRating(conversation.id, inlineRatingValue, inlineNote);
+			conversation.ratings = [...conversation.ratings, newRating];
+			cancelInlineRating();
+		} catch (e) {
+			inlineError = e instanceof Error ? e.message : 'Failed to submit rating';
+		} finally {
+			inlineSubmitting = false;
+		}
+	}
 
 	let timeline: TimelineItem[] = $derived.by(() => {
 		if (!conversation) return [];
@@ -99,6 +134,55 @@
 					</div>
 					<div class="turn-content">{item.turn.content}</div>
 				</div>
+				{#if item.turn.role === 'user'}
+					<div class="inline-rating">
+						{#if inlineRatingTurnId === item.turn.id}
+							<div class="inline-rating-expanded">
+								<div class="inline-stars">
+									{#each [1, 2, 3, 4, 5] as star (star)}
+										<button
+											class="star-btn"
+											class:active={star <= inlineRatingValue}
+											onclick={() => (inlineRatingValue = star)}
+										>
+											{star <= inlineRatingValue ? '★' : '☆'}
+										</button>
+									{/each}
+								</div>
+								<input
+									type="text"
+									class="inline-note"
+									placeholder="Optional note..."
+									bind:value={inlineNote}
+								/>
+								<div class="inline-actions">
+									<button
+										class="btn-sm"
+										disabled={inlineSubmitting || inlineRatingValue < 1}
+										onclick={submitInlineRating}
+									>
+										{inlineSubmitting ? 'Submitting...' : 'Submit'}
+									</button>
+									<button class="btn-sm btn-cancel" onclick={cancelInlineRating}> Cancel </button>
+								</div>
+								{#if inlineError}
+									<p class="inline-error">{inlineError}</p>
+								{/if}
+							</div>
+						{:else}
+							<div class="inline-stars-collapsed">
+								{#each [1, 2, 3, 4, 5] as star (star)}
+									<button
+										class="star-btn faded"
+										onclick={() => openInlineRating(item.turn.id, star)}
+									>
+										☆
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 			{:else}
 				<div class="rating-card">
 					<div class="turn-header">
@@ -152,5 +236,87 @@
 	.rating-field {
 		font-size: 0.9rem;
 		margin-top: 0.25rem;
+	}
+
+	.inline-rating {
+		margin-bottom: 1rem;
+		padding-left: 0.75rem;
+	}
+
+	.inline-stars-collapsed {
+		display: flex;
+		gap: 2px;
+	}
+
+	.star-btn {
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 1.1rem;
+		padding: 0;
+		line-height: 1;
+		color: #ccc;
+	}
+
+	.star-btn:hover,
+	.star-btn.active {
+		color: #f0c040;
+	}
+
+	.star-btn.faded {
+		color: #ccc;
+	}
+
+	.star-btn.faded:hover,
+	.inline-stars-collapsed:hover .star-btn.faded {
+		color: #f0c040;
+	}
+
+	.inline-rating-expanded {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		max-width: 400px;
+	}
+
+	.inline-stars {
+		display: flex;
+		gap: 2px;
+	}
+
+	.inline-note {
+		padding: 0.25rem 0.5rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		font-size: 0.85rem;
+	}
+
+	.inline-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.btn-sm {
+		padding: 0.25rem 0.75rem;
+		font-size: 0.85rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		background: #f0c040;
+		cursor: pointer;
+	}
+
+	.btn-sm:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.btn-cancel {
+		background: #fff;
+	}
+
+	.inline-error {
+		color: #c00;
+		font-size: 0.85rem;
+		margin: 0;
 	}
 </style>

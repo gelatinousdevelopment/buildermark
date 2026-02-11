@@ -51,3 +51,15 @@ export function getConversation(id: string): Promise<ConversationDetail> {
 export function listRatings(): Promise<Rating[]> {
 	return api('/api/v1/ratings');
 }
+
+export function createRating(
+	conversationId: string,
+	rating: number,
+	note: string
+): Promise<Rating> {
+	return api('/api/v1/rating', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ conversationId, rating, note })
+	});
+}
