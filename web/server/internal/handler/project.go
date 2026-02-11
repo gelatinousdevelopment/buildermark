@@ -1,0 +1,39 @@
+package handler
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/davidcann/zrate/web/server/internal/db"
+)
+
+func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
+	projects, err := db.ListProjects(r.Context(), s.DB)
+	if err != nil {
+		log.Printf("error listing projects: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to list projects")
+		return
+	}
+	writeSuccess(w, http.StatusOK, projects)
+}
+
+func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "project id is required")
+		return
+	}
+
+	project, err := db.GetProjectDetail(r.Context(), s.DB, id)
+	if err != nil {
+		log.Printf("error getting project: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to get project")
+		return
+	}
+	if project == nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, project)
+}

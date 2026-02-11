@@ -72,13 +72,7 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 			return nil, fmt.Errorf("scan rating: %w", err)
 		}
 
-		// go-sqlite3 stores time.Time as RFC 3339 by default.
-		// Fall back to the bare SQLite CURRENT_TIMESTAMP format for rows
-		// that were not inserted through Go.
-		r.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
-		if r.CreatedAt.IsZero() {
-			r.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAt)
-		}
+		r.CreatedAt = parseTime(createdAt)
 
 		ratings = append(ratings, r)
 	}
