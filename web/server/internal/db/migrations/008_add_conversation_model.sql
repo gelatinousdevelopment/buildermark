@@ -1,0 +1,1 @@
+ALTER TABLE conversations ADD COLUMN model TEXT NOT NULL DEFAULT '';

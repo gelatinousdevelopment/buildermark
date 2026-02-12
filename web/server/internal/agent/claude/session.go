@@ -25,7 +25,14 @@ type historyEntry struct {
 	SessionID      string                   `json:"sessionId"`
 	Project        string                   `json:"project"`
 	Type           string                   `json:"type"`
+	Model          string                   `json:"model"`
+	Message        historyEntryMessage      `json:"message"`
 	PastedContents map[string]pastedContent `json:"pastedContents"`
+	RawJSON        string                   `json:"-"`
+}
+
+type historyEntryMessage struct {
+	Model string `json:"model"`
 }
 
 // ResolveSession polls history.jsonl for up to 5 seconds looking for a
@@ -155,6 +162,7 @@ func collectSessionEntries(home, path, sessionID string) []agent.Entry {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}
+		entry.RawJSON = line
 		if entry.SessionID != sessionID {
 			continue
 		}
@@ -174,12 +182,66 @@ func collectSessionEntries(home, path, sessionID string) []agent.Entry {
 			SessionID: entry.SessionID,
 			Project:   entry.Project,
 			Role:      role,
+			Model:     historyEntryModel(entry),
 			Display:   display,
 			RawJSON:   line,
 		})
 	}
 
 	return entries
+}
+
+func historyEntryModel(e historyEntry) string {
+	if model := strings.TrimSpace(e.Model); model != "" {
+		return model
+	}
+	if model := strings.TrimSpace(e.Message.Model); model != "" {
+		return model
+	}
+	if model := extractModelFromJSONLine(e.RawJSON); model != "" {
+		return model
+	}
+	return ""
+}
+
+func extractModelFromJSONLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+
+	var obj any
+	if err := json.Unmarshal([]byte(line), &obj); err != nil {
+		return ""
+	}
+	return findModelString(obj)
+}
+
+func findModelString(v any) string {
+	switch x := v.(type) {
+	case map[string]any:
+		// Check direct model-like keys first at this level.
+		for _, k := range []string{"model", "model_name", "modelName", "model_slug", "modelSlug"} {
+			if s, ok := x[k].(string); ok {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					return s
+				}
+			}
+		}
+		for _, nested := range x {
+			if found := findModelString(nested); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for _, item := range x {
+			if found := findModelString(item); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
 }
 
 // resolvePastedContents replaces [Pasted text #N] placeholders in display

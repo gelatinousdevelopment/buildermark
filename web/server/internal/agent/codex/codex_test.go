@@ -247,8 +247,9 @@ func TestWatcherProcessCurrentSchemaSessionFile(t *testing.T) {
 			"timestamp": now.Add(-5 * time.Second).Format(time.RFC3339Nano),
 			"type":      "session_meta",
 			"payload": map[string]any{
-				"id":  "thread-current",
-				"cwd": "/proj/current",
+				"id":    "thread-current",
+				"cwd":   "/proj/current",
+				"model": "gpt-5-codex",
 			},
 		},
 		map[string]any{
@@ -311,6 +312,13 @@ func TestWatcherProcessCurrentSchemaSessionFile(t *testing.T) {
 	}
 	if agentName != "codex" {
 		t.Errorf("agent = %q, want %q", agentName, "codex")
+	}
+	var model string
+	if err := database.QueryRow("SELECT model FROM messages WHERE conversation_id = 'thread-current' AND role = 'agent' ORDER BY timestamp DESC LIMIT 1").Scan(&model); err != nil {
+		t.Fatalf("query message model: %v", err)
+	}
+	if model != "gpt-5-codex" {
+		t.Errorf("model = %q, want %q", model, "gpt-5-codex")
 	}
 }
 

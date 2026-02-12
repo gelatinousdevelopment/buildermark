@@ -187,6 +187,7 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 	var entries []agent.Entry
 	var threadID string
 	var project string
+	var currentModel string
 	var responseItemUserIdx []int
 	hasEventMsgUser := false
 
@@ -199,6 +200,9 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 		var event codexSessionLine
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			continue
+		}
+		if m := extractCodexModelFromRawLine(line); m != "" {
+			currentModel = m
 		}
 
 		ts := parseCodexTimestamp(event.Timestamp)
@@ -248,6 +252,7 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 				SessionID: threadID,
 				Project:   project,
 				Role:      role,
+				Model:     currentModel,
 				Display:   content,
 				RawJSON:   line,
 			})
@@ -270,6 +275,7 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 				SessionID: threadID,
 				Project:   project,
 				Role:      "user",
+				Model:     currentModel,
 				Display:   content,
 				RawJSON:   line,
 			})
@@ -292,6 +298,7 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 				SessionID: threadID,
 				Project:   project,
 				Role:      "user",
+				Model:     currentModel,
 				Display:   content,
 				RawJSON:   line,
 			})
@@ -331,6 +338,7 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 				SessionID: threadID,
 				Project:   project,
 				Role:      role,
+				Model:     currentModel,
 				Display:   content,
 				RawJSON:   line,
 			})

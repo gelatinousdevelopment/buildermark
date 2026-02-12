@@ -107,6 +107,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 	if conv.SessionID == "" {
 		return
 	}
+	sessionModel := strings.TrimSpace(conv.Model)
 
 	projectPath := a.resolveProjectPath(conv)
 	if projectPath == "" {
@@ -150,6 +151,10 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		if m.Type == "user" {
 			role = "user"
 		}
+		msgModel := ""
+		if role == "agent" {
+			msgModel = firstNonEmpty(strings.TrimSpace(m.Model), strings.TrimSpace(m.ModelName), sessionModel)
+		}
 
 		rawJSON, _ := json.Marshal(m)
 
@@ -159,6 +164,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			ProjectID:      projectID,
 			ConversationID: conv.SessionID,
 			Role:           role,
+			Model:          msgModel,
 			Content:        content,
 			RawJSON:        string(rawJSON),
 		})
@@ -188,6 +194,10 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		if entry.Type == "user" {
 			role = "user"
 		}
+		msgModel := ""
+		if role == "agent" {
+			msgModel = firstNonEmpty(strings.TrimSpace(entry.Model), strings.TrimSpace(entry.ModelName), sessionModel)
+		}
 
 		rawJSON, _ := json.Marshal(entry)
 		ts := parseGeminiTimestamp(entry.Timestamp)
@@ -196,6 +206,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			ProjectID:      projectID,
 			ConversationID: conv.SessionID,
 			Role:           role,
+			Model:          msgModel,
 			Content:        content,
 			RawJSON:        string(rawJSON),
 		})
@@ -265,4 +276,14 @@ func (a *Agent) backfillGitIDs(ctx context.Context) {
 	if updated > 0 {
 		log.Printf("gemini watcher: backfilled %d project git_ids", updated)
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

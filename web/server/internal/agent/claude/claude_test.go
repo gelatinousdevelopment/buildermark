@@ -1118,18 +1118,49 @@ func TestWatcherStoresAgentName(t *testing.T) {
 
 	writeEntries(t, histPath, []historyEntry{
 		{Display: "hello", Timestamp: 1000, SessionID: "sess-1", Project: "/proj/a", Type: "user"},
+		{Display: "hi", Timestamp: 2000, SessionID: "sess-1", Project: "/proj/a", Type: "assistant", Model: "claude-3-7-sonnet"},
 	})
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	var agent string
-	err := database.QueryRow("SELECT agent FROM conversations WHERE id = 'sess-1'").Scan(&agent)
+	var agentName string
+	err := database.QueryRow("SELECT agent FROM conversations WHERE id = 'sess-1'").Scan(&agentName)
 	if err != nil {
 		t.Fatalf("query agent: %v", err)
 	}
-	if agent != "claude" {
-		t.Errorf("agent = %q, want %q", agent, "claude")
+	if agentName != "claude" {
+		t.Errorf("agent = %q, want %q", agentName, "claude")
+	}
+	var model string
+	err = database.QueryRow("SELECT model FROM messages WHERE conversation_id = 'sess-1' AND role = 'agent' ORDER BY timestamp DESC LIMIT 1").Scan(&model)
+	if err != nil {
+		t.Fatalf("query model: %v", err)
+	}
+	if model != "claude-3-7-sonnet" {
+		t.Errorf("model = %q, want %q", model, "claude-3-7-sonnet")
+	}
+}
+
+func TestWatcherExtractsModelFromNestedRawHistoryJSON(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	raw := `{"display":"hello","timestamp":1000,"sessionId":"sess-nested","project":"/proj/a","type":"assistant","message":{"metadata":{"model":"claude-3-5-sonnet"}}}` + "\n"
+	if err := os.WriteFile(histPath, []byte(raw), 0644); err != nil {
+		t.Fatalf("write history: %v", err)
+	}
+
+	a := newAgent(database, histPath, tmpDir)
+	a.scanSince(context.Background(), time.Time{})
+
+	var model string
+	if err := database.QueryRow("SELECT model FROM messages WHERE conversation_id = 'sess-nested' AND role = 'agent' LIMIT 1").Scan(&model); err != nil {
+		t.Fatalf("query model: %v", err)
+	}
+	if model != "claude-3-5-sonnet" {
+		t.Errorf("model = %q, want %q", model, "claude-3-5-sonnet")
 	}
 }

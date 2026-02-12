@@ -139,6 +139,7 @@ func (a *Agent) readFrom(offset int64) ([]historyEntry, int64) {
 		if entry.SessionID == "" {
 			continue
 		}
+		entry.RawJSON = line
 		entries = append(entries, entry)
 	}
 
@@ -288,6 +289,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				ProjectID:      projectID,
 				ConversationID: sid,
 				Role:           role,
+				Model:          mapRoleModel(role, historyEntryModel(e)),
 				Content:        display,
 				RawJSON:        string(rawJSON),
 			})
@@ -320,6 +322,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				ProjectID:      projectID,
 				ConversationID: sid,
 				Role:           e.Role,
+				Model:          mapRoleModel(e.Role, extractModelFromJSONLine(string(rawJSON))),
 				Content:        e.Content,
 				RawJSON:        string(rawJSON),
 			})
@@ -344,6 +347,13 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			}
 		}
 	}
+}
+
+func mapRoleModel(role, model string) string {
+	if role != "agent" {
+		return ""
+	}
+	return strings.TrimSpace(model)
 }
 
 // parseZrateDisplay parses "/zrate 4 optional note" into (4, "optional note").

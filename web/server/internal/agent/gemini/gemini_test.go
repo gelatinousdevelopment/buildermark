@@ -85,6 +85,7 @@ func TestWatcherProcessSessionFile(t *testing.T) {
 	writeConversationFile(t, convPath, map[string]any{
 		"sessionId":   sessionID,
 		"projectHash": hash,
+		"model":       "gemini-2.5-pro",
 		"directories": []string{"/proj/gemini"},
 		"messages": []map[string]any{
 			{
@@ -128,6 +129,51 @@ func TestWatcherProcessSessionFile(t *testing.T) {
 	}
 	if conversationID != sessionID {
 		t.Errorf("conversation_id = %q, want %q", conversationID, sessionID)
+	}
+
+	var model string
+	if err := database.QueryRow("SELECT model FROM messages WHERE conversation_id = ? AND role = 'agent' ORDER BY timestamp DESC LIMIT 1", sessionID).Scan(&model); err != nil {
+		t.Fatalf("query message model: %v", err)
+	}
+	if model != "gemini-2.5-pro" {
+		t.Errorf("model = %q, want %q", model, "gemini-2.5-pro")
+	}
+}
+
+func TestWatcherDetectsNestedConversationModel(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	hash := "nested-hash"
+	sessionID := "99999999-2222-3333-4444-555555555555"
+	now := time.Now().UTC()
+
+	convPath := filepath.Join(tmpDir, hash, "chats", "session-2026-02-12T12-00-99999999.json")
+	writeConversationFile(t, convPath, map[string]any{
+		"sessionId":   sessionID,
+		"projectHash": hash,
+		"config": map[string]any{
+			"model": "gemini-2.0-flash",
+		},
+		"directories": []string{"/proj/gemini"},
+		"messages": []map[string]any{
+			{
+				"id":        "m1",
+				"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),
+				"type":      "gemini",
+				"content":   "hello",
+			},
+		},
+	})
+
+	a := newAgent(database, tmpDir, tmpDir)
+	a.processSessionFile(context.Background(), convPath)
+
+	var model string
+	if err := database.QueryRow("SELECT model FROM messages WHERE conversation_id = ? AND role = 'agent' LIMIT 1", sessionID).Scan(&model); err != nil {
+		t.Fatalf("query model: %v", err)
+	}
+	if model != "gemini-2.0-flash" {
+		t.Errorf("model = %q, want %q", model, "gemini-2.0-flash")
 	}
 }
 

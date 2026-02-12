@@ -15,6 +15,7 @@ type Message struct {
 	ProjectID      string
 	ConversationID string
 	Role           string
+	Model          string
 	Content        string
 	RawJSON        string
 }
@@ -73,11 +74,11 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR IGNORE INTO messages (id, timestamp, project_id, conversation_id, role, content, raw_json)
-		 SELECT ?, ?, ?, ?, ?, ?, ?
+		`INSERT OR IGNORE INTO messages (id, timestamp, project_id, conversation_id, role, model, content, raw_json)
+		 SELECT ?, ?, ?, ?, ?, ?, ?, ?
 		 WHERE NOT EXISTS (
 		     SELECT 1 FROM messages
-		     WHERE conversation_id = ? AND role = ? AND content = ?
+		     WHERE conversation_id = ? AND role = ? AND model = ? AND content = ?
 		     AND ABS(timestamp - ?) < ?
 		 )`,
 	)
@@ -86,12 +87,27 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	}
 	defer stmt.Close()
 
+	updateModelStmt, err := tx.PrepareContext(ctx,
+		`UPDATE messages
+		 SET model = ?
+		 WHERE conversation_id = ? AND timestamp = ? AND model = ''`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare update message model: %w", err)
+	}
+	defer updateModelStmt.Close()
+
 	for _, m := range messages {
 		if _, err := stmt.ExecContext(ctx,
-			uuid.New().String(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.Content, m.RawJSON,
-			m.ConversationID, m.Role, m.Content, m.Timestamp, dupWindowMs,
+			uuid.New().String(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.Model, m.Content, m.RawJSON,
+			m.ConversationID, m.Role, m.Model, m.Content, m.Timestamp, dupWindowMs,
 		); err != nil {
 			return fmt.Errorf("insert message: %w", err)
+		}
+		if m.Model != "" {
+			if _, err := updateModelStmt.ExecContext(ctx, m.Model, m.ConversationID, m.Timestamp); err != nil {
+				return fmt.Errorf("update message model: %w", err)
+			}
 		}
 	}
 
@@ -104,12 +120,13 @@ func deduplicateMessages(messages []Message) []Message {
 	type key struct {
 		conversationID string
 		role           string
+		model          string
 		content        string
 	}
 	seen := make(map[key]int64) // key -> first-seen timestamp
 	result := make([]Message, 0, len(messages))
 	for _, m := range messages {
-		k := key{m.ConversationID, m.Role, m.Content}
+		k := key{m.ConversationID, m.Role, m.Model, m.Content}
 		if prevTs, ok := seen[k]; ok && absInt64(m.Timestamp-prevTs) < dupWindowMs {
 			continue
 		}

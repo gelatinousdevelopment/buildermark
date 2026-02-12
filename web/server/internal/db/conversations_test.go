@@ -69,7 +69,7 @@ func TestGetConversationDetail(t *testing.T) {
 
 	messages := []Message{
 		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-1", Role: "user", Content: "hello"},
-		{Timestamp: 2000, ProjectID: pid, ConversationID: "conv-1", Role: "agent", Content: "hi"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "conv-1", Role: "agent", Model: "claude-3-7-sonnet", Content: "hi"},
 	}
 	if err := InsertMessages(ctx, db, messages); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
@@ -102,6 +102,9 @@ func TestGetConversationDetail(t *testing.T) {
 	}
 	if detail.Messages[1].Role != "user" {
 		t.Errorf("second turn role = %q, want %q", detail.Messages[1].Role, "user")
+	}
+	if detail.Messages[0].Model != "claude-3-7-sonnet" {
+		t.Errorf("first turn model = %q, want %q", detail.Messages[0].Model, "claude-3-7-sonnet")
 	}
 	if len(detail.Ratings) != 1 {
 		t.Fatalf("got %d ratings, want 1", len(detail.Ratings))

@@ -138,6 +138,7 @@ func TestEnsureConversationIdempotent(t *testing.T) {
 	if count != 1 {
 		t.Errorf("expected 1 conversation, got %d", count)
 	}
+
 }
 
 func TestInsertMessages(t *testing.T) {
@@ -265,6 +266,70 @@ func TestInsertMessagesNearDuplicateContent(t *testing.T) {
 	}
 }
 
+func TestInsertMessagesDifferentModelNotDeduplicated(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	msgs := []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Model: "claude-3-7-sonnet", Content: "same", RawJSON: "{}"},
+		{Timestamp: 1001, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Model: "claude-3-5-sonnet", Content: "same", RawJSON: "{}"},
+	}
+	if err := InsertMessages(ctx, db, msgs); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 messages (different models), got %d", count)
+	}
+}
+
+func TestInsertMessagesBackfillsModelOnExistingTimestampRow(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	initial := []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "hello", RawJSON: "{}"},
+	}
+	if err := InsertMessages(ctx, db, initial); err != nil {
+		t.Fatalf("InsertMessages initial: %v", err)
+	}
+
+	rescan := []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Model: "claude-3-7-sonnet", Content: "hello", RawJSON: "{}"},
+	}
+	if err := InsertMessages(ctx, db, rescan); err != nil {
+		t.Fatalf("InsertMessages rescan: %v", err)
+	}
+
+	var model string
+	if err := db.QueryRow("SELECT model FROM messages WHERE conversation_id = ? AND timestamp = 1000", "conv-1").Scan(&model); err != nil {
+		t.Fatalf("query model: %v", err)
+	}
+	if model != "claude-3-7-sonnet" {
+		t.Errorf("model = %q, want %q", model, "claude-3-7-sonnet")
+	}
+}
+
 func TestInsertMessagesSameContentFarApart(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -330,11 +395,11 @@ func TestInsertMessagesBatchDeduplication(t *testing.T) {
 func TestDeduplicateMessages(t *testing.T) {
 	messages := []Message{
 		{Timestamp: 1000, ConversationID: "c1", Role: "user", Content: "hello"},
-		{Timestamp: 1002, ConversationID: "c1", Role: "user", Content: "hello"},     // dup of first
-		{Timestamp: 2000, ConversationID: "c1", Role: "agent", Content: "hello"},    // different role
-		{Timestamp: 3000, ConversationID: "c1", Role: "user", Content: "goodbye"},   // different content
-		{Timestamp: 3001, ConversationID: "c2", Role: "user", Content: "hello"},     // different conversation
-		{Timestamp: 60000, ConversationID: "c1", Role: "user", Content: "hello"},    // same content, far apart
+		{Timestamp: 1002, ConversationID: "c1", Role: "user", Content: "hello"},   // dup of first
+		{Timestamp: 2000, ConversationID: "c1", Role: "agent", Content: "hello"},  // different role
+		{Timestamp: 3000, ConversationID: "c1", Role: "user", Content: "goodbye"}, // different content
+		{Timestamp: 3001, ConversationID: "c2", Role: "user", Content: "hello"},   // different conversation
+		{Timestamp: 60000, ConversationID: "c1", Role: "user", Content: "hello"},  // same content, far apart
 	}
 
 	result := deduplicateMessages(messages)

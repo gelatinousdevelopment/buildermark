@@ -114,6 +114,7 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 				ProjectID:      projectID,
 				ConversationID: result.SessionID,
 				Role:           e.Role,
+				Model:          e.Model,
 				Content:        e.Display,
 				RawJSON:        e.RawJSON,
 			}

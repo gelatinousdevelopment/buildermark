@@ -71,7 +71,44 @@ func readConversation(path string) (*geminiConversation, error) {
 	if err := json.Unmarshal(data, &conv); err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(conv.Model) == "" {
+		conv.Model = detectGeminiModelFromJSON(data)
+	}
 	return &conv, nil
+}
+
+func detectGeminiModelFromJSON(data []byte) string {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return ""
+	}
+	return findGeminiModel(v)
+}
+
+func findGeminiModel(v any) string {
+	switch x := v.(type) {
+	case map[string]any:
+		for _, k := range []string{"model", "modelName", "model_name", "model_slug", "selectedModel"} {
+			if s, ok := x[k].(string); ok {
+				s = strings.TrimSpace(s)
+				if strings.Contains(strings.ToLower(s), "gemini") {
+					return s
+				}
+			}
+		}
+		for _, nested := range x {
+			if m := findGeminiModel(nested); m != "" {
+				return m
+			}
+		}
+	case []any:
+		for _, item := range x {
+			if m := findGeminiModel(item); m != "" {
+				return m
+			}
+		}
+	}
+	return ""
 }
 
 func inferProjectPath(conv *geminiConversation) string {

@@ -20,6 +20,7 @@ type MessageRead struct {
 	Timestamp      int64  `json:"timestamp"`
 	ConversationID string `json:"conversationId"`
 	Role           string `json:"role"`
+	Model          string `json:"model"`
 	Content        string `json:"content"`
 	RawJSON        string `json:"rawJson"`
 }
@@ -72,7 +73,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 
 	// Fetch messages ordered by most recent first.
 	messageRows, err := db.QueryContext(ctx,
-		"SELECT id, timestamp, conversation_id, role, content, raw_json FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
+		"SELECT id, timestamp, conversation_id, role, model, content, raw_json FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
 		conversationID,
 	)
 	if err != nil {
@@ -83,7 +84,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	c.Messages = []MessageRead{}
 	for messageRows.Next() {
 		var m MessageRead
-		if err := messageRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Content, &m.RawJSON); err != nil {
+		if err := messageRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Model, &m.Content, &m.RawJSON); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		c.Messages = append(c.Messages, m)

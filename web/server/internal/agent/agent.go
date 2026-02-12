@@ -32,6 +32,7 @@ type Entry struct {
 	SessionID string
 	Project   string
 	Role      string // "user" or "agent"
+	Model     string
 	Display   string
 	RawJSON   string
 }

@@ -25,12 +25,16 @@ type codexSessionLine struct {
 }
 
 type codexSessionMetaPayload struct {
-	ID  string `json:"id"`
-	Cwd string `json:"cwd"`
+	ID        string `json:"id"`
+	Cwd       string `json:"cwd"`
+	Model     string `json:"model"`
+	ModelSlug string `json:"model_slug"`
 }
 
 type codexTurnContextPayload struct {
-	Cwd string `json:"cwd"`
+	Cwd       string `json:"cwd"`
+	Model     string `json:"model"`
+	ModelSlug string `json:"model_slug"`
 }
 
 type codexResponseContentBlock struct {
@@ -39,9 +43,11 @@ type codexResponseContentBlock struct {
 }
 
 type codexResponseItemPayload struct {
-	Type    string                      `json:"type"`
-	Role    string                      `json:"role"`
-	Content []codexResponseContentBlock `json:"content"`
+	Type      string                      `json:"type"`
+	Role      string                      `json:"role"`
+	Content   []codexResponseContentBlock `json:"content"`
+	Model     string                      `json:"model"`
+	ModelSlug string                      `json:"model_slug"`
 }
 
 type codexEventMsgPayload struct {

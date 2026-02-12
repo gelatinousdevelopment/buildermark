@@ -10,6 +10,7 @@ import (
 type geminiConversation struct {
 	SessionID   string          `json:"sessionId"`
 	ProjectHash string          `json:"projectHash"`
+	Model       string          `json:"model"`
 	StartTime   string          `json:"startTime"`
 	LastUpdated string          `json:"lastUpdated"`
 	Messages    []geminiMessage `json:"messages"`
@@ -20,6 +21,8 @@ type geminiMessage struct {
 	ID             string           `json:"id"`
 	Timestamp      string           `json:"timestamp"`
 	Type           string           `json:"type"`
+	Model          string           `json:"model"`
+	ModelName      string           `json:"modelName"`
 	Content        json.RawMessage  `json:"content"`
 	DisplayContent json.RawMessage  `json:"displayContent"`
 	ToolCalls      []geminiToolCall `json:"toolCalls"`
@@ -32,6 +35,8 @@ type geminiToolCall struct {
 type geminiLogEntry struct {
 	SessionID string `json:"sessionId"`
 	Type      string `json:"type"`
+	Model     string `json:"model"`
+	ModelName string `json:"modelName"`
 	Message   string `json:"message"`
 	Timestamp string `json:"timestamp"`
 }

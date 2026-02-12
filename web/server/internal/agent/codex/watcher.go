@@ -148,6 +148,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 
 	var threadID string
 	var workingDir string
+	var currentModel string
 	var messages []db.Message
 	var responseItemUserIdx []int
 	hasEventMsgUser := false
@@ -167,6 +168,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			continue
 		}
+		if m := extractCodexModelFromRawLine(line); m != "" {
+			currentModel = m
+		}
 
 		ts := parseCodexTimestamp(event.Timestamp)
 
@@ -182,9 +186,13 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			if meta.Cwd != "" && workingDir == "" {
 				workingDir = meta.Cwd
 			}
+			if m := firstNonEmpty(strings.TrimSpace(meta.Model), strings.TrimSpace(meta.ModelSlug)); m != "" {
+				currentModel = m
+			}
 			messages = append(messages, db.Message{
 				Timestamp: ts,
 				Role:      "agent",
+				Model:     currentModel,
 				Content:   summarizeCodexEvent(event.Type, event.Payload, ""),
 				RawJSON:   line,
 			})
@@ -197,9 +205,13 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			if turnCtx.Cwd != "" && workingDir == "" {
 				workingDir = turnCtx.Cwd
 			}
+			if m := firstNonEmpty(strings.TrimSpace(turnCtx.Model), strings.TrimSpace(turnCtx.ModelSlug)); m != "" {
+				currentModel = m
+			}
 			messages = append(messages, db.Message{
 				Timestamp: ts,
 				Role:      "agent",
+				Model:     currentModel,
 				Content:   summarizeCodexEvent(event.Type, event.Payload, ""),
 				RawJSON:   line,
 			})
@@ -208,6 +220,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			var item codexResponseItemPayload
 			if err := json.Unmarshal(event.Payload, &item); err != nil {
 				continue
+			}
+			if m := firstNonEmpty(strings.TrimSpace(item.Model), strings.TrimSpace(item.ModelSlug)); m != "" {
+				currentModel = m
 			}
 			role := "agent"
 			content := extractResponseItemText(item.Content)
@@ -228,6 +243,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			messages = append(messages, db.Message{
 				Timestamp: ts,
 				Role:      role,
+				Model:     currentModel,
 				Content:   content,
 				RawJSON:   line,
 			})
@@ -262,6 +278,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			messages = append(messages, db.Message{
 				Timestamp: ts,
 				Role:      role,
+				Model:     currentModel,
 				Content:   content,
 				RawJSON:   line,
 			})
@@ -283,7 +300,6 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			if event.WorkingDir != "" && workingDir == "" {
 				workingDir = event.WorkingDir
 			}
-
 			// Direct user input event.
 			content := strings.TrimSpace(event.Content)
 			if content == "" {
@@ -292,6 +308,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			messages = append(messages, db.Message{
 				Timestamp: ts,
 				Role:      "user",
+				Model:     currentModel,
 				Content:   content,
 				RawJSON:   line,
 			})
@@ -314,7 +331,6 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			if event.WorkingDir != "" && workingDir == "" {
 				workingDir = event.WorkingDir
 			}
-
 			item := event.Item
 			role := "user"
 			if item.Role == "assistant" || item.Type == "agent_message" {
@@ -339,6 +355,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			messages = append(messages, db.Message{
 				Timestamp: ts,
 				Role:      role,
+				Model:     currentModel,
 				Content:   content,
 				RawJSON:   line,
 			})
@@ -358,6 +375,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			messages = append(messages, db.Message{
 				Timestamp: ts,
 				Role:      "agent",
+				Model:     currentModel,
 				Content:   summarizeCodexEvent(event.Type, event.Payload, ""),
 				RawJSON:   line,
 			})
@@ -538,4 +556,45 @@ func parseZrateDisplay(display string) (int, string) {
 		note = parts[1]
 	}
 	return rating, note
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+func extractCodexModelFromRawLine(line string) string {
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(line), &obj); err != nil {
+		return ""
+	}
+
+	if model := firstNonEmpty(
+		stringValue(obj["model"]),
+		stringValue(obj["model_slug"]),
+		stringValue(obj["modelName"]),
+		stringValue(obj["model_name"]),
+	); model != "" {
+		return model
+	}
+
+	payload, _ := obj["payload"].(map[string]any)
+	if payload == nil {
+		return ""
+	}
+	return firstNonEmpty(
+		stringValue(payload["model"]),
+		stringValue(payload["model_slug"]),
+		stringValue(payload["modelName"]),
+		stringValue(payload["model_name"]),
+	)
+}
+
+func stringValue(v any) string {
+	s, _ := v.(string)
+	return strings.TrimSpace(s)
 }
