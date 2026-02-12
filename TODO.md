@@ -7,7 +7,6 @@
 - [ ] Add a plugin and server agent implementation for opencode
 - [ ] Save the model along with each conversation
 - [ ] Is writing sql inline in go code the best practice way to do this in the go community? I want to make sure that this go code is really clean, secure, and won't get too much criticism from hacker news commenters.
-- [ ]  All non-user and non-rating messages should be collapsed by default to only a single line of text for each (perhaps with a label of the type or first part of the output or something), but they should be clickable and expand to show the full message on click.
 
 ## Later
 

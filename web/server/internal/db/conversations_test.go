@@ -267,7 +267,10 @@ func TestUpdateConversationProject(t *testing.T) {
 
 func TestParseTimeRFC3339(t *testing.T) {
 	input := "2024-06-15T10:30:00.123456789Z"
-	got := parseTime(input)
+	got, err := parseTime(input)
+	if err != nil {
+		t.Fatalf("parseTime(%q): %v", input, err)
+	}
 
 	want := time.Date(2024, 6, 15, 10, 30, 0, 123456789, time.UTC)
 	if !got.Equal(want) {
@@ -277,7 +280,10 @@ func TestParseTimeRFC3339(t *testing.T) {
 
 func TestParseTimeSQLiteFormat(t *testing.T) {
 	input := "2024-06-15 10:30:00"
-	got := parseTime(input)
+	got, err := parseTime(input)
+	if err != nil {
+		t.Fatalf("parseTime(%q): %v", input, err)
+	}
 
 	want := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
 	if !got.Equal(want) {
@@ -286,8 +292,11 @@ func TestParseTimeSQLiteFormat(t *testing.T) {
 }
 
 func TestParseTimeInvalid(t *testing.T) {
-	got := parseTime("not a time")
+	got, err := parseTime("not a time")
+	if err == nil {
+		t.Fatal("expected parseTime to return an error")
+	}
 	if !got.IsZero() {
-		t.Errorf("parseTime with invalid input = %v, want zero time", got)
+		t.Errorf("parseTime with invalid input = %v, want zero time with error", got)
 	}
 }

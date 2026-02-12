@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
@@ -17,6 +18,8 @@ type createRatingRequest struct {
 	Analysis       string `json:"analysis"`
 	Agent          string `json:"agent"`
 }
+
+const asyncSessionDBTimeout = 15 * time.Second
 
 func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 	if !requireJSON(w, r) {
@@ -77,7 +80,8 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), asyncSessionDBTimeout)
+		defer cancel()
 
 		if err := db.UpdateConversationID(ctx, s.DB, ratingID, result.SessionID); err != nil {
 			log.Printf("error updating conversation_id: %v", err)

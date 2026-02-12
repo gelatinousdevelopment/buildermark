@@ -108,7 +108,10 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan rating: %w", err)
 		}
-		r.CreatedAt = parseTime(createdAt)
+		r.CreatedAt, err = parseTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse rating created_at %q: %w", createdAt, err)
+		}
 		c.Ratings = append(c.Ratings, r)
 	}
 	if err := ratRows.Err(); err != nil {
@@ -148,18 +151,32 @@ func ListUntitledConversations(ctx context.Context, db *sql.DB, agent string) ([
 
 // UpdateConversationTitle sets the title on an existing conversation.
 func UpdateConversationTitle(ctx context.Context, db *sql.DB, conversationID, title string) error {
-	_, err := db.ExecContext(ctx, "UPDATE conversations SET title = ? WHERE id = ?", title, conversationID)
+	res, err := db.ExecContext(ctx, "UPDATE conversations SET title = ? WHERE id = ?", title, conversationID)
 	if err != nil {
 		return fmt.Errorf("update conversation title: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("conversation %s: %w", conversationID, ErrNotFound)
 	}
 	return nil
 }
 
 // UpdateConversationProject sets the project_id on an existing conversation.
 func UpdateConversationProject(ctx context.Context, db *sql.DB, conversationID, projectID string) error {
-	_, err := db.ExecContext(ctx, "UPDATE conversations SET project_id = ? WHERE id = ?", projectID, conversationID)
+	res, err := db.ExecContext(ctx, "UPDATE conversations SET project_id = ? WHERE id = ?", projectID, conversationID)
 	if err != nil {
 		return fmt.Errorf("update conversation project: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("conversation %s: %w", conversationID, ErrNotFound)
 	}
 	return nil
 }

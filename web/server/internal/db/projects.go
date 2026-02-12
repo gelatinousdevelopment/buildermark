@@ -133,7 +133,10 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 			if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 				return nil, fmt.Errorf("scan rating: %w", err)
 			}
-			r.CreatedAt = parseTime(createdAt)
+			r.CreatedAt, err = parseTime(createdAt)
+			if err != nil {
+				return nil, fmt.Errorf("parse rating created_at %q: %w", createdAt, err)
+			}
 			if c, ok := convMap[r.ConversationID]; ok {
 				c.Ratings = append(c.Ratings, r)
 			}
@@ -176,9 +179,16 @@ func SetProjectLabel(ctx context.Context, db *sql.DB, projectID, label string) e
 
 // UpdateProjectGitID sets the git_id on a project.
 func UpdateProjectGitID(ctx context.Context, db *sql.DB, projectID, gitID string) error {
-	_, err := db.ExecContext(ctx, "UPDATE projects SET git_id = ? WHERE id = ?", gitID, projectID)
+	res, err := db.ExecContext(ctx, "UPDATE projects SET git_id = ? WHERE id = ?", gitID, projectID)
 	if err != nil {
 		return fmt.Errorf("update project git_id: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
 	}
 	return nil
 }

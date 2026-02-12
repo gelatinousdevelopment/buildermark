@@ -44,9 +44,16 @@ func InsertRating(ctx context.Context, db *sql.DB, conversationID string, rating
 
 // UpdateConversationID replaces the conversation_id on an existing rating.
 func UpdateConversationID(ctx context.Context, db *sql.DB, ratingID, conversationID string) error {
-	_, err := db.ExecContext(ctx, "UPDATE ratings SET conversation_id = ? WHERE id = ?", conversationID, ratingID)
+	res, err := db.ExecContext(ctx, "UPDATE ratings SET conversation_id = ? WHERE id = ?", conversationID, ratingID)
 	if err != nil {
 		return fmt.Errorf("update conversation_id: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("rating %s: %w", ratingID, ErrNotFound)
 	}
 	return nil
 }
@@ -74,7 +81,10 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 			return nil, fmt.Errorf("scan rating: %w", err)
 		}
 
-		r.CreatedAt = parseTime(createdAt)
+		r.CreatedAt, err = parseTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse rating created_at %q: %w", createdAt, err)
+		}
 
 		ratings = append(ratings, r)
 	}
@@ -111,9 +121,16 @@ func ReconcileOrphanedRating(ctx context.Context, db *sql.DB, rating int, note s
 		return fmt.Errorf("find orphaned rating: %w", err)
 	}
 
-	_, err = db.ExecContext(ctx, "UPDATE ratings SET conversation_id = ? WHERE id = ?", realSessionID, ratingID)
+	res, err := db.ExecContext(ctx, "UPDATE ratings SET conversation_id = ? WHERE id = ?", realSessionID, ratingID)
 	if err != nil {
 		return fmt.Errorf("update orphaned rating: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("rating %s: %w", ratingID, ErrNotFound)
 	}
 
 	return nil
