@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// Turn holds the data for a single conversation turn to be inserted.
-type Turn struct {
+// Message holds the data for a single conversation message to be inserted.
+type Message struct {
 	Timestamp      int64
 	ProjectID      string
 	ConversationID string
@@ -57,14 +57,14 @@ func EnsureConversation(ctx context.Context, db *sql.DB, conversationID, project
 }
 
 // dupWindowMs is the maximum timestamp difference (in milliseconds) within which
-// two turns with the same conversation, role, and content are considered duplicates.
+// two messages with the same conversation, role, and content are considered duplicates.
 const dupWindowMs = 10_000 // 10 seconds
 
-// InsertTurns inserts multiple turns in a single transaction, skipping duplicates.
+// InsertMessages inserts multiple messages in a single transaction, skipping duplicates.
 // Duplicates are detected both within the batch (same conversation + role + content
 // within dupWindowMs) and against existing rows in the database.
-func InsertTurns(ctx context.Context, db *sql.DB, turns []Turn) error {
-	turns = deduplicateTurns(turns)
+func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
+	messages = deduplicateMessages(messages)
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -73,48 +73,48 @@ func InsertTurns(ctx context.Context, db *sql.DB, turns []Turn) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR IGNORE INTO turns (id, timestamp, project_id, conversation_id, role, content, raw_json)
+		`INSERT OR IGNORE INTO messages (id, timestamp, project_id, conversation_id, role, content, raw_json)
 		 SELECT ?, ?, ?, ?, ?, ?, ?
 		 WHERE NOT EXISTS (
-		     SELECT 1 FROM turns
+		     SELECT 1 FROM messages
 		     WHERE conversation_id = ? AND role = ? AND content = ?
 		     AND ABS(timestamp - ?) < ?
 		 )`,
 	)
 	if err != nil {
-		return fmt.Errorf("prepare insert turn: %w", err)
+		return fmt.Errorf("prepare insert message: %w", err)
 	}
 	defer stmt.Close()
 
-	for _, t := range turns {
+	for _, m := range messages {
 		if _, err := stmt.ExecContext(ctx,
-			uuid.New().String(), t.Timestamp, t.ProjectID, t.ConversationID, t.Role, t.Content, t.RawJSON,
-			t.ConversationID, t.Role, t.Content, t.Timestamp, dupWindowMs,
+			uuid.New().String(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.Content, m.RawJSON,
+			m.ConversationID, m.Role, m.Content, m.Timestamp, dupWindowMs,
 		); err != nil {
-			return fmt.Errorf("insert turn: %w", err)
+			return fmt.Errorf("insert message: %w", err)
 		}
 	}
 
 	return tx.Commit()
 }
 
-// deduplicateTurns removes turns within the same conversation that have the same
+// deduplicateMessages removes messages within the same conversation that have the same
 // role and content within dupWindowMs, keeping only the first occurrence.
-func deduplicateTurns(turns []Turn) []Turn {
+func deduplicateMessages(messages []Message) []Message {
 	type key struct {
 		conversationID string
 		role           string
 		content        string
 	}
 	seen := make(map[key]int64) // key -> first-seen timestamp
-	result := make([]Turn, 0, len(turns))
-	for _, t := range turns {
-		k := key{t.ConversationID, t.Role, t.Content}
-		if prevTs, ok := seen[k]; ok && absInt64(t.Timestamp-prevTs) < dupWindowMs {
+	result := make([]Message, 0, len(messages))
+	for _, m := range messages {
+		k := key{m.ConversationID, m.Role, m.Content}
+		if prevTs, ok := seen[k]; ok && absInt64(m.Timestamp-prevTs) < dupWindowMs {
 			continue
 		}
-		seen[k] = t.Timestamp
-		result = append(result, t)
+		seen[k] = m.Timestamp
+		result = append(result, m)
 	}
 	return result
 }

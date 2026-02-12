@@ -96,20 +96,20 @@ func TestWatcherProcessEntries(t *testing.T) {
 	if n := countRows(t, database, "conversations"); n != 2 {
 		t.Errorf("conversations: got %d, want 2", n)
 	}
-	if n := countRows(t, database, "turns"); n != 3 {
-		t.Errorf("turns: got %d, want 3", n)
+	if n := countRows(t, database, "messages"); n != 3 {
+		t.Errorf("messages: got %d, want 3", n)
 	}
 
 	// Verify role mapping.
 	var role string
-	err := database.QueryRow("SELECT role FROM turns WHERE conversation_id = 'sess-1' ORDER BY timestamp LIMIT 1").Scan(&role)
+	err := database.QueryRow("SELECT role FROM messages WHERE conversation_id = 'sess-1' ORDER BY timestamp LIMIT 1").Scan(&role)
 	if err != nil {
 		t.Fatalf("query role: %v", err)
 	}
 	if role != "user" {
 		t.Errorf("role = %q, want %q", role, "user")
 	}
-	err = database.QueryRow("SELECT role FROM turns WHERE conversation_id = 'sess-1' ORDER BY timestamp DESC LIMIT 1").Scan(&role)
+	err = database.QueryRow("SELECT role FROM messages WHERE conversation_id = 'sess-1' ORDER BY timestamp DESC LIMIT 1").Scan(&role)
 	if err != nil {
 		t.Fatalf("query role: %v", err)
 	}
@@ -131,8 +131,8 @@ func TestWatcherOffsetTracking(t *testing.T) {
 	ctx := context.Background()
 
 	a.scanSince(ctx, time.Time{})
-	if n := countRows(t, database, "turns"); n != 1 {
-		t.Fatalf("after scan: turns = %d, want 1", n)
+	if n := countRows(t, database, "messages"); n != 1 {
+		t.Fatalf("after scan: messages = %d, want 1", n)
 	}
 
 	writeEntries(t, histPath, []historyEntry{
@@ -141,13 +141,13 @@ func TestWatcherOffsetTracking(t *testing.T) {
 	})
 
 	a.poll(ctx)
-	if n := countRows(t, database, "turns"); n != 3 {
-		t.Errorf("after poll: turns = %d, want 3", n)
+	if n := countRows(t, database, "messages"); n != 3 {
+		t.Errorf("after poll: messages = %d, want 3", n)
 	}
 
 	a.poll(ctx)
-	if n := countRows(t, database, "turns"); n != 3 {
-		t.Errorf("after second poll: turns = %d, want 3", n)
+	if n := countRows(t, database, "messages"); n != 3 {
+		t.Errorf("after second poll: messages = %d, want 3", n)
 	}
 }
 
@@ -165,8 +165,8 @@ func TestWatcherFileRotation(t *testing.T) {
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	if n := countRows(t, database, "turns"); n != 2 {
-		t.Fatalf("after scan: turns = %d, want 2", n)
+	if n := countRows(t, database, "messages"); n != 2 {
+		t.Fatalf("after scan: messages = %d, want 2", n)
 	}
 
 	os.WriteFile(histPath, nil, 0644)
@@ -179,8 +179,8 @@ func TestWatcherFileRotation(t *testing.T) {
 	if n := countRows(t, database, "conversations"); n != 2 {
 		t.Errorf("conversations = %d, want 2", n)
 	}
-	if n := countRows(t, database, "turns"); n != 3 {
-		t.Errorf("turns = %d, want 3", n)
+	if n := countRows(t, database, "messages"); n != 3 {
+		t.Errorf("messages = %d, want 3", n)
 	}
 }
 
@@ -202,8 +202,8 @@ func TestWatcherIdempotentReprocessing(t *testing.T) {
 	a.offset = 0
 	a.scanSince(ctx, time.Time{})
 
-	if n := countRows(t, database, "turns"); n != 2 {
-		t.Errorf("turns after double scan = %d, want 2", n)
+	if n := countRows(t, database, "messages"); n != 2 {
+		t.Errorf("messages after double scan = %d, want 2", n)
 	}
 	if n := countRows(t, database, "projects"); n != 1 {
 		t.Errorf("projects after double scan = %d, want 1", n)
@@ -227,8 +227,8 @@ func TestWatcherSkipsEntriesWithoutSessionID(t *testing.T) {
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	if n := countRows(t, database, "turns"); n != 1 {
-		t.Errorf("turns = %d, want 1 (should skip entry without sessionID)", n)
+	if n := countRows(t, database, "messages"); n != 1 {
+		t.Errorf("messages = %d, want 1 (should skip entry without sessionID)", n)
 	}
 }
 
@@ -245,8 +245,8 @@ func TestWatcherSkipsEntriesWithoutProject(t *testing.T) {
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	if n := countRows(t, database, "turns"); n != 0 {
-		t.Errorf("turns = %d, want 0 (should skip session without project)", n)
+	if n := countRows(t, database, "messages"); n != 0 {
+		t.Errorf("messages = %d, want 0 (should skip session without project)", n)
 	}
 }
 
@@ -261,8 +261,8 @@ func TestWatcherMissingFile(t *testing.T) {
 	a.scanSince(ctx, time.Time{})
 	a.poll(ctx)
 
-	if n := countRows(t, database, "turns"); n != 0 {
-		t.Errorf("turns = %d, want 0", n)
+	if n := countRows(t, database, "messages"); n != 0 {
+		t.Errorf("messages = %d, want 0", n)
 	}
 }
 
@@ -285,8 +285,8 @@ func TestWatcherScanSinceFiltersOldEntries(t *testing.T) {
 
 	a.scanSince(ctx, now.Add(-7*24*time.Hour))
 
-	if n := countRows(t, database, "turns"); n != 1 {
-		t.Errorf("turns = %d, want 1 (should filter old entries)", n)
+	if n := countRows(t, database, "messages"); n != 1 {
+		t.Errorf("messages = %d, want 1 (should filter old entries)", n)
 	}
 	if n := countRows(t, database, "conversations"); n != 1 {
 		t.Errorf("conversations = %d, want 1", n)
@@ -316,16 +316,16 @@ func TestWatcherScanSinceAPI(t *testing.T) {
 	if count != 2 {
 		t.Errorf("ScanSince returned %d, want 2", count)
 	}
-	if n := countRows(t, database, "turns"); n != 2 {
-		t.Errorf("turns = %d, want 2", n)
+	if n := countRows(t, database, "messages"); n != 2 {
+		t.Errorf("messages = %d, want 2", n)
 	}
 
 	count = a.ScanSince(ctx, now.Add(-90*24*time.Hour))
 	if count != 3 {
 		t.Errorf("ScanSince returned %d, want 3", count)
 	}
-	if n := countRows(t, database, "turns"); n != 3 {
-		t.Errorf("turns = %d, want 3", n)
+	if n := countRows(t, database, "messages"); n != 3 {
+		t.Errorf("messages = %d, want 3", n)
 	}
 }
 
@@ -740,22 +740,22 @@ func TestProcessEntriesAddsFirstPromptFromConversationFile(t *testing.T) {
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	// Should have 2 turns: the first prompt from the conversation file + the /zrate from history.
-	if n := countRows(t, database, "turns"); n != 2 {
-		t.Errorf("turns = %d, want 2", n)
+	// Should have 2 messages: the first prompt from the conversation file + the /zrate from history.
+	if n := countRows(t, database, "messages"); n != 2 {
+		t.Errorf("messages = %d, want 2", n)
 	}
 
 	// Verify the first prompt was inserted with correct content.
 	var content string
 	err := database.QueryRow(
-		"SELECT content FROM turns WHERE conversation_id = ? ORDER BY timestamp LIMIT 1",
+		"SELECT content FROM messages WHERE conversation_id = ? ORDER BY timestamp LIMIT 1",
 		sessionID,
 	).Scan(&content)
 	if err != nil {
-		t.Fatalf("query first turn: %v", err)
+		t.Fatalf("query first message: %v", err)
 	}
 	if !containsSubstring(content, "Implement the plan") {
-		t.Errorf("first turn content = %q, want to contain %q", content, "Implement the plan")
+		t.Errorf("first message content = %q, want to contain %q", content, "Implement the plan")
 	}
 }
 
@@ -791,9 +791,9 @@ func TestProcessEntriesDoesNotDuplicateFirstPrompt(t *testing.T) {
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	// Should have exactly 2 turns (no duplicate).
-	if n := countRows(t, database, "turns"); n != 2 {
-		t.Errorf("turns = %d, want 2", n)
+	// Should have exactly 2 messages (no duplicate).
+	if n := countRows(t, database, "messages"); n != 2 {
+		t.Errorf("messages = %d, want 2", n)
 	}
 }
 

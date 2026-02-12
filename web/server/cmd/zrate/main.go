@@ -13,6 +13,7 @@ import (
 
 	"github.com/davidcann/zrate/web/server/internal/agent"
 	"github.com/davidcann/zrate/web/server/internal/agent/claude"
+	"github.com/davidcann/zrate/web/server/internal/agent/codex"
 	"github.com/davidcann/zrate/web/server/internal/db"
 	"github.com/davidcann/zrate/web/server/internal/handler"
 )
@@ -40,6 +41,13 @@ func main() {
 		log.Printf("warning: claude agent disabled: %v", err)
 	} else {
 		registry.Register(claudeAgent)
+	}
+
+	codexAgent, err := codex.New(database)
+	if err != nil {
+		log.Printf("warning: codex agent disabled: %v", err)
+	} else {
+		registry.Register(codexAgent)
 	}
 
 	watchCtx, watchCancel := context.WithCancel(context.Background())

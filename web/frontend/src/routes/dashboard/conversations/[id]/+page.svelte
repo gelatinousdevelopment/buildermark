@@ -5,38 +5,38 @@
 	import { getConversation, createRating } from '$lib/api';
 	import { stars, fmtTime } from '$lib/utils';
 	import { SvelteSet } from 'svelte/reactivity';
-	import type { ConversationDetail, TurnRead, Rating } from '$lib/types';
+	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
 
 	type TimelineItem =
-		| { kind: 'turn'; turn: TurnRead; time: number }
+		| { kind: 'message'; message: MessageRead; time: number }
 		| { kind: 'rating'; rating: Rating; time: number };
 
 	let conversation: ConversationDetail | null = $state(null);
 	let loading = $state(true);
 	let error: string | null = $state(null);
 
-	let inlineRatingTurnId: string | null = $state(null);
+	let inlineRatingMessageId: string | null = $state(null);
 	let inlineRatingValue: number = $state(0);
 	let inlineNote: string = $state('');
 	let inlineSubmitting: boolean = $state(false);
 	let inlineError: string | null = $state(null);
 
-	function openInlineRating(turnId: string, starValue: number) {
-		inlineRatingTurnId = turnId;
+	function openInlineRating(messageId: string, starValue: number) {
+		inlineRatingMessageId = messageId;
 		inlineRatingValue = starValue;
 		inlineNote = '';
 		inlineError = null;
 	}
 
 	function cancelInlineRating() {
-		inlineRatingTurnId = null;
+		inlineRatingMessageId = null;
 		inlineRatingValue = 0;
 		inlineNote = '';
 		inlineError = null;
 	}
 
 	async function submitInlineRating() {
-		if (!conversation || !inlineRatingTurnId || inlineRatingValue < 1) return;
+		if (!conversation || !inlineRatingMessageId || inlineRatingValue < 1) return;
 		inlineSubmitting = true;
 		inlineError = null;
 		try {
@@ -53,37 +53,37 @@
 	let timeline: TimelineItem[] = $derived.by(() => {
 		if (!conversation) return [];
 
-		const matchedTurnIds = new SvelteSet<string>();
+		const matchedMessageIds = new SvelteSet<string>();
 		const matchedRatingIds = new SvelteSet<string>();
 		const items: TimelineItem[] = [];
 
-		// Match each rating to the closest /zrate user turn within 120s
+		// Match each rating to the closest /zrate user message within 120s
 		for (const rating of conversation.ratings) {
 			const ratingTime = new Date(rating.createdAt).getTime();
-			let bestTurn: TurnRead | null = null;
+			let bestMessage: MessageRead | null = null;
 			let bestDelta = Infinity;
 
-			for (const turn of conversation.turns) {
-				if (turn.role !== 'user' || !turn.content.startsWith('/zrate')) continue;
-				if (matchedTurnIds.has(turn.id)) continue;
-				const delta = Math.abs(turn.timestamp - ratingTime);
+			for (const message of conversation.messages) {
+				if (message.role !== 'user' || !message.content.startsWith('/zrate')) continue;
+				if (matchedMessageIds.has(message.id)) continue;
+				const delta = Math.abs(message.timestamp - ratingTime);
 				if (delta < bestDelta && delta <= 120_000) {
 					bestDelta = delta;
-					bestTurn = turn;
+					bestMessage = message;
 				}
 			}
 
-			if (bestTurn) {
-				matchedTurnIds.add(bestTurn.id);
+			if (bestMessage) {
+				matchedMessageIds.add(bestMessage.id);
 				matchedRatingIds.add(rating.id);
-				items.push({ kind: 'rating', rating, time: bestTurn.timestamp });
+				items.push({ kind: 'rating', rating, time: bestMessage.timestamp });
 			}
 		}
 
-		// Add unmatched turns
-		for (const turn of conversation.turns) {
-			if (!matchedTurnIds.has(turn.id)) {
-				items.push({ kind: 'turn', turn, time: turn.timestamp });
+		// Add unmatched messages
+		for (const message of conversation.messages) {
+			if (!matchedMessageIds.has(message.id)) {
+				items.push({ kind: 'message', message, time: message.timestamp });
 			}
 		}
 
@@ -124,19 +124,19 @@
 	<p>Agent: {conversation.agent} | Project: {conversation.projectId}</p>
 
 	{#if timeline.length === 0}
-		<p>No turns or ratings.</p>
+		<p>No messages or ratings.</p>
 	{:else}
-		{#each timeline as item (item.kind === 'turn' ? item.turn.id : item.rating.id)}
-			{#if item.kind === 'turn'}
-				<div class="turn">
-					<div class="turn-header">
-						<strong>{item.turn.role}</strong> &middot; {fmtTime(item.turn.timestamp)}
+		{#each timeline as item (item.kind === 'message' ? item.message.id : item.rating.id)}
+			{#if item.kind === 'message'}
+				<div class="message">
+					<div class="message-header">
+						<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
 					</div>
-					<div class="turn-content">{item.turn.content}</div>
+					<div class="message-content">{item.message.content}</div>
 				</div>
-				{#if item.turn.role === 'user'}
+				{#if item.message.role === 'user'}
 					<div class="inline-rating">
-						{#if inlineRatingTurnId === item.turn.id}
+						{#if inlineRatingMessageId === item.message.id}
 							<div class="inline-rating-expanded">
 								<div class="inline-stars">
 									{#each [1, 2, 3, 4, 5] as star (star)}
@@ -174,7 +174,7 @@
 								{#each [1, 2, 3, 4, 5] as star (star)}
 									<button
 										class="star-btn faded"
-										onclick={() => openInlineRating(item.turn.id, star)}
+										onclick={() => openInlineRating(item.message.id, star)}
 									>
 										☆
 									</button>
@@ -185,7 +185,7 @@
 				{/if}
 			{:else}
 				<div class="rating-card">
-					<div class="turn-header">
+					<div class="message-header">
 						<strong>Rating</strong> &middot; {fmtTime(item.rating.createdAt)}
 					</div>
 					<div class="rating-stars">{stars(item.rating.rating)}</div>
@@ -202,20 +202,20 @@
 {/if}
 
 <style>
-	.turn {
+	.message {
 		margin-bottom: 1rem;
 		padding: 0.75rem;
 		border: 1px solid #eee;
 		border-radius: 4px;
 	}
 
-	.turn-header {
+	.message-header {
 		font-size: 0.85rem;
 		color: #666;
 		margin-bottom: 0.25rem;
 	}
 
-	.turn-content {
+	.message-content {
 		white-space: pre-wrap;
 		font-size: 0.9rem;
 	}

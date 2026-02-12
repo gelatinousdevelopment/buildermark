@@ -34,11 +34,11 @@ export interface ConversationDetail {
 	projectId: string;
 	agent: string;
 	title: string;
-	turns: TurnRead[];
+	messages: MessageRead[];
 	ratings: Rating[];
 }
 
-export interface TurnRead {
+export interface MessageRead {
 	id: string;
 	timestamp: number;
 	conversationId: string;

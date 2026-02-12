@@ -53,7 +53,7 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve real session in the background, then collect and store all conversation turns.
+	// Resolve real session in the background, then collect and store all conversation messages.
 	go func(ratingID, fallbackCID string, ratingVal int, note, agent string) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -103,9 +103,9 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		turns := make([]db.Turn, len(result.Entries))
+		messages := make([]db.Message, len(result.Entries))
 		for i, e := range result.Entries {
-			turns[i] = db.Turn{
+			messages[i] = db.Message{
 				Timestamp:      e.Timestamp,
 				ProjectID:      projectID,
 				ConversationID: result.SessionID,
@@ -115,8 +115,8 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := db.InsertTurns(ctx, s.DB, turns); err != nil {
-			log.Printf("error inserting turns: %v", err)
+		if err := db.InsertMessages(ctx, s.DB, messages); err != nil {
+			log.Printf("error inserting messages: %v", err)
 		}
 	}(rating.ID, req.ConversationID, req.Rating, req.Note, agentName)
 

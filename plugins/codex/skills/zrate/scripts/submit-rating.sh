@@ -31,14 +31,21 @@ if ! [[ "$rating" =~ ^[0-5]$ ]]; then
   exit 1
 fi
 
-# --- conversation id (throwaway; server resolves real sessionId from history) ---
-cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
+# --- conversation id ---
+# Use CODEX_THREAD_ID if available (set by Codex CLI for spawned processes),
+# otherwise generate a throwaway ID. The server resolves the real session
+# from the watcher when possible.
+if [[ -n "${CODEX_THREAD_ID:-}" ]]; then
+  cid="$CODEX_THREAD_ID"
+else
+  cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
+fi
 
 # --- build JSON payload ---
 analysis="${ANALYSIS:-}"
 note_esc=$(json_escape "$note")
 analysis_esc=$(json_escape "$analysis")
-payload="{\"conversationId\":\"${cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\"}"
+payload="{\"conversationId\":\"${cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\",\"agent\":\"codex\"}"
 
 # --- submit ---
 response=$(curl -s -X POST "${SERVER}/api/v1/rating" \

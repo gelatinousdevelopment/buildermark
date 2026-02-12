@@ -14,8 +14,8 @@ type Conversation struct {
 	Title     string `json:"title"`
 }
 
-// TurnRead is a turn as returned by read queries (excludes raw_json).
-type TurnRead struct {
+// MessageRead is a message as returned by read queries (excludes raw_json).
+type MessageRead struct {
 	ID             string `json:"id"`
 	Timestamp      int64  `json:"timestamp"`
 	ConversationID string `json:"conversationId"`
@@ -23,14 +23,14 @@ type TurnRead struct {
 	Content        string `json:"content"`
 }
 
-// ConversationDetail is a conversation with all its turns and ratings.
+// ConversationDetail is a conversation with all its messages and ratings.
 type ConversationDetail struct {
-	ID        string     `json:"id"`
-	ProjectID string     `json:"projectId"`
-	Agent     string     `json:"agent"`
-	Title     string     `json:"title"`
-	Turns     []TurnRead `json:"turns"`
-	Ratings   []Rating   `json:"ratings"`
+	ID        string        `json:"id"`
+	ProjectID string        `json:"projectId"`
+	Agent     string        `json:"agent"`
+	Title     string        `json:"title"`
+	Messages  []MessageRead `json:"messages"`
+	Ratings   []Rating      `json:"ratings"`
 }
 
 // ListConversations returns conversations, up to limit.
@@ -69,26 +69,26 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		return nil, fmt.Errorf("query conversation: %w", err)
 	}
 
-	// Fetch turns ordered by most recent first.
-	turnRows, err := db.QueryContext(ctx,
-		"SELECT id, timestamp, conversation_id, role, content FROM turns WHERE conversation_id = ? ORDER BY timestamp DESC",
+	// Fetch messages ordered by most recent first.
+	messageRows, err := db.QueryContext(ctx,
+		"SELECT id, timestamp, conversation_id, role, content FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
 		conversationID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("query turns: %w", err)
+		return nil, fmt.Errorf("query messages: %w", err)
 	}
-	defer turnRows.Close()
+	defer messageRows.Close()
 
-	c.Turns = []TurnRead{}
-	for turnRows.Next() {
-		var t TurnRead
-		if err := turnRows.Scan(&t.ID, &t.Timestamp, &t.ConversationID, &t.Role, &t.Content); err != nil {
-			return nil, fmt.Errorf("scan turn: %w", err)
+	c.Messages = []MessageRead{}
+	for messageRows.Next() {
+		var m MessageRead
+		if err := messageRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Content); err != nil {
+			return nil, fmt.Errorf("scan message: %w", err)
 		}
-		c.Turns = append(c.Turns, t)
+		c.Messages = append(c.Messages, m)
 	}
-	if err := turnRows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate turns: %w", err)
+	if err := messageRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate messages: %w", err)
 	}
 
 	// Fetch ratings.

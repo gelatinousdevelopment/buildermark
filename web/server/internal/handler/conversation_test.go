@@ -90,13 +90,13 @@ func TestGetConversation(t *testing.T) {
 		t.Fatalf("EnsureConversation: %v", err)
 	}
 
-	// Add turns and a rating.
-	turns := []db.Turn{
+	// Add messages and a rating.
+	messages := []db.Message{
 		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-1", Role: "user", Content: "hello"},
 		{Timestamp: 2000, ProjectID: pid, ConversationID: "conv-1", Role: "agent", Content: "hi"},
 	}
-	if err := db.InsertTurns(ctx, s.DB, turns); err != nil {
-		t.Fatalf("InsertTurns: %v", err)
+	if err := db.InsertMessages(ctx, s.DB, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
 	}
 	if _, err := db.InsertRating(ctx, s.DB, "conv-1", 4, "nice", ""); err != nil {
 		t.Fatalf("InsertRating: %v", err)
@@ -127,12 +127,12 @@ func TestGetConversation(t *testing.T) {
 		t.Errorf("id = %v, want %q", data["id"], "conv-1")
 	}
 
-	turnsData, ok := data["turns"].([]any)
+	messagesData, ok := data["messages"].([]any)
 	if !ok {
-		t.Fatalf("turns is not an array: %T", data["turns"])
+		t.Fatalf("messages is not an array: %T", data["messages"])
 	}
-	if len(turnsData) != 2 {
-		t.Errorf("got %d turns, want 2", len(turnsData))
+	if len(messagesData) != 2 {
+		t.Errorf("got %d messages, want 2", len(messagesData))
 	}
 
 	ratingsData, ok := data["ratings"].([]any)

@@ -194,7 +194,7 @@ func (a *Agent) backfillGitIDs(ctx context.Context) {
 }
 
 // processEntries groups entries by sessionId and upserts projects,
-// conversations, and turns for each session.
+// conversations, and messages for each session.
 func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 	type sessionGroup struct {
 		project string
@@ -239,7 +239,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			}
 		}
 
-		turns := make([]db.Turn, 0, len(g.entries)+1)
+		messages := make([]db.Message, 0, len(g.entries)+1)
 
 		// Check conversation file for a first prompt that history.jsonl may have missed
 		// (e.g. plan-mode auto-submissions).
@@ -259,7 +259,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 					"project":   g.project,
 					"source":    "conversation_file",
 				})
-				turns = append(turns, db.Turn{
+				messages = append(messages, db.Message{
 					Timestamp:      firstTs,
 					ProjectID:      projectID,
 					ConversationID: sid,
@@ -283,7 +283,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 
 			rawJSON, _ := json.Marshal(e)
 
-			turns = append(turns, db.Turn{
+			messages = append(messages, db.Message{
 				Timestamp:      e.Timestamp,
 				ProjectID:      projectID,
 				ConversationID: sid,
@@ -293,8 +293,8 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			})
 		}
 
-		if err := db.InsertTurns(ctx, a.db, turns); err != nil {
-			log.Printf("claude watcher: insert turns for session %s: %v", sid, err)
+		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
+			log.Printf("claude watcher: insert messages for session %s: %v", sid, err)
 		}
 
 		// Reconcile orphaned ratings: if any entry in this session is a /zrate

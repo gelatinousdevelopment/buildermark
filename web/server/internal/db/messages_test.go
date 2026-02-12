@@ -140,7 +140,7 @@ func TestEnsureConversationIdempotent(t *testing.T) {
 	}
 }
 
-func TestInsertTurns(t *testing.T) {
+func TestInsertMessages(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -152,47 +152,47 @@ func TestInsertTurns(t *testing.T) {
 		t.Fatalf("EnsureConversation: %v", err)
 	}
 
-	turns := []Turn{
+	messages := []Message{
 		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: `{"type":"user"}`},
 		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "hi there", RawJSON: `{"type":"assistant"}`},
 		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "thanks", RawJSON: `{"type":"user"}`},
 	}
 
-	if err := InsertTurns(ctx, db, turns); err != nil {
-		t.Fatalf("InsertTurns: %v", err)
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
 	}
 
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM turns WHERE conversation_id = ?", "conv-1").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count)
 	if err != nil {
-		t.Fatalf("count turns: %v", err)
+		t.Fatalf("count messages: %v", err)
 	}
 	if count != 3 {
-		t.Errorf("expected 3 turns, got %d", count)
+		t.Errorf("expected 3 messages, got %d", count)
 	}
 
 	// Verify content is stored correctly.
 	var content string
-	err = db.QueryRow("SELECT content FROM turns WHERE conversation_id = ? ORDER BY timestamp LIMIT 1", "conv-1").Scan(&content)
+	err = db.QueryRow("SELECT content FROM messages WHERE conversation_id = ? ORDER BY timestamp LIMIT 1", "conv-1").Scan(&content)
 	if err != nil {
-		t.Fatalf("query turn: %v", err)
+		t.Fatalf("query message: %v", err)
 	}
 	if content != "hello" {
 		t.Errorf("content = %q, want %q", content, "hello")
 	}
 }
 
-func TestInsertTurnsEmpty(t *testing.T) {
+func TestInsertMessagesEmpty(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	// Inserting zero turns should succeed.
-	if err := InsertTurns(ctx, db, []Turn{}); err != nil {
-		t.Fatalf("InsertTurns with empty slice: %v", err)
+	// Inserting zero messages should succeed.
+	if err := InsertMessages(ctx, db, []Message{}); err != nil {
+		t.Fatalf("InsertMessages with empty slice: %v", err)
 	}
 }
 
-func TestInsertTurnsDuplicateTimestamp(t *testing.T) {
+func TestInsertMessagesDuplicateTimestamp(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -204,30 +204,30 @@ func TestInsertTurnsDuplicateTimestamp(t *testing.T) {
 		t.Fatalf("EnsureConversation: %v", err)
 	}
 
-	turns := []Turn{
+	messages := []Message{
 		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: "{}"},
 	}
 
-	if err := InsertTurns(ctx, db, turns); err != nil {
-		t.Fatalf("first InsertTurns: %v", err)
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("first InsertMessages: %v", err)
 	}
 
 	// Inserting again with the same conversation_id + timestamp should be ignored (INSERT OR IGNORE).
-	if err := InsertTurns(ctx, db, turns); err != nil {
-		t.Fatalf("second InsertTurns: %v", err)
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("second InsertMessages: %v", err)
 	}
 
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM turns WHERE conversation_id = ?", "conv-1").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected 1 turn after duplicate insert, got %d", count)
+		t.Errorf("expected 1 message after duplicate insert, got %d", count)
 	}
 }
 
-func TestInsertTurnsNearDuplicateContent(t *testing.T) {
+func TestInsertMessagesNearDuplicateContent(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -239,33 +239,33 @@ func TestInsertTurnsNearDuplicateContent(t *testing.T) {
 		t.Fatalf("EnsureConversation: %v", err)
 	}
 
-	// Insert a turn, then try to insert the same content with a slightly different timestamp.
-	first := []Turn{
+	// Insert a message, then try to insert the same content with a slightly different timestamp.
+	first := []Message{
 		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: "{}"},
 	}
-	if err := InsertTurns(ctx, db, first); err != nil {
-		t.Fatalf("first InsertTurns: %v", err)
+	if err := InsertMessages(ctx, db, first); err != nil {
+		t.Fatalf("first InsertMessages: %v", err)
 	}
 
 	// Same content, 2ms later — should be deduplicated.
-	second := []Turn{
+	second := []Message{
 		{Timestamp: 1002, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: "{}"},
 	}
-	if err := InsertTurns(ctx, db, second); err != nil {
-		t.Fatalf("second InsertTurns: %v", err)
+	if err := InsertMessages(ctx, db, second); err != nil {
+		t.Fatalf("second InsertMessages: %v", err)
 	}
 
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM turns WHERE conversation_id = ?", "conv-1").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected 1 turn after near-duplicate insert, got %d", count)
+		t.Errorf("expected 1 message after near-duplicate insert, got %d", count)
 	}
 }
 
-func TestInsertTurnsSameContentFarApart(t *testing.T) {
+func TestInsertMessagesSameContentFarApart(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -278,25 +278,25 @@ func TestInsertTurnsSameContentFarApart(t *testing.T) {
 	}
 
 	// Same content but far apart (>10s) — both should be inserted.
-	turns := []Turn{
+	messages := []Message{
 		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "yes", RawJSON: "{}"},
 		{Timestamp: 60000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "yes", RawJSON: "{}"},
 	}
-	if err := InsertTurns(ctx, db, turns); err != nil {
-		t.Fatalf("InsertTurns: %v", err)
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
 	}
 
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM turns WHERE conversation_id = ?", "conv-1").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 2 {
-		t.Errorf("expected 2 turns for same content far apart, got %d", count)
+		t.Errorf("expected 2 messages for same content far apart, got %d", count)
 	}
 }
 
-func TestInsertTurnsBatchDeduplication(t *testing.T) {
+func TestInsertMessagesBatchDeduplication(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
@@ -309,26 +309,26 @@ func TestInsertTurnsBatchDeduplication(t *testing.T) {
 	}
 
 	// Same content in a single batch with close timestamps — should deduplicate within the batch.
-	turns := []Turn{
+	messages := []Message{
 		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: `{"v":1}`},
 		{Timestamp: 1005, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: `{"v":2}`},
 	}
-	if err := InsertTurns(ctx, db, turns); err != nil {
-		t.Fatalf("InsertTurns: %v", err)
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
 	}
 
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM turns WHERE conversation_id = ?", "conv-1").Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count)
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("expected 1 turn after batch dedup, got %d", count)
+		t.Errorf("expected 1 message after batch dedup, got %d", count)
 	}
 }
 
-func TestDeduplicateTurns(t *testing.T) {
-	turns := []Turn{
+func TestDeduplicateMessages(t *testing.T) {
+	messages := []Message{
 		{Timestamp: 1000, ConversationID: "c1", Role: "user", Content: "hello"},
 		{Timestamp: 1002, ConversationID: "c1", Role: "user", Content: "hello"},     // dup of first
 		{Timestamp: 2000, ConversationID: "c1", Role: "agent", Content: "hello"},    // different role
@@ -337,9 +337,9 @@ func TestDeduplicateTurns(t *testing.T) {
 		{Timestamp: 60000, ConversationID: "c1", Role: "user", Content: "hello"},    // same content, far apart
 	}
 
-	result := deduplicateTurns(turns)
+	result := deduplicateMessages(messages)
 	if len(result) != 5 {
-		t.Errorf("expected 5 turns after dedup, got %d", len(result))
+		t.Errorf("expected 5 messages after dedup, got %d", len(result))
 		for i, r := range result {
 			t.Logf("  [%d] ts=%d conv=%s role=%s content=%q", i, r.Timestamp, r.ConversationID, r.Role, r.Content)
 		}
