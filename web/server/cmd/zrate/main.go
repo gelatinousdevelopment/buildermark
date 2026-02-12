@@ -14,6 +14,7 @@ import (
 	"github.com/davidcann/zrate/web/server/internal/agent"
 	"github.com/davidcann/zrate/web/server/internal/agent/claude"
 	"github.com/davidcann/zrate/web/server/internal/agent/codex"
+	"github.com/davidcann/zrate/web/server/internal/agent/gemini"
 	"github.com/davidcann/zrate/web/server/internal/db"
 	"github.com/davidcann/zrate/web/server/internal/handler"
 )
@@ -48,6 +49,13 @@ func main() {
 		log.Printf("warning: codex agent disabled: %v", err)
 	} else {
 		registry.Register(codexAgent)
+	}
+
+	geminiAgent, err := gemini.New(database)
+	if err != nil {
+		log.Printf("warning: gemini agent disabled: %v", err)
+	} else {
+		registry.Register(geminiAgent)
 	}
 
 	watchCtx, watchCancel := context.WithCancel(context.Background())

@@ -236,6 +236,35 @@ func TestUpdateConversationTitle(t *testing.T) {
 	}
 }
 
+func TestUpdateConversationProject(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pidA, err := EnsureProject(ctx, db, "/test/project-a")
+	if err != nil {
+		t.Fatalf("EnsureProject A: %v", err)
+	}
+	pidB, err := EnsureProject(ctx, db, "/test/project-b")
+	if err != nil {
+		t.Fatalf("EnsureProject B: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-project", pidA, "gemini"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	if err := UpdateConversationProject(ctx, db, "conv-project", pidB); err != nil {
+		t.Fatalf("UpdateConversationProject: %v", err)
+	}
+
+	detail, err := GetConversationDetail(ctx, db, "conv-project")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.ProjectID != pidB {
+		t.Errorf("project_id = %q, want %q", detail.ProjectID, pidB)
+	}
+}
+
 func TestParseTimeRFC3339(t *testing.T) {
 	input := "2024-06-15T10:30:00.123456789Z"
 	got := parseTime(input)

@@ -154,3 +154,12 @@ func UpdateConversationTitle(ctx context.Context, db *sql.DB, conversationID, ti
 	}
 	return nil
 }
+
+// UpdateConversationProject sets the project_id on an existing conversation.
+func UpdateConversationProject(ctx context.Context, db *sql.DB, conversationID, projectID string) error {
+	_, err := db.ExecContext(ctx, "UPDATE conversations SET project_id = ? WHERE id = ?", projectID, conversationID)
+	if err != nil {
+		return fmt.Errorf("update conversation project: %w", err)
+	}
+	return nil
+}
