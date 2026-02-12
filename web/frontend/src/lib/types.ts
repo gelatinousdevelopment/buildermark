@@ -44,6 +44,7 @@ export interface MessageRead {
 	conversationId: string;
 	role: string;
 	content: string;
+	rawJson: string;
 }
 
 export interface Rating {

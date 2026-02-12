@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -148,6 +149,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 	var threadID string
 	var workingDir string
 	var messages []db.Message
+	var responseItemUserIdx []int
+	hasEventMsgUser := false
 	var zrateEntries []struct {
 		rating    int
 		note      string
@@ -179,36 +182,48 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			if meta.Cwd != "" && workingDir == "" {
 				workingDir = meta.Cwd
 			}
+			messages = append(messages, db.Message{
+				Timestamp: ts,
+				Role:      "agent",
+				Content:   summarizeCodexEvent(event.Type, event.Payload, ""),
+				RawJSON:   line,
+			})
 
 		case "turn_context":
-			var ctx codexTurnContextPayload
-			if err := json.Unmarshal(event.Payload, &ctx); err != nil {
+			var turnCtx codexTurnContextPayload
+			if err := json.Unmarshal(event.Payload, &turnCtx); err != nil {
 				continue
 			}
-			if ctx.Cwd != "" && workingDir == "" {
-				workingDir = ctx.Cwd
+			if turnCtx.Cwd != "" && workingDir == "" {
+				workingDir = turnCtx.Cwd
 			}
+			messages = append(messages, db.Message{
+				Timestamp: ts,
+				Role:      "agent",
+				Content:   summarizeCodexEvent(event.Type, event.Payload, ""),
+				RawJSON:   line,
+			})
 
 		case "response_item":
 			var item codexResponseItemPayload
 			if err := json.Unmarshal(event.Payload, &item); err != nil {
 				continue
 			}
-			if item.Type != "message" {
-				continue
-			}
-
+			role := "agent"
 			content := extractResponseItemText(item.Content)
-			if content == "" {
-				continue
+			if item.Type == "message" {
+				role = "user"
+				if item.Role == "assistant" {
+					role = "agent"
+				} else if item.Role != "user" {
+					role = "agent"
+				}
+			}
+			if strings.TrimSpace(content) == "" {
+				content = summarizeCodexEvent(event.Type, event.Payload, item.Type)
 			}
 
-			role := "user"
-			if item.Role == "assistant" {
-				role = "agent"
-			} else if item.Role != "user" {
-				continue
-			}
+			isResponseItemUser := item.Type == "message" && item.Role == "user"
 
 			messages = append(messages, db.Message{
 				Timestamp: ts,
@@ -216,6 +231,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 				Content:   content,
 				RawJSON:   line,
 			})
+			if isResponseItemUser {
+				responseItemUserIdx = append(responseItemUserIdx, len(messages)-1)
+			}
 
 			if role == "user" {
 				if rating, note := parseZrateDisplay(content); rating >= 0 {
@@ -232,15 +250,29 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			if err := json.Unmarshal(event.Payload, &msg); err != nil {
 				continue
 			}
-			if msg.Type != "user_message" {
-				continue
+			role := "agent"
+			if msg.Type == "user_message" {
+				role = "user"
+				hasEventMsgUser = true
 			}
-			if rating, note := parseZrateDisplay(msg.Message); rating >= 0 {
-				zrateEntries = append(zrateEntries, struct {
-					rating    int
-					note      string
-					timestamp int64
-				}{rating, note, ts})
+			content := strings.TrimSpace(msg.Message)
+			if content == "" {
+				content = summarizeCodexEvent(event.Type, event.Payload, msg.Type)
+			}
+			messages = append(messages, db.Message{
+				Timestamp: ts,
+				Role:      role,
+				Content:   content,
+				RawJSON:   line,
+			})
+			if role == "user" {
+				if rating, note := parseZrateDisplay(msg.Message); rating >= 0 {
+					zrateEntries = append(zrateEntries, struct {
+						rating    int
+						note      string
+						timestamp int64
+					}{rating, note, ts})
+				}
 			}
 
 		case "input":
@@ -255,7 +287,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			// Direct user input event.
 			content := strings.TrimSpace(event.Content)
 			if content == "" {
-				continue
+				content = summarizeCodexEvent(event.Type, nil, "")
 			}
 			messages = append(messages, db.Message{
 				Timestamp: ts,
@@ -301,7 +333,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 
 			content := strings.TrimSpace(text.String())
 			if content == "" {
-				continue
+				content = summarizeCodexEvent(event.Type, nil, item.Type)
 			}
 
 			messages = append(messages, db.Message{
@@ -321,8 +353,24 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 					}{rating, note, ts})
 				}
 			}
+
+		default:
+			messages = append(messages, db.Message{
+				Timestamp: ts,
+				Role:      "agent",
+				Content:   summarizeCodexEvent(event.Type, event.Payload, ""),
+				RawJSON:   line,
+			})
 		}
 	}
+	if hasEventMsgUser {
+		for _, i := range responseItemUserIdx {
+			// When explicit user_message events exist, treat response_item user
+			// records as non-user log/system context to avoid mislabeling.
+			messages[i].Role = "agent"
+		}
+	}
+	normalizeMessageTimestamps(messages)
 
 	// Derive thread ID from filename if not found in events.
 	if threadID == "" {
@@ -367,6 +415,55 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		if err := db.ReconcileOrphanedRating(ctx, a.db, z.rating, z.note, z.timestamp, threadID); err != nil {
 			log.Printf("codex watcher: reconcile rating for session %s: %v", threadID, err)
 		}
+	}
+}
+
+func summarizeCodexEvent(eventType string, payload json.RawMessage, subtype string) string {
+	label := strings.TrimSpace(eventType)
+	if label == "" {
+		label = "event"
+	}
+	if strings.TrimSpace(subtype) != "" {
+		label += ":" + strings.TrimSpace(subtype)
+	}
+
+	extract := func(v any) string {
+		s, ok := v.(string)
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(s)
+	}
+
+	if len(payload) > 0 && string(payload) != "null" {
+		var obj map[string]any
+		if err := json.Unmarshal(payload, &obj); err == nil {
+			for _, key := range []string{"message", "type", "role", "cwd", "id"} {
+				if value := extract(obj[key]); value != "" {
+					return fmt.Sprintf("[%s] %s", label, value)
+				}
+			}
+		}
+	}
+
+	return fmt.Sprintf("[%s]", label)
+}
+
+// normalizeMessageTimestamps makes per-batch timestamps unique while preserving
+// event order. This avoids dropping same-millisecond Codex events due the DB's
+// UNIQUE(conversation_id, timestamp) constraint.
+func normalizeMessageTimestamps(messages []db.Message) {
+	used := make(map[int64]struct{}, len(messages))
+	for i := range messages {
+		ts := messages[i].Timestamp
+		for {
+			if _, exists := used[ts]; !exists {
+				break
+			}
+			ts++
+		}
+		messages[i].Timestamp = ts
+		used[ts] = struct{}{}
 	}
 }
 

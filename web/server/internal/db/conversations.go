@@ -14,13 +14,14 @@ type Conversation struct {
 	Title     string `json:"title"`
 }
 
-// MessageRead is a message as returned by read queries (excludes raw_json).
+// MessageRead is a message as returned by read queries.
 type MessageRead struct {
 	ID             string `json:"id"`
 	Timestamp      int64  `json:"timestamp"`
 	ConversationID string `json:"conversationId"`
 	Role           string `json:"role"`
 	Content        string `json:"content"`
+	RawJSON        string `json:"rawJson"`
 }
 
 // ConversationDetail is a conversation with all its messages and ratings.
@@ -71,7 +72,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 
 	// Fetch messages ordered by most recent first.
 	messageRows, err := db.QueryContext(ctx,
-		"SELECT id, timestamp, conversation_id, role, content FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
+		"SELECT id, timestamp, conversation_id, role, content, raw_json FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
 		conversationID,
 	)
 	if err != nil {
@@ -82,7 +83,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	c.Messages = []MessageRead{}
 	for messageRows.Next() {
 		var m MessageRead
-		if err := messageRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Content); err != nil {
+		if err := messageRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Content, &m.RawJSON); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		c.Messages = append(c.Messages, m)

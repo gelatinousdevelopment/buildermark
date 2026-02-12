@@ -293,6 +293,38 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			})
 		}
 
+		for _, e := range readConversationLogEntries(a.home, g.project, sid) {
+			alreadyPresent := false
+			for _, m := range messages {
+				if m.Role == e.Role && m.Content == e.Content {
+					alreadyPresent = true
+					break
+				}
+			}
+			if alreadyPresent {
+				continue
+			}
+
+			rawJSON, _ := json.Marshal(map[string]any{
+				"type":      e.Type,
+				"timestamp": e.Timestamp,
+				"content":   e.Content,
+				"source":    "conversation_file",
+			})
+			if e.RawJSON != "" {
+				rawJSON = []byte(e.RawJSON)
+			}
+
+			messages = append(messages, db.Message{
+				Timestamp:      e.Timestamp,
+				ProjectID:      projectID,
+				ConversationID: sid,
+				Role:           e.Role,
+				Content:        e.Content,
+				RawJSON:        string(rawJSON),
+			})
+		}
+
 		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
 			log.Printf("claude watcher: insert messages for session %s: %v", sid, err)
 		}

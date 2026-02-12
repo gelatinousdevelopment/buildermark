@@ -174,6 +174,43 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		}
 	}
 
+	logsPath := filepath.Join(filepath.Dir(filepath.Dir(path)), "logs.json")
+	for _, entry := range readGeminiLogEntries(logsPath, conv.SessionID) {
+		content := strings.TrimSpace(entry.Message)
+		if content == "" {
+			content = "[" + strings.TrimSpace(entry.Type) + "]"
+		}
+		if content == "[]" {
+			content = "[log]"
+		}
+
+		role := "agent"
+		if entry.Type == "user" {
+			role = "user"
+		}
+
+		rawJSON, _ := json.Marshal(entry)
+		ts := parseGeminiTimestamp(entry.Timestamp)
+		messages = append(messages, db.Message{
+			Timestamp:      ts,
+			ProjectID:      projectID,
+			ConversationID: conv.SessionID,
+			Role:           role,
+			Content:        content,
+			RawJSON:        string(rawJSON),
+		})
+
+		if role == "user" {
+			if rating, note := parseZrateDisplay(content); rating >= 0 {
+				zrateEntries = append(zrateEntries, struct {
+					rating    int
+					note      string
+					timestamp int64
+				}{rating, note, ts})
+			}
+		}
+	}
+
 	if len(messages) > 0 {
 		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
 			log.Printf("gemini watcher: insert messages for session %s: %v", conv.SessionID, err)
@@ -185,6 +222,27 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			log.Printf("gemini watcher: reconcile rating for session %s: %v", conv.SessionID, err)
 		}
 	}
+}
+
+func readGeminiLogEntries(path, sessionID string) []geminiLogEntry {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var entries []geminiLogEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil
+	}
+
+	result := make([]geminiLogEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.SessionID != sessionID {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result
 }
 
 func (a *Agent) backfillGitIDs(ctx context.Context) {

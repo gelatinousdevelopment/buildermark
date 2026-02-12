@@ -29,6 +29,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	firstResponseItemUser := ""
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -42,13 +43,24 @@ func readSessionTitle(sessionsDir, threadID string) string {
 		}
 
 		switch event.Type {
+		case "event_msg":
+			var msg codexEventMsgPayload
+			if err := json.Unmarshal(event.Payload, &msg); err != nil || msg.Type != "user_message" {
+				continue
+			}
+			if text := strings.TrimSpace(msg.Message); text != "" {
+				return titleFromPrompt(text)
+			}
+
 		case "response_item":
 			var item codexResponseItemPayload
 			if err := json.Unmarshal(event.Payload, &item); err != nil || item.Type != "message" || item.Role != "user" {
 				continue
 			}
 			if text := extractResponseItemText(item.Content); text != "" {
-				return titleFromPrompt(text)
+				if firstResponseItemUser == "" {
+					firstResponseItemUser = text
+				}
 			}
 
 		case "input":
@@ -73,6 +85,10 @@ func readSessionTitle(sessionsDir, threadID string) string {
 				}
 			}
 		}
+	}
+
+	if firstResponseItemUser != "" {
+		return titleFromPrompt(firstResponseItemUser)
 	}
 
 	return ""

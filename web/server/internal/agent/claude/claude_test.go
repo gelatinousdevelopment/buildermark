@@ -740,9 +740,9 @@ func TestProcessEntriesAddsFirstPromptFromConversationFile(t *testing.T) {
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	// Should have 2 messages: the first prompt from the conversation file + the /zrate from history.
-	if n := countRows(t, database, "messages"); n != 2 {
-		t.Errorf("messages = %d, want 2", n)
+	// Should have 3 messages: first prompt + assistant reply from conversation file + /zrate from history.
+	if n := countRows(t, database, "messages"); n != 3 {
+		t.Errorf("messages = %d, want 3", n)
 	}
 
 	// Verify the first prompt was inserted with correct content.
@@ -791,7 +791,7 @@ func TestProcessEntriesDoesNotDuplicateFirstPrompt(t *testing.T) {
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	// Should have exactly 2 messages (no duplicate).
+	// Should have exactly 2 messages (no duplicate first prompt from conversation file).
 	if n := countRows(t, database, "messages"); n != 2 {
 		t.Errorf("messages = %d, want 2", n)
 	}

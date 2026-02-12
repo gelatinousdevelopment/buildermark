@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { getConversation, createRating } from '$lib/api';
 	import { stars, fmtTime } from '$lib/utils';
+	import { marked } from 'marked';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
 
@@ -20,6 +21,56 @@
 	let inlineNote: string = $state('');
 	let inlineSubmitting: boolean = $state(false);
 	let inlineError: string | null = $state(null);
+	let expandedMessages = $state(new SvelteSet<string>());
+
+	function isUserPromptMessage(message: MessageRead): boolean {
+		if (message.role !== 'user') return false;
+		const trimmed = message.content.trimStart();
+		if (trimmed.startsWith('/zrate') || trimmed.startsWith('$zrate')) return false;
+		return true;
+	}
+
+	function escapeHtml(s: string): string {
+		return s
+			.replaceAll('&', '&amp;')
+			.replaceAll('<', '&lt;')
+			.replaceAll('>', '&gt;')
+			.replaceAll('"', '&quot;')
+			.replaceAll("'", '&#39;');
+	}
+
+	function renderMarkdown(content: string): string {
+		return marked.parse(escapeHtml(content), { gfm: true, breaks: true }) as string;
+	}
+
+	function firstLine(s: string): string {
+		return s.replace(/\s+/g, ' ').trim();
+	}
+
+	function messageTypeLabel(message: MessageRead): string {
+		try {
+			const obj = JSON.parse(message.rawJson) as Record<string, unknown>;
+			const t = typeof obj.type === 'string' ? obj.type : '';
+			if (t) return t;
+		} catch {
+			// ignore parse failures
+		}
+		return message.role;
+	}
+
+	function messageSummary(message: MessageRead): string {
+		const line = firstLine(message.content);
+		if (!line) return `[${messageTypeLabel(message)}]`;
+		return line.length > 120 ? `${line.slice(0, 117)}...` : line;
+	}
+
+	function toggleExpanded(messageId: string) {
+		if (expandedMessages.has(messageId)) {
+			expandedMessages.delete(messageId);
+			return;
+		}
+		expandedMessages.add(messageId);
+	}
 
 	function openInlineRating(messageId: string, starValue: number) {
 		inlineRatingMessageId = messageId;
@@ -64,7 +115,10 @@
 			let bestDelta = Infinity;
 
 			for (const message of conversation.messages) {
-				if (message.role !== 'user' || !message.content.startsWith('/zrate')) continue;
+				const trimmed = message.content.trimStart();
+				if (message.role !== 'user' || (!trimmed.startsWith('/zrate') && !trimmed.startsWith('$zrate'))) {
+					continue;
+				}
 				if (matchedMessageIds.has(message.id)) continue;
 				const delta = Math.abs(message.timestamp - ratingTime);
 				if (delta < bestDelta && delta <= 120_000) {
@@ -128,13 +182,14 @@
 	{:else}
 		{#each timeline as item (item.kind === 'message' ? item.message.id : item.rating.id)}
 			{#if item.kind === 'message'}
-				<div class="message">
-					<div class="message-header">
-						<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
+				{#if isUserPromptMessage(item.message)}
+					<div class="message">
+						<div class="message-header">
+							<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
+							<span class="expansion-indicator"><span class="chevron">▾</span></span>
+						</div>
+						<div class="message-content markdown-body">{@html renderMarkdown(item.message.content)}</div>
 					</div>
-					<div class="message-content">{item.message.content}</div>
-				</div>
-				{#if item.message.role === 'user'}
 					<div class="inline-rating">
 						{#if inlineRatingMessageId === item.message.id}
 							<div class="inline-rating-expanded">
@@ -182,6 +237,22 @@
 							</div>
 						{/if}
 					</div>
+				{:else}
+					<div class="message message-collapsed">
+						<button class="message-summary-btn" onclick={() => toggleExpanded(item.message.id)}>
+							<div class="message-header">
+								<strong>{messageTypeLabel(item.message)}</strong> &middot;
+								{fmtTime(item.message.timestamp)}
+								<span class="expansion-indicator">
+									<span class="chevron">{expandedMessages.has(item.message.id) ? '▾' : '▸'}</span>
+								</span>
+							</div>
+							<div class="message-summary">{messageSummary(item.message)}</div>
+						</button>
+						{#if expandedMessages.has(item.message.id)}
+							<div class="message-content markdown-body">{@html renderMarkdown(item.message.content)}</div>
+						{/if}
+					</div>
 				{/if}
 			{:else}
 				<div class="rating-card">
@@ -209,15 +280,66 @@
 		border-radius: 4px;
 	}
 
+	.message-collapsed {
+		padding: 0.5rem 0.75rem;
+		background: #fafafa;
+	}
+
 	.message-header {
 		font-size: 0.85rem;
 		color: #666;
 		margin-bottom: 0.25rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.expansion-indicator {
+		margin-left: auto;
+		color: #888;
+	}
+
+	.chevron {
+		display: inline-block;
+		width: 0.8rem;
+	}
+
+	.message-summary-btn {
+		display: block;
+		width: 100%;
+		text-align: left;
+		background: transparent;
+		border: 0;
+		padding: 0;
+		cursor: pointer;
+	}
+
+	.message-summary {
+		font-size: 0.9rem;
+		color: #333;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.message-content {
-		white-space: pre-wrap;
 		font-size: 0.9rem;
+		margin-top: 0.35rem;
+	}
+
+	.markdown-body :global(p) {
+		margin: 0.25rem 0;
+	}
+
+	.markdown-body :global(pre) {
+		overflow-x: auto;
+		padding: 0.5rem;
+		background: #f7f7f7;
+		border-radius: 4px;
+	}
+
+	.markdown-body :global(code) {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	}
 
 	.rating-card {

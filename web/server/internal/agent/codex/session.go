@@ -187,6 +187,8 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 	var entries []agent.Entry
 	var threadID string
 	var project string
+	var responseItemUserIdx []int
+	hasEventMsgUser := false
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -246,6 +248,28 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 				SessionID: threadID,
 				Project:   project,
 				Role:      role,
+				Display:   content,
+				RawJSON:   line,
+			})
+			if item.Role == "user" {
+				responseItemUserIdx = append(responseItemUserIdx, len(entries)-1)
+			}
+
+		case "event_msg":
+			var msg codexEventMsgPayload
+			if err := json.Unmarshal(event.Payload, &msg); err != nil || msg.Type != "user_message" {
+				continue
+			}
+			content := strings.TrimSpace(msg.Message)
+			if content == "" {
+				continue
+			}
+			hasEventMsgUser = true
+			entries = append(entries, agent.Entry{
+				Timestamp: ts,
+				SessionID: threadID,
+				Project:   project,
+				Role:      "user",
 				Display:   content,
 				RawJSON:   line,
 			})
@@ -310,6 +334,11 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 				Display:   content,
 				RawJSON:   line,
 			})
+		}
+	}
+	if hasEventMsgUser {
+		for _, i := range responseItemUserIdx {
+			entries[i].Role = "agent"
 		}
 	}
 

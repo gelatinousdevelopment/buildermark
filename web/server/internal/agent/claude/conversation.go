@@ -3,6 +3,7 @@ package claude
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,19 +20,23 @@ type conversationEntry struct {
 	} `json:"message"`
 }
 
-// readFirstPrompt reads the Claude conversation JSONL file for the given session
-// and returns the first substantive user prompt and its timestamp in unix millis.
-// Claude Code stores full conversation transcripts at
-// ~/.claude/projects/{project-dir}/{sessionId}.jsonl but history.jsonl sometimes
-// omits the initial prompt (e.g. plan-mode auto-submissions). This function
-// extracts that missing first prompt.
-func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
-	dirName := strings.ReplaceAll(projectPath, "/", "-")
-	convPath := filepath.Join(home, ".claude", "projects", dirName, sessionID+".jsonl")
+type conversationLogEntry struct {
+	Type      string
+	Timestamp int64
+	Role      string
+	Content   string
+	RawJSON   string
+}
 
-	f, err := os.Open(convPath)
+func conversationPath(home, projectPath, sessionID string) string {
+	dirName := strings.ReplaceAll(projectPath, "/", "-")
+	return filepath.Join(home, ".claude", "projects", dirName, sessionID+".jsonl")
+}
+
+func scanConversationFile(path string, fn func(line string, entry conversationEntry)) {
+	f, err := os.Open(path)
 	if err != nil {
-		return "", 0
+		return
 	}
 	defer f.Close()
 
@@ -48,24 +53,45 @@ func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}
+
+		fn(line, entry)
+	}
+}
+
+// readFirstPrompt reads the Claude conversation JSONL file for the given session
+// and returns the first substantive user prompt and its timestamp in unix millis.
+// Claude Code stores full conversation transcripts at
+// ~/.claude/projects/{project-dir}/{sessionId}.jsonl but history.jsonl sometimes
+// omits the initial prompt (e.g. plan-mode auto-submissions). This function
+// extracts that missing first prompt.
+func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
+	convPath := conversationPath(home, projectPath, sessionID)
+	var firstText string
+	var firstTS int64
+
+	scanConversationFile(convPath, func(_ string, entry conversationEntry) {
+		if firstText != "" {
+			return
+		}
 		if entry.Type != "user" {
-			continue
+			return
 		}
 
 		text := extractUserText(entry.Message.Content)
 		if text == "" || isSystemMessage(text) {
-			continue
+			return
 		}
 
 		ts, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
 		if err != nil {
-			continue
+			return
 		}
 
-		return text, ts.UnixMilli()
-	}
+		firstText = text
+		firstTS = ts.UnixMilli()
+	})
 
-	return "", 0
+	return firstText, firstTS
 }
 
 // extractUserText extracts text from a conversation entry's content field,
@@ -98,6 +124,41 @@ func extractUserText(raw json.RawMessage) string {
 	}
 
 	return ""
+}
+
+func readConversationLogEntries(home, projectPath, sessionID string) []conversationLogEntry {
+	convPath := conversationPath(home, projectPath, sessionID)
+	result := make([]conversationLogEntry, 0, 64)
+
+	scanConversationFile(convPath, func(line string, entry conversationEntry) {
+		content := extractUserText(entry.Message.Content)
+		if content == "" {
+			content = fmt.Sprintf("[%s]", strings.TrimSpace(entry.Type))
+		}
+		if strings.TrimSpace(content) == "" {
+			content = "[entry]"
+		}
+
+		ts := time.Now().UnixMilli()
+		if parsed, err := time.Parse(time.RFC3339Nano, entry.Timestamp); err == nil {
+			ts = parsed.UnixMilli()
+		}
+
+		role := "agent"
+		if entry.Type == "user" {
+			role = "user"
+		}
+
+		result = append(result, conversationLogEntry{
+			Type:      entry.Type,
+			Timestamp: ts,
+			Role:      role,
+			Content:   content,
+			RawJSON:   line,
+		})
+	})
+
+	return result
 }
 
 // sessionsIndex represents the top-level structure of Claude's sessions-index.json.

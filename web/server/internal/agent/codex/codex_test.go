@@ -258,8 +258,16 @@ func TestWatcherProcessCurrentSchemaSessionFile(t *testing.T) {
 				"type": "message",
 				"role": "user",
 				"content": []map[string]any{
-					{"type": "input_text", "text": "run tests"},
+					{"type": "input_text", "text": "internal system-expanded prompt"},
 				},
+			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-4 * time.Second).Format(time.RFC3339Nano),
+			"type":      "event_msg",
+			"payload": map[string]any{
+				"type":    "user_message",
+				"message": "run tests",
 			},
 		},
 		map[string]any{
@@ -285,8 +293,16 @@ func TestWatcherProcessCurrentSchemaSessionFile(t *testing.T) {
 	if n := countRows(t, database, "conversations"); n != 1 {
 		t.Errorf("conversations: got %d, want 1", n)
 	}
-	if n := countRows(t, database, "messages"); n != 2 {
-		t.Errorf("messages: got %d, want 2", n)
+	if n := countRows(t, database, "messages"); n != 4 {
+		t.Errorf("messages: got %d, want 4", n)
+	}
+
+	var userCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'thread-current' AND role = 'user'").Scan(&userCount); err != nil {
+		t.Fatalf("count user messages: %v", err)
+	}
+	if userCount != 1 {
+		t.Errorf("user messages: got %d, want 1 (event_msg should be canonical user input)", userCount)
 	}
 
 	var agentName string
@@ -601,6 +617,47 @@ func TestReadSessionTitleCurrentSchema(t *testing.T) {
 	title := readSessionTitle(sessionsDir, "thread-title-new")
 	if title != "Improve Session Parsing" {
 		t.Errorf("title = %q, want %q", title, "Improve Session Parsing")
+	}
+}
+
+func TestReadSessionTitlePrefersEventMsgUser(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+
+	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "13", "rollout-2026-02-13T04-02-54-thread-title-event-msg.jsonl")
+	writeJSONLObjects(t, rolloutPath, []any{
+		map[string]any{
+			"timestamp": "2026-02-13T04:02:54.264Z",
+			"type":      "session_meta",
+			"payload": map[string]any{
+				"id":  "thread-title-event-msg",
+				"cwd": "/proj/title-new",
+			},
+		},
+		map[string]any{
+			"timestamp": "2026-02-13T04:02:55.000Z",
+			"type":      "response_item",
+			"payload": map[string]any{
+				"type": "message",
+				"role": "user",
+				"content": []map[string]any{
+					{"type": "input_text", "text": "internal wrapper prompt"},
+				},
+			},
+		},
+		map[string]any{
+			"timestamp": "2026-02-13T04:02:55.100Z",
+			"type":      "event_msg",
+			"payload": map[string]any{
+				"type":    "user_message",
+				"message": "# Real User Prompt\n\nDo the actual task.",
+			},
+		},
+	})
+
+	title := readSessionTitle(sessionsDir, "thread-title-event-msg")
+	if title != "Real User Prompt" {
+		t.Errorf("title = %q, want %q", title, "Real User Prompt")
 	}
 }
 
