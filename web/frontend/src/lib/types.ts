@@ -43,6 +43,7 @@ export interface MessageRead {
 	timestamp: number;
 	conversationId: string;
 	role: string;
+	model?: string;
 	content: string;
 	rawJson: string;
 }

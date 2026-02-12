@@ -12,6 +12,10 @@
 		| { kind: 'message'; message: MessageRead; time: number }
 		| { kind: 'rating'; rating: Rating; time: number };
 
+	type DisplayItem =
+		| TimelineItem
+		| { kind: 'log-group'; id: string; messages: MessageRead[]; time: number };
+
 	let conversation: ConversationDetail | null = $state(null);
 	let loading = $state(true);
 	let error: string | null = $state(null);
@@ -21,7 +25,12 @@
 	let inlineNote: string = $state('');
 	let inlineSubmitting: boolean = $state(false);
 	let inlineError: string | null = $state(null);
+	let bottomRatingValue: number = $state(0);
+	let bottomNote: string = $state('');
+	let bottomSubmitting: boolean = $state(false);
+	let bottomError: string | null = $state(null);
 	let expandedMessages = $state(new SvelteSet<string>());
+	let expandedLogGroups = $state(new SvelteSet<string>());
 
 	function isUserPromptMessage(message: MessageRead): boolean {
 		if (message.role !== 'user') return false;
@@ -64,12 +73,24 @@
 		return line.length > 120 ? `${line.slice(0, 117)}...` : line;
 	}
 
+	function messageModel(message: MessageRead): string {
+		return typeof message.model === 'string' ? message.model.trim() : '';
+	}
+
 	function toggleExpanded(messageId: string) {
 		if (expandedMessages.has(messageId)) {
 			expandedMessages.delete(messageId);
 			return;
 		}
 		expandedMessages.add(messageId);
+	}
+
+	function toggleLogGroup(groupId: string) {
+		if (expandedLogGroups.has(groupId)) {
+			expandedLogGroups.delete(groupId);
+			return;
+		}
+		expandedLogGroups.add(groupId);
 	}
 
 	function openInlineRating(messageId: string, starValue: number) {
@@ -98,6 +119,22 @@
 			inlineError = e instanceof Error ? e.message : 'Failed to submit rating';
 		} finally {
 			inlineSubmitting = false;
+		}
+	}
+
+	async function submitBottomRating() {
+		if (!conversation || bottomRatingValue < 1) return;
+		bottomSubmitting = true;
+		bottomError = null;
+		try {
+			const newRating = await createRating(conversation.id, bottomRatingValue, bottomNote);
+			conversation.ratings = [...conversation.ratings, newRating];
+			bottomRatingValue = 0;
+			bottomNote = '';
+		} catch (e) {
+			bottomError = e instanceof Error ? e.message : 'Failed to submit rating';
+		} finally {
+			bottomSubmitting = false;
 		}
 	}
 
@@ -152,6 +189,72 @@
 		return items;
 	});
 
+	let conversationModels: string[] = $derived.by(() => {
+		if (!conversation) return [];
+		const seen = new SvelteSet<string>();
+		const models: string[] = [];
+		for (const message of conversation.messages) {
+			const model = messageModel(message);
+			if (!model || seen.has(model)) continue;
+			seen.add(model);
+			models.push(model);
+		}
+		return models;
+	});
+
+	function groupModelLabel(messages: MessageRead[]): string {
+		const models = new SvelteSet<string>();
+		for (const message of messages) {
+			const model = messageModel(message);
+			if (model) models.add(model);
+		}
+		if (models.size === 1) return Array.from(models)[0] ?? 'model';
+		return 'model';
+	}
+
+	let displayItems: DisplayItem[] = $derived.by(() => {
+		const items: DisplayItem[] = [];
+		let logRun: MessageRead[] = [];
+
+		function flushLogRun() {
+			if (logRun.length > 1) {
+				const first = logRun[0];
+				items.push({
+					kind: 'log-group',
+					id: `log-group-${first.id}`,
+					messages: [...logRun],
+					time: first.timestamp
+				});
+			} else if (logRun.length === 1) {
+				const only = logRun[0];
+				items.push({ kind: 'message', message: only, time: only.timestamp });
+			}
+			logRun = [];
+		}
+
+		for (const item of timeline) {
+			if (item.kind === 'rating') {
+				flushLogRun();
+				items.push(item);
+				continue;
+			}
+			if (isUserPromptMessage(item.message)) {
+				flushLogRun();
+				items.push(item);
+				continue;
+			}
+			logRun.push(item.message);
+		}
+
+		flushLogRun();
+		return items;
+	});
+
+	let hasBottomRating = $derived.by(() => {
+		if (timeline.length === 0) return false;
+		return timeline[timeline.length - 1]?.kind === 'rating';
+	});
+
 	onMount(async () => {
 		try {
 			const id = page.params.id;
@@ -176,16 +279,29 @@
 {:else if conversation}
 	<h2>{conversation.title || conversation.id}</h2>
 	<p>Agent: {conversation.agent} | Project: {conversation.projectId}</p>
+	{#if conversationModels.length > 0}
+		<div class="models-summary">
+			<span class="models-label">Models:</span>
+			<ul class="models-list">
+				{#each conversationModels as model (model)}
+					<li>{model}</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
 
 	{#if timeline.length === 0}
 		<p>No messages or ratings.</p>
 	{:else}
-		{#each timeline as item (item.kind === 'message' ? item.message.id : item.rating.id)}
+		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
 			{#if item.kind === 'message'}
 				{#if isUserPromptMessage(item.message)}
 					<div class="message">
 						<div class="message-header">
 							<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
+							{#if messageModel(item.message)}
+								<span class="message-model">{messageModel(item.message)}</span>
+							{/if}
 							<span class="expansion-indicator"><span class="chevron">▾</span></span>
 						</div>
 						<div class="message-content markdown-body">{@html renderMarkdown(item.message.content)}</div>
@@ -243,6 +359,9 @@
 							<div class="message-header">
 								<strong>{messageTypeLabel(item.message)}</strong> &middot;
 								{fmtTime(item.message.timestamp)}
+								{#if messageModel(item.message)}
+									<span class="message-model">{messageModel(item.message)}</span>
+								{/if}
 								<span class="expansion-indicator">
 									<span class="chevron">{expandedMessages.has(item.message.id) ? '▾' : '▸'}</span>
 								</span>
@@ -254,6 +373,41 @@
 						{/if}
 					</div>
 				{/if}
+			{:else if item.kind === 'log-group'}
+				<div class="message message-collapsed log-group">
+					<button class="message-summary-btn" onclick={() => toggleLogGroup(item.id)}>
+						<div class="message-header">
+							<strong>{item.messages.length} logs from {groupModelLabel(item.messages)}</strong>
+							<span class="expansion-indicator">
+								<span class="chevron">{expandedLogGroups.has(item.id) ? '▾' : '▸'}</span>
+							</span>
+						</div>
+					</button>
+					{#if expandedLogGroups.has(item.id)}
+						<div class="log-group-items">
+							{#each item.messages as logMessage (logMessage.id)}
+								<div class="message message-collapsed">
+									<button class="message-summary-btn" onclick={() => toggleExpanded(logMessage.id)}>
+										<div class="message-header">
+											<strong>{messageTypeLabel(logMessage)}</strong> &middot;
+											{fmtTime(logMessage.timestamp)}
+											{#if messageModel(logMessage)}
+												<span class="message-model">{messageModel(logMessage)}</span>
+											{/if}
+											<span class="expansion-indicator">
+												<span class="chevron">{expandedMessages.has(logMessage.id) ? '▾' : '▸'}</span>
+											</span>
+										</div>
+										<div class="message-summary">{messageSummary(logMessage)}</div>
+									</button>
+									{#if expandedMessages.has(logMessage.id)}
+										<div class="message-content markdown-body">{@html renderMarkdown(logMessage.content)}</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
 			{:else}
 				<div class="rating-card">
 					<div class="message-header">
@@ -269,6 +423,42 @@
 				</div>
 			{/if}
 		{/each}
+	{/if}
+	{#if !hasBottomRating}
+		<div class="rating-card rating-input">
+			<div class="message-header">
+				<strong>Add rating</strong>
+			</div>
+			<div class="inline-stars">
+				{#each [1, 2, 3, 4, 5] as star (star)}
+					<button
+						class="star-btn"
+						class:active={star <= bottomRatingValue}
+						onclick={() => (bottomRatingValue = star)}
+					>
+						{star <= bottomRatingValue ? '★' : '☆'}
+					</button>
+				{/each}
+			</div>
+			<input
+				type="text"
+				class="inline-note"
+				placeholder="Optional note..."
+				bind:value={bottomNote}
+			/>
+			<div class="inline-actions">
+				<button
+					class="btn-sm"
+					disabled={bottomSubmitting || bottomRatingValue < 1}
+					onclick={submitBottomRating}
+				>
+					{bottomSubmitting ? 'Submitting...' : 'Submit'}
+				</button>
+			</div>
+			{#if bottomError}
+				<p class="inline-error">{bottomError}</p>
+			{/if}
+		</div>
 	{/if}
 {/if}
 
@@ -292,6 +482,35 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	.message-model {
+		color: #9a9a9a;
+	}
+
+	.models-summary {
+		margin-bottom: 0.85rem;
+		font-size: 0.85rem;
+		color: #666;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.models-label {
+		font-weight: 600;
+		color: #555;
+	}
+
+	.models-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 1rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		color: #888;
 	}
 
 	.expansion-indicator {
@@ -348,6 +567,20 @@
 		border: 2px solid #f0c040;
 		border-radius: 4px;
 		background: #fffbea;
+	}
+
+	.rating-input {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.log-group {
+		border-color: #e5e5e5;
+	}
+
+	.log-group-items {
+		margin-top: 0.5rem;
 	}
 
 	.rating-stars {
