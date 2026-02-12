@@ -11,13 +11,20 @@ Parse `$ARGUMENTS`: the first word is the rating (0–5), everything after is an
 
 If no arguments were provided, ask the user: "How would you rate this conversation? (0-5, with an optional note)"
 
-Otherwise, before submitting, analyze the conversation in light of the rating and note. The user may be rating the prompt, the model's output, or both — the note will often clarify. Write a short analysis (no more than 2 sentences or a short bulleted list) that is technical and dry with no personality. The analysis may include:
+Otherwise, before submitting, review the conversation in light of the rating and optional note. Produce two sections:
 
-- What went well or poorly in the interaction
-- Whether the original prompt could have been clearer or more specific
-- Whether the model should have asked clarifying questions, chosen a different approach, or known better given available context
+**Prompt Suggestions** — short bullet points (max 3) on how the user's prompt could have been clearer or more effective.
 
-Never be snarky or arrogant.
+**Model Failures** — short bullet points (max 3) on what the model did wrong or could have done better.
+
+Guidelines:
+- Weigh the rating (0–5) and optional note to calibrate your response
+- If no note is present, the rating alone implies user sentiment — infer what went wrong from the conversation context
+- If rating < 5 and no note: explain what the model should have done better
+- If rating = 5: likely no suggestions and no failures, unless you genuinely identify something worth noting
+- 0, 1, or 2 bullets per section is perfectly acceptable — do not force 3
+- A section with no bullets should say "None."
+- Keep the tone technical and dry, no personality, never snarky or arrogant
 
 Then run the submission script, passing your analysis text in the `ANALYSIS` environment variable:
 
@@ -25,6 +32,6 @@ Then run the submission script, passing your analysis text in the `ANALYSIS` env
 ANALYSIS="your analysis text here" bash plugins/claudecode/skills/zrate/scripts/submit-rating.sh $ARGUMENTS
 ```
 
-If the output starts with "ok", confirm to the user: **Rated N/5** (include the note if one was given), then show your analysis under a `**Analysis:**` heading.
+If the output starts with "ok", confirm to the user: **Rated N/5** (include the note if one was given), then show your analysis under `**Prompt Suggestions:**` and `**Model Failures:**` headings.
 
 If the output starts with "error", relay the message to the user. If it's a connection error, suggest starting the server with `cd web/server && go run .`
