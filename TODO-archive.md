@@ -46,3 +46,4 @@
 - [x] In the diff message rows, show a summary of number of files edited, number of lines added, and number of lines removed. Show this in the header of the message, so it's visible when collapsed and expanded.
 - [x] Verify that the new tests for each of the @web/server/internal/agent implementations looking for diffs are well-formed to match real logs from my computer's folders `~/.claude`, `~/.codex`, and `~/.gemini`. Do not edit any code right now, just check and tell me what you find.
 - [x] After a rating from an extension (all extensions), have the agent print a link to the conversation for the user to click on, like: `http://localhost:5173/dashboard/conversations/019c541c-3eef-78e0-98fe-f335f0561bd9`
+- [x] in @web/frontend conversation detail page, convert model analysis markdown to html for displaying

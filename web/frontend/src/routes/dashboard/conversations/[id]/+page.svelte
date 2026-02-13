@@ -521,7 +521,10 @@
 						<div class="rating-field"><strong>Note:</strong> {item.rating.note}</div>
 					{/if}
 					{#if item.rating.analysis}
-						<div class="rating-field"><strong>Analysis:</strong> {item.rating.analysis}</div>
+						<div class="rating-field">
+							<strong>Analysis:</strong>
+							<div class="markdown-body">{@html renderMarkdown(item.rating.analysis)}</div>
+						</div>
 					{/if}
 				</div>
 			{/if}
