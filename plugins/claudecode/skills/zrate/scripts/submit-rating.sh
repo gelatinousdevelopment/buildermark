@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SERVER="${ZRATE_SERVER:-http://localhost:7022}"
+DASHBOARD="${ZRATE_DASHBOARD:-http://localhost:5173}"
 
 json_escape() {
   local s="${1:-}"
@@ -51,10 +52,12 @@ response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
 
 # --- check response ---
 if printf '%s' "$response" | grep -q '"ok":true'; then
+  conversation_url="${DASHBOARD%/}/dashboard/conversations/${cid}"
   printf 'ok\n'
   printf 'rating: %s/5\n' "$rating"
   [[ -n "$note" ]] && printf 'note: %s\n' "$note"
   printf 'conversation: %s\n' "$cid"
+  printf 'conversation_url: %s\n' "$conversation_url"
 else
   echo "error: server rejected the rating"
   printf '%s\n' "$response"

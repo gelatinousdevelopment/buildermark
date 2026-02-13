@@ -32,6 +32,6 @@ Then run the submission script, passing your analysis text in the `ANALYSIS` env
 ANALYSIS="your analysis text here" bash plugins/claudecode/skills/zrate/scripts/submit-rating.sh $ARGUMENTS
 ```
 
-If the output starts with "ok", confirm to the user: **Rated N/5** (include the note if one was given), then show your analysis under `**Prompt Suggestions:**` and `**Model Failures:**` headings.
+If the output starts with "ok", confirm to the user: **Rated N/5** (include the note if one was given), print a clickable conversation link using the `conversation_url` value from script output, then show your analysis under `**Prompt Suggestions:**` and `**Model Failures:**` headings.
 
 If the output starts with "error", relay the message to the user. If it's a connection error, suggest starting the server with `cd web/server && go run .`
