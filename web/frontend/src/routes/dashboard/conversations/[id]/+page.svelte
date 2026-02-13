@@ -5,6 +5,8 @@
 	import { getConversation, createRating } from '$lib/api';
 	import { stars, fmtTime } from '$lib/utils';
 	import { marked } from 'marked';
+	import { html as diffToHtml } from 'diff2html';
+	import 'diff2html/bundles/css/diff2html.min.css';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
 
@@ -39,6 +41,17 @@
 		return true;
 	}
 
+	function isDiffMessage(message: MessageRead): boolean {
+		const trimmed = message.content.trimStart();
+		if (trimmed.startsWith('```diff') || trimmed.startsWith('diff --git ')) return true;
+		try {
+			const obj = JSON.parse(message.rawJson) as Record<string, unknown>;
+			return obj.source === 'derived_diff';
+		} catch {
+			return false;
+		}
+	}
+
 	function escapeHtml(s: string): string {
 		return s
 			.replaceAll('&', '&amp;')
@@ -52,11 +65,79 @@
 		return marked.parse(escapeHtml(content), { gfm: true, breaks: true }) as string;
 	}
 
+	function extractDiffText(content: string): string {
+		let text = content.trim();
+		if (text.startsWith('```diff')) {
+			text = text.slice('```diff'.length).trimStart();
+			if (text.endsWith('```')) text = text.slice(0, -3).trimEnd();
+		}
+
+		const gitIdx = text.indexOf('diff --git ');
+		if (gitIdx >= 0) return text.slice(gitIdx).trim();
+
+		const oldIdx = text.indexOf('\n--- ');
+		if (oldIdx >= 0) return text.slice(oldIdx + 1).trim();
+
+		if (text.startsWith('--- ')) return text;
+		return '';
+	}
+
+	function renderDiff(content: string): string {
+		const diffText = extractDiffText(content);
+		if (!diffText) return renderMarkdown(content);
+		try {
+			return diffToHtml(diffText, {
+				drawFileList: true,
+				matching: 'lines',
+				outputFormat: 'line-by-line'
+			});
+		} catch {
+			return renderMarkdown(content);
+		}
+	}
+
+	function diffStats(message: MessageRead): { files: number; added: number; removed: number } {
+		const diffText = extractDiffText(message.content);
+		if (!diffText) return { files: 0, added: 0, removed: 0 };
+
+		const lines = diffText.split('\n');
+		let files = 0;
+		let added = 0;
+		let removed = 0;
+
+		for (const line of lines) {
+			if (line.startsWith('diff --git ')) {
+				files++;
+				continue;
+			}
+			if (line.startsWith('+++ ') || line.startsWith('--- ')) {
+				continue;
+			}
+			if (line.startsWith('+')) {
+				added++;
+				continue;
+			}
+			if (line.startsWith('-')) {
+				removed++;
+			}
+		}
+
+		if (files === 0 && (added > 0 || removed > 0)) files = 1;
+		return { files, added, removed };
+	}
+
+	function diffStatsLabel(message: MessageRead): string {
+		const stats = diffStats(message);
+		const fileLabel = stats.files === 1 ? 'file' : 'files';
+		return `${stats.files} ${fileLabel}, +${stats.added} -${stats.removed}`;
+	}
+
 	function firstLine(s: string): string {
 		return s.replace(/\s+/g, ' ').trim();
 	}
 
 	function messageTypeLabel(message: MessageRead): string {
+		if (isDiffMessage(message)) return 'diff';
 		try {
 			const obj = JSON.parse(message.rawJson) as Record<string, unknown>;
 			const t = typeof obj.type === 'string' ? obj.type : '';
@@ -68,6 +149,11 @@
 	}
 
 	function messageSummary(message: MessageRead): string {
+		if (isDiffMessage(message)) {
+			const diffText = extractDiffText(message.content);
+			const firstDiffLine = diffText.split('\n').find((line) => line.startsWith('diff --git '));
+			if (firstDiffLine) return firstDiffLine;
+		}
 		const line = firstLine(message.content);
 		if (!line) return `[${messageTypeLabel(message)}]`;
 		return line.length > 120 ? `${line.slice(0, 117)}...` : line;
@@ -238,7 +324,7 @@
 				items.push(item);
 				continue;
 			}
-			if (isUserPromptMessage(item.message)) {
+			if (isUserPromptMessage(item.message) || isDiffMessage(item.message)) {
 				flushLogRun();
 				items.push(item);
 				continue;
@@ -293,7 +379,7 @@
 	{#if timeline.length === 0}
 		<p>No messages or ratings.</p>
 	{:else}
-		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
+			{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
 			{#if item.kind === 'message'}
 				{#if isUserPromptMessage(item.message)}
 					<div class="message">
@@ -301,6 +387,9 @@
 							<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
 							{#if messageModel(item.message)}
 								<span class="message-model">{messageModel(item.message)}</span>
+							{/if}
+							{#if isDiffMessage(item.message)}
+								<span class="message-diff-stats">{diffStatsLabel(item.message)}</span>
 							{/if}
 							<span class="expansion-indicator"><span class="chevron">▾</span></span>
 						</div>
@@ -362,6 +451,9 @@
 								{#if messageModel(item.message)}
 									<span class="message-model">{messageModel(item.message)}</span>
 								{/if}
+								{#if isDiffMessage(item.message)}
+									<span class="message-diff-stats">{diffStatsLabel(item.message)}</span>
+								{/if}
 								<span class="expansion-indicator">
 									<span class="chevron">{expandedMessages.has(item.message.id) ? '▾' : '▸'}</span>
 								</span>
@@ -369,7 +461,11 @@
 							<div class="message-summary">{messageSummary(item.message)}</div>
 						</button>
 						{#if expandedMessages.has(item.message.id)}
-							<div class="message-content markdown-body">{@html renderMarkdown(item.message.content)}</div>
+							{#if isDiffMessage(item.message)}
+								<div class="message-content diff-body">{@html renderDiff(item.message.content)}</div>
+							{:else}
+								<div class="message-content markdown-body">{@html renderMarkdown(item.message.content)}</div>
+							{/if}
 						{/if}
 					</div>
 				{/if}
@@ -394,6 +490,9 @@
 											{#if messageModel(logMessage)}
 												<span class="message-model">{messageModel(logMessage)}</span>
 											{/if}
+											{#if isDiffMessage(logMessage)}
+												<span class="message-diff-stats">{diffStatsLabel(logMessage)}</span>
+											{/if}
 											<span class="expansion-indicator">
 												<span class="chevron">{expandedMessages.has(logMessage.id) ? '▾' : '▸'}</span>
 											</span>
@@ -401,7 +500,11 @@
 										<div class="message-summary">{messageSummary(logMessage)}</div>
 									</button>
 									{#if expandedMessages.has(logMessage.id)}
-										<div class="message-content markdown-body">{@html renderMarkdown(logMessage.content)}</div>
+										{#if isDiffMessage(logMessage)}
+											<div class="message-content diff-body">{@html renderDiff(logMessage.content)}</div>
+										{:else}
+											<div class="message-content markdown-body">{@html renderMarkdown(logMessage.content)}</div>
+										{/if}
 									{/if}
 								</div>
 							{/each}
@@ -488,6 +591,11 @@
 		color: #9a9a9a;
 	}
 
+	.message-diff-stats {
+		color: #5f6b7a;
+		font-variant-numeric: tabular-nums;
+	}
+
 	.models-summary {
 		margin-bottom: 0.85rem;
 		font-size: 0.85rem;
@@ -559,6 +667,10 @@
 
 	.markdown-body :global(code) {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	}
+
+	.diff-body :global(.d2h-wrapper) {
+		overflow-x: auto;
 	}
 
 	.rating-card {

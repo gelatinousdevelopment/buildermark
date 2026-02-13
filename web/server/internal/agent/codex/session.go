@@ -349,6 +349,7 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 			entries[i].Role = "agent"
 		}
 	}
+	entries = appendDiffEntries(entries)
 
 	return entries, project
 }

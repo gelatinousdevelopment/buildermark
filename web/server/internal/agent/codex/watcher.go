@@ -388,6 +388,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			messages[i].Role = "agent"
 		}
 	}
+	messages = appendDiffDBMessages(messages)
 	normalizeMessageTimestamps(messages)
 
 	// Derive thread ID from filename if not found in events.

@@ -194,7 +194,7 @@ func (a *Agent) collectSessionEntries(path string) ([]agent.Entry, string, strin
 		})
 	}
 
-	return entries, project, conv.SessionID
+	return appendDiffEntries(entries), project, conv.SessionID
 }
 
 func min(a, b int) int {

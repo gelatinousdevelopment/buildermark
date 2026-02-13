@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/davidcann/zrate/web/server/internal/agent"
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
 
@@ -148,6 +149,53 @@ func TestWatcherOffsetTracking(t *testing.T) {
 	a.poll(ctx)
 	if n := countRows(t, database, "messages"); n != 3 {
 		t.Errorf("after second poll: messages = %d, want 3", n)
+	}
+}
+
+func TestAppendDiffEntries(t *testing.T) {
+	entries := []agent.Entry{
+		{
+			Timestamp: 2000,
+			SessionID: "sess-1",
+			Project:   "/proj/a",
+			Role:      "agent",
+			Display:   "```diff\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n```",
+		},
+	}
+
+	out := appendDiffEntries(entries)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+	if out[1].Timestamp != 2001 {
+		t.Fatalf("diff timestamp = %d, want 2001", out[1].Timestamp)
+	}
+	if !strings.Contains(out[1].Display, "+++ b/a.txt") {
+		t.Fatalf("diff entry missing expected content: %q", out[1].Display)
+	}
+}
+
+func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
+	entries := []agent.Entry{
+		{
+			Timestamp: 2000,
+			SessionID: "sess-1",
+			Project:   "/proj/a",
+			Role:      "agent",
+			Display:   "[assistant]",
+			RawJSON:   `{"type":"assistant","timestamp":"2026-02-11T10:00:02.000Z","message":{"content":[{"type":"text","text":"diff --git a/x.txt b/x.txt\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n"}]}}`,
+		},
+	}
+
+	out := appendDiffEntries(entries)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+	if out[1].Timestamp != 2001 {
+		t.Fatalf("diff timestamp = %d, want 2001", out[1].Timestamp)
+	}
+	if !strings.Contains(out[1].Display, "--- a/x.txt") {
+		t.Fatalf("diff entry missing expected content: %q", out[1].Display)
 	}
 }
 

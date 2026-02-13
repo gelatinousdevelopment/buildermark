@@ -17,7 +17,6 @@
 		"test:e2e": "playwright test"
 	},
 	"devDependencies": {
-		"marked": "^16.4.1",
 		"@eslint/compat": "^2.0.2",
 		"@eslint/js": "^9.39.2",
 		"@playwright/test": "^1.58.1",
@@ -26,10 +25,12 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
 		"@types/node": "^22",
 		"@vitest/browser-playwright": "^4.0.18",
+		"diff2html": "^3.4.56",
 		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.14.0",
 		"globals": "^17.3.0",
+		"marked": "^16.4.1",
 		"playwright": "^1.58.1",
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.4.1",

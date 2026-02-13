@@ -223,6 +223,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 	}
 
 	if len(messages) > 0 {
+		messages = appendDiffDBMessages(messages)
 		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
 			log.Printf("gemini watcher: insert messages for session %s: %v", conv.SessionID, err)
 		}

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/davidcann/zrate/web/server/internal/agent"
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
 
@@ -174,6 +175,53 @@ func TestWatcherDetectsNestedConversationModel(t *testing.T) {
 	}
 	if model != "gemini-2.0-flash" {
 		t.Errorf("model = %q, want %q", model, "gemini-2.0-flash")
+	}
+}
+
+func TestAppendDiffEntries(t *testing.T) {
+	entries := []agent.Entry{
+		{
+			Timestamp: 3000,
+			SessionID: "sess-1",
+			Project:   "/proj/a",
+			Role:      "agent",
+			Display:   "```diff\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n```",
+		},
+	}
+
+	out := appendDiffEntries(entries)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+	if out[1].Timestamp != 3001 {
+		t.Fatalf("diff timestamp = %d, want 3001", out[1].Timestamp)
+	}
+	if !strings.Contains(out[1].Display, "@@ -1 +1 @@") {
+		t.Fatalf("diff entry missing expected content: %q", out[1].Display)
+	}
+}
+
+func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
+	entries := []agent.Entry{
+		{
+			Timestamp: 3000,
+			SessionID: "sess-1",
+			Project:   "/proj/a",
+			Role:      "agent",
+			Display:   "[tool call]",
+			RawJSON:   `{"id":"m2","type":"gemini","toolCalls":[{"id":"run-shell","name":"run_shell_command","resultDisplay":"diff --git a/x.txt b/x.txt\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n"}]}`,
+		},
+	}
+
+	out := appendDiffEntries(entries)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+	if out[1].Timestamp != 3001 {
+		t.Fatalf("diff timestamp = %d, want 3001", out[1].Timestamp)
+	}
+	if !strings.Contains(out[1].Display, "+++ b/x.txt") {
+		t.Fatalf("diff entry missing expected content: %q", out[1].Display)
 	}
 }
 

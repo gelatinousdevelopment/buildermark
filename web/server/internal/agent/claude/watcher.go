@@ -328,6 +328,8 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			})
 		}
 
+		messages = appendDiffDBMessages(messages)
+
 		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
 			log.Printf("claude watcher: insert messages for session %s: %v", sid, err)
 		}

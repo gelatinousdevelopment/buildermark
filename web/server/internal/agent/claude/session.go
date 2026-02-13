@@ -188,7 +188,7 @@ func collectSessionEntries(home, path, sessionID string) []agent.Entry {
 		})
 	}
 
-	return entries
+	return appendDiffEntries(entries)
 }
 
 func historyEntryModel(e historyEntry) string {

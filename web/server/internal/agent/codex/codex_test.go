@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/davidcann/zrate/web/server/internal/agent"
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
 
@@ -189,6 +190,53 @@ func TestWatcherSkipsFilesWithoutThreadID(t *testing.T) {
 
 	if n := countRows(t, database, "messages"); n != 0 {
 		t.Errorf("messages: got %d, want 0 (no thread_id or working_dir)", n)
+	}
+}
+
+func TestAppendDiffEntries(t *testing.T) {
+	entries := []agent.Entry{
+		{
+			Timestamp: 1000,
+			SessionID: "sess-1",
+			Project:   "/proj/a",
+			Role:      "agent",
+			Display:   "```diff\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n```",
+		},
+	}
+
+	out := appendDiffEntries(entries)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+	if out[1].Timestamp != 1001 {
+		t.Fatalf("diff timestamp = %d, want 1001", out[1].Timestamp)
+	}
+	if !strings.Contains(out[1].Display, "--- a/a.txt") {
+		t.Fatalf("diff entry missing expected content: %q", out[1].Display)
+	}
+}
+
+func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
+	entries := []agent.Entry{
+		{
+			Timestamp: 1000,
+			SessionID: "sess-1",
+			Project:   "/proj/a",
+			Role:      "agent",
+			Display:   "[response_item]",
+			RawJSON: `{"type":"response_item","payload":{"type":"function_call_output","output":"{\"resultDisplay\":\"diff --git a/x.txt b/x.txt\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n\"}"}}`,
+		},
+	}
+
+	out := appendDiffEntries(entries)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+	if out[1].Timestamp != 1001 {
+		t.Fatalf("diff timestamp = %d, want 1001", out[1].Timestamp)
+	}
+	if !strings.Contains(out[1].Display, "diff --git a/x.txt b/x.txt") {
+		t.Fatalf("diff entry missing expected content: %q", out[1].Display)
 	}
 }
 
