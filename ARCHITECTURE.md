@@ -2,20 +2,25 @@
 
 Possible folder structure:
 
-- `/extensions`
+- `/plugins`
   - `/claudecode`
   - `/codex`
   - `/gemini`
 - `/server`
   - `/_shared`
-  - `/local`
+    - `/db`
+    - `/handler`
+  - `/local`:
+    - `/internal/handler`: endpoints for `/api/v1/local/*`
   - `/team`
+    - `/internal/handler`: endpoints for `/api/v1/team/*`
   - `/cloud`
-- `/frontend`
-  - `/_shared`
-  - `/local`
-  - `/team`
-  - `/cloud`
+- `/frontend/src`
+  - `/lib`
+  - `/routes`
+    - `/local`
+    - `/team`
+    - `/cloud`
 
 ## Extensions
 
