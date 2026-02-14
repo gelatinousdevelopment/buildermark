@@ -66,6 +66,8 @@ type projectCommitCoverage struct {
 type projectCommitDetailResponse struct {
 	Branch   string                      `json:"branch"`
 	Commit   projectCommitCoverage       `json:"commit"`
+	Diff     string                      `json:"diff"`
+	Files    []commitFileCoverage        `json:"files"`
 	Messages []commitContributionMessage `json:"messages"`
 }
 
@@ -97,6 +99,16 @@ type commitContributionMessage struct {
 	CharsMatched      int    `json:"charsMatched"`
 }
 
+type commitFileCoverage struct {
+	Path           string  `json:"path"`
+	Added          int     `json:"added"`
+	Removed        int     `json:"removed"`
+	Ignored        bool    `json:"ignored"`
+	LinesTotal     int     `json:"linesTotal"`
+	LinesFromAgent int     `json:"linesFromAgent"`
+	LinePercent    float64 `json:"linePercent"`
+}
+
 type gitIdentity struct {
 	Name  string
 	Email string
@@ -126,6 +138,7 @@ type messageDiff struct {
 }
 
 type diffToken struct {
+	Path  string
 	Key   string
 	Chars int
 }
@@ -248,13 +261,15 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	ignorePatterns := groupIgnoreDiffPatterns(group)
+
 	if commitHash == workingCopyCommitHash {
-		coverage, messages, ok := computeWorkingCopyDetail(
+		coverage, messages, diffText, files, ok := computeWorkingCopyDetail(
 			r.Context(),
 			s.DB,
 			repoProject,
 			projectIDs(group),
-			groupIgnoreDiffPatterns(group),
+			ignorePatterns,
 			commits,
 		)
 		if !ok {
@@ -264,6 +279,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 			Branch:   mainBranch,
 			Commit:   coverage,
+			Diff:     diffText,
+			Files:    files,
 			Messages: messages,
 		})
 		return
@@ -298,7 +315,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	commitTokens := parseUnifiedDiffTokens(commitDiff, groupIgnoreDiffPatterns(group))
+	commitTokens := parseUnifiedDiffTokens(commitDiff, ignorePatterns)
 	windowStart := commit.TimestampUnix*1000 - defaultMessageWindowMs
 	if commitIdx > 0 {
 		prev := commits[commitIdx-1].TimestampUnix * 1000
@@ -315,8 +332,9 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	contribMessages, matchedLines, matchedChars := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	contribMessages, matchedLines, matchedChars, fileAgent := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	totalLines, totalChars := tokenTotals(commitTokens)
+	files := summarizeDiffFiles(commitDiff, ignorePatterns, fileAgent)
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 		Branch: mainBranch,
@@ -335,6 +353,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			CharsFromAgent:   matchedChars,
 			CharacterPercent: percentage(matchedChars, totalChars),
 		},
+		Diff:     commitDiff,
+		Files:    files,
 		Messages: contribMessages,
 	})
 }
@@ -649,7 +669,7 @@ func computeCoverageForRepo(
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
 		totalLines, totalChars := tokenTotals(commitTokens)
-		_, matchedLines, matchedChars := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, matchedLines, matchedChars, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 
 		coverage = append(coverage, projectCommitCoverage{
 			ProjectID:        repoProject.ID,
@@ -736,7 +756,7 @@ func attributeCommitToMessages(
 	commitTokens []diffToken,
 	messages []messageDiff,
 	windowStart, windowEnd int64,
-) ([]commitContributionMessage, int, int) {
+) ([]commitContributionMessage, int, int, map[string]commitFileCoverage) {
 	matchedLines := 0
 	matchedChars := 0
 	tokenSources := make(map[string][]int)
@@ -750,9 +770,19 @@ func attributeCommitToMessages(
 	}
 
 	contribByIndex := make(map[int]*commitContributionMessage)
+	fileCoverageByPath := make(map[string]commitFileCoverage)
 	for _, tok := range commitTokens {
+		path := tok.Path
+		if path == "" {
+			path = "(unknown)"
+		}
+		fileCov := fileCoverageByPath[path]
+		fileCov.Path = path
+		fileCov.Added++
+
 		sources := tokenSources[tok.Key]
 		if len(sources) == 0 {
+			fileCoverageByPath[path] = fileCov
 			continue
 		}
 		msgIdx := sources[0]
@@ -760,6 +790,8 @@ func attributeCommitToMessages(
 
 		matchedLines++
 		matchedChars += tok.Chars
+		fileCov.Removed++
+		fileCoverageByPath[path] = fileCov
 
 		contrib := contribByIndex[msgIdx]
 		if contrib == nil {
@@ -788,7 +820,8 @@ func attributeCommitToMessages(
 	for _, idx := range indices {
 		out = append(out, *contribByIndex[idx])
 	}
-	return out, matchedLines, matchedChars
+
+	return out, matchedLines, matchedChars, fileCoverageByPath
 }
 
 func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
@@ -950,6 +983,7 @@ func makeDiffToken(path, line string) (diffToken, bool) {
 		return diffToken{}, false
 	}
 	return diffToken{
+		Path:  path,
 		Key:   path + "\x1f" + norm,
 		Chars: utf8.RuneCountInString(norm),
 	}, true
@@ -1002,7 +1036,7 @@ func computeWorkingCopyCoverage(
 	ignorePatterns []string,
 	commits []gitCommit,
 ) (projectCommitCoverage, bool) {
-	coverage, _, ok := computeWorkingCopyDetail(ctx, database, repoProject, projectIDs, ignorePatterns, commits)
+	coverage, _, _, _, ok := computeWorkingCopyDetail(ctx, database, repoProject, projectIDs, ignorePatterns, commits)
 	return coverage, ok
 }
 
@@ -1013,7 +1047,7 @@ func computeWorkingCopyDetail(
 	projectIDs []string,
 	ignorePatterns []string,
 	commits []gitCommit,
-) (projectCommitCoverage, []commitContributionMessage, bool) {
+) (projectCommitCoverage, []commitContributionMessage, string, []commitFileCoverage, bool) {
 	diffText, err := runGit(
 		ctx,
 		repoProject.Path,
@@ -1024,11 +1058,11 @@ func computeWorkingCopyDetail(
 		"--ignore-blank-lines",
 	)
 	if err != nil {
-		return projectCommitCoverage{}, nil, false
+		return projectCommitCoverage{}, nil, "", nil, false
 	}
 	commitTokens := parseUnifiedDiffTokens(diffText, ignorePatterns)
 	if len(commitTokens) == 0 {
-		return projectCommitCoverage{}, nil, false
+		return projectCommitCoverage{}, nil, "", nil, false
 	}
 
 	nowMs := time.Now().UnixMilli()
@@ -1043,11 +1077,12 @@ func computeWorkingCopyDetail(
 
 	messages, err := listDerivedDiffMessages(ctx, database, projectIDs, windowStart, windowEnd)
 	if err != nil {
-		return projectCommitCoverage{}, nil, false
+		return projectCommitCoverage{}, nil, "", nil, false
 	}
 
 	totalLines, totalChars := tokenTotals(commitTokens)
-	contribMessages, matchedLines, matchedChars := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	contribMessages, matchedLines, matchedChars, fileAgent := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	files := summarizeDiffFiles(diffText, ignorePatterns, fileAgent)
 
 	return projectCommitCoverage{
 		WorkingCopy:      true,
@@ -1064,7 +1099,99 @@ func computeWorkingCopyDetail(
 		CharsTotal:       totalChars,
 		CharsFromAgent:   matchedChars,
 		CharacterPercent: percentage(matchedChars, totalChars),
-	}, contribMessages, true
+	}, contribMessages, diffText, files, true
+}
+
+func summarizeDiffFiles(diffText string, ignorePatterns []string, fileAgent map[string]commitFileCoverage) []commitFileCoverage {
+	diffText = strings.ReplaceAll(diffText, "\r\n", "\n")
+	lines := strings.Split(diffText, "\n")
+
+	oldPath := ""
+	newPath := ""
+	coverageByPath := make(map[string]commitFileCoverage)
+
+	ensure := func(path string) string {
+		if path == "" {
+			return ""
+		}
+		c := coverageByPath[path]
+		c.Path = path
+		c.Ignored = shouldIgnoreDiffPath(path, ignorePatterns)
+		coverageByPath[path] = c
+		return path
+	}
+
+	for _, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "diff --git "):
+			parts := strings.Fields(line)
+			if len(parts) >= 4 {
+				oldPath = parseDiffPath(parts[2])
+				newPath = parseDiffPath(parts[3])
+				if newPath != "" {
+					ensure(newPath)
+				} else if oldPath != "" {
+					ensure(oldPath)
+				}
+			}
+		case strings.HasPrefix(line, "--- "):
+			oldPath = parseDiffPath(strings.TrimPrefix(line, "--- "))
+			if oldPath != "" {
+				ensure(oldPath)
+			}
+		case strings.HasPrefix(line, "+++ "):
+			newPath = parseDiffPath(strings.TrimPrefix(line, "+++ "))
+			if newPath != "" {
+				ensure(newPath)
+			}
+		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+			p := newPath
+			if p == "" {
+				p = oldPath
+			}
+			p = ensure(p)
+			if p == "" {
+				continue
+			}
+			c := coverageByPath[p]
+			c.Added++
+			coverageByPath[p] = c
+		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
+			p := oldPath
+			if p == "" {
+				p = newPath
+			}
+			p = ensure(p)
+			if p == "" {
+				continue
+			}
+			c := coverageByPath[p]
+			c.Removed++
+			coverageByPath[p] = c
+		}
+	}
+
+	filePaths := make([]string, 0, len(coverageByPath))
+	for filePath := range coverageByPath {
+		filePaths = append(filePaths, filePath)
+	}
+	sort.Strings(filePaths)
+
+	out := make([]commitFileCoverage, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		c := coverageByPath[filePath]
+		if !c.Ignored {
+			if agent, ok := fileAgent[filePath]; ok {
+				total := agent.Added
+				matched := agent.Removed
+				c.LinesTotal = total
+				c.LinesFromAgent = matched
+				c.LinePercent = percentage(matched, total)
+			}
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 func runGit(ctx context.Context, repoPath string, args ...string) (string, error) {

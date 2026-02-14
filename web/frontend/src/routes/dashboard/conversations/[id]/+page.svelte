@@ -5,10 +5,9 @@
 	import { getConversation, createRating } from '$lib/api';
 	import { stars, fmtTime } from '$lib/utils';
 	import { marked } from 'marked';
-	import { html as diffToHtml } from 'diff2html';
-	import 'diff2html/bundles/css/diff2html.min.css';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
+	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -65,73 +64,6 @@
 		return marked.parse(escapeHtml(content), { gfm: true, breaks: true }) as string;
 	}
 
-	function extractDiffText(content: string): string {
-		let text = content.trim();
-		if (text.startsWith('```diff')) {
-			text = text.slice('```diff'.length).trimStart();
-			if (text.endsWith('```')) text = text.slice(0, -3).trimEnd();
-		}
-
-		const gitIdx = text.indexOf('diff --git ');
-		if (gitIdx >= 0) return text.slice(gitIdx).trim();
-
-		const oldIdx = text.indexOf('\n--- ');
-		if (oldIdx >= 0) return text.slice(oldIdx + 1).trim();
-
-		if (text.startsWith('--- ')) return text;
-		return '';
-	}
-
-	function renderDiff(content: string): string {
-		const diffText = extractDiffText(content);
-		if (!diffText) return renderMarkdown(content);
-		try {
-			return diffToHtml(diffText, {
-				drawFileList: true,
-				matching: 'lines',
-				outputFormat: 'line-by-line'
-			});
-		} catch {
-			return renderMarkdown(content);
-		}
-	}
-
-	function diffStats(message: MessageRead): { files: number; added: number; removed: number } {
-		const diffText = extractDiffText(message.content);
-		if (!diffText) return { files: 0, added: 0, removed: 0 };
-
-		const lines = diffText.split('\n');
-		let files = 0;
-		let added = 0;
-		let removed = 0;
-
-		for (const line of lines) {
-			if (line.startsWith('diff --git ')) {
-				files++;
-				continue;
-			}
-			if (line.startsWith('+++ ') || line.startsWith('--- ')) {
-				continue;
-			}
-			if (line.startsWith('+')) {
-				added++;
-				continue;
-			}
-			if (line.startsWith('-')) {
-				removed++;
-			}
-		}
-
-		if (files === 0 && (added > 0 || removed > 0)) files = 1;
-		return { files, added, removed };
-	}
-
-	function diffStatsLabel(message: MessageRead): string {
-		const stats = diffStats(message);
-		const fileLabel = stats.files === 1 ? 'file' : 'files';
-		return `${stats.files} ${fileLabel}, +${stats.added} -${stats.removed}`;
-	}
-
 	function firstLine(s: string): string {
 		return s.replace(/\s+/g, ' ').trim();
 	}
@@ -149,11 +81,6 @@
 	}
 
 	function messageSummary(message: MessageRead): string {
-		if (isDiffMessage(message)) {
-			const diffText = extractDiffText(message.content);
-			const firstDiffLine = diffText.split('\n').find((line) => line.startsWith('diff --git '));
-			if (firstDiffLine) return firstDiffLine;
-		}
 		const line = firstLine(message.content);
 		if (!line) return `[${messageTypeLabel(message)}]`;
 		return line.length > 120 ? `${line.slice(0, 117)}...` : line;
@@ -391,9 +318,6 @@
 							{#if messageModel(item.message)}
 								<span class="message-model">{messageModel(item.message)}</span>
 							{/if}
-							{#if isDiffMessage(item.message)}
-								<span class="message-diff-stats">{diffStatsLabel(item.message)}</span>
-							{/if}
 							<span class="expansion-indicator"><span class="chevron">▾</span></span>
 						</div>
 						<div class="message-content markdown-body">
@@ -448,6 +372,14 @@
 							</div>
 						{/if}
 					</div>
+				{:else if isDiffMessage(item.message)}
+					<DiffMessageCard
+						timestamp={item.message.timestamp}
+						model={messageModel(item.message)}
+						content={item.message.content}
+						expanded={expandedMessages.has(item.message.id)}
+						onToggle={() => toggleExpanded(item.message.id)}
+					/>
 				{:else}
 					<div class="message message-collapsed">
 						<button class="message-summary-btn" onclick={() => toggleExpanded(item.message.id)}>
@@ -457,9 +389,6 @@
 								{#if messageModel(item.message)}
 									<span class="message-model">{messageModel(item.message)}</span>
 								{/if}
-								{#if isDiffMessage(item.message)}
-									<span class="message-diff-stats">{diffStatsLabel(item.message)}</span>
-								{/if}
 								<span class="expansion-indicator">
 									<span class="chevron">{expandedMessages.has(item.message.id) ? '▾' : '▸'}</span>
 								</span>
@@ -467,17 +396,10 @@
 							<div class="message-summary">{messageSummary(item.message)}</div>
 						</button>
 						{#if expandedMessages.has(item.message.id)}
-							{#if isDiffMessage(item.message)}
-								<div class="message-content diff-body">
-									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-									{@html renderDiff(item.message.content)}
-								</div>
-							{:else}
-								<div class="message-content markdown-body">
-									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-									{@html renderMarkdown(item.message.content)}
-								</div>
-							{/if}
+							<div class="message-content markdown-body">
+								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+								{@html renderMarkdown(item.message.content)}
+							</div>
 						{/if}
 					</div>
 				{/if}
@@ -494,39 +416,42 @@
 					{#if expandedLogGroups.has(item.id)}
 						<div class="log-group-items">
 							{#each item.messages as logMessage (logMessage.id)}
-								<div class="message message-collapsed">
-									<button class="message-summary-btn" onclick={() => toggleExpanded(logMessage.id)}>
-										<div class="message-header">
-											<strong>{messageTypeLabel(logMessage)}</strong> &middot;
-											{fmtTime(logMessage.timestamp)}
-											{#if messageModel(logMessage)}
-												<span class="message-model">{messageModel(logMessage)}</span>
-											{/if}
-											{#if isDiffMessage(logMessage)}
-												<span class="message-diff-stats">{diffStatsLabel(logMessage)}</span>
-											{/if}
-											<span class="expansion-indicator">
-												<span class="chevron"
-													>{expandedMessages.has(logMessage.id) ? '▾' : '▸'}</span
-												>
-											</span>
-										</div>
-										<div class="message-summary">{messageSummary(logMessage)}</div>
-									</button>
-									{#if expandedMessages.has(logMessage.id)}
-										{#if isDiffMessage(logMessage)}
-											<div class="message-content diff-body">
-												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-												{@html renderDiff(logMessage.content)}
+								{#if isDiffMessage(logMessage)}
+									<DiffMessageCard
+										timestamp={logMessage.timestamp}
+										model={messageModel(logMessage)}
+										content={logMessage.content}
+										expanded={expandedMessages.has(logMessage.id)}
+										onToggle={() => toggleExpanded(logMessage.id)}
+									/>
+								{:else}
+									<div class="message message-collapsed">
+										<button
+											class="message-summary-btn"
+											onclick={() => toggleExpanded(logMessage.id)}
+										>
+											<div class="message-header">
+												<strong>{messageTypeLabel(logMessage)}</strong> &middot;
+												{fmtTime(logMessage.timestamp)}
+												{#if messageModel(logMessage)}
+													<span class="message-model">{messageModel(logMessage)}</span>
+												{/if}
+												<span class="expansion-indicator">
+													<span class="chevron"
+														>{expandedMessages.has(logMessage.id) ? '▾' : '▸'}</span
+													>
+												</span>
 											</div>
-										{:else}
+											<div class="message-summary">{messageSummary(logMessage)}</div>
+										</button>
+										{#if expandedMessages.has(logMessage.id)}
 											<div class="message-content markdown-body">
 												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 												{@html renderMarkdown(logMessage.content)}
 											</div>
 										{/if}
-									{/if}
-								</div>
+									</div>
+								{/if}
 							{/each}
 						</div>
 					{/if}
@@ -617,11 +542,6 @@
 		color: #9a9a9a;
 	}
 
-	.message-diff-stats {
-		color: #5f6b7a;
-		font-variant-numeric: tabular-nums;
-	}
-
 	.models-summary {
 		margin-bottom: 0.85rem;
 		font-size: 0.85rem;
@@ -693,10 +613,6 @@
 
 	.markdown-body :global(code) {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-	}
-
-	.diff-body :global(.d2h-wrapper) {
-		overflow-x: auto;
 	}
 
 	.rating-card {

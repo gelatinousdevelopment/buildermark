@@ -87,7 +87,19 @@ export interface ProjectCommitPagination {
 export interface ProjectCommitDetailResponse {
 	branch: string;
 	commit: ProjectCommitCoverage;
+	diff: string;
+	files: ProjectCommitFileCoverage[];
 	messages: ProjectCommitContributionMessage[];
+}
+
+export interface ProjectCommitFileCoverage {
+	path: string;
+	added: number;
+	removed: number;
+	ignored: boolean;
+	linesTotal: number;
+	linesFromAgent: number;
+	linePercent: number;
 }
 
 export interface ProjectCommitContributionMessage {
