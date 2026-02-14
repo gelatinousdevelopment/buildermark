@@ -22,6 +22,7 @@ func (a *Agent) Run(ctx context.Context) {
 
 	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
 	a.backfillGitIDs(ctx)
+	a.backfillLabels(ctx)
 
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
@@ -255,6 +256,31 @@ func readGeminiLogEntries(path, sessionID string) []geminiLogEntry {
 		result = append(result, entry)
 	}
 	return result
+}
+
+// backfillLabels updates project labels from the last path component to the
+// git repository root directory name for projects whose label was auto-generated.
+func (a *Agent) backfillLabels(ctx context.Context) {
+	projects, err := db.ListAllProjects(ctx, a.db)
+	if err != nil {
+		log.Printf("gemini watcher: list projects for label backfill: %v", err)
+		return
+	}
+
+	updated := 0
+	for _, p := range projects {
+		repoName := db.RepoLabel(p.Path)
+		if repoName != p.Label && p.Label == filepath.Base(p.Path) {
+			if err := db.SetProjectLabel(ctx, a.db, p.ID, repoName); err != nil {
+				log.Printf("gemini watcher: update label for %s: %v", p.ID, err)
+				continue
+			}
+			updated++
+		}
+	}
+	if updated > 0 {
+		log.Printf("gemini watcher: backfilled %d project labels", updated)
+	}
 }
 
 func (a *Agent) backfillGitIDs(ctx context.Context) {

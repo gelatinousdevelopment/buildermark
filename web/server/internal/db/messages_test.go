@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -28,10 +30,11 @@ func TestEnsureProject(t *testing.T) {
 	}
 }
 
-func TestEnsureProjectSetsLabel(t *testing.T) {
+func TestEnsureProjectSetsLabelFallback(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
+	// When the path has no .git directory, falls back to last path component.
 	id, err := EnsureProject(ctx, db, "/home/user/myproject")
 	if err != nil {
 		t.Fatalf("EnsureProject: %v", err)
@@ -44,6 +47,75 @@ func TestEnsureProjectSetsLabel(t *testing.T) {
 	}
 	if label != "myproject" {
 		t.Errorf("label = %q, want %q", label, "myproject")
+	}
+}
+
+func TestEnsureProjectSetsLabelFromGitRoot(t *testing.T) {
+	// Create a temp directory structure: reponame/.git/  and reponame/subdir/
+	tmp := t.TempDir()
+	repoDir := filepath.Join(tmp, "myrepo")
+	subDir := filepath.Join(repoDir, "packages", "frontend")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	// EnsureProject with a subdirectory path should detect the git root.
+	id, err := EnsureProject(ctx, db, subDir)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	var label string
+	err = db.QueryRow("SELECT label FROM projects WHERE id = ?", id).Scan(&label)
+	if err != nil {
+		t.Fatalf("query label: %v", err)
+	}
+	if label != "myrepo" {
+		t.Errorf("label = %q, want %q", label, "myrepo")
+	}
+}
+
+func TestRepoLabelNoGit(t *testing.T) {
+	// When no .git exists, falls back to filepath.Base.
+	label := RepoLabel("/some/fake/path")
+	if label != "path" {
+		t.Errorf("RepoLabel = %q, want %q", label, "path")
+	}
+}
+
+func TestRepoLabelAtGitRoot(t *testing.T) {
+	tmp := t.TempDir()
+	repoDir := filepath.Join(tmp, "myrepo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	label := RepoLabel(repoDir)
+	if label != "myrepo" {
+		t.Errorf("RepoLabel = %q, want %q", label, "myrepo")
+	}
+}
+
+func TestRepoLabelFromSubdir(t *testing.T) {
+	tmp := t.TempDir()
+	repoDir := filepath.Join(tmp, "myrepo")
+	subDir := filepath.Join(repoDir, "src", "pkg")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	label := RepoLabel(subDir)
+	if label != "myrepo" {
+		t.Errorf("RepoLabel = %q, want %q", label, "myrepo")
 	}
 }
 

@@ -230,6 +230,25 @@ func ListProjectsWithoutGitID(ctx context.Context, db *sql.DB) ([]Project, error
 	return projects, rows.Err()
 }
 
+// ListAllProjects returns all projects (used for label backfill).
+func ListAllProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
+	rows, err := db.QueryContext(ctx, "SELECT id, path, label, git_id, ignored, ignore_diff_paths FROM projects")
+	if err != nil {
+		return nil, fmt.Errorf("query all projects: %w", err)
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		if err := rows.Scan(&p.ID, &p.Path, &p.Label, &p.GitID, &p.Ignored, &p.IgnoreDiffPaths); err != nil {
+			return nil, fmt.Errorf("scan project: %w", err)
+		}
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
+}
+
 func latestRatingTime(ratings []Rating) time.Time {
 	var latest time.Time
 	for _, r := range ratings {
