@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/google/uuid"
 )
 
 // Message holds the data for a single conversation message to be inserted.
@@ -52,7 +50,7 @@ func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error)
 		return "", fmt.Errorf("query project: %w", err)
 	}
 
-	id = uuid.New().String()
+	id = newID()
 	_, err = db.ExecContext(ctx, "INSERT OR IGNORE INTO projects (id, path, label) VALUES (?, ?, ?)", id, path, RepoLabel(path))
 	if err != nil {
 		return "", fmt.Errorf("insert project: %w", err)
@@ -120,7 +118,7 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 
 	for _, m := range messages {
 		if _, err := stmt.ExecContext(ctx,
-			uuid.New().String(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.Model, m.Content, m.RawJSON,
+			newID(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.Model, m.Content, m.RawJSON,
 			m.ConversationID, m.Role, m.Model, m.Content, m.Timestamp, dupWindowMs,
 		); err != nil {
 			return fmt.Errorf("insert message: %w", err)

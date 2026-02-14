@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // Commit represents a row in the commits table.
@@ -29,7 +27,7 @@ type Commit struct {
 // it updates the diff_content and coverage fields.
 func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
 	if c.ID == "" {
-		c.ID = uuid.New().String()
+		c.ID = newID()
 	}
 	_, err := db.ExecContext(ctx,
 		`INSERT INTO commits (id, project_id, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent)
@@ -84,7 +82,7 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 
 	for _, c := range commits {
 		if c.ID == "" {
-			c.ID = uuid.New().String()
+			c.ID = newID()
 		}
 		if _, err := stmt.ExecContext(ctx,
 			c.ID, c.ProjectID, c.CommitHash, c.Subject, c.AuthorName, c.AuthorEmail, c.AuthoredAt,

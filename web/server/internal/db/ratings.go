@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // Rating represents a single conversation rating.
@@ -21,7 +19,7 @@ type Rating struct {
 
 // InsertRating creates a new rating and returns the persisted record.
 func InsertRating(ctx context.Context, db *sql.DB, conversationID string, rating int, note, analysis string) (*Rating, error) {
-	id := uuid.New().String()
+	id := newID()
 	now := time.Now().UTC()
 
 	_, err := db.ExecContext(ctx,

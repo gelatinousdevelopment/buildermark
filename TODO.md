@@ -1,11 +1,8 @@
 # TODO
 
-- [x] In the @web/frontend, I renamed the root from /dashboard to /local, moved the commits url to `/local/projects/[project_id]/commits/[commit_hash]`, and moved the conversations url to `/local/projects/[project_id]/conversations/[id]`. Update the link URLs everywhere that's necessary.
-- [x] Reorganize frontend files
 - [ ] Label lines in diff that were agent generated
 - [ ] Support more than just main branch
 - [ ] Support cloud AI pull requests
-- [ ] Change to a shorter UUID for id columns
 - [ ] Show color bar for agent percentage vs manual (or per-agent colors?)
 
 ## Later
