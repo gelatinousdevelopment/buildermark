@@ -10,7 +10,7 @@
 	let loading = $state(true);
 	let error: string | null = $state(null);
 	let expandedMessageIds: string[] = $state([]);
-	let breadcrumbProjectId = $derived(page.params.projectId ?? '');
+	let breadcrumbProjectId = $derived(page.params.project_id ?? '');
 
 	function isExpanded(id: string): boolean {
 		return expandedMessageIds.includes(id);
@@ -47,8 +47,8 @@
 
 	onMount(async () => {
 		try {
-			const projectId = page.params.projectId;
-			const commitHash = page.params.commitHash;
+			const projectId = page.params.project_id;
+			const commitHash = page.params.commit_hash;
 			if (!projectId || !commitHash) {
 				throw new Error('Missing project or commit ID');
 			}
@@ -64,7 +64,8 @@
 <div class="breadcrumb">
 	<a href={resolve('/dashboard')}>Dashboard</a> &rsaquo;
 	<a href={resolve('/dashboard/commits')}>Commits</a> &rsaquo;
-	<a href={resolve('/dashboard/commits/[projectId]', { projectId: breadcrumbProjectId })}>Project</a
+	<a href={resolve('/dashboard/projects/[project_id]/commits', { project_id: breadcrumbProjectId })}
+		>Project</a
 	>
 	&rsaquo; Commit
 </div>

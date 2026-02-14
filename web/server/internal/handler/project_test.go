@@ -439,3 +439,48 @@ func TestGetProjectHasLabel(t *testing.T) {
 		t.Errorf("label = %v, want %q", data["label"], "myproject")
 	}
 }
+
+func TestSetProjectIgnoreDiffPaths(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	paths := "TODO.md\nAGENTS.md\n**/*.generated.go"
+	body, _ := json.Marshal(map[string]string{"ignoreDiffPaths": paths})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+pid+"/ignore-diff-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	detail, err := db.GetProjectDetail(ctx, s.DB, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.IgnoreDiffPaths != paths {
+		t.Errorf("ignoreDiffPaths = %q, want %q", detail.IgnoreDiffPaths, paths)
+	}
+}
+
+func TestSetProjectIgnoreDiffPathsNotFound(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	body, _ := json.Marshal(map[string]string{"ignoreDiffPaths": "TODO.md"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/nonexistent/ignore-diff-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}

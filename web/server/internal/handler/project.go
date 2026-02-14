@@ -113,3 +113,37 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 
 	writeSuccess(w, http.StatusOK, project)
 }
+
+func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "project id is required")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+
+	var body struct {
+		IgnoreDiffPaths string `json:"ignoreDiffPaths"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if err := db.SetProjectIgnoreDiffPaths(r.Context(), s.DB, id, body.IgnoreDiffPaths); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		log.Printf("error setting project ignore_diff_paths: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to update project")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, nil)
+}

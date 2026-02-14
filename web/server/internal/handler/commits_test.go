@@ -254,6 +254,104 @@ func TestListProjectCommits(t *testing.T) {
 	}
 }
 
+func TestListProjectCommitsIgnoresConfiguredDiffPaths(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	appPath := filepath.Join(repo, "app.txt")
+	agentsPath := filepath.Join(repo, "AGENTS.md")
+	mustWriteFile(t, appPath, "start\n")
+	mustWriteFile(t, agentsPath, "old rules\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "app.txt", "AGENTS.md")
+	gitRun(t, repo, []string{
+		"GIT_AUTHOR_NAME=Other User",
+		"GIT_AUTHOR_EMAIL=other@example.com",
+		"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z",
+		"GIT_COMMITTER_DATE=2026-01-01T00:00:00Z",
+	}, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	pid, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, pid, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.SetProjectIgnoreDiffPaths(ctx, s.DB, pid, "AGENTS.md"); err != nil {
+		t.Fatalf("SetProjectIgnoreDiffPaths: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-1", pid, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	agentTs := mustUnixMilli(t, "2026-01-01T00:59:00Z")
+	agentDiff := "```diff\n" +
+		"diff --git a/app.txt b/app.txt\n" +
+		"--- a/app.txt\n" +
+		"+++ b/app.txt\n" +
+		"@@ -1 +1,2 @@\n" +
+		" start\n" +
+		"+hello world\n" +
+		"diff --git a/AGENTS.md b/AGENTS.md\n" +
+		"--- a/AGENTS.md\n" +
+		"+++ b/AGENTS.md\n" +
+		"@@ -1 +1 @@\n" +
+		"-old rules\n" +
+		"+new rules\n" +
+		"```"
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{{
+		Timestamp:      agentTs,
+		ProjectID:      pid,
+		ConversationID: "conv-1",
+		Role:           "agent",
+		Content:        agentDiff,
+		RawJSON:        `{"source":"derived_diff"}`,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	mustWriteFile(t, appPath, "start\nhello world\n")
+	mustWriteFile(t, agentsPath, "new rules\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "app.txt", "AGENTS.md")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "mixed change")
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/commits", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	commits := data["commits"].([]any)
+	if len(commits) != 1 {
+		t.Fatalf("commits = %d, want 1", len(commits))
+	}
+	commit := commits[0].(map[string]any)
+	if got := int(commit["linesTotal"].(float64)); got != 1 {
+		t.Fatalf("linesTotal = %d, want 1 after ignoring AGENTS.md", got)
+	}
+	if got := int(commit["linesFromAgent"].(float64)); got != 1 {
+		t.Fatalf("linesFromAgent = %d, want 1", got)
+	}
+}
+
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

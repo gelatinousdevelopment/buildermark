@@ -56,6 +56,14 @@ export function getProject(id: string): Promise<ProjectDetail> {
 	return api(`/api/v1/projects/${id}`);
 }
 
+export function setProjectIgnoreDiffPaths(id: string, ignoreDiffPaths: string): Promise<void> {
+	return api(`/api/v1/projects/${id}/ignore-diff-paths`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ ignoreDiffPaths })
+	});
+}
+
 export function listConversations(): Promise<Conversation[]> {
 	return api('/api/v1/conversations');
 }

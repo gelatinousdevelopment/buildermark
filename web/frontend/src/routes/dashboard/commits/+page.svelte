@@ -44,7 +44,8 @@
 					<td>{project.label || project.path}</td>
 					<td>{project.path}</td>
 					<td>
-						<a href={resolve('/dashboard/commits/[projectId]', { projectId: project.id })}
+						<a
+							href={resolve('/dashboard/projects/[project_id]/commits', { project_id: project.id })}
 							>View commits</a
 						>
 					</td>

@@ -255,6 +255,9 @@ func TestListProjectsReturnsLabel(t *testing.T) {
 	if projects[0].Label != "myproject" {
 		t.Errorf("label = %q, want %q", projects[0].Label, "myproject")
 	}
+	if projects[0].IgnoreDiffPaths != "" {
+		t.Errorf("ignoreDiffPaths = %q, want empty", projects[0].IgnoreDiffPaths)
+	}
 }
 
 func TestSetProjectLabel(t *testing.T) {
@@ -284,6 +287,42 @@ func TestSetProjectLabelNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	err := SetProjectLabel(ctx, db, "nonexistent", "label")
+	if err == nil {
+		t.Fatal("expected error for nonexistent project")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestSetProjectIgnoreDiffPaths(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	ignoreDiffPaths := "TODO.md\nAGENTS.md\n**/*.generated.go"
+	if err := SetProjectIgnoreDiffPaths(ctx, db, pid, ignoreDiffPaths); err != nil {
+		t.Fatalf("SetProjectIgnoreDiffPaths: %v", err)
+	}
+
+	detail, err := GetProjectDetail(ctx, db, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.IgnoreDiffPaths != ignoreDiffPaths {
+		t.Errorf("ignoreDiffPaths = %q, want %q", detail.IgnoreDiffPaths, ignoreDiffPaths)
+	}
+}
+
+func TestSetProjectIgnoreDiffPathsNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	err := SetProjectIgnoreDiffPaths(ctx, db, "nonexistent", "TODO.md")
 	if err == nil {
 		t.Fatal("expected error for nonexistent project")
 	}

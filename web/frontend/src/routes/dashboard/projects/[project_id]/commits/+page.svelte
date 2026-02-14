@@ -18,7 +18,7 @@
 	}
 
 	async function load(pageNum: number) {
-		const projectId = page.params.projectId;
+		const projectId = page.params.project_id;
 		if (!projectId) throw new Error('Missing project ID');
 		data = await listProjectCommitsPage(projectId, pageNum);
 	}
@@ -99,9 +99,9 @@
 					<td>
 						<div>
 							<a
-								href={resolve('/dashboard/commits/[projectId]/[commitHash]', {
-									projectId: c.projectId,
-									commitHash: c.commitHash
+								href={resolve('/dashboard/projects/[project_id]/commits/[commit_hash]', {
+									project_id: c.projectId,
+									commit_hash: c.commitHash
 								})}
 							>
 								{c.subject || c.commitHash.slice(0, 8)}

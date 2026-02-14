@@ -31,8 +31,8 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if version != 9 {
-		t.Errorf("expected version 9, got %d", version)
+	if version != 10 {
+		t.Errorf("expected version 10, got %d", version)
 	}
 
 	// Verify ratings table exists with expected columns.
@@ -42,7 +42,7 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	}
 
 	// Verify new tables exist with expected columns.
-	_, err = db.Exec("SELECT id, path, label, git_id FROM projects LIMIT 0")
+	_, err = db.Exec("SELECT id, path, label, git_id, ignore_diff_paths FROM projects LIMIT 0")
 	if err != nil {
 		t.Fatalf("projects table missing or wrong schema: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if count != 9 {
-		t.Errorf("expected 9 version rows after idempotent run, got %d", count)
+	if count != 10 {
+		t.Errorf("expected 10 version rows after idempotent run, got %d", count)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -166,7 +167,8 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 		}
 
 		projectIDs := projectIDs(group)
-		metrics, err := computeCoverageForRepo(r.Context(), s.DB, repoProject, projectIDs, commits)
+		ignorePatterns := groupIgnoreDiffPatterns(group)
+		metrics, err := computeCoverageForRepo(r.Context(), s.DB, repoProject, projectIDs, ignorePatterns, commits)
 		if err != nil {
 			log.Printf("error computing commit coverage for %s: %v", repoProject.Path, err)
 			continue
@@ -247,7 +249,14 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if commitHash == workingCopyCommitHash {
-		coverage, messages, ok := computeWorkingCopyDetail(r.Context(), s.DB, repoProject, projectIDs(group), commits)
+		coverage, messages, ok := computeWorkingCopyDetail(
+			r.Context(),
+			s.DB,
+			repoProject,
+			projectIDs(group),
+			groupIgnoreDiffPatterns(group),
+			commits,
+		)
 		if !ok {
 			writeError(w, http.StatusNotFound, "working copy is clean")
 			return
@@ -289,7 +298,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	commitTokens := parseUnifiedDiffTokens(commitDiff)
+	commitTokens := parseUnifiedDiffTokens(commitDiff, groupIgnoreDiffPatterns(group))
 	windowStart := commit.TimestampUnix*1000 - defaultMessageWindowMs
 	if commitIdx > 0 {
 		prev := commits[commitIdx-1].TimestampUnix * 1000
@@ -380,7 +389,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		return
 	}
 
-	all, err := computeCoverageForRepo(r.Context(), s.DB, repoProject, projectIDs(group), commits)
+	ignorePatterns := groupIgnoreDiffPatterns(group)
+	all, err := computeCoverageForRepo(r.Context(), s.DB, repoProject, projectIDs(group), ignorePatterns, commits)
 	if err != nil {
 		log.Printf("error computing commit coverage for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to compute commit coverage")
@@ -414,7 +424,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 	paged := all[start:end]
 	if page == 1 {
-		workingCopy, ok := computeWorkingCopyCoverage(r.Context(), s.DB, repoProject, projectIDs(group), commits)
+		workingCopy, ok := computeWorkingCopyCoverage(r.Context(), s.DB, repoProject, projectIDs(group), ignorePatterns, commits)
 		if ok {
 			paged = append([]projectCommitCoverage{workingCopy}, paged...)
 		}
@@ -462,7 +472,14 @@ func findProjectGroupByProjectID(groups []projectGroup, projectID string) (proje
 
 func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*db.Project, error) {
 	var p db.Project
-	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, ignored FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path, &p.Label, &p.GitID, &p.Ignored)
+	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, ignored, ignore_diff_paths FROM projects WHERE id = ?", projectID).Scan(
+		&p.ID,
+		&p.Path,
+		&p.Label,
+		&p.GitID,
+		&p.Ignored,
+		&p.IgnoreDiffPaths,
+	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -597,6 +614,7 @@ func computeCoverageForRepo(
 	database *sql.DB,
 	repoProject *db.Project,
 	projectIDs []string,
+	ignorePatterns []string,
 	commits []gitCommit,
 ) ([]projectCommitCoverage, error) {
 	if len(commits) == 0 {
@@ -616,7 +634,7 @@ func computeCoverageForRepo(
 		if err != nil {
 			continue
 		}
-		commitTokens := parseUnifiedDiffTokens(commitDiff)
+		commitTokens := parseUnifiedDiffTokens(commitDiff, ignorePatterns)
 		if len(commitTokens) == 0 {
 			continue
 		}
@@ -692,7 +710,7 @@ func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs [
 		if !ok {
 			continue
 		}
-		m.Tokens = parseUnifiedDiffTokens(diff)
+		m.Tokens = parseUnifiedDiffTokens(diff, nil)
 		if len(m.Tokens) == 0 {
 			continue
 		}
@@ -773,7 +791,7 @@ func attributeCommitToMessages(
 	return out, matchedLines, matchedChars
 }
 
-func parseUnifiedDiffTokens(diff string) []diffToken {
+func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
 	diff = strings.ReplaceAll(diff, "\r\n", "\n")
 	lines := strings.Split(diff, "\n")
 
@@ -794,10 +812,16 @@ func parseUnifiedDiffTokens(diff string) []diffToken {
 		case strings.HasPrefix(line, "+++ "):
 			newPath = parseDiffPath(strings.TrimPrefix(line, "+++ "))
 		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+			if shouldIgnoreDiffPath(newPath, ignorePatterns) {
+				continue
+			}
 			if tok, ok := makeDiffToken(newPath, line[1:]); ok {
 				tokens = append(tokens, tok)
 			}
 		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
+			if shouldIgnoreDiffPath(oldPath, ignorePatterns) {
+				continue
+			}
 			if tok, ok := makeDiffToken(oldPath, line[1:]); ok {
 				tokens = append(tokens, tok)
 			}
@@ -818,6 +842,106 @@ func parseDiffPath(raw string) string {
 	raw = strings.TrimPrefix(raw, "a/")
 	raw = strings.TrimPrefix(raw, "b/")
 	return raw
+}
+
+func groupIgnoreDiffPatterns(group projectGroup) []string {
+	patternSet := make(map[string]struct{})
+	patterns := make([]string, 0, 8)
+	for _, p := range group.Projects {
+		for _, pattern := range splitIgnoreDiffPatterns(p.IgnoreDiffPaths) {
+			if _, exists := patternSet[pattern]; exists {
+				continue
+			}
+			patternSet[pattern] = struct{}{}
+			patterns = append(patterns, pattern)
+		}
+	}
+	return patterns
+}
+
+func splitIgnoreDiffPatterns(raw string) []string {
+	lines := strings.Split(strings.ReplaceAll(raw, "\r\n", "\n"), "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		pattern := strings.TrimSpace(strings.ReplaceAll(line, "\\", "/"))
+		pattern = strings.TrimPrefix(pattern, "./")
+		pattern = strings.TrimPrefix(pattern, "/")
+		if pattern == "" {
+			continue
+		}
+		out = append(out, pattern)
+	}
+	return out
+}
+
+func shouldIgnoreDiffPath(diffPath string, patterns []string) bool {
+	p := strings.TrimSpace(strings.ReplaceAll(diffPath, "\\", "/"))
+	p = strings.TrimPrefix(p, "./")
+	p = strings.TrimPrefix(p, "/")
+	if p == "" || len(patterns) == 0 {
+		return false
+	}
+	for _, pattern := range patterns {
+		if globMatchPath(pattern, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func globMatchPath(pattern, p string) bool {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return false
+	}
+
+	if !strings.Contains(pattern, "/") {
+		for _, seg := range strings.Split(p, "/") {
+			ok, err := path.Match(pattern, seg)
+			if err == nil && ok {
+				return true
+			}
+		}
+	}
+
+	return globMatchSegments(splitPathSegments(pattern), splitPathSegments(p))
+}
+
+func splitPathSegments(s string) []string {
+	s = strings.Trim(strings.ReplaceAll(s, "\\", "/"), "/")
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "/")
+}
+
+func globMatchSegments(patternSegs, pathSegs []string) bool {
+	var match func(pi, si int) bool
+	match = func(pi, si int) bool {
+		if pi == len(patternSegs) {
+			return si == len(pathSegs)
+		}
+		if patternSegs[pi] == "**" {
+			if pi == len(patternSegs)-1 {
+				return true
+			}
+			for skip := si; skip <= len(pathSegs); skip++ {
+				if match(pi+1, skip) {
+					return true
+				}
+			}
+			return false
+		}
+		if si >= len(pathSegs) {
+			return false
+		}
+		ok, err := path.Match(patternSegs[pi], pathSegs[si])
+		if err != nil || !ok {
+			return false
+		}
+		return match(pi+1, si+1)
+	}
+	return match(0, 0)
 }
 
 func makeDiffToken(path, line string) (diffToken, bool) {
@@ -875,9 +999,10 @@ func computeWorkingCopyCoverage(
 	database *sql.DB,
 	repoProject *db.Project,
 	projectIDs []string,
+	ignorePatterns []string,
 	commits []gitCommit,
 ) (projectCommitCoverage, bool) {
-	coverage, _, ok := computeWorkingCopyDetail(ctx, database, repoProject, projectIDs, commits)
+	coverage, _, ok := computeWorkingCopyDetail(ctx, database, repoProject, projectIDs, ignorePatterns, commits)
 	return coverage, ok
 }
 
@@ -886,6 +1011,7 @@ func computeWorkingCopyDetail(
 	database *sql.DB,
 	repoProject *db.Project,
 	projectIDs []string,
+	ignorePatterns []string,
 	commits []gitCommit,
 ) (projectCommitCoverage, []commitContributionMessage, bool) {
 	diffText, err := runGit(
@@ -900,7 +1026,7 @@ func computeWorkingCopyDetail(
 	if err != nil {
 		return projectCommitCoverage{}, nil, false
 	}
-	commitTokens := parseUnifiedDiffTokens(diffText)
+	commitTokens := parseUnifiedDiffTokens(diffText, ignorePatterns)
 	if len(commitTokens) == 0 {
 		return projectCommitCoverage{}, nil, false
 	}

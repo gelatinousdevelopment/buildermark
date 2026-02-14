@@ -81,7 +81,26 @@
 		<div class="project-section">
 			<div class="project-heading">
 				<h2>{project.label || project.path}</h2>
-				<button class="btn-sm" onclick={() => ignoreProject(project.id)}>Ignore</button>
+				<a
+					class="btn-sm settings-link"
+					href={resolve('/dashboard/projects/[project_id]/settings', { project_id: project.id })}
+				>
+					Settings
+				</a>
+				<a
+					class="btn-sm settings-link"
+					href={resolve('/dashboard/projects/[project_id]/commits', { project_id: project.id })}
+				>
+					Commits
+				</a>
+				<details class="project-menu">
+					<summary class="btn-sm menu-trigger">...</summary>
+					<div class="menu-list">
+						<button class="menu-item" type="button" onclick={() => ignoreProject(project.id)}>
+							Ignore Project
+						</button>
+					</div>
+				</details>
 			</div>
 			{#if project.label}
 				<p class="project-path">{project.path}</p>
@@ -131,6 +150,18 @@
 			{#each ignoredProjects as project (project.id)}
 				<div class="ignored-row">
 					<span>{project.label || project.path}</span>
+					<a
+						class="btn-sm settings-link"
+						href={resolve('/dashboard/projects/[project_id]/settings', { project_id: project.id })}
+					>
+						Settings
+					</a>
+					<a
+						class="btn-sm settings-link"
+						href={resolve('/dashboard/projects/[project_id]/commits', { project_id: project.id })}
+					>
+						Commits
+					</a>
 					<button class="btn-sm" onclick={() => trackProject(project.id)}>Track</button>
 				</div>
 			{/each}
@@ -189,5 +220,51 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	.settings-link {
+		text-decoration: none;
+	}
+
+	.project-menu {
+		position: relative;
+	}
+
+	.menu-trigger {
+		list-style: none;
+		user-select: none;
+	}
+
+	.menu-trigger::-webkit-details-marker {
+		display: none;
+	}
+
+	.menu-list {
+		position: absolute;
+		top: calc(100% + 0.3rem);
+		right: 0;
+		min-width: 8rem;
+		background: #fff;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+		padding: 0.3rem;
+		z-index: 2;
+	}
+
+	.menu-item {
+		display: block;
+		width: 100%;
+		background: transparent;
+		border: 0;
+		text-align: left;
+		padding: 0.35rem 0.45rem;
+		font-size: 0.82rem;
+		color: #444;
+		cursor: pointer;
+	}
+
+	.menu-item:hover {
+		background: #f3f3f3;
 	}
 </style>
