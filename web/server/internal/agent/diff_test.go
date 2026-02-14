@@ -116,3 +116,28 @@ func TestExtractReliableDiffRejectsApplyPatchWithoutHunkLines(t *testing.T) {
 		t.Fatal("expected apply_patch without changes to be rejected")
 	}
 }
+
+func TestExtractReliableDiffFromShellHeredocWrite(t *testing.T) {
+	input := "mkdir -p src && cat > 'src/a.txt' <<'EOF'\nline1\nline2\nEOF\n"
+	diff, ok := ExtractReliableDiff(input)
+	if !ok || diff == "" {
+		t.Fatal("expected heredoc file-write command to be extracted")
+	}
+	if !strings.Contains(diff, "diff --git a/src/a.txt b/src/a.txt") {
+		t.Fatalf("expected diff header for heredoc write, got: %q", diff)
+	}
+	if !strings.Contains(diff, "\n+line1\n+line2") {
+		t.Fatalf("expected heredoc body lines in diff, got: %q", diff)
+	}
+}
+
+func TestExtractReliableDiffFromJSONFunctionCallCmdHeredoc(t *testing.T) {
+	raw := `{"type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{\"cmd\":\"cat > 'src/a.txt' <<'EOF'\\nalpha\\nbeta\\nEOF\\n\"}"}}`
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected heredoc diff from nested JSON command")
+	}
+	if !strings.Contains(diff, "diff --git a/src/a.txt b/src/a.txt") {
+		t.Fatalf("expected diff header in heredoc JSON extraction, got: %q", diff)
+	}
+}

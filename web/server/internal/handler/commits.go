@@ -788,12 +788,11 @@ func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs [
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
 	query := fmt.Sprintf(
-		`SELECT m.id, m.timestamp, m.conversation_id, c.title, m.model, m.content
+		`SELECT m.id, m.timestamp, m.conversation_id, c.title, m.model, m.content, m.raw_json
 		 FROM messages m
 		 JOIN conversations c ON c.id = m.conversation_id
 		 WHERE m.role = 'agent'
 		   AND m.timestamp BETWEEN ? AND ?
-		   AND instr(m.raw_json, 'derived_diff') > 0
 		   AND m.project_id IN (%s)
 		 ORDER BY m.timestamp, m.id`,
 		placeholders,
@@ -813,11 +812,15 @@ func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs [
 	messages := make([]messageDiff, 0, 64)
 	for rows.Next() {
 		var m messageDiff
-		if err := rows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.ConversationTitle, &m.Model, &m.Content); err != nil {
+		var rawJSON string
+		if err := rows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.ConversationTitle, &m.Model, &m.Content, &rawJSON); err != nil {
 			return nil, fmt.Errorf("scan derived diff message: %w", err)
 		}
 
 		diff, ok := agent.ExtractReliableDiff(m.Content)
+		if !ok {
+			diff, ok = agent.ExtractReliableDiffFromJSON(rawJSON)
+		}
 		if !ok {
 			continue
 		}
@@ -851,6 +854,9 @@ func attributeCommitToMessages(
 	matchedLines := 0
 	matchedChars := 0
 	tokenSources := make(map[string][]int)
+	// Keep a full multiset of normalized message lines for copied-file detection.
+	// This must not be decremented by exact path matches, otherwise copied files
+	// can be severely under-attributed when the same lines also appear elsewhere.
 	normSources := make(map[string]int)
 	for i, msg := range messages {
 		if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
@@ -887,10 +893,6 @@ func attributeCommitToMessages(
 		matchedChars += tok.Chars
 		fileCov.Removed++
 		fileCoverageByPath[path] = fileCov
-		if tok.Norm != "" && normSources[tok.Norm] > 0 {
-			normSources[tok.Norm]--
-		}
-
 		contrib := contribByIndex[msgIdx]
 		if contrib == nil {
 			msg := messages[msgIdx]
@@ -1333,7 +1335,7 @@ func summarizeDiffFiles(
 					}
 					if fallbackMatched >= 10 {
 						c.LinesFromAgent = fallbackMatched
-						c.LinePercent = percentage(c.LinesFromAgent, c.LinesTotal)
+						c.LinePercent = percentage(c.LinesFromAgent, len(norms))
 						c.CopiedFromAgent = true
 					}
 				}

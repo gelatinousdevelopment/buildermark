@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -35,6 +36,9 @@ func ExtractReliableDiff(content string) (string, bool) {
 
 	if !looksLikeUnifiedDiff(content) {
 		if converted, ok := extractApplyPatchDiff(content); ok {
+			return converted, true
+		}
+		if converted, ok := extractShellHeredocWriteDiff(content); ok {
 			return converted, true
 		}
 		return "", false
@@ -302,4 +306,97 @@ func extractApplyPatchDiff(content string) (string, bool) {
 		return "", false
 	}
 	return diff, true
+}
+
+func extractShellHeredocWriteDiff(content string) (string, bool) {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+
+	idx := strings.Index(content, "cat >")
+	if idx < 0 {
+		return "", false
+	}
+	rest := content[idx+len("cat >"):]
+
+	rest = strings.TrimLeft(rest, " \t")
+	if rest == "" {
+		return "", false
+	}
+
+	path, rem, ok := parseQuotedToken(rest)
+	if !ok || path == "" {
+		return "", false
+	}
+	rem = strings.TrimLeft(rem, " \t")
+	if !strings.HasPrefix(rem, "<<") {
+		return "", false
+	}
+	rem = strings.TrimPrefix(rem, "<<")
+	rem = strings.TrimLeft(rem, " \t")
+	if rem == "" {
+		return "", false
+	}
+
+	delim, rem, ok := parseQuotedToken(rem)
+	if !ok || delim == "" {
+		return "", false
+	}
+	if i := strings.IndexByte(rem, '\n'); i >= 0 {
+		rem = rem[i+1:]
+	} else {
+		return "", false
+	}
+
+	bodyEnd := strings.Index(rem, "\n"+delim+"\n")
+	if bodyEnd < 0 {
+		if strings.HasSuffix(rem, "\n"+delim) {
+			bodyEnd = len(rem) - (len(delim) + 1)
+		} else {
+			return "", false
+		}
+	}
+	body := rem[:bodyEnd]
+	if strings.TrimSpace(body) == "" {
+		return "", false
+	}
+	lines := strings.Split(body, "\n")
+
+	var out strings.Builder
+	out.WriteString("diff --git a/")
+	out.WriteString(path)
+	out.WriteString(" b/")
+	out.WriteString(path)
+	out.WriteString("\n--- a/")
+	out.WriteString(path)
+	out.WriteString("\n+++ b/")
+	out.WriteString(path)
+	out.WriteString("\n")
+	out.WriteString(fmt.Sprintf("@@ -1,0 +1,%d @@\n", len(lines)))
+	for _, line := range lines {
+		out.WriteString("+")
+		out.WriteString(line)
+		out.WriteString("\n")
+	}
+	return strings.TrimSpace(out.String()), true
+}
+
+func parseQuotedToken(s string) (token string, remainder string, ok bool) {
+	if s == "" {
+		return "", "", false
+	}
+	switch s[0] {
+	case '\'', '"':
+		quote := s[0]
+		end := strings.IndexByte(s[1:], quote)
+		if end < 0 {
+			return "", "", false
+		}
+		end++
+		return s[1:end], s[end+1:], true
+	default:
+		i := strings.IndexAny(s, " \t\n")
+		if i < 0 {
+			return s, "", true
+		}
+		return s[:i], s[i:], true
+	}
 }

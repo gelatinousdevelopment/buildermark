@@ -254,6 +254,84 @@ func TestListProjectCommits(t *testing.T) {
 	}
 }
 
+func TestListProjectCommits_UsesRawJSONDiffWithoutDerivedFlag(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	appPath := filepath.Join(repo, "app.txt")
+	mustWriteFile(t, appPath, "start\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	pid, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, pid, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-raw-json", pid, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	rawOnlyTs := mustUnixMilli(t, "2026-01-01T00:59:00Z")
+	rawOnlyJSON := `{"type":"response_item","payload":{"type":"function_call_output","output":"diff --git a/app.txt b/app.txt\n--- a/app.txt\n+++ b/app.txt\n@@ -1 +1,2 @@\n start\n+hello world\n"}}`
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{{
+		Timestamp:      rawOnlyTs,
+		ProjectID:      pid,
+		ConversationID: "conv-raw-json",
+		Role:           "agent",
+		Content:        "[response_item:function_call_output] function_call_output",
+		RawJSON:        rawOnlyJSON,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	mustWriteFile(t, appPath, "start\nhello world\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "agent change")
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/commits", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	commits := data["commits"].([]any)
+	if len(commits) != 2 {
+		t.Fatalf("commits = %d, want 2", len(commits))
+	}
+	bySubject := map[string]map[string]any{}
+	for _, raw := range commits {
+		item := raw.(map[string]any)
+		bySubject[item["subject"].(string)] = item
+	}
+	agentCommit, ok := bySubject["agent change"]
+	if !ok {
+		t.Fatalf("missing commit subject %q", "agent change")
+	}
+	if got := int(agentCommit["linesFromAgent"].(float64)); got != 1 {
+		t.Fatalf("agent change linesFromAgent = %d, want 1", got)
+	}
+}
+
 func TestListProjectCommitsIgnoresConfiguredDiffPaths(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
@@ -439,6 +517,99 @@ func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *t
 	if copyFile.LinesTotal != 10 {
 		t.Fatalf("copy linesTotal = %d, want 10", copyFile.LinesTotal)
 	}
+	if !copyFile.CopiedFromAgent {
+		t.Fatalf("copy copiedFromAgent = %v, want true", copyFile.CopiedFromAgent)
+	}
+	if copyFile.LinesFromAgent != 10 {
+		t.Fatalf("copy linesFromAgent = %d, want 10", copyFile.LinesFromAgent)
+	}
+	if copyFile.LinePercent != 100 {
+		t.Fatalf("copy linePercent = %.1f, want 100.0", copyFile.LinePercent)
+	}
+}
+
+func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
+	commitTokens := []diffToken{
+		{Path: "exact.txt", Norm: "c1", Key: "exact.txt\x1fc1", Chars: 2},
+		{Path: "exact.txt", Norm: "c2", Key: "exact.txt\x1fc2", Chars: 2},
+		{Path: "exact.txt", Norm: "c3", Key: "exact.txt\x1fc3", Chars: 2},
+		{Path: "exact.txt", Norm: "c4", Key: "exact.txt\x1fc4", Chars: 2},
+		{Path: "exact.txt", Norm: "c5", Key: "exact.txt\x1fc5", Chars: 2},
+		{Path: "exact.txt", Norm: "c6", Key: "exact.txt\x1fc6", Chars: 2},
+		{Path: "exact.txt", Norm: "c7", Key: "exact.txt\x1fc7", Chars: 2},
+		{Path: "exact.txt", Norm: "c8", Key: "exact.txt\x1fc8", Chars: 2},
+		{Path: "exact.txt", Norm: "c9", Key: "exact.txt\x1fc9", Chars: 2},
+		{Path: "exact.txt", Norm: "c10", Key: "exact.txt\x1fc10", Chars: 3},
+		{Path: "copy.txt", Norm: "c1", Key: "copy.txt\x1fc1", Chars: 2},
+		{Path: "copy.txt", Norm: "c2", Key: "copy.txt\x1fc2", Chars: 2},
+		{Path: "copy.txt", Norm: "c3", Key: "copy.txt\x1fc3", Chars: 2},
+		{Path: "copy.txt", Norm: "c4", Key: "copy.txt\x1fc4", Chars: 2},
+		{Path: "copy.txt", Norm: "c5", Key: "copy.txt\x1fc5", Chars: 2},
+		{Path: "copy.txt", Norm: "c6", Key: "copy.txt\x1fc6", Chars: 2},
+		{Path: "copy.txt", Norm: "c7", Key: "copy.txt\x1fc7", Chars: 2},
+		{Path: "copy.txt", Norm: "c8", Key: "copy.txt\x1fc8", Chars: 2},
+		{Path: "copy.txt", Norm: "c9", Key: "copy.txt\x1fc9", Chars: 2},
+		{Path: "copy.txt", Norm: "c10", Key: "copy.txt\x1fc10", Chars: 3},
+	}
+	messages := []messageDiff{
+		{
+			ID:        "m1",
+			Timestamp: 1000,
+			Tokens: []diffToken{
+				{Path: "exact.txt", Norm: "c1", Key: "exact.txt\x1fc1", Chars: 2},
+				{Path: "exact.txt", Norm: "c2", Key: "exact.txt\x1fc2", Chars: 2},
+				{Path: "exact.txt", Norm: "c3", Key: "exact.txt\x1fc3", Chars: 2},
+				{Path: "exact.txt", Norm: "c4", Key: "exact.txt\x1fc4", Chars: 2},
+				{Path: "exact.txt", Norm: "c5", Key: "exact.txt\x1fc5", Chars: 2},
+				{Path: "exact.txt", Norm: "c6", Key: "exact.txt\x1fc6", Chars: 2},
+				{Path: "exact.txt", Norm: "c7", Key: "exact.txt\x1fc7", Chars: 2},
+				{Path: "exact.txt", Norm: "c8", Key: "exact.txt\x1fc8", Chars: 2},
+				{Path: "exact.txt", Norm: "c9", Key: "exact.txt\x1fc9", Chars: 2},
+				{Path: "exact.txt", Norm: "c10", Key: "exact.txt\x1fc10", Chars: 3},
+			},
+		},
+	}
+
+	diffText := strings.Join([]string{
+		"diff --git a/exact.txt b/exact.txt",
+		"--- a/exact.txt",
+		"+++ b/exact.txt",
+		"@@ -0,0 +1,10 @@",
+		"+c1",
+		"+c2",
+		"+c3",
+		"+c4",
+		"+c5",
+		"+c6",
+		"+c7",
+		"+c8",
+		"+c9",
+		"+c10",
+		"diff --git a/copy.txt b/copy.txt",
+		"--- a/copy.txt",
+		"+++ b/copy.txt",
+		"@@ -0,0 +1,10 @@",
+		"+c1",
+		"+c2",
+		"+c3",
+		"+c4",
+		"+c5",
+		"+c6",
+		"+c7",
+		"+c8",
+		"+c9",
+		"+c10",
+		"",
+	}, "\n")
+
+	_, _, _, fileAgent, normCounts := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	files := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, normCounts)
+
+	byPath := make(map[string]commitFileCoverage, len(files))
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+	copyFile := byPath["copy.txt"]
 	if !copyFile.CopiedFromAgent {
 		t.Fatalf("copy copiedFromAgent = %v, want true", copyFile.CopiedFromAgent)
 	}
