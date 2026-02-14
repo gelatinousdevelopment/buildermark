@@ -69,7 +69,7 @@ test('commit detail renders contributing message and conversation link', async (
 		});
 	});
 
-	await page.goto('/dashboard/projects/proj-1/commits/hash-1');
+	await page.goto('/local/projects/proj-1/commits/hash-1');
 	await expect(page.getByText('agent change')).toBeVisible();
 	await expect(page.getByText('Conversation: Fix auth')).toBeVisible();
 	await expect(page.getByRole('link', { name: 'a.txt' })).toHaveAttribute('href', '#diff-a.txt');
@@ -91,7 +91,7 @@ test('commit detail surfaces non-json API error cleanly', async ({ page }) => {
 		});
 	});
 
-	await page.goto('/dashboard/projects/proj-2/commits/hash-2');
+	await page.goto('/local/projects/proj-2/commits/hash-2');
 	await expect(
 		page.getByText('API returned non-JSON response (404): 404 page not found')
 	).toBeVisible();

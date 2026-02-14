@@ -13,7 +13,6 @@
 	let loading = $state(true);
 	let error: string | null = $state(null);
 	let expandedMessageIds: string[] = $state([]);
-	let breadcrumbProjectId = $derived(page.params.project_id ?? '');
 	let totalAdded = $derived.by(() => detail?.files.reduce((sum, f) => sum + f.added, 0) ?? 0);
 	let totalRemoved = $derived.by(() => detail?.files.reduce((sum, f) => sum + f.removed, 0) ?? 0);
 	type DiffSection = {
@@ -152,26 +151,13 @@
 	});
 </script>
 
-<div class="breadcrumb">
-	<a href={resolve('/dashboard')}>Dashboard</a> &rsaquo;
-	<a href={resolve('/dashboard/commits')}>Commits</a> &rsaquo;
-	<a href={resolve('/dashboard/projects/[project_id]/commits', { project_id: breadcrumbProjectId })}
-		>Project</a
-	>
-	&rsaquo; Commit
-</div>
-
 {#if loading}
 	<p class="loading">Loading commit...</p>
 {:else if error}
 	<p class="error">{error}</p>
 {:else if detail}
 	<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
-	<p>
-		{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.projectLabel ||
-			detail.commit.projectPath} |
-		{detail.commit.commitHash.slice(0, 12)}
-	</p>
+	<p>{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}</p>
 	<p>
 		Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} changed lines ({percent(
 			agentLinesFromAgent,
@@ -249,7 +235,10 @@
 				expanded={isExpanded(message.id)}
 				onToggle={() => toggleExpanded(message.id)}
 				statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
-				linkHref={resolve('/dashboard/conversations/[id]', { id: message.conversationId })}
+				linkHref={resolve('/local/projects/[project_id]/conversations/[id]', {
+					project_id: detail.commit.projectId,
+					id: message.conversationId
+				})}
 				linkLabel={`Conversation: ${message.conversationTitle || message.conversationId}`}
 			/>
 		{/each}

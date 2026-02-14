@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
 	import { getConversation, createRating } from '$lib/api';
 	import { stars, fmtTime } from '$lib/utils';
 	import { marked } from 'marked';
@@ -284,17 +283,13 @@
 	});
 </script>
 
-<div class="breadcrumb">
-	<a href={resolve('/dashboard')}>Dashboard</a> &rsaquo; Conversation
-</div>
-
 {#if loading}
 	<p class="loading">Loading conversation...</p>
 {:else if error}
 	<p class="error">{error}</p>
 {:else if conversation}
 	<h2>{conversation.title || conversation.id}</h2>
-	<p>Agent: {conversation.agent} | Project: {conversation.projectId}</p>
+	<p>Agent: {conversation.agent}</p>
 	{#if conversationModels.length > 0}
 		<div class="models-summary">
 			<span class="models-label">Models:</span>

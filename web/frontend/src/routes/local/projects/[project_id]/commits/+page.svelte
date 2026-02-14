@@ -81,11 +81,6 @@
 	});
 </script>
 
-<div class="breadcrumb">
-	<a href={resolve('/dashboard')}>Dashboard</a> &rsaquo;
-	<a href={resolve('/dashboard/commits')}>Commits</a> &rsaquo; Project
-</div>
-
 {#if loading}
 	<p class="loading">Loading commits...</p>
 {:else if error}
@@ -93,9 +88,6 @@
 {:else if !data || data.commits.length === 0}
 	<p>No commits found for this project and current git user.</p>
 {:else}
-	<h2>{data.project.label || data.project.path}</h2>
-	<p>{data.project.path}</p>
-
 	<section class="summary-grid">
 		<div class="summary-card">
 			<div class="summary-label">Current User</div>
@@ -132,7 +124,7 @@
 					<td>
 						<div>
 							<a
-								href={resolve('/dashboard/projects/[project_id]/commits/[commit_hash]', {
+								href={resolve('/local/projects/[project_id]/commits/[commit_hash]', {
 									project_id: c.projectId,
 									commit_hash: c.commitHash
 								})}

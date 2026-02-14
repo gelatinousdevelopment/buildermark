@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { resolve } from '$app/paths';
 	import { getProject, setProjectIgnoreDiffPaths } from '$lib/api';
 	import type { ProjectDetail } from '$lib/types';
 
@@ -46,10 +45,6 @@
 </script>
 
 <div class="page">
-	<div class="breadcrumb">
-		<a href={resolve('/dashboard')}>Dashboard</a> &rsaquo; Project Settings
-	</div>
-
 	{#if loading}
 		<p class="loading">Loading settings...</p>
 	{:else if error && !project}
@@ -88,21 +83,6 @@
 	.page {
 		max-width: 920px;
 		padding: 1.5rem;
-	}
-
-	.breadcrumb {
-		margin-bottom: 1rem;
-		font-size: 0.9rem;
-		color: #666;
-	}
-
-	.breadcrumb a {
-		color: #0066cc;
-		text-decoration: none;
-	}
-
-	.breadcrumb a:hover {
-		text-decoration: underline;
 	}
 
 	h1 {

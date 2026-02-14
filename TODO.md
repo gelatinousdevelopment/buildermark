@@ -1,10 +1,15 @@
 # TODO
 
+- [x] In the @web/frontend, I renamed the root from /dashboard to /local, moved the commits url to `/local/projects/[project_id]/commits/[commit_hash]`, and moved the conversations url to `/local/projects/[project_id]/conversations/[id]`. Update the link URLs everywhere that's necessary.
+- [x] Reorganize frontend files
 - [ ] Label lines in diff that were agent generated
+- [ ] Support more than just main branch
+- [ ] Support cloud AI pull requests
+- [ ] Change to a shorter UUID for id columns
+- [ ] Show color bar for agent percentage vs manual (or per-agent colors?)
 
 ## Later
 
-- [ ] Support more than just main branch
 - [ ] Maybe organize dashboard by Project > Commits (and Working Copy) > Conversations?
 - [ ] Make a separate cloud project or maybe a subfolder in @web/server/cloud for stuff specific to our cloud implementation?
 - [ ] Should we keep the personal tracking stuff totally clean and separate, then have the teams stuff in a separate folder?

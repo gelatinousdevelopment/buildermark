@@ -96,23 +96,6 @@ table.data td a:hover {
 	text-decoration: underline;
 }
 
-/* Breadcrumbs */
-
-.breadcrumb {
-	margin-bottom: 1rem;
-	font-size: 0.9rem;
-	color: #666;
-}
-
-.breadcrumb a {
-	color: #0066cc;
-	text-decoration: none;
-}
-
-.breadcrumb a:hover {
-	text-decoration: underline;
-}
-
 /* Shared utility */
 
 .loading {

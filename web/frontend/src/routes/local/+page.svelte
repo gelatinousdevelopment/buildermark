@@ -83,19 +83,25 @@
 				<h2>{project.label || project.path}</h2>
 				<a
 					class="btn-sm settings-link"
-					href={resolve('/dashboard/projects/[project_id]/settings', { project_id: project.id })}
+					href={resolve('/local/projects/[project_id]/commits', { project_id: project.id })}
 				>
-					Settings
+					Commits
 				</a>
 				<a
 					class="btn-sm settings-link"
-					href={resolve('/dashboard/projects/[project_id]/commits', { project_id: project.id })}
+					href={resolve('/local/projects/[project_id]/conversations', { project_id: project.id })}
 				>
-					Commits
+					Conversations
 				</a>
 				<details class="project-menu">
 					<summary class="btn-sm menu-trigger">...</summary>
 					<div class="menu-list">
+						<a
+							class="menu-item"
+							href={resolve('/local/projects/[project_id]/settings', { project_id: project.id })}
+						>
+							Settings
+						</a>
 						<button class="menu-item" type="button" onclick={() => ignoreProject(project.id)}>
 							Ignore Project
 						</button>
@@ -120,7 +126,12 @@
 						{#each project.conversations as conv (conv.id)}
 							<tr>
 								<td>
-									<a href={resolve('/dashboard/conversations/[id]', { id: conv.id })}>
+									<a
+										href={resolve('/local/projects/[project_id]/conversations/[id]', {
+											project_id: project.id,
+											id: conv.id
+										})}
+									>
 										{conv.title || shortId(conv.id)}
 									</a>
 								</td>
@@ -152,13 +163,13 @@
 					<span>{project.label || project.path}</span>
 					<a
 						class="btn-sm settings-link"
-						href={resolve('/dashboard/projects/[project_id]/settings', { project_id: project.id })}
+						href={resolve('/local/projects/[project_id]/settings', { project_id: project.id })}
 					>
 						Settings
 					</a>
 					<a
 						class="btn-sm settings-link"
-						href={resolve('/dashboard/projects/[project_id]/commits', { project_id: project.id })}
+						href={resolve('/local/projects/[project_id]/commits', { project_id: project.id })}
 					>
 						Commits
 					</a>
@@ -262,6 +273,7 @@
 		font-size: 0.82rem;
 		color: #444;
 		cursor: pointer;
+		text-decoration: none;
 	}
 
 	.menu-item:hover {
