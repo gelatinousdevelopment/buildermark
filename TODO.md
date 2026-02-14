@@ -1,5 +1,6 @@
 # TODO
 
+- [ ] Label lines in diff that were agent generated
 
 ## Later
 

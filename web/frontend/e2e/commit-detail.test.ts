@@ -9,7 +9,7 @@ test('commit detail renders contributing message and conversation link', async (
 				ok: true,
 				data: {
 					branch: 'main',
-						commit: {
+					commit: {
 						projectId: 'proj-1',
 						projectLabel: 'demo',
 						projectPath: '/tmp/demo',
@@ -22,24 +22,36 @@ test('commit detail renders contributing message and conversation link', async (
 						linePercent: 50,
 						charsTotal: 20,
 						charsFromAgent: 10,
-							characterPercent: 50
+						characterPercent: 50
+					},
+					diff: 'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n\ndiff --git a/ignored.txt b/ignored.txt\n--- a/ignored.txt\n+++ b/ignored.txt\n@@ -1 +1 @@\n-secret-old\n+do-not-show\n',
+					files: [
+						{
+							path: 'a.txt',
+							added: 1,
+							removed: 1,
+							ignored: false,
+							moved: false,
+							movedFrom: '',
+							copiedFromAgent: false,
+							linesTotal: 2,
+							linesFromAgent: 1,
+							linePercent: 50
 						},
-						diff: 'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n',
-						files: [
-							{
-								path: 'a.txt',
-								added: 1,
-								removed: 1,
-								ignored: false,
-								moved: false,
-								movedFrom: '',
-								copiedFromAgent: false,
-								linesTotal: 2,
-								linesFromAgent: 1,
-								linePercent: 50
-							}
-						],
-						messages: [
+						{
+							path: 'ignored.txt',
+							added: 1,
+							removed: 1,
+							ignored: true,
+							moved: false,
+							movedFrom: '',
+							copiedFromAgent: false,
+							linesTotal: 2,
+							linesFromAgent: 0,
+							linePercent: 0
+						}
+					],
+					messages: [
 						{
 							id: 'msg-1',
 							timestamp: 1760000000000,
@@ -60,8 +72,14 @@ test('commit detail renders contributing message and conversation link', async (
 	await page.goto('/dashboard/projects/proj-1/commits/hash-1');
 	await expect(page.getByText('agent change')).toBeVisible();
 	await expect(page.getByText('Conversation: Fix auth')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'a.txt' })).toHaveAttribute('href', '#diff-a.txt');
+	await expect(page.getByRole('link', { name: 'ignored.txt' })).toHaveCount(0);
+	await expect(page.locator('tr', { hasText: 'ignored.txt' }).locator('.changes-col')).toHaveText(
+		''
+	);
 	await page.getByRole('button').filter({ hasText: 'matched 1 lines, 3 chars' }).click();
 	await expect(page.locator('.commit-diff').first()).toContainText('new');
+	await expect(page.getByText('do-not-show')).toHaveCount(0);
 });
 
 test('commit detail surfaces non-json API error cleanly', async ({ page }) => {

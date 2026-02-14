@@ -16,6 +16,17 @@
 	let breadcrumbProjectId = $derived(page.params.project_id ?? '');
 	let totalAdded = $derived.by(() => detail?.files.reduce((sum, f) => sum + f.added, 0) ?? 0);
 	let totalRemoved = $derived.by(() => detail?.files.reduce((sum, f) => sum + f.removed, 0) ?? 0);
+	type DiffSection = {
+		path: string;
+		diffText: string;
+	};
+	let diffSections = $derived.by(() => parseDiffSections(detail?.diff ?? ''));
+	let diffSectionByPath = $derived.by(
+		() => new Map(diffSections.map((section) => [section.path, section.diffText]))
+	);
+	let renderableDiffFiles = $derived.by(
+		() => detail?.files.filter((file) => !file.ignored && diffSectionByPath.has(file.path)) ?? []
+	);
 	let agentLinesTotal = $derived.by(
 		() =>
 			detail?.files
@@ -63,6 +74,63 @@
 		}
 	}
 
+	function normalizeGitPath(pathText: string): string {
+		let path = pathText.trim();
+		if (path.startsWith('"') && path.endsWith('"')) {
+			path = path.slice(1, -1).replaceAll('\\"', '"').replaceAll('\\\\', '\\');
+		}
+		if (path.startsWith('a/') || path.startsWith('b/')) {
+			return path.slice(2);
+		}
+		return path;
+	}
+
+	function parseDiffHeader(line: string): { oldPath: string; newPath: string } | null {
+		const match = line.match(/^diff --git (.+) (.+)$/);
+		if (!match) return null;
+		return {
+			oldPath: normalizeGitPath(match[1]),
+			newPath: normalizeGitPath(match[2])
+		};
+	}
+
+	function parseDiffSections(diffText: string): DiffSection[] {
+		if (!diffText.trim()) return [];
+		const lines = diffText.split('\n');
+		const sections: DiffSection[] = [];
+		let currentPath = '';
+		let currentLines: string[] = [];
+
+		const pushCurrent = () => {
+			if (!currentPath || currentLines.length === 0) return;
+			sections.push({
+				path: currentPath,
+				diffText: currentLines.join('\n')
+			});
+		};
+
+		for (const line of lines) {
+			if (line.startsWith('diff --git ')) {
+				pushCurrent();
+				currentLines = [line];
+				const parsed = parseDiffHeader(line);
+				if (!parsed) {
+					currentPath = '';
+					continue;
+				}
+				currentPath = parsed.newPath === '/dev/null' ? parsed.oldPath : parsed.newPath;
+				continue;
+			}
+			if (currentLines.length > 0) currentLines.push(line);
+		}
+		pushCurrent();
+		return sections;
+	}
+
+	function diffAnchor(path: string): string {
+		return `diff-${encodeURIComponent(path)}`;
+	}
+
 	function percent(part: number, total: number): number {
 		if (total <= 0) return 0;
 		return (part * 100) / total;
@@ -105,8 +173,10 @@
 		{detail.commit.commitHash.slice(0, 12)}
 	</p>
 	<p>
-		Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} changed lines
-		({percent(agentLinesFromAgent, agentLinesTotal).toFixed(1)}%) in non-ignored, non-moved files
+		Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} changed lines ({percent(
+			agentLinesFromAgent,
+			agentLinesTotal
+		).toFixed(1)}%) in non-ignored, non-moved files
 	</p>
 	<p>Changes: <span class="plus">+{totalAdded}</span><span class="minus">-{totalRemoved}</span></p>
 
@@ -127,7 +197,11 @@
 					{#each detail.files as file (file.path)}
 						<tr class:ignored-row={file.ignored || file.moved}>
 							<td>
-								{file.path}
+								{#if !file.ignored && diffSectionByPath.has(file.path)}
+									<a href={`#${diffAnchor(file.path)}`}>{file.path}</a>
+								{:else}
+									{file.path}
+								{/if}
 								{#if file.moved}
 									<span class="file-tag">[moved]</span>
 								{:else if file.copiedFromAgent}
@@ -135,20 +209,33 @@
 								{/if}
 							</td>
 							<td class="changes-col">
-								<span class="plus">+{file.added}</span>
-								<span class="minus">-{file.removed}</span>
+								{#if !file.ignored}
+									<span class="plus">+{file.added}</span>
+									<span class="minus">-{file.removed}</span>
+								{/if}
 							</td>
-							<td class="pct-col">{file.ignored || file.moved ? '' : `${file.linePercent.toFixed(1)}%`}</td>
+							<td class="pct-col"
+								>{file.ignored || file.moved ? '' : `${file.linePercent.toFixed(1)}%`}</td
+							>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
 		</div>
 	{/if}
-	<div class="commit-diff diff-body markdown-body">
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-		{@html renderCommitDiff(detail.diff)}
-	</div>
+	{#if renderableDiffFiles.length === 0}
+		<p>No non-ignored file diffs to display.</p>
+	{:else}
+		{#each renderableDiffFiles as file (file.path)}
+			<div class="commit-diff-section" id={diffAnchor(file.path)}>
+				<h4>{file.path}</h4>
+				<div class="commit-diff diff-body markdown-body">
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html renderCommitDiff(diffSectionByPath.get(file.path) ?? '')}
+				</div>
+			</div>
+		{/each}
+	{/if}
 
 	<h3>Matched Messages</h3>
 	{#if detail.messages.length === 0}
@@ -227,6 +314,11 @@
 
 	.commit-diff {
 		margin-bottom: 1rem;
+	}
+
+	.commit-diff-section h4 {
+		margin: 0.75rem 0 0.5rem;
+		font-size: 0.95rem;
 	}
 
 	.diff-body :global(.d2h-wrapper) {
