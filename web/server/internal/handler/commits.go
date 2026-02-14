@@ -100,13 +100,16 @@ type commitContributionMessage struct {
 }
 
 type commitFileCoverage struct {
-	Path           string  `json:"path"`
-	Added          int     `json:"added"`
-	Removed        int     `json:"removed"`
-	Ignored        bool    `json:"ignored"`
-	LinesTotal     int     `json:"linesTotal"`
-	LinesFromAgent int     `json:"linesFromAgent"`
-	LinePercent    float64 `json:"linePercent"`
+	Path            string  `json:"path"`
+	Added           int     `json:"added"`
+	Removed         int     `json:"removed"`
+	Ignored         bool    `json:"ignored"`
+	Moved           bool    `json:"moved"`
+	MovedFrom       string  `json:"movedFrom"`
+	CopiedFromAgent bool    `json:"copiedFromAgent"`
+	LinesTotal      int     `json:"linesTotal"`
+	LinesFromAgent  int     `json:"linesFromAgent"`
+	LinePercent     float64 `json:"linePercent"`
 }
 
 type gitIdentity struct {
@@ -139,6 +142,7 @@ type messageDiff struct {
 
 type diffToken struct {
 	Path  string
+	Norm  string
 	Key   string
 	Chars int
 }
@@ -305,6 +309,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		"show",
 		"--pretty=format:",
 		"--unified=0",
+		"-M",
 		"-w",
 		"--ignore-blank-lines",
 		commit.Hash,
@@ -332,9 +337,9 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	contribMessages, matchedLines, matchedChars, fileAgent := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	totalLines, totalChars := tokenTotals(commitTokens)
-	files := summarizeDiffFiles(commitDiff, ignorePatterns, fileAgent)
+	files := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 		Branch: mainBranch,
@@ -669,7 +674,7 @@ func computeCoverageForRepo(
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
 		totalLines, totalChars := tokenTotals(commitTokens)
-		_, matchedLines, matchedChars, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, matchedLines, matchedChars, _, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 
 		coverage = append(coverage, projectCommitCoverage{
 			ProjectID:        repoProject.ID,
@@ -756,16 +761,20 @@ func attributeCommitToMessages(
 	commitTokens []diffToken,
 	messages []messageDiff,
 	windowStart, windowEnd int64,
-) ([]commitContributionMessage, int, int, map[string]commitFileCoverage) {
+) ([]commitContributionMessage, int, int, map[string]commitFileCoverage, map[string]int) {
 	matchedLines := 0
 	matchedChars := 0
 	tokenSources := make(map[string][]int)
+	normSources := make(map[string]int)
 	for i, msg := range messages {
 		if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
 			continue
 		}
 		for _, tok := range msg.Tokens {
 			tokenSources[tok.Key] = append(tokenSources[tok.Key], i)
+			if tok.Norm != "" {
+				normSources[tok.Norm]++
+			}
 		}
 	}
 
@@ -792,6 +801,9 @@ func attributeCommitToMessages(
 		matchedChars += tok.Chars
 		fileCov.Removed++
 		fileCoverageByPath[path] = fileCov
+		if tok.Norm != "" && normSources[tok.Norm] > 0 {
+			normSources[tok.Norm]--
+		}
 
 		contrib := contribByIndex[msgIdx]
 		if contrib == nil {
@@ -821,7 +833,7 @@ func attributeCommitToMessages(
 		out = append(out, *contribByIndex[idx])
 	}
 
-	return out, matchedLines, matchedChars, fileCoverageByPath
+	return out, matchedLines, matchedChars, fileCoverageByPath, normSources
 }
 
 func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
@@ -984,6 +996,7 @@ func makeDiffToken(path, line string) (diffToken, bool) {
 	}
 	return diffToken{
 		Path:  path,
+		Norm:  norm,
 		Key:   path + "\x1f" + norm,
 		Chars: utf8.RuneCountInString(norm),
 	}, true
@@ -1054,6 +1067,7 @@ func computeWorkingCopyDetail(
 		"diff",
 		"HEAD",
 		"--unified=0",
+		"-M",
 		"-w",
 		"--ignore-blank-lines",
 	)
@@ -1081,8 +1095,8 @@ func computeWorkingCopyDetail(
 	}
 
 	totalLines, totalChars := tokenTotals(commitTokens)
-	contribMessages, matchedLines, matchedChars, fileAgent := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-	files := summarizeDiffFiles(diffText, ignorePatterns, fileAgent)
+	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	files := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 
 	return projectCommitCoverage{
 		WorkingCopy:      true,
@@ -1102,7 +1116,13 @@ func computeWorkingCopyDetail(
 	}, contribMessages, diffText, files, true
 }
 
-func summarizeDiffFiles(diffText string, ignorePatterns []string, fileAgent map[string]commitFileCoverage) []commitFileCoverage {
+func summarizeDiffFiles(
+	diffText string,
+	ignorePatterns []string,
+	commitTokens []diffToken,
+	fileAgent map[string]commitFileCoverage,
+	remainingNorms map[string]int,
+) []commitFileCoverage {
 	diffText = strings.ReplaceAll(diffText, "\r\n", "\n")
 	lines := strings.Split(diffText, "\n")
 
@@ -1133,6 +1153,20 @@ func summarizeDiffFiles(diffText string, ignorePatterns []string, fileAgent map[
 				} else if oldPath != "" {
 					ensure(oldPath)
 				}
+			}
+		case strings.HasPrefix(line, "rename from "):
+			oldPath = parseDiffPath(strings.TrimPrefix(line, "rename from "))
+			if oldPath != "" {
+				ensure(oldPath)
+			}
+		case strings.HasPrefix(line, "rename to "):
+			newPath = parseDiffPath(strings.TrimPrefix(line, "rename to "))
+			if newPath != "" {
+				newPath = ensure(newPath)
+				c := coverageByPath[newPath]
+				c.Moved = true
+				c.MovedFrom = oldPath
+				coverageByPath[newPath] = c
 			}
 		case strings.HasPrefix(line, "--- "):
 			oldPath = parseDiffPath(strings.TrimPrefix(line, "--- "))
@@ -1177,16 +1211,46 @@ func summarizeDiffFiles(diffText string, ignorePatterns []string, fileAgent map[
 	}
 	sort.Strings(filePaths)
 
+	fileNorms := make(map[string][]string)
+	for _, tok := range commitTokens {
+		path := tok.Path
+		if path == "" || tok.Norm == "" {
+			continue
+		}
+		fileNorms[path] = append(fileNorms[path], tok.Norm)
+	}
+
 	out := make([]commitFileCoverage, 0, len(filePaths))
 	for _, filePath := range filePaths {
 		c := coverageByPath[filePath]
+		c.LinesTotal = c.Added + c.Removed
 		if !c.Ignored {
 			if agent, ok := fileAgent[filePath]; ok {
-				total := agent.Added
-				matched := agent.Removed
-				c.LinesTotal = total
-				c.LinesFromAgent = matched
-				c.LinePercent = percentage(matched, total)
+				c.LinesFromAgent = agent.Removed
+				// Exact attribution uses normalized token totals so whitespace-only
+				// diff lines do not lower percentages for otherwise exact matches.
+				c.LinePercent = percentage(c.LinesFromAgent, agent.Added)
+			}
+			// Fallback: detect relocated/copied agent code by matching normalized
+			// lines independent of file path. Require at least 10 lines to reduce
+			// small accidental matches.
+			if !c.Moved && c.LinesFromAgent == 0 && c.LinesTotal >= 10 {
+				norms := fileNorms[filePath]
+				if len(norms) >= 10 {
+					fallbackMatched := 0
+					for _, norm := range norms {
+						if remainingNorms[norm] <= 0 {
+							continue
+						}
+						remainingNorms[norm]--
+						fallbackMatched++
+					}
+					if fallbackMatched >= 10 {
+						c.LinesFromAgent = fallbackMatched
+						c.LinePercent = percentage(c.LinesFromAgent, c.LinesTotal)
+						c.CopiedFromAgent = true
+					}
+				}
 			}
 		}
 		out = append(out, c)

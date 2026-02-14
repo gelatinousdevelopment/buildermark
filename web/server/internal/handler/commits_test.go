@@ -352,6 +352,104 @@ func TestListProjectCommitsIgnoresConfiguredDiffPaths(t *testing.T) {
 	}
 }
 
+func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *testing.T) {
+	diffText := strings.Join([]string{
+		"diff --git a/exact.txt b/exact.txt",
+		"--- a/exact.txt",
+		"+++ b/exact.txt",
+		"@@ -0,0 +1,3 @@",
+		"+alpha",
+		"+   ",
+		"+beta",
+		"diff --git a/copy.txt b/copy.txt",
+		"--- a/copy.txt",
+		"+++ b/copy.txt",
+		"@@ -0,0 +1,10 @@",
+		"+c1",
+		"+c2",
+		"+c3",
+		"+c4",
+		"+c5",
+		"+c6",
+		"+c7",
+		"+c8",
+		"+c9",
+		"+c10",
+		"",
+	}, "\n")
+
+	commitTokens := []diffToken{
+		{Path: "exact.txt", Norm: "alpha"},
+		{Path: "exact.txt", Norm: "beta"},
+		{Path: "copy.txt", Norm: "c1"},
+		{Path: "copy.txt", Norm: "c2"},
+		{Path: "copy.txt", Norm: "c3"},
+		{Path: "copy.txt", Norm: "c4"},
+		{Path: "copy.txt", Norm: "c5"},
+		{Path: "copy.txt", Norm: "c6"},
+		{Path: "copy.txt", Norm: "c7"},
+		{Path: "copy.txt", Norm: "c8"},
+		{Path: "copy.txt", Norm: "c9"},
+		{Path: "copy.txt", Norm: "c10"},
+	}
+
+	fileAgent := map[string]commitFileCoverage{
+		"exact.txt": {
+			Path:    "exact.txt",
+			Added:   2,
+			Removed: 2,
+		},
+	}
+
+	remainingNorms := map[string]int{
+		"c1":  1,
+		"c2":  1,
+		"c3":  1,
+		"c4":  1,
+		"c5":  1,
+		"c6":  1,
+		"c7":  1,
+		"c8":  1,
+		"c9":  1,
+		"c10": 1,
+	}
+
+	files := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	if len(files) != 2 {
+		t.Fatalf("files len = %d, want 2", len(files))
+	}
+
+	byPath := make(map[string]commitFileCoverage, len(files))
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+
+	exact := byPath["exact.txt"]
+	if exact.LinesTotal != 3 {
+		t.Fatalf("exact linesTotal = %d, want 3 raw lines", exact.LinesTotal)
+	}
+	if exact.LinesFromAgent != 2 {
+		t.Fatalf("exact linesFromAgent = %d, want 2", exact.LinesFromAgent)
+	}
+	if exact.LinePercent != 100 {
+		t.Fatalf("exact linePercent = %.1f, want 100.0", exact.LinePercent)
+	}
+
+	copyFile := byPath["copy.txt"]
+	if copyFile.LinesTotal != 10 {
+		t.Fatalf("copy linesTotal = %d, want 10", copyFile.LinesTotal)
+	}
+	if !copyFile.CopiedFromAgent {
+		t.Fatalf("copy copiedFromAgent = %v, want true", copyFile.CopiedFromAgent)
+	}
+	if copyFile.LinesFromAgent != 10 {
+		t.Fatalf("copy linesFromAgent = %d, want 10", copyFile.LinesFromAgent)
+	}
+	if copyFile.LinePercent != 100 {
+		t.Fatalf("copy linePercent = %.1f, want 100.0", copyFile.LinePercent)
+	}
+}
+
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

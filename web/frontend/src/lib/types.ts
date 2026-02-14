@@ -97,6 +97,9 @@ export interface ProjectCommitFileCoverage {
 	added: number;
 	removed: number;
 	ignored: boolean;
+	moved: boolean;
+	movedFrom: string;
+	copiedFromAgent: boolean;
 	linesTotal: number;
 	linesFromAgent: number;
 	linePercent: number;

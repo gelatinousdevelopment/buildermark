@@ -19,13 +19,13 @@
 	let agentLinesTotal = $derived.by(
 		() =>
 			detail?.files
-				.filter((f) => !f.ignored)
+				.filter((f) => !f.ignored && !f.moved)
 				.reduce((sum, f) => sum + f.added + f.removed, 0) ?? 0
 	);
 	let agentLinesFromAgent = $derived.by(
 		() =>
 			detail?.files
-				.filter((f) => !f.ignored)
+				.filter((f) => !f.ignored && !f.moved)
 				.reduce((sum, f) => sum + (f.added + f.removed) * (f.linePercent / 100), 0) ?? 0
 	);
 
@@ -106,7 +106,7 @@
 	</p>
 	<p>
 		Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} changed lines
-		({percent(agentLinesFromAgent, agentLinesTotal).toFixed(1)}%) in non-ignored files
+		({percent(agentLinesFromAgent, agentLinesTotal).toFixed(1)}%) in non-ignored, non-moved files
 	</p>
 	<p>Changes: <span class="plus">+{totalAdded}</span><span class="minus">-{totalRemoved}</span></p>
 
@@ -125,13 +125,20 @@
 				</thead>
 				<tbody>
 					{#each detail.files as file (file.path)}
-						<tr class:ignored-row={file.ignored}>
-							<td>{file.path}</td>
+						<tr class:ignored-row={file.ignored || file.moved}>
+							<td>
+								{file.path}
+								{#if file.moved}
+									<span class="file-tag">[moved]</span>
+								{:else if file.copiedFromAgent}
+									<span class="file-tag">[copied-from-agent]</span>
+								{/if}
+							</td>
 							<td class="changes-col">
 								<span class="plus">+{file.added}</span>
 								<span class="minus">-{file.removed}</span>
 							</td>
-							<td class="pct-col">{file.ignored ? '' : `${file.linePercent.toFixed(1)}%`}</td>
+							<td class="pct-col">{file.ignored || file.moved ? '' : `${file.linePercent.toFixed(1)}%`}</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -210,6 +217,12 @@
 	.ignored-row {
 		color: #9a9a9a;
 		background: #f9f9f9;
+	}
+
+	.file-tag {
+		margin-left: 0.4rem;
+		font-size: 0.8rem;
+		color: #8a8a8a;
 	}
 
 	.commit-diff {
