@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/google/uuid"
@@ -20,6 +21,26 @@ type Message struct {
 	RawJSON        string
 }
 
+// RepoLabel returns the name of the git repository root directory for the
+// given path. It walks up the directory tree looking for a .git entry. If no
+// git root is found it falls back to the last path component.
+func RepoLabel(path string) string {
+	dir := filepath.Clean(path)
+	for {
+		if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			// .git can be a directory (normal repo) or a file (worktree/submodule).
+			_ = info
+			return filepath.Base(dir)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return filepath.Base(path)
+}
+
 // EnsureProject inserts a project if it doesn't already exist and returns its ID.
 func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error) {
 	var id string
@@ -32,7 +53,7 @@ func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error)
 	}
 
 	id = uuid.New().String()
-	_, err = db.ExecContext(ctx, "INSERT OR IGNORE INTO projects (id, path, label) VALUES (?, ?, ?)", id, path, filepath.Base(path))
+	_, err = db.ExecContext(ctx, "INSERT OR IGNORE INTO projects (id, path, label) VALUES (?, ?, ?)", id, path, RepoLabel(path))
 	if err != nil {
 		return "", fmt.Errorf("insert project: %w", err)
 	}
