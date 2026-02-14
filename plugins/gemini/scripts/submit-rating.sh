@@ -50,7 +50,7 @@ response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
 }
 
 if printf '%s' "$response" | grep -q '"ok":true'; then
-  conversation_url="${DASHBOARD%/}/local/conversations/${cid}"
+  conversation_url="${DASHBOARD%/}/local/conv/${cid}"
   printf 'ok\n'
   printf 'rating: %s/5\n' "$rating"
   [[ -n "$note" ]] && printf 'note: %s\n' "$note"
