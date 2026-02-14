@@ -332,6 +332,88 @@ func TestListProjectCommits_UsesRawJSONDiffWithoutDerivedFlag(t *testing.T) {
 	}
 }
 
+func TestProjectCommitsPageAlwaysImportsLatestCommits(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	appPath := filepath.Join(repo, "app.txt")
+	mustWriteFile(t, appPath, "start\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first call status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode first response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("first call ok=false, error=%v", env.Error)
+	}
+	firstData := env.Data.(map[string]any)
+	firstPagination := firstData["pagination"].(map[string]any)
+	if got := int(firstPagination["total"].(float64)); got != 1 {
+		t.Fatalf("first pagination.total = %d, want 1", got)
+	}
+
+	mustWriteFile(t, appPath, "start\nsecond line\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "second commit")
+
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second call status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	env = jsonEnvelope{}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("second call ok=false, error=%v", env.Error)
+	}
+	secondData := env.Data.(map[string]any)
+	secondPagination := secondData["pagination"].(map[string]any)
+	if got := int(secondPagination["total"].(float64)); got != 2 {
+		t.Fatalf("second pagination.total = %d, want 2", got)
+	}
+
+	commits := secondData["commits"].([]any)
+	foundSecond := false
+	for _, raw := range commits {
+		item := raw.(map[string]any)
+		if item["subject"].(string) == "second commit" {
+			foundSecond = true
+			break
+		}
+	}
+	if !foundSecond {
+		t.Fatalf("second commit not found in project commits response")
+	}
+}
+
 func TestListProjectCommitsIgnoresConfiguredDiffPaths(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()

@@ -158,15 +158,64 @@ func ingestMoreCommitsForProject(
 		return 0, true, nil
 	}
 
+	ingested, err := ingestCommits(ctx, database, repoProject, group, toIngest)
+	if err != nil {
+		return 0, false, err
+	}
+
+	// Check if we reached the root (first commit in git log).
+	reachedRoot := false
+	if len(toIngest) > 0 && len(allGitCommits) > 0 {
+		reachedRoot = toIngest[0].Hash == allGitCommits[0].Hash
+	}
+
+	return ingested, reachedRoot, nil
+}
+
+// IngestDefaultCommits ingests the latest `defaultIngestCount` commits for a project
+// on each call so commits endpoints always include newly created commits.
+func IngestDefaultCommits(
+	ctx context.Context,
+	database *sql.DB,
+	repoProject *db.Project,
+	group projectGroup,
+	identity gitIdentity,
+) error {
+	commits, err := listCommitsByIdentity(ctx, repoProject.Path, identity)
+	if err != nil {
+		return err
+	}
+	if len(commits) == 0 {
+		return nil
+	}
+
+	start := len(commits) - defaultIngestCount
+	if start < 0 {
+		start = 0
+	}
+	_, err = ingestCommits(ctx, database, repoProject, group, commits[start:])
+	return err
+}
+
+func ingestCommits(
+	ctx context.Context,
+	database *sql.DB,
+	repoProject *db.Project,
+	group projectGroup,
+	toIngest []gitCommit,
+) (int, error) {
+	if len(toIngest) == 0 {
+		return 0, nil
+	}
+
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 	pIDs := projectIDs(group)
 
-	// Fetch all derived diff messages for the time window.
 	firstTs := toIngest[0].TimestampUnix*1000 - defaultMessageWindowMs
 	lastTs := toIngest[len(toIngest)-1].TimestampUnix*1000 + commitWindowLookaheadMs
 	messages, err := listDerivedDiffMessages(ctx, database, pIDs, firstTs, lastTs)
 	if err != nil {
-		return 0, false, fmt.Errorf("list derived diff messages: %w", err)
+		return 0, fmt.Errorf("list derived diff messages: %w", err)
 	}
 
 	dbCommits := make([]db.Commit, 0, len(toIngest))
@@ -217,37 +266,10 @@ func ingestMoreCommitsForProject(
 	}
 
 	if err := db.UpsertCommits(ctx, database, dbCommits); err != nil {
-		return 0, false, fmt.Errorf("upsert commits: %w", err)
+		return 0, fmt.Errorf("upsert commits: %w", err)
 	}
 
-	// Check if we reached the root (first commit in git log).
-	reachedRoot := false
-	if len(toIngest) > 0 && len(allGitCommits) > 0 {
-		reachedRoot = toIngest[0].Hash == allGitCommits[0].Hash
-	}
-
-	return len(dbCommits), reachedRoot, nil
-}
-
-// IngestDefaultCommits ingests the latest `defaultIngestCount` commits for a project
-// if no commits are currently stored. Called during startup/first-page-load.
-func IngestDefaultCommits(
-	ctx context.Context,
-	database *sql.DB,
-	repoProject *db.Project,
-	group projectGroup,
-	identity gitIdentity,
-) error {
-	count, err := db.CountCommitsByProject(ctx, database, repoProject.ID)
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil // Already ingested.
-	}
-
-	_, _, err = ingestMoreCommitsForProject(ctx, database, repoProject, group, identity, defaultIngestCount)
-	return err
+	return len(dbCommits), nil
 }
 
 // listAllCommitsByIdentity is like listCommitsByIdentity but without the max-count limit,
