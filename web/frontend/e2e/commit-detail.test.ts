@@ -9,7 +9,7 @@ test('commit detail renders contributing message and conversation link', async (
 				ok: true,
 				data: {
 					branch: 'main',
-					commit: {
+						commit: {
 						projectId: 'proj-1',
 						projectLabel: 'demo',
 						projectPath: '/tmp/demo',
@@ -22,9 +22,24 @@ test('commit detail renders contributing message and conversation link', async (
 						linePercent: 50,
 						charsTotal: 20,
 						charsFromAgent: 10,
-						characterPercent: 50
-					},
-					messages: [
+							characterPercent: 50
+						},
+						diff: 'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n',
+						files: [
+							{
+								path: 'a.txt',
+								added: 1,
+								removed: 1,
+								ignored: false,
+								moved: false,
+								movedFrom: '',
+								copiedFromAgent: false,
+								linesTotal: 2,
+								linesFromAgent: 1,
+								linePercent: 50
+							}
+						],
+						messages: [
 						{
 							id: 'msg-1',
 							timestamp: 1760000000000,
@@ -42,11 +57,11 @@ test('commit detail renders contributing message and conversation link', async (
 		});
 	});
 
-	await page.goto('/dashboard/commits/proj-1/hash-1');
+	await page.goto('/dashboard/projects/proj-1/commits/hash-1');
 	await expect(page.getByText('agent change')).toBeVisible();
 	await expect(page.getByText('Conversation: Fix auth')).toBeVisible();
 	await page.getByRole('button').filter({ hasText: 'matched 1 lines, 3 chars' }).click();
-	await expect(page.locator('.diff-content').first()).toContainText('diff --git a/a.txt b/a.txt');
+	await expect(page.locator('.commit-diff').first()).toContainText('new');
 });
 
 test('commit detail surfaces non-json API error cleanly', async ({ page }) => {
@@ -58,7 +73,7 @@ test('commit detail surfaces non-json API error cleanly', async ({ page }) => {
 		});
 	});
 
-	await page.goto('/dashboard/commits/proj-2/hash-2');
+	await page.goto('/dashboard/projects/proj-2/commits/hash-2');
 	await expect(
 		page.getByText('API returned non-JSON response (404): 404 page not found')
 	).toBeVisible();

@@ -160,11 +160,14 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 
 	var currentUser, currentEmail string
 
+	// Build a map from project ID to project for labeling.
+	projectMap := make(map[string]*db.Project)
 	for _, group := range groups {
 		repoProject, err := resolveRepoProject(r.Context(), group)
 		if err != nil {
 			continue
 		}
+		projectMap[repoProject.ID] = repoProject
 
 		identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 		if err != nil {
@@ -175,22 +178,24 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 			currentEmail = identity.Email
 		}
 
-		commits, err := listCommitsByIdentity(r.Context(), repoProject.Path, identity)
-		if err != nil {
-			continue
-		}
-		if len(commits) == 0 {
-			continue
+		// Trigger default ingestion if needed.
+		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity); err != nil {
+			log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
 		}
 
-		projectIDs := projectIDs(group)
-		ignorePatterns := groupIgnoreDiffPatterns(group)
-		metrics, err := computeCoverageForRepo(r.Context(), s.DB, repoProject, projectIDs, ignorePatterns, commits)
+		// Read commits from database.
+		dbCommits, err := db.ListCommitsByProjectIDs(r.Context(), s.DB, projectIDs(group))
 		if err != nil {
-			log.Printf("error computing commit coverage for %s: %v", repoProject.Path, err)
+			log.Printf("error listing db commits for %s: %v", repoProject.Path, err)
 			continue
 		}
-		all = append(all, metrics...)
+		for _, c := range dbCommits {
+			rp := projectMap[c.ProjectID]
+			if rp == nil {
+				rp = repoProject
+			}
+			all = append(all, dbCommitToCoverage(c, rp))
+		}
 	}
 
 	sort.SliceStable(all, func(i, j int) bool {
@@ -290,6 +295,81 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Try to load from database first.
+	dbCommit, err := db.GetCommitByHash(r.Context(), s.DB, repoProject.ID, commitHash)
+	if err != nil {
+		log.Printf("error checking db for commit %s: %v", commitHash, err)
+	}
+
+	var commit gitCommit
+	var commitDiff string
+	var tokenDiff string
+
+	if dbCommit != nil {
+		// Use stored diff from database.
+		commit = gitCommit{
+			Hash:          dbCommit.CommitHash,
+			Subject:       dbCommit.Subject,
+			AuthorName:    dbCommit.AuthorName,
+			AuthorEmail:   dbCommit.AuthorEmail,
+			TimestampUnix: dbCommit.AuthoredAt,
+		}
+		commitDiff = dbCommit.DiffContent
+		// Use stored diff tokens when commit is already ingested.
+		tokenDiff = commitDiff
+	} else {
+		// Fallback to git for commits not yet ingested.
+		commitIdx := -1
+		for i := range commits {
+			if commits[i].Hash == commitHash {
+				commitIdx = i
+				break
+			}
+		}
+		if commitIdx < 0 {
+			writeError(w, http.StatusNotFound, "commit not found for current user")
+			return
+		}
+		commit = commits[commitIdx]
+
+		rawDiff, gitErr := runGit(
+			r.Context(),
+			repoProject.Path,
+			"show",
+			"--pretty=format:",
+			"-M",
+			"-w",
+			"--ignore-blank-lines",
+			commit.Hash,
+		)
+		if gitErr != nil {
+			log.Printf("error loading commit diff %s: %v", commit.Hash, gitErr)
+			writeError(w, http.StatusNotFound, "commit diff not found")
+			return
+		}
+		commitDiff = stripBinaryDiffs(rawDiff)
+
+		// Use unified=0 when available to improve token precision.
+		tokenDiff, err = runGit(
+			r.Context(),
+			repoProject.Path,
+			"show",
+			"--pretty=format:",
+			"--unified=0",
+			"-M",
+			"-w",
+			"--ignore-blank-lines",
+			commit.Hash,
+		)
+		if err != nil {
+			// Fall back to the regular commit diff instead of zeroing coverage.
+			tokenDiff = commitDiff
+		}
+	}
+
+	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
+
+	// Determine the time window for message matching.
 	commitIdx := -1
 	for i := range commits {
 		if commits[i].Hash == commitHash {
@@ -297,30 +377,6 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			break
 		}
 	}
-	if commitIdx < 0 {
-		writeError(w, http.StatusNotFound, "commit not found for current user")
-		return
-	}
-
-	commit := commits[commitIdx]
-	commitDiff, err := runGit(
-		r.Context(),
-		repoProject.Path,
-		"show",
-		"--pretty=format:",
-		"--unified=0",
-		"-M",
-		"-w",
-		"--ignore-blank-lines",
-		commit.Hash,
-	)
-	if err != nil {
-		log.Printf("error loading commit diff %s: %v", commit.Hash, err)
-		writeError(w, http.StatusNotFound, "commit diff not found")
-		return
-	}
-
-	commitTokens := parseUnifiedDiffTokens(commitDiff, ignorePatterns)
 	windowStart := commit.TimestampUnix*1000 - defaultMessageWindowMs
 	if commitIdx > 0 {
 		prev := commits[commitIdx-1].TimestampUnix * 1000
@@ -407,28 +463,19 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		return
 	}
 
-	commits, err := listCommitsByIdentity(r.Context(), repoProject.Path, identity)
+	// Trigger default ingestion if needed (first page load).
+	if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity); err != nil {
+		log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
+	}
+
+	// Read commits from database.
+	total, err := db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID)
 	if err != nil {
-		log.Printf("error listing commits for %s: %v", repoProject.Path, err)
-		writeError(w, http.StatusInternalServerError, "failed to list commits")
+		log.Printf("error counting commits for %s: %v", repoProject.Path, err)
+		writeError(w, http.StatusInternalServerError, "failed to count commits")
 		return
 	}
 
-	ignorePatterns := groupIgnoreDiffPatterns(group)
-	all, err := computeCoverageForRepo(r.Context(), s.DB, repoProject, projectIDs(group), ignorePatterns, commits)
-	if err != nil {
-		log.Printf("error computing commit coverage for %s: %v", repoProject.Path, err)
-		writeError(w, http.StatusInternalServerError, "failed to compute commit coverage")
-		return
-	}
-	sort.SliceStable(all, func(i, j int) bool {
-		if all[i].AuthoredAtUnixMs != all[j].AuthoredAtUnixMs {
-			return all[i].AuthoredAtUnixMs > all[j].AuthoredAtUnixMs
-		}
-		return all[i].CommitHash > all[j].CommitHash
-	})
-
-	total := len(all)
 	totalPages := 0
 	if total > 0 {
 		totalPages = (total + commitsPageSize - 1) / commitsPageSize
@@ -436,20 +483,41 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	if totalPages > 0 && page > totalPages {
 		page = totalPages
 	}
-	start := (page - 1) * commitsPageSize
-	if start < 0 {
-		start = 0
+	offset := (page - 1) * commitsPageSize
+	if offset < 0 {
+		offset = 0
 	}
-	if start > total {
-		start = total
+
+	dbCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, commitsPageSize, offset)
+	if err != nil {
+		log.Printf("error listing commits from db for %s: %v", repoProject.Path, err)
+		writeError(w, http.StatusInternalServerError, "failed to list commits")
+		return
 	}
-	end := start + commitsPageSize
-	if end > total {
-		end = total
+
+	// Convert DB commits to coverage structs.
+	paged := make([]projectCommitCoverage, 0, len(dbCommits))
+	for _, c := range dbCommits {
+		paged = append(paged, dbCommitToCoverage(c, repoProject))
 	}
-	paged := all[start:end]
+
+	// Compute summary from all DB commits.
+	allDBCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, total, 0)
+	if err != nil {
+		log.Printf("error listing all commits from db for %s: %v", repoProject.Path, err)
+		writeError(w, http.StatusInternalServerError, "failed to list commits")
+		return
+	}
+	allCoverage := make([]projectCommitCoverage, 0, len(allDBCommits))
+	for _, c := range allDBCommits {
+		allCoverage = append(allCoverage, dbCommitToCoverage(c, repoProject))
+	}
+
+	// Add working copy on page 1.
 	if page == 1 {
-		workingCopy, ok := computeWorkingCopyCoverage(r.Context(), s.DB, repoProject, projectIDs(group), ignorePatterns, commits)
+		ignorePatterns := groupIgnoreDiffPatterns(group)
+		gitCommits, _ := listCommitsByIdentity(r.Context(), repoProject.Path, identity)
+		workingCopy, ok := computeWorkingCopyCoverage(r.Context(), s.DB, repoProject, projectIDs(group), ignorePatterns, gitCommits)
 		if ok {
 			paged = append([]projectCommitCoverage{workingCopy}, paged...)
 		}
@@ -460,7 +528,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		CurrentUser:  identity.Name,
 		CurrentEmail: identity.Email,
 		Project:      *project,
-		Summary:      summarizeCommitCoverage(all),
+		Summary:      summarizeCommitCoverage(allCoverage),
 		Pagination: projectCommitPagination{
 			Page:       page,
 			PageSize:   commitsPageSize,
@@ -469,6 +537,24 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		},
 		Commits: paged,
 	})
+}
+
+func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCoverage {
+	return projectCommitCoverage{
+		ProjectID:        repoProject.ID,
+		ProjectLabel:     repoProject.Label,
+		ProjectPath:      repoProject.Path,
+		ProjectGitID:     repoProject.GitID,
+		CommitHash:       c.CommitHash,
+		Subject:          c.Subject,
+		AuthoredAtUnixMs: c.AuthoredAt * 1000,
+		LinesTotal:       c.LinesTotal,
+		LinesFromAgent:   c.LinesFromAgent,
+		LinePercent:      percentage(c.LinesFromAgent, c.LinesTotal),
+		CharsTotal:       c.CharsTotal,
+		CharsFromAgent:   c.CharsFromAgent,
+		CharacterPercent: percentage(c.CharsFromAgent, c.CharsTotal),
+	}
 }
 
 func listAllProjectGroups(ctx context.Context, database *sql.DB) ([]projectGroup, error) {

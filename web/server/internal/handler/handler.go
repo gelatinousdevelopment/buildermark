@@ -31,6 +31,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignore-diff-paths", s.handleSetProjectIgnoreDiffPaths)
 	mux.HandleFunc("GET /api/v1/conversations", s.handleListConversations)
 	mux.HandleFunc("GET /api/v1/conversations/{id}", s.handleGetConversation)
+	mux.HandleFunc("POST /api/v1/projects/{id}/ingest-commits", s.handleIngestMoreCommits)
+	mux.HandleFunc("GET /api/v1/projects/{projectId}/commit-ingestion-status", s.handleCommitIngestionStatus)
 	mux.HandleFunc("POST /api/v1/history/scan", s.handleHistoryScan)
 	mux.HandleFunc("GET /", s.handleDashboard)
 	return corsMiddleware(mux)
