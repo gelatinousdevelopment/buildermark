@@ -31,8 +31,16 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query schema_version: %v", err)
 	}
-	if version != 10 {
-		t.Errorf("expected version 10, got %d", version)
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
+	if err != nil {
+		t.Fatalf("query schema_version count: %v", err)
+	}
+	if version != count {
+		t.Errorf("expected max schema version to match count (%d), got %d", count, version)
+	}
+	if version < 1 {
+		t.Errorf("expected at least one migration version, got %d", version)
 	}
 
 	// Verify ratings table exists with expected columns.
@@ -59,17 +67,23 @@ func TestMigrationsRunCleanly(t *testing.T) {
 func TestMigrationsIdempotent(t *testing.T) {
 	db := setupTestDB(t)
 
+	var countBefore int
+	err := db.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&countBefore)
+	if err != nil {
+		t.Fatalf("query schema_version before second run: %v", err)
+	}
+
 	// Run migrations a second time — should be a no-op.
 	if err := runMigrations(db); err != nil {
 		t.Fatalf("second migration run failed: %v", err)
 	}
 
-	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&count)
+	var countAfter int
+	err = db.QueryRow("SELECT COUNT(*) FROM schema_version").Scan(&countAfter)
 	if err != nil {
-		t.Fatalf("query schema_version: %v", err)
+		t.Fatalf("query schema_version after second run: %v", err)
 	}
-	if count != 10 {
-		t.Errorf("expected 10 version rows after idempotent run, got %d", count)
+	if countAfter != countBefore {
+		t.Errorf("expected migration count to remain %d after idempotent run, got %d", countBefore, countAfter)
 	}
 }

@@ -17,7 +17,7 @@ type Commit struct {
 	Subject        string `json:"subject"`
 	AuthorName     string `json:"authorName"`
 	AuthorEmail    string `json:"authorEmail"`
-	AuthoredAt     int64  `json:"authoredAt"`     // unix seconds
+	AuthoredAt     int64  `json:"authoredAt"` // unix seconds
 	DiffContent    string `json:"diffContent"`
 	LinesTotal     int    `json:"linesTotal"`
 	CharsTotal     int    `json:"charsTotal"`
@@ -97,14 +97,15 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 	return tx.Commit()
 }
 
-// ListCommitsByProject returns commits for a project, ordered newest first.
+// ListCommitsByProject returns commit metadata for a project, ordered newest first.
+// DiffContent is intentionally omitted to keep list queries lightweight.
 func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID string, limit, offset int) ([]Commit, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, project_id, commit_hash, subject, author_name, author_email, authored_at,
-		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent
+		        lines_total, chars_total, lines_from_agent, chars_from_agent
 		 FROM commits
 		 WHERE project_id = ?
 		 ORDER BY authored_at DESC
@@ -120,7 +121,7 @@ func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID string, lim
 	for rows.Next() {
 		var c Commit
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
-			&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
 		}
 		commits = append(commits, c)
@@ -189,7 +190,8 @@ func UpdateCommitCoverage(ctx context.Context, db *sql.DB, projectID, commitHash
 	return nil
 }
 
-// ListCommitsByProjectIDs returns all commits for a set of project IDs, ordered oldest first.
+// ListCommitsByProjectIDs returns commit metadata for project IDs, ordered oldest first.
+// DiffContent is intentionally omitted to keep list queries lightweight.
 func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []string) ([]Commit, error) {
 	if len(projectIDs) == 0 {
 		return nil, nil
@@ -197,7 +199,7 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
 	query := fmt.Sprintf(
 		`SELECT id, project_id, commit_hash, subject, author_name, author_email, authored_at,
-		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent
+		        lines_total, chars_total, lines_from_agent, chars_from_agent
 		 FROM commits
 		 WHERE project_id IN (%s)
 		 ORDER BY authored_at ASC`,
@@ -218,7 +220,7 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	for rows.Next() {
 		var c Commit
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
-			&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
 		}
 		commits = append(commits, c)

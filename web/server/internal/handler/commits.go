@@ -303,6 +303,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 
 	var commit gitCommit
 	var commitDiff string
+	var tokenDiff string
 
 	if dbCommit != nil {
 		// Use stored diff from database.
@@ -314,6 +315,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			TimestampUnix: dbCommit.AuthoredAt,
 		}
 		commitDiff = dbCommit.DiffContent
+		// Use stored diff tokens when commit is already ingested.
+		tokenDiff = commitDiff
 	} else {
 		// Fallback to git for commits not yet ingested.
 		commitIdx := -1
@@ -345,22 +348,23 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		commitDiff = stripBinaryDiffs(rawDiff)
-	}
 
-	// Get the unified=0 diff for token matching (either from git or re-derive).
-	tokenDiff, err := runGit(
-		r.Context(),
-		repoProject.Path,
-		"show",
-		"--pretty=format:",
-		"--unified=0",
-		"-M",
-		"-w",
-		"--ignore-blank-lines",
-		commit.Hash,
-	)
-	if err != nil {
-		tokenDiff = ""
+		// Use unified=0 when available to improve token precision.
+		tokenDiff, err = runGit(
+			r.Context(),
+			repoProject.Path,
+			"show",
+			"--pretty=format:",
+			"--unified=0",
+			"-M",
+			"-w",
+			"--ignore-blank-lines",
+			commit.Hash,
+		)
+		if err != nil {
+			// Fall back to the regular commit diff instead of zeroing coverage.
+			tokenDiff = commitDiff
+		}
 	}
 
 	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
