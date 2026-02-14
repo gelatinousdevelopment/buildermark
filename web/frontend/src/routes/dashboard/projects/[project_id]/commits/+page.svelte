@@ -2,12 +2,16 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { listProjectCommitsPage } from '$lib/api';
-	import type { ProjectCommitPageResponse } from '$lib/types';
+	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
+	import type { ProjectCommitPageResponse, CommitIngestionStatusResponse } from '$lib/types';
 
 	let data: ProjectCommitPageResponse | null = $state(null);
+	let ingestionStatus: CommitIngestionStatusResponse | null = $state(null);
 	let loading = $state(true);
 	let error: string | null = $state(null);
+	let loadMoreCount = $state(20);
+	let loadingMore = $state(false);
+	let loadMoreError: string | null = $state(null);
 
 	function percent(value: number): string {
 		return `${value.toFixed(1)}%`;
@@ -21,6 +25,17 @@
 		const projectId = page.params.project_id;
 		if (!projectId) throw new Error('Missing project ID');
 		data = await listProjectCommitsPage(projectId, pageNum);
+	}
+
+	async function loadIngestionStatus() {
+		const projectId = page.params.project_id;
+		if (!projectId) return;
+		try {
+			ingestionStatus = await getCommitIngestionStatus(projectId);
+		} catch {
+			// Non-critical, just hide the load more button.
+			ingestionStatus = null;
+		}
 	}
 
 	async function goToPage(pageNum: number) {
@@ -37,9 +52,27 @@
 		}
 	}
 
+	async function handleLoadMore() {
+		const projectId = page.params.project_id;
+		if (!projectId || loadingMore) return;
+		loadingMore = true;
+		loadMoreError = null;
+		try {
+			await ingestMoreCommits(projectId, loadMoreCount);
+			// Reload current page and status.
+			await load(data?.pagination.page ?? 1);
+			await loadIngestionStatus();
+		} catch (e) {
+			loadMoreError = e instanceof Error ? e.message : 'Failed to load more commits';
+		} finally {
+			loadingMore = false;
+		}
+	}
+
 	onMount(async () => {
 		try {
 			await load(1);
+			await loadIngestionStatus();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load commit coverage';
 		} finally {
@@ -137,6 +170,34 @@
 			</button>
 		</div>
 	{/if}
+
+	{#if ingestionStatus && !ingestionStatus.reachedRoot}
+		<div class="load-more">
+			<span class="load-more-info">
+				{ingestionStatus.ingestedCount} of {ingestionStatus.totalGitCommits} commits loaded
+			</span>
+			<div class="load-more-controls">
+				<label>
+					Load
+					<input
+						type="number"
+						min="1"
+						max="500"
+						bind:value={loadMoreCount}
+						class="load-more-input"
+						disabled={loadingMore}
+					/>
+					more
+				</label>
+				<button class="btn-sm" onclick={handleLoadMore} disabled={loadingMore}>
+					{loadingMore ? 'Loading...' : 'Load'}
+				</button>
+			</div>
+			{#if loadMoreError}
+				<p class="error">{loadMoreError}</p>
+			{/if}
+		</div>
+	{/if}
 {/if}
 
 <style>
@@ -184,5 +245,42 @@
 		align-items: center;
 		gap: 0.75rem;
 		margin-top: 1rem;
+	}
+
+	.load-more {
+		margin-top: 1.2rem;
+		padding: 0.8rem;
+		border: 1px solid #e6e6e6;
+		border-radius: 6px;
+		background: #fbfbfb;
+	}
+
+	.load-more-info {
+		font-size: 0.85rem;
+		color: #666;
+		display: block;
+		margin-bottom: 0.5rem;
+	}
+
+	.load-more-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.load-more-controls label {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.9rem;
+	}
+
+	.load-more-input {
+		width: 5rem;
+		padding: 0.25rem 0.4rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		font-size: 0.9rem;
+		text-align: center;
 	}
 </style>

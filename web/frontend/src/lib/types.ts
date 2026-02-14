@@ -126,6 +126,17 @@ export interface ProjectCommitSummary {
 	characterPercent: number;
 }
 
+export interface IngestCommitsResponse {
+	ingested: number;
+	reachedRoot: boolean;
+}
+
+export interface CommitIngestionStatusResponse {
+	ingestedCount: number;
+	totalGitCommits: number;
+	reachedRoot: boolean;
+}
+
 export interface ProjectCommitCoverage {
 	workingCopy?: boolean;
 	projectId: string;

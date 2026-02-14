@@ -7,7 +7,9 @@ import type {
 	Rating,
 	ProjectCommitCoverageResponse,
 	ProjectCommitDetailResponse,
-	ProjectCommitPageResponse
+	ProjectCommitPageResponse,
+	IngestCommitsResponse,
+	CommitIngestionStatusResponse
 } from './types';
 
 interface Envelope<T> {
@@ -104,4 +106,21 @@ export function getProjectCommitDetail(
 	commitHash: string
 ): Promise<ProjectCommitDetailResponse> {
 	return api(`/api/v1/projects/${projectId}/commits/${commitHash}`);
+}
+
+export function ingestMoreCommits(
+	projectId: string,
+	count: number
+): Promise<IngestCommitsResponse> {
+	return api(`/api/v1/projects/${projectId}/ingest-commits`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ count })
+	});
+}
+
+export function getCommitIngestionStatus(
+	projectId: string
+): Promise<CommitIngestionStatusResponse> {
+	return api(`/api/v1/projects/${projectId}/commit-ingestion-status`);
 }
