@@ -34,6 +34,9 @@ func ExtractReliableDiff(content string) (string, bool) {
 	}
 
 	if !looksLikeUnifiedDiff(content) {
+		if converted, ok := extractApplyPatchDiff(content); ok {
+			return converted, true
+		}
 		return "", false
 	}
 	return content, true
@@ -178,4 +181,125 @@ func walkStrings(v any, fn func(string)) {
 			walkStrings(nested, fn)
 		}
 	}
+}
+
+func extractApplyPatchDiff(content string) (string, bool) {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	start := -1
+	end := -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if start < 0 && trimmed == "*** Begin Patch" {
+			start = i + 1
+			continue
+		}
+		if start >= 0 && trimmed == "*** End Patch" {
+			end = i
+			break
+		}
+	}
+	if start < 0 || end <= start {
+		return "", false
+	}
+
+	type section struct {
+		oldPath string
+		newPath string
+		lines   []string
+	}
+
+	sections := make([]section, 0, 2)
+	var current *section
+
+	flush := func() {
+		if current == nil || current.newPath == "" || len(current.lines) == 0 {
+			return
+		}
+		sections = append(sections, *current)
+	}
+
+	for i := start; i < end; i++ {
+		line := lines[i]
+		switch {
+		case strings.HasPrefix(line, "*** Update File: "):
+			flush()
+			path := strings.TrimSpace(strings.TrimPrefix(line, "*** Update File: "))
+			current = &section{oldPath: path, newPath: path}
+		case strings.HasPrefix(line, "*** Add File: "):
+			flush()
+			path := strings.TrimSpace(strings.TrimPrefix(line, "*** Add File: "))
+			current = &section{oldPath: "", newPath: path}
+		case strings.HasPrefix(line, "*** Delete File: "):
+			flush()
+			path := strings.TrimSpace(strings.TrimPrefix(line, "*** Delete File: "))
+			current = &section{oldPath: path, newPath: ""}
+		case strings.HasPrefix(line, "*** Move to: "):
+			if current != nil {
+				current.newPath = strings.TrimSpace(strings.TrimPrefix(line, "*** Move to: "))
+			}
+		case strings.HasPrefix(line, "@@"):
+			if current != nil {
+				current.lines = append(current.lines, line)
+			}
+		case strings.HasPrefix(line, " "), strings.HasPrefix(line, "+"), strings.HasPrefix(line, "-"):
+			if current != nil {
+				current.lines = append(current.lines, line)
+			}
+		}
+	}
+	flush()
+
+	if len(sections) == 0 {
+		return "", false
+	}
+
+	var out strings.Builder
+	for _, sec := range sections {
+		oldPathRaw := sec.oldPath
+		newPathRaw := sec.newPath
+		oldPath := oldPathRaw
+		newPath := newPathRaw
+		if oldPath == "" {
+			oldPath = newPath
+		}
+		if newPath == "" {
+			newPath = oldPath
+		}
+		if oldPath == "" || newPath == "" {
+			continue
+		}
+
+		if out.Len() > 0 {
+			out.WriteString("\n")
+		}
+		out.WriteString("diff --git a/")
+		out.WriteString(oldPath)
+		out.WriteString(" b/")
+		out.WriteString(newPath)
+		out.WriteString("\n")
+		if oldPathRaw == "" {
+			out.WriteString("--- /dev/null\n")
+		} else {
+			out.WriteString("--- a/")
+			out.WriteString(oldPath)
+			out.WriteString("\n")
+		}
+		if newPathRaw == "" {
+			out.WriteString("+++ /dev/null\n")
+		} else {
+			out.WriteString("+++ b/")
+			out.WriteString(newPath)
+			out.WriteString("\n")
+		}
+		for _, line := range sec.lines {
+			out.WriteString(line)
+			out.WriteString("\n")
+		}
+	}
+
+	diff := strings.TrimSpace(out.String())
+	if diff == "" || !looksLikeUnifiedDiff(diff) {
+		return "", false
+	}
+	return diff, true
 }

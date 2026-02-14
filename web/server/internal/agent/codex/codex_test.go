@@ -224,7 +224,7 @@ func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
 			Project:   "/proj/a",
 			Role:      "agent",
 			Display:   "[response_item]",
-			RawJSON: `{"type":"response_item","payload":{"type":"function_call_output","output":"{\"resultDisplay\":\"diff --git a/x.txt b/x.txt\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n\"}"}}`,
+			RawJSON:   `{"type":"response_item","payload":{"type":"function_call_output","output":"{\"resultDisplay\":\"diff --git a/x.txt b/x.txt\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n\"}"}}`,
 		},
 	}
 
@@ -367,6 +367,46 @@ func TestWatcherProcessCurrentSchemaSessionFile(t *testing.T) {
 	}
 	if model != "gpt-5-codex" {
 		t.Errorf("model = %q, want %q", model, "gpt-5-codex")
+	}
+}
+
+func TestWatcherDerivesDiffFromCurrentSchemaApplyPatch(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+
+	now := time.Now().UTC()
+	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "14", "rollout-2026-02-14T08-00-00-thread-apply-patch.jsonl")
+	writeJSONLObjects(t, rolloutPath, []any{
+		map[string]any{
+			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"type":      "session_meta",
+			"payload": map[string]any{
+				"id":    "thread-apply-patch",
+				"cwd":   "/proj/apply-patch",
+				"model": "gpt-5-codex",
+			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),
+			"type":      "response_item",
+			"payload": map[string]any{
+				"type":  "custom_tool_call",
+				"name":  "apply_patch",
+				"input": "*** Begin Patch\n*** Update File: x.txt\n@@\n-old\n+new\n*** End Patch\n",
+			},
+		},
+	})
+
+	a := newAgent(database, sessionsDir, tmpDir)
+	a.processSessionFile(context.Background(), rolloutPath)
+
+	var diffCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'thread-apply-patch' AND content LIKE '```diff%'").Scan(&diffCount); err != nil {
+		t.Fatalf("count diff messages: %v", err)
+	}
+	if diffCount != 1 {
+		t.Fatalf("diff messages = %d, want 1", diffCount)
 	}
 }
 
