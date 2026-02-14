@@ -8,4 +8,4 @@
 
 ## Important Rules
 
-- Never edit or even read `TODO.md` or `TODO-archive.md`
+- Never edit or even read `TODO.md`, `TODO-archive.md`, or `ARCHITECTURE.md`

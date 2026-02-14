@@ -9,6 +9,7 @@
 	<h1><a href={resolve('/dashboard')}>zrate</a></h1>
 	<nav>
 		<a href={resolve('/dashboard')}>Dashboard</a>
+		<a href={resolve('/dashboard/commits')}>Commits</a>
 	</nav>
 </div>
 

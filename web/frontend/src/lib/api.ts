@@ -1,5 +1,14 @@
 import { PUBLIC_API_URL } from '$env/static/public';
-import type { Project, ProjectDetail, Conversation, ConversationDetail, Rating } from './types';
+import type {
+	Project,
+	ProjectDetail,
+	Conversation,
+	ConversationDetail,
+	Rating,
+	ProjectCommitCoverageResponse,
+	ProjectCommitDetailResponse,
+	ProjectCommitPageResponse
+} from './types';
 
 interface Envelope<T> {
 	ok: boolean;
@@ -9,7 +18,14 @@ interface Envelope<T> {
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${PUBLIC_API_URL}${path}`, init);
-	const envelope: Envelope<T> = await res.json();
+	const raw = await res.text();
+	let envelope: Envelope<T> | null = null;
+	try {
+		envelope = JSON.parse(raw) as Envelope<T>;
+	} catch {
+		const snippet = raw.trim().slice(0, 200) || res.statusText || `HTTP ${res.status}`;
+		throw new Error(`API returned non-JSON response (${res.status}): ${snippet}`);
+	}
 	if (!envelope.ok) {
 		throw new Error(envelope.error ?? `API error: ${res.status}`);
 	}
@@ -62,4 +78,22 @@ export function createRating(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ conversationId, rating, note })
 	});
+}
+
+export function listProjectCommits(): Promise<ProjectCommitCoverageResponse> {
+	return api('/api/v1/projects/commits');
+}
+
+export function listProjectCommitsPage(
+	projectId: string,
+	page = 1
+): Promise<ProjectCommitPageResponse> {
+	return api(`/api/v1/projects/${projectId}/commits?page=${page}`);
+}
+
+export function getProjectCommitDetail(
+	projectId: string,
+	commitHash: string
+): Promise<ProjectCommitDetailResponse> {
+	return api(`/api/v1/projects/${projectId}/commits/${commitHash}`);
 }

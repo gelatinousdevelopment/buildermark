@@ -56,3 +56,72 @@ export interface Rating {
 	analysis: string;
 	createdAt: string;
 }
+
+export interface ProjectCommitCoverageResponse {
+	branch: string;
+	currentUser: string;
+	currentEmail: string;
+	summary: ProjectCommitSummary;
+	commits: ProjectCommitCoverage[];
+}
+
+export interface ProjectCommitPageResponse {
+	branch: string;
+	currentUser: string;
+	currentEmail: string;
+	project: Project;
+	summary: ProjectCommitSummary;
+	pagination: ProjectCommitPagination;
+	commits: ProjectCommitCoverage[];
+}
+
+export interface ProjectCommitPagination {
+	page: number;
+	pageSize: number;
+	total: number;
+	totalPages: number;
+}
+
+export interface ProjectCommitDetailResponse {
+	branch: string;
+	commit: ProjectCommitCoverage;
+	messages: ProjectCommitContributionMessage[];
+}
+
+export interface ProjectCommitContributionMessage {
+	id: string;
+	timestamp: number;
+	conversationId: string;
+	conversationTitle: string;
+	model: string;
+	content: string;
+	linesMatched: number;
+	charsMatched: number;
+}
+
+export interface ProjectCommitSummary {
+	commitCount: number;
+	linesTotal: number;
+	linesFromAgent: number;
+	linePercent: number;
+	charsTotal: number;
+	charsFromAgent: number;
+	characterPercent: number;
+}
+
+export interface ProjectCommitCoverage {
+	workingCopy?: boolean;
+	projectId: string;
+	projectLabel: string;
+	projectPath: string;
+	projectGitId: string;
+	commitHash: string;
+	subject: string;
+	authoredAtUnixMs: number;
+	linesTotal: number;
+	linesFromAgent: number;
+	linePercent: number;
+	charsTotal: number;
+	charsFromAgent: number;
+	characterPercent: number;
+}

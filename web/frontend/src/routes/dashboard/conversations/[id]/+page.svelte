@@ -31,8 +31,8 @@
 	let bottomNote: string = $state('');
 	let bottomSubmitting: boolean = $state(false);
 	let bottomError: string | null = $state(null);
-	let expandedMessages = $state(new SvelteSet<string>());
-	let expandedLogGroups = $state(new SvelteSet<string>());
+	let expandedMessages = new SvelteSet<string>();
+	let expandedLogGroups = new SvelteSet<string>();
 
 	function isUserPromptMessage(message: MessageRead): boolean {
 		if (message.role !== 'user') return false;
@@ -239,7 +239,10 @@
 
 			for (const message of conversation.messages) {
 				const trimmed = message.content.trimStart();
-				if (message.role !== 'user' || (!trimmed.startsWith('/zrate') && !trimmed.startsWith('$zrate'))) {
+				if (
+					message.role !== 'user' ||
+					(!trimmed.startsWith('/zrate') && !trimmed.startsWith('$zrate'))
+				) {
 					continue;
 				}
 				if (matchedMessageIds.has(message.id)) continue;
@@ -379,7 +382,7 @@
 	{#if timeline.length === 0}
 		<p>No messages or ratings.</p>
 	{:else}
-			{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
+		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
 			{#if item.kind === 'message'}
 				{#if isUserPromptMessage(item.message)}
 					<div class="message">
@@ -393,7 +396,10 @@
 							{/if}
 							<span class="expansion-indicator"><span class="chevron">▾</span></span>
 						</div>
-						<div class="message-content markdown-body">{@html renderMarkdown(item.message.content)}</div>
+						<div class="message-content markdown-body">
+							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+							{@html renderMarkdown(item.message.content)}
+						</div>
 					</div>
 					<div class="inline-rating">
 						{#if inlineRatingMessageId === item.message.id}
@@ -462,9 +468,15 @@
 						</button>
 						{#if expandedMessages.has(item.message.id)}
 							{#if isDiffMessage(item.message)}
-								<div class="message-content diff-body">{@html renderDiff(item.message.content)}</div>
+								<div class="message-content diff-body">
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+									{@html renderDiff(item.message.content)}
+								</div>
 							{:else}
-								<div class="message-content markdown-body">{@html renderMarkdown(item.message.content)}</div>
+								<div class="message-content markdown-body">
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+									{@html renderMarkdown(item.message.content)}
+								</div>
 							{/if}
 						{/if}
 					</div>
@@ -494,16 +506,24 @@
 												<span class="message-diff-stats">{diffStatsLabel(logMessage)}</span>
 											{/if}
 											<span class="expansion-indicator">
-												<span class="chevron">{expandedMessages.has(logMessage.id) ? '▾' : '▸'}</span>
+												<span class="chevron"
+													>{expandedMessages.has(logMessage.id) ? '▾' : '▸'}</span
+												>
 											</span>
 										</div>
 										<div class="message-summary">{messageSummary(logMessage)}</div>
 									</button>
 									{#if expandedMessages.has(logMessage.id)}
 										{#if isDiffMessage(logMessage)}
-											<div class="message-content diff-body">{@html renderDiff(logMessage.content)}</div>
+											<div class="message-content diff-body">
+												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+												{@html renderDiff(logMessage.content)}
+											</div>
 										{:else}
-											<div class="message-content markdown-body">{@html renderMarkdown(logMessage.content)}</div>
+											<div class="message-content markdown-body">
+												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+												{@html renderMarkdown(logMessage.content)}
+											</div>
 										{/if}
 									{/if}
 								</div>
@@ -523,7 +543,10 @@
 					{#if item.rating.analysis}
 						<div class="rating-field">
 							<strong>Analysis:</strong>
-							<div class="markdown-body">{@html renderMarkdown(item.rating.analysis)}</div>
+							<div class="markdown-body">
+								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+								{@html renderMarkdown(item.rating.analysis)}
+							</div>
 						</div>
 					{/if}
 				</div>
