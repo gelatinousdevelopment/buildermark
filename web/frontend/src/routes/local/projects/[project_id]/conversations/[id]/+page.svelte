@@ -232,18 +232,18 @@
 		let logRun: MessageRead[] = [];
 
 		function flushLogRun() {
-			if (logRun.length > 1) {
-				const first = logRun[0];
-				items.push({
-					kind: 'log-group',
-					id: `log-group-${first.id}`,
-					messages: [...logRun],
-					time: first.timestamp
-				});
-			} else if (logRun.length === 1) {
-				const only = logRun[0];
-				items.push({ kind: 'message', message: only, time: only.timestamp });
-			}
+			// if (logRun.length > 1) {
+			const first = logRun[0];
+			items.push({
+				kind: 'log-group',
+				id: `log-group-${first.id}`,
+				messages: [...logRun],
+				time: first.timestamp
+			});
+			// } else if (logRun.length === 1) {
+			// 	const only = logRun[0];
+			// 	items.push({ kind: 'message', message: only, time: only.timestamp });
+			// }
 			logRun = [];
 		}
 
@@ -305,78 +305,95 @@
 		<p>No messages or ratings.</p>
 	{:else}
 		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
-			{#if item.kind === 'message'}
-				{#if isUserPromptMessage(item.message)}
-					<div class="message">
-						<div class="message-header">
-							<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
-							{#if messageModel(item.message)}
-								<span class="message-model">{messageModel(item.message)}</span>
-							{/if}
-							<span class="expansion-indicator"><span class="chevron">▾</span></span>
-						</div>
-						<div class="message-content markdown-body">
-							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-							{@html renderMarkdown(item.message.content)}
-						</div>
+			{#if item.kind === 'message' && isUserPromptMessage(item.message)}
+				<div class="message">
+					<div class="message-header">
+						<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
+						{#if messageModel(item.message)}
+							<span class="message-model">{messageModel(item.message)}</span>
+						{/if}
 					</div>
-					<div class="inline-rating">
-						{#if inlineRatingMessageId === item.message.id}
-							<div class="inline-rating-expanded">
-								<div class="inline-stars">
-									{#each [1, 2, 3, 4, 5] as star (star)}
-										<button
-											class="star-btn"
-											class:active={star <= inlineRatingValue}
-											onclick={() => (inlineRatingValue = star)}
-										>
-											{star <= inlineRatingValue ? '★' : '☆'}
-										</button>
-									{/each}
-								</div>
-								<input
-									type="text"
-									class="inline-note"
-									placeholder="Optional note..."
-									bind:value={inlineNote}
-								/>
-								<div class="inline-actions">
-									<button
-										class="btn-sm"
-										disabled={inlineSubmitting || inlineRatingValue < 1}
-										onclick={submitInlineRating}
-									>
-										{inlineSubmitting ? 'Submitting...' : 'Submit'}
-									</button>
-									<button class="btn-sm btn-cancel" onclick={cancelInlineRating}> Cancel </button>
-								</div>
-								{#if inlineError}
-									<p class="inline-error">{inlineError}</p>
-								{/if}
-							</div>
-						{:else}
-							<div class="inline-stars-collapsed">
+					<div class="message-content markdown-body">
+						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+						{@html renderMarkdown(item.message.content)}
+					</div>
+				</div>
+				<div class="inline-rating">
+					{#if inlineRatingMessageId === item.message.id}
+						<div class="inline-rating-expanded">
+							<div class="inline-stars">
 								{#each [1, 2, 3, 4, 5] as star (star)}
 									<button
-										class="star-btn faded"
-										onclick={() => openInlineRating(item.message.id, star)}
+										class="star-btn"
+										class:active={star <= inlineRatingValue}
+										onclick={() => (inlineRatingValue = star)}
 									>
-										☆
+										{star <= inlineRatingValue ? '★' : '☆'}
 									</button>
 								{/each}
 							</div>
-						{/if}
+							<input
+								type="text"
+								class="inline-note"
+								placeholder="Optional note..."
+								bind:value={inlineNote}
+							/>
+							<div class="inline-actions">
+								<button
+									class="btn-sm"
+									disabled={inlineSubmitting || inlineRatingValue < 1}
+									onclick={submitInlineRating}
+								>
+									{inlineSubmitting ? 'Submitting...' : 'Submit'}
+								</button>
+								<button class="btn-sm btn-cancel" onclick={cancelInlineRating}> Cancel </button>
+							</div>
+							{#if inlineError}
+								<p class="inline-error">{inlineError}</p>
+							{/if}
+						</div>
+					{:else}
+						<div class="inline-stars-collapsed">
+							{#each [1, 2, 3, 4, 5] as star (star)}
+								<button
+									class="star-btn faded"
+									onclick={() => openInlineRating(item.message.id, star)}
+								>
+									☆
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			{:else if item.kind === 'message' && isDiffMessage(item.message)}
+				<DiffMessageCard
+					timestamp={item.message.timestamp}
+					model={messageModel(item.message)}
+					content={item.message.content}
+					expanded={expandedMessages.has(item.message.id)}
+					onToggle={() => toggleExpanded(item.message.id)}
+				/>
+			{:else if item.kind === 'rating'}
+				<div class="rating-card">
+					<div class="message-header">
+						<strong>Rating</strong> &middot; {fmtTime(item.rating.createdAt)}
 					</div>
-				{:else if isDiffMessage(item.message)}
-					<DiffMessageCard
-						timestamp={item.message.timestamp}
-						model={messageModel(item.message)}
-						content={item.message.content}
-						expanded={expandedMessages.has(item.message.id)}
-						onToggle={() => toggleExpanded(item.message.id)}
-					/>
-				{:else}
-					<div class="message message-collapsed">
+					<div class="rating-stars">{stars(item.rating.rating)}</div>
+					{#if item.rating.note}
+						<div class="rating-field"><strong>Note:</strong> {item.rating.note}</div>
+					{/if}
+					{#if item.rating.analysis}
+						<div class="rating-field">
+							<strong>Analysis:</strong>
+							<div class="markdown-body">
+								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+								{@html renderMarkdown(item.rating.analysis)}
+							</div>
+						</div>
+					{/if}
+				</div>
+			{:else if item.kind === 'log-group'}
+				<!-- <div class="message message-collapsed">
 						<button class="message-summary-btn" onclick={() => toggleExpanded(item.message.id)}>
 							<div class="message-header">
 								<strong>{messageTypeLabel(item.message)}</strong> &middot;
@@ -392,17 +409,17 @@
 						</button>
 						{#if expandedMessages.has(item.message.id)}
 							<div class="message-content markdown-body">
-								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 								{@html renderMarkdown(item.message.content)}
 							</div>
 						{/if}
 					</div>
 				{/if}
-			{:else if item.kind === 'log-group'}
+			{:else if item.kind === 'log-group'} -->
+				{@const messages = item.messages || [item.message]}
 				<div class="message message-collapsed log-group">
 					<button class="message-summary-btn" onclick={() => toggleLogGroup(item.id)}>
 						<div class="message-header">
-							<strong>{item.messages.length} logs from {groupModelLabel(item.messages)}</strong>
+							<strong>{messages.length} logs from {groupModelLabel(messages)}</strong>
 							<span class="expansion-indicator">
 								<span class="chevron">{expandedLogGroups.has(item.id) ? '▾' : '▸'}</span>
 							</span>
@@ -410,7 +427,7 @@
 					</button>
 					{#if expandedLogGroups.has(item.id)}
 						<div class="log-group-items">
-							{#each item.messages as logMessage (logMessage.id)}
+							{#each messages as logMessage (logMessage.id)}
 								{#if isDiffMessage(logMessage)}
 									<DiffMessageCard
 										timestamp={logMessage.timestamp}
@@ -448,25 +465,6 @@
 									</div>
 								{/if}
 							{/each}
-						</div>
-					{/if}
-				</div>
-			{:else}
-				<div class="rating-card">
-					<div class="message-header">
-						<strong>Rating</strong> &middot; {fmtTime(item.rating.createdAt)}
-					</div>
-					<div class="rating-stars">{stars(item.rating.rating)}</div>
-					{#if item.rating.note}
-						<div class="rating-field"><strong>Note:</strong> {item.rating.note}</div>
-					{/if}
-					{#if item.rating.analysis}
-						<div class="rating-field">
-							<strong>Analysis:</strong>
-							<div class="markdown-body">
-								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-								{@html renderMarkdown(item.rating.analysis)}
-							</div>
 						</div>
 					{/if}
 				</div>
@@ -515,7 +513,7 @@
 	.message {
 		margin-bottom: 1rem;
 		padding: 0.75rem;
-		border: 1px solid #eee;
+		border: 1px solid #ccc;
 		border-radius: 4px;
 	}
 
@@ -527,7 +525,7 @@
 	.message-header {
 		font-size: 0.85rem;
 		color: #666;
-		margin-bottom: 0.25rem;
+		/*margin-bottom: 0.25rem;*/
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -583,7 +581,7 @@
 	}
 
 	.message-summary {
-		font-size: 0.9rem;
+		font-size: 1rem;
 		color: #333;
 		white-space: nowrap;
 		overflow: hidden;
@@ -591,7 +589,7 @@
 	}
 
 	.message-content {
-		font-size: 0.9rem;
+		font-size: 1rem;
 		margin-top: 0.35rem;
 	}
 
@@ -626,6 +624,13 @@
 
 	.log-group {
 		border-color: #e5e5e5;
+		width: fit-content;
+		margin-left: 1rem;
+	}
+
+	.log-group :global(.message-summary-btn .message-header strong) {
+		font-size: 0.9rem;
+		font-weight: normal;
 	}
 
 	.log-group-items {
