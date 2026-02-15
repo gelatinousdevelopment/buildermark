@@ -3,8 +3,6 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getProjectCommitDetail } from '$lib/api';
-	import { html as diffToHtml } from 'diff2html';
-	import 'diff2html/bundles/css/diff2html.min.css';
 	import { fmtTime } from '$lib/utils';
 	import type { ProjectCommitDetailResponse } from '$lib/types';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
@@ -40,6 +38,7 @@
 				.filter((f) => !f.ignored && !f.moved)
 				.reduce((sum, f) => sum + (f.added + f.removed) * (f.linePercent / 100), 0) ?? 0
 	);
+	let collapsedDiffPaths: string[] = $state([]);
 
 	function isExpanded(id: string): boolean {
 		return expandedMessageIds.includes(id);
@@ -53,25 +52,15 @@
 		expandedMessageIds = [...expandedMessageIds, id];
 	}
 
-	function escapeHtml(s: string): string {
-		return s
-			.replaceAll('&', '&amp;')
-			.replaceAll('<', '&lt;')
-			.replaceAll('>', '&gt;')
-			.replaceAll('"', '&quot;')
-			.replaceAll("'", '&#39;');
+	function isDiffExpanded(path: string): boolean {
+		return !collapsedDiffPaths.includes(path);
 	}
 
-	function renderCommitDiff(diffText: string): string {
-		if (!diffText.trim()) return '<p>No diff content found.</p>';
-		try {
-			return diffToHtml(diffText, {
-				drawFileList: false,
-				matching: 'lines',
-				outputFormat: 'line-by-line'
-			});
-		} catch {
-			return `<pre>${escapeHtml(diffText)}</pre>`;
+	function toggleDiffPath(path: string) {
+		if (collapsedDiffPaths.includes(path)) {
+			collapsedDiffPaths = collapsedDiffPaths.filter((p) => p !== path);
+		} else {
+			collapsedDiffPaths = [...collapsedDiffPaths, path];
 		}
 	}
 
@@ -226,11 +215,13 @@
 	{:else}
 		{#each renderableDiffFiles as file (file.path)}
 			<div class="commit-diff-section" id={diffAnchor(file.path)}>
-				<h4>{file.path}</h4>
-				<div class="commit-diff diff-body markdown-body">
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					{@html renderCommitDiff(diffSectionByPath.get(file.path) ?? '')}
-				</div>
+				<DiffMessageCard
+					label={file.path}
+					content={diffSectionByPath.get(file.path) ?? ''}
+					expanded={isDiffExpanded(file.path)}
+					onToggle={() => toggleDiffPath(file.path)}
+					agentPercent={file.linePercent}
+				/>
 			</div>
 		{/each}
 	{/if}
@@ -304,28 +295,8 @@
 		color: #8a8a8a;
 	}
 
-	.commit-diff {
-		margin-bottom: 1rem;
-	}
-
-	.commit-diff-section h4 {
-		margin: 0.75rem 0 0.5rem;
-		font-size: 0.95rem;
-	}
-
-	.diff-body :global(.d2h-wrapper) {
-		overflow-x: auto;
-	}
-
-	.markdown-body :global(pre) {
-		overflow-x: auto;
-		padding: 0.5rem;
-		background: #f7f7f7;
-		border-radius: 4px;
-	}
-
-	.markdown-body :global(code) {
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	.commit-diff-section {
+		margin-top: 0.5rem;
 	}
 
 	.detail-bar {
