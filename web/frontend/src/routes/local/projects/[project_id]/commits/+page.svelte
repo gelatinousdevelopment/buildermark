@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
 	import type { ProjectCommitPageResponse, CommitIngestionStatusResponse } from '$lib/types';
+	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
 
 	let data: ProjectCommitPageResponse | null = $state(null);
 	let ingestionStatus: CommitIngestionStatusResponse | null = $state(null);
@@ -108,6 +109,10 @@
 		</div>
 	</section>
 
+	<div class="summary-bar">
+		<AgentPercentageBar agentPercent={data.summary.linePercent} showManual={true} />
+	</div>
+
 	<table class="data">
 		<thead>
 			<tr>
@@ -115,6 +120,7 @@
 				<th>Commit</th>
 				<th>Lines</th>
 				<th>Chars</th>
+				<th class="bar-col">Agent %</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -138,6 +144,7 @@
 					</td>
 					<td>{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
 					<td>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td>
+					<td class="bar-col"><AgentPercentageBar agentPercent={c.linePercent} showKey={false} /></td>
 				</tr>
 			{/each}
 		</tbody>
@@ -274,5 +281,15 @@
 		border-radius: 4px;
 		font-size: 0.9rem;
 		text-align: center;
+	}
+
+	.summary-bar {
+		margin-bottom: 1rem;
+		max-width: 600px;
+	}
+
+	.bar-col {
+		width: 120px;
+		min-width: 80px;
 	}
 </style>

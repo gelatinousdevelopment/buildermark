@@ -9,6 +9,7 @@
 	import type { ProjectCommitDetailResponse } from '$lib/types';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
+	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
 
 	let detail: ProjectCommitDetailResponse | null = $state(null);
 	let loading = $state(true);
@@ -165,6 +166,12 @@
 			agentLinesTotal
 		).toFixed(1)}%) in non-ignored, non-moved files
 	</p>
+	<div class="detail-bar">
+		<AgentPercentageBar
+			agentPercent={percent(agentLinesFromAgent, agentLinesTotal)}
+			showManual={true}
+		/>
+	</div>
 	<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 
 	<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
@@ -200,9 +207,14 @@
 									<DiffCount added={file.added} removed={file.removed} />
 								{/if}
 							</td>
-							<td class="pct-col"
-								>{file.ignored || file.moved ? '' : `${file.linePercent.toFixed(1)}%`}</td
-							>
+							<td class="pct-col">
+								{#if !file.ignored && !file.moved}
+									<div class="file-bar-wrap">
+										<span class="file-pct">{file.linePercent.toFixed(1)}%</span>
+										<AgentPercentageBar agentPercent={file.linePercent} showKey={false} />
+									</div>
+								{/if}
+							</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -314,5 +326,23 @@
 
 	.markdown-body :global(code) {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	}
+
+	.detail-bar {
+		max-width: 500px;
+		margin-bottom: 0.75rem;
+	}
+
+	.file-bar-wrap {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-width: 100px;
+	}
+
+	.file-pct {
+		flex-shrink: 0;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 	}
 </style>
