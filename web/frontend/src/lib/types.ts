@@ -5,6 +5,7 @@ export interface Project {
 	gitId: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
+	ignoreDefaultDiffPaths: boolean;
 }
 
 export interface ProjectDetail {
@@ -14,6 +15,7 @@ export interface ProjectDetail {
 	gitId: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
+	ignoreDefaultDiffPaths: boolean;
 	conversations: ConversationWithRatings[];
 }
 

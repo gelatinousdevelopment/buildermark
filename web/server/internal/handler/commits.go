@@ -583,13 +583,14 @@ func findProjectGroupByProjectID(groups []projectGroup, projectID string) (proje
 
 func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*db.Project, error) {
 	var p db.Project
-	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, ignored, ignore_diff_paths FROM projects WHERE id = ?", projectID).Scan(
+	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(
 		&p.ID,
 		&p.Path,
 		&p.Label,
 		&p.GitID,
 		&p.Ignored,
 		&p.IgnoreDiffPaths,
+		&p.IgnoreDefaultDiffPaths,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -977,9 +978,49 @@ func parseDiffPath(raw string) string {
 	return raw
 }
 
+// DefaultIgnoreDiffPaths is the hardcoded list of glob patterns ignored when
+// the "Ignore default paths" option is enabled for a project.
+var DefaultIgnoreDiffPaths = []string{
+	"package-lock.json",
+	"yarn.lock",
+	"pnpm-lock.yaml",
+	"go.sum",
+	"Cargo.lock",
+	"Gemfile.lock",
+	"composer.lock",
+	"poetry.lock",
+	"Pipfile.lock",
+	"*.min.js",
+	"*.min.css",
+	"*.map",
+	"**/.git/**",
+	"**/node_modules/**",
+	"**/vendor/**",
+	"**/dist/**",
+	"**/build/**",
+	"**/__pycache__/**",
+	"**/.next/**",
+	"**/.nuxt/**",
+}
+
 func groupIgnoreDiffPatterns(group projectGroup) []string {
 	patternSet := make(map[string]struct{})
 	patterns := make([]string, 0, 8)
+
+	// Include default patterns if any project in the group has the flag enabled.
+	for _, p := range group.Projects {
+		if p.IgnoreDefaultDiffPaths {
+			for _, pattern := range DefaultIgnoreDiffPaths {
+				if _, exists := patternSet[pattern]; exists {
+					continue
+				}
+				patternSet[pattern] = struct{}{}
+				patterns = append(patterns, pattern)
+			}
+			break
+		}
+	}
+
 	for _, p := range group.Projects {
 		for _, pattern := range splitIgnoreDiffPatterns(p.IgnoreDiffPaths) {
 			if _, exists := patternSet[pattern]; exists {

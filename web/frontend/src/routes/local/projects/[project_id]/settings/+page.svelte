@@ -1,11 +1,40 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { getProject, setProjectIgnoreDiffPaths } from '$lib/api';
+	import {
+		getProject,
+		setProjectIgnoreDiffPaths,
+		setProjectIgnoreDefaultDiffPaths
+	} from '$lib/api';
 	import type { ProjectDetail } from '$lib/types';
+
+	const defaultPaths = [
+		'package-lock.json',
+		'yarn.lock',
+		'pnpm-lock.yaml',
+		'go.sum',
+		'Cargo.lock',
+		'Gemfile.lock',
+		'composer.lock',
+		'poetry.lock',
+		'Pipfile.lock',
+		'*.min.js',
+		'*.min.css',
+		'*.map',
+		'**/.git/**',
+		'**/node_modules/**',
+		'**/vendor/**',
+		'**/dist/**',
+		'**/build/**',
+		'**/__pycache__/**',
+		'**/.next/**',
+		'**/.nuxt/**'
+	];
 
 	let project: ProjectDetail | null = $state(null);
 	let ignoreDiffPaths = $state('');
+	let ignoreDefaultDiffPaths = $state(true);
+	let showDefaultPaths = $state(false);
 	let loading = $state(true);
 	let saving = $state(false);
 	let error: string | null = $state(null);
@@ -16,6 +45,7 @@
 		if (!id) throw new Error('Missing project ID');
 		project = await getProject(id);
 		ignoreDiffPaths = project.ignoreDiffPaths ?? '';
+		ignoreDefaultDiffPaths = project.ignoreDefaultDiffPaths ?? true;
 	}
 
 	async function save() {
@@ -25,6 +55,7 @@
 		notice = null;
 		try {
 			await setProjectIgnoreDiffPaths(project.id, ignoreDiffPaths);
+			await setProjectIgnoreDefaultDiffPaths(project.id, ignoreDefaultDiffPaths);
 			notice = 'Saved';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to save settings';
@@ -53,6 +84,27 @@
 		<h1>{project.label || project.path}</h1>
 		{#if project.label}
 			<p class="project-path">{project.path}</p>
+		{/if}
+
+		<div class="defaults-row">
+			<label class="checkbox-label">
+				<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
+				Ignore default paths
+			</label>
+			<button
+				class="info-btn"
+				title="Show default paths"
+				onclick={() => (showDefaultPaths = !showDefaultPaths)}
+			>
+				{showDefaultPaths ? 'hide' : 'info'}
+			</button>
+		</div>
+		{#if showDefaultPaths}
+			<ul class="default-paths-list">
+				{#each defaultPaths as p}
+					<li><code>{p}</code></li>
+				{/each}
+			</ul>
 		{/if}
 
 		<label class="field-label" for="ignore-diff-paths">Ignore Diff Paths</label>
@@ -94,6 +146,55 @@
 		margin: 0.35rem 0 1rem;
 		color: #888;
 		font-size: 0.85rem;
+	}
+
+	.defaults-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
+
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-weight: 600;
+		font-size: 0.9rem;
+		cursor: pointer;
+	}
+
+	.info-btn {
+		padding: 0.1rem 0.4rem;
+		font-size: 0.7rem;
+		line-height: 1.4;
+		border: 1px solid #ccc;
+		border-radius: 3px;
+		background: #fafafa;
+		color: #777;
+		cursor: pointer;
+	}
+
+	.info-btn:hover {
+		background: #eee;
+		border-color: #bbb;
+		color: #333;
+	}
+
+	.default-paths-list {
+		margin: 0 0 1rem;
+		padding-left: 1.5rem;
+		font-size: 0.8rem;
+		color: #666;
+		line-height: 1.6;
+	}
+
+	.default-paths-list code {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		font-size: 0.78rem;
+		background: #f5f5f5;
+		padding: 0.1rem 0.3rem;
+		border-radius: 2px;
 	}
 
 	.field-label {
