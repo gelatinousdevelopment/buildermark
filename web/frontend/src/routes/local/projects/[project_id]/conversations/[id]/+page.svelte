@@ -235,7 +235,7 @@
 		let logRun: MessageRead[] = [];
 
 		function flushLogRun() {
-			// if (logRun.length > 1) {
+			if (logRun.length === 0) return;
 			const first = logRun[0];
 			items.push({
 				kind: 'log-group',
@@ -243,10 +243,6 @@
 				messages: [...logRun],
 				time: first.timestamp
 			});
-			// } else if (logRun.length === 1) {
-			// 	const only = logRun[0];
-			// 	items.push({ kind: 'message', message: only, time: only.timestamp });
-			// }
 			logRun = [];
 		}
 
@@ -396,29 +392,7 @@
 					{/if}
 				</div>
 			{:else if item.kind === 'log-group'}
-				<!-- <div class="message message-collapsed">
-						<button class="message-summary-btn" onclick={() => toggleExpanded(item.message.id)}>
-							<div class="message-header">
-								<strong>{messageTypeLabel(item.message)}</strong> &middot;
-								{fmtTime(item.message.timestamp)}
-								{#if messageModel(item.message)}
-									<span class="message-model">{messageModel(item.message)}</span>
-								{/if}
-								<span class="expansion-indicator">
-									<span class="chevron">{expandedMessages.has(item.message.id) ? '▾' : '▸'}</span>
-								</span>
-							</div>
-							<div class="message-summary">{messageSummary(item.message)}</div>
-						</button>
-						{#if expandedMessages.has(item.message.id)}
-							<div class="message-content markdown-body">
-								{@html renderMarkdown(item.message.content)}
-							</div>
-						{/if}
-					</div>
-				{/if}
-			{:else if item.kind === 'log-group'} -->
-				{@const messages = item.messages || [item.message]}
+				{@const messages = item.messages}
 				<div class="message message-collapsed log-group">
 					<button class="message-summary-btn" onclick={() => toggleLogGroup(item.id)}>
 						<div class="message-header">
