@@ -187,9 +187,12 @@
 		}
 
 		// Add unmatched messages
+		// Subtract 1s from user prompt timestamps so they sort before
+		// the model messages that share the same second-level timestamp.
 		for (const message of conversation.messages) {
 			if (!matchedMessageIds.has(message.id)) {
-				items.push({ kind: 'message', message, time: message.timestamp });
+				const adjust = isUserPromptMessage(message) ? 1000 : 0;
+				items.push({ kind: 'message', message, time: message.timestamp - adjust });
 			}
 		}
 
