@@ -1,5 +1,13 @@
 :root {
 	--accent-color: #0066cc;
+
+	/* Agent colors (known coding agents) */
+	--agent-color-claude: #e07b39;
+	--agent-color-codex: #10b981;
+	--agent-color-gemini: #3b82f6;
+
+	/* Manual (non-agent) color */
+	--agent-color-manual: #656565;
 }
 
 html,

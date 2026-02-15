@@ -4,15 +4,39 @@
 	import { fmtTime } from '$lib/utils';
 	import DiffCount from './DiffCount.svelte';
 
-	export let label = 'diff';
-	export let timestamp: number | string;
-	export let model = '';
-	export let content: string;
-	export let expanded = false;
-	export let statsLabel: string | null = null;
-	export let linkHref: string | null = null;
-	export let linkLabel: string | null = null;
-	export let onToggle: (() => void) | null = null;
+	interface Props {
+		label?: string;
+		/** Timestamp to display. Omit to hide. */
+		timestamp?: number | string;
+		model?: string;
+		content: string;
+		expanded?: boolean;
+		statsLabel?: string | null;
+		linkHref?: string | null;
+		linkLabel?: string | null;
+		onToggle?: (() => void) | null;
+		/** When provided, shows agent percentage in the header. */
+		agentPercent?: number;
+	}
+
+	let {
+		label = 'diff',
+		timestamp,
+		model = '',
+		content,
+		expanded = false,
+		statsLabel = null,
+		linkHref = null,
+		linkLabel = null,
+		onToggle = null,
+		agentPercent
+	}: Props = $props();
+
+	interface FileDiffStat {
+		path: string;
+		added: number;
+		removed: number;
+	}
 
 	function extractDiffText(textInput: string): string {
 		let text = textInput.trim();
@@ -28,6 +52,47 @@
 		if (oldIdx >= 0) return text.slice(oldIdx + 1).trim();
 		if (text.startsWith('--- ')) return text;
 		return '';
+	}
+
+	function normalizeGitPath(pathText: string): string {
+		let path = pathText.trim();
+		if (path.startsWith('"') && path.endsWith('"')) {
+			path = path.slice(1, -1).replaceAll('\\"', '"').replaceAll('\\\\', '\\');
+		}
+		if (path.startsWith('a/') || path.startsWith('b/')) {
+			return path.slice(2);
+		}
+		return path;
+	}
+
+	function perFileDiffStats(textInput: string): FileDiffStat[] {
+		const diffText = extractDiffText(textInput);
+		if (!diffText) return [];
+
+		const lines = diffText.split('\n');
+		const files: FileDiffStat[] = [];
+		let current: FileDiffStat | null = null;
+
+		for (const line of lines) {
+			if (line.startsWith('diff --git ')) {
+				if (current) files.push(current);
+				const match = line.match(/^diff --git (.+) (.+)$/);
+				let path = 'unknown';
+				if (match) {
+					const newPath = normalizeGitPath(match[2]);
+					path = newPath === '/dev/null' ? normalizeGitPath(match[1]) : newPath;
+				}
+				current = { path, added: 0, removed: 0 };
+				continue;
+			}
+			if (!current) continue;
+			if (line.startsWith('+++ ') || line.startsWith('--- ')) continue;
+			if (line.startsWith('+')) current.added++;
+			else if (line.startsWith('-')) current.removed++;
+		}
+		if (current) files.push(current);
+
+		return files;
 	}
 
 	function diffStats(textInput: string): { files: number; added: number; removed: number } {
@@ -56,15 +121,6 @@
 		return { files, added, removed };
 	}
 
-	function summary(textInput: string): string {
-		const diffText = extractDiffText(textInput);
-		const first = diffText.split('\n').find((line) => line.startsWith('diff --git '));
-		if (first) return first;
-		const oneLine = diffText.replace(/\s+/g, ' ').trim();
-		if (!oneLine) return '[diff]';
-		return oneLine.length > 120 ? `${oneLine.slice(0, 117)}...` : oneLine;
-	}
-
 	function escapeHtml(s: string): string {
 		return s
 			.replaceAll('&', '&amp;')
@@ -79,7 +135,7 @@
 		if (!diffText) return `<pre>${escapeHtml(textInput)}</pre>`;
 		try {
 			return diffToHtml(diffText, {
-				drawFileList: true,
+				drawFileList: false,
 				matching: 'lines',
 				outputFormat: 'line-by-line'
 			});
@@ -91,12 +147,22 @@
 	function handleToggle() {
 		onToggle?.();
 	}
+
+	let fileStats = $derived(perFileDiffStats(content));
+
+	/** Show file list when it adds info the header doesn't already convey. */
+	let showFileList = $derived(
+		fileStats.length > 1 || (fileStats.length === 1 && label !== fileStats[0].path)
+	);
 </script>
 
 <div class="message message-collapsed">
 	<button class="message-summary-btn" onclick={handleToggle}>
 		<div class="message-header">
-			<strong>{label}</strong> &middot; {fmtTime(timestamp)}
+			<strong>{label}</strong>
+			{#if timestamp !== undefined}
+				<span>&middot; {fmtTime(timestamp)}</span>
+			{/if}
 			{#if model}
 				<span class="message-model">{model}</span>
 			{/if}
@@ -104,13 +170,30 @@
 				<span class="message-diff-stats">{statsLabel}</span>
 			{:else}
 				{@const stats = diffStats(content)}
-				<DiffCount added={stats.added} removed={stats.removed} files={stats.files} showFiles={true} />
+				<DiffCount
+					added={stats.added}
+					removed={stats.removed}
+					files={stats.files}
+					showFiles={true}
+				/>
+			{/if}
+			{#if agentPercent !== undefined}
+				<span class="agent-pct">{agentPercent.toFixed(1)}% agent</span>
 			{/if}
 			<span class="expansion-indicator">
 				<span class="chevron">{expanded ? '▾' : '▸'}</span>
 			</span>
 		</div>
-		<div class="message-summary">{summary(content)}</div>
+		{#if showFileList}
+			<div class="file-stats-list">
+				{#each fileStats as f (f.path)}
+					<div class="file-stats-item">
+						<span class="file-stats-path">{f.path}</span>
+						<DiffCount added={f.added} removed={f.removed} />
+					</div>
+				{/each}
+			</div>
+		{/if}
 		{#if linkHref && linkLabel}
 			<div class="conversation-link"><a href={linkHref}>{linkLabel}</a></div>
 		{/if}
@@ -155,20 +238,17 @@
 		cursor: pointer;
 	}
 
-	.message-summary {
-		font-size: 0.9rem;
-		color: #333;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
 	.message-model {
 		color: #9a9a9a;
 	}
 
 	.message-diff-stats {
 		color: #5f6b7a;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.agent-pct {
+		color: #666;
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -180,6 +260,23 @@
 	.chevron {
 		display: inline-block;
 		width: 0.8rem;
+	}
+
+	.file-stats-list {
+		margin-top: 0.15rem;
+	}
+
+	.file-stats-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.82rem;
+		padding: 0.05rem 0;
+	}
+
+	.file-stats-path {
+		color: #333;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	}
 
 	.conversation-link {
