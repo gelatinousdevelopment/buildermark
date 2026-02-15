@@ -8,6 +8,7 @@
 	import { fmtTime } from '$lib/utils';
 	import type { ProjectCommitDetailResponse } from '$lib/types';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
+	import DiffCount from '$lib/components/DiffCount.svelte';
 
 	let detail: ProjectCommitDetailResponse | null = $state(null);
 	let loading = $state(true);
@@ -164,7 +165,7 @@
 			agentLinesTotal
 		).toFixed(1)}%) in non-ignored, non-moved files
 	</p>
-	<p>Changes: <span class="plus">+{totalAdded}</span><span class="minus">-{totalRemoved}</span></p>
+	<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 
 	<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
 	{#if detail.files.length === 0}
@@ -196,8 +197,7 @@
 							</td>
 							<td class="changes-col">
 								{#if !file.ignored}
-									<span class="plus">+{file.added}</span>
-									<span class="minus">-{file.removed}</span>
+									<DiffCount added={file.added} removed={file.removed} />
 								{/if}
 							</td>
 							<td class="pct-col"
@@ -279,15 +279,6 @@
 	.changes-col {
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
-	}
-
-	.plus {
-		color: #1a7f37;
-		margin-right: 0.65rem;
-	}
-
-	.minus {
-		color: #cf222e;
 	}
 
 	.ignored-row {

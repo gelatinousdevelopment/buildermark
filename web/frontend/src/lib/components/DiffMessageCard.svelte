@@ -2,6 +2,7 @@
 	import { html as diffToHtml } from 'diff2html';
 	import 'diff2html/bundles/css/diff2html.min.css';
 	import { fmtTime } from '$lib/utils';
+	import DiffCount from './DiffCount.svelte';
 
 	export let label = 'diff';
 	export let timestamp: number | string;
@@ -29,9 +30,9 @@
 		return '';
 	}
 
-	function diffStatsLabel(textInput: string): string {
+	function diffStats(textInput: string): { files: number; added: number; removed: number } {
 		const diffText = extractDiffText(textInput);
-		if (!diffText) return '0 files, +0 -0';
+		if (!diffText) return { files: 0, added: 0, removed: 0 };
 
 		const lines = diffText.split('\n');
 		let files = 0;
@@ -52,8 +53,7 @@
 		}
 
 		if (files === 0 && (added > 0 || removed > 0)) files = 1;
-		const fileLabel = files === 1 ? 'file' : 'files';
-		return `${files} ${fileLabel}, +${added} -${removed}`;
+		return { files, added, removed };
 	}
 
 	function summary(textInput: string): string {
@@ -100,7 +100,12 @@
 			{#if model}
 				<span class="message-model">{model}</span>
 			{/if}
-			<span class="message-diff-stats">{statsLabel ?? diffStatsLabel(content)}</span>
+			{#if statsLabel}
+				<span class="message-diff-stats">{statsLabel}</span>
+			{:else}
+				{@const stats = diffStats(content)}
+				<DiffCount added={stats.added} removed={stats.removed} files={stats.files} showFiles={true} />
+			{/if}
 			<span class="expansion-indicator">
 				<span class="chevron">{expanded ? '▾' : '▸'}</span>
 			</span>
