@@ -332,6 +332,85 @@ func TestListProjectCommits_UsesRawJSONDiffWithoutDerivedFlag(t *testing.T) {
 	}
 }
 
+func TestListProjectCommits_UsesRawJSONFileSnapshotForNewFile(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	readmePath := filepath.Join(repo, "README.md")
+	mustWriteFile(t, readmePath, "start\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "README.md")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	pid, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, pid, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-file-snapshot", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	filePath := filepath.Join(repo, "web", "frontend", "src", "app.svelte")
+	rawOnlyTs := mustUnixMilli(t, "2026-01-01T00:59:00Z")
+	rawOnlyJSON := `{"cwd":"` + strings.ReplaceAll(filepath.Join(repo, "web", "server"), `\`, `\\`) + `","toolUseResult":{"file":{"filePath":"` + strings.ReplaceAll(filePath, `\`, `\\`) + `","content":"     1→<script>\n     2→\tlet x = 1;\n     3→</script>\n     4→","numLines":4,"startLine":1,"totalLines":4}}}`
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{{
+		Timestamp:      rawOnlyTs,
+		ProjectID:      pid,
+		ConversationID: "conv-file-snapshot",
+		Role:           "agent",
+		Content:        "     1→<script>\n     2→\tlet x = 1;\n     3→</script>\n     4→",
+		RawJSON:        rawOnlyJSON,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	mustWriteFile(t, filePath, "<script>\n\tlet x = 1;\n</script>\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "web/frontend/src/app.svelte")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "add snapshot file")
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/commits", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	commits := data["commits"].([]any)
+	bySubject := map[string]map[string]any{}
+	for _, raw := range commits {
+		item := raw.(map[string]any)
+		bySubject[item["subject"].(string)] = item
+	}
+	agentCommit, ok := bySubject["add snapshot file"]
+	if !ok {
+		t.Fatalf("missing commit subject %q", "add snapshot file")
+	}
+	if got := int(agentCommit["linesFromAgent"].(float64)); got != 3 {
+		t.Fatalf("add snapshot file linesFromAgent = %d, want 3", got)
+	}
+}
+
 func TestProjectCommitsPageAlwaysImportsLatestCommits(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()

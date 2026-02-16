@@ -178,3 +178,89 @@ func TestExtractReliableDiffFromStructuredPatchJSON(t *testing.T) {
 		t.Fatalf("expected added and removed lines from structuredPatch, got: %q", diff)
 	}
 }
+
+func TestExtractReliableDiffFromJSONFileSnapshot(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := filepath.Join(repo, "web", "server")
+	filePath := filepath.Join(repo, "web", "frontend", "src", "app.ts")
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"toolUseResult":{
+			"file":{
+				"filePath":%q,
+				"content":"line1\nline2\n",
+				"numLines":2,
+				"startLine":1,
+				"totalLines":2
+			}
+		}
+	}`, cwd, filePath)
+
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from JSON file snapshot")
+	}
+	if !strings.Contains(diff, "--- /dev/null") || !strings.Contains(diff, "+++ b/web/frontend/src/app.ts") {
+		t.Fatalf("expected add-file markers with repo-relative path, got: %q", diff)
+	}
+	if !strings.Contains(diff, "\n+line1\n+line2") {
+		t.Fatalf("expected snapshot content lines in diff, got: %q", diff)
+	}
+}
+
+func TestExtractReliableDiffFromJSONCatNumberedSnapshot(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := filepath.Join(repo, "web", "server")
+	filePath := filepath.Join(repo, "web", "frontend", "src", "app.ts")
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"toolUseResult":{
+			"filePath":%q,
+			"content":"     1→alpha\n     2→beta\n     3→"
+		}
+	}`, cwd, filePath)
+
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from cat-numbered JSON snapshot")
+	}
+	if strings.Contains(diff, "1→alpha") || strings.Contains(diff, "2→beta") {
+		t.Fatalf("expected cat-number prefixes to be stripped, got: %q", diff)
+	}
+	if !strings.Contains(diff, "\n+alpha\n+beta") {
+		t.Fatalf("expected stripped snapshot lines in diff, got: %q", diff)
+	}
+}
+
+func TestExtractReliableDiffFromJSONPrefersRealDiffOverSnapshot(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := filepath.Join(repo, "web", "server")
+	filePath := filepath.Join(repo, "web", "frontend", "src", "app.ts")
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"payload":{"output":"diff --git a/x.txt b/x.txt\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n"},
+		"toolUseResult":{
+			"file":{"filePath":%q,"content":"line1\nline2\nline3","numLines":3}
+		}
+	}`, cwd, filePath)
+
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from JSON")
+	}
+	if !strings.Contains(diff, "diff --git a/x.txt b/x.txt") {
+		t.Fatalf("expected real unified diff to be preferred, got: %q", diff)
+	}
+	if strings.Contains(diff, "+++ b/web/frontend/src/app.ts") {
+		t.Fatalf("unexpected fallback snapshot diff selected: %q", diff)
+	}
+}

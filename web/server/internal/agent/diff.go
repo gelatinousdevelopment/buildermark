@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -82,6 +83,11 @@ func ExtractReliableDiffFromJSON(raw string) (string, bool) {
 	if diff, ok := extractStructuredPatchDiffFromValue(value); ok && len(diff) > len(best) {
 		best = diff
 	}
+	if best == "" {
+		if diff, ok := extractFileSnapshotDiffFromValue(value); ok {
+			best = diff
+		}
+	}
 
 	if best == "" {
 		return "", false
@@ -104,6 +110,39 @@ func extractStructuredPatchDiffFromValue(v any) (string, bool) {
 			}
 
 			if diff, ok := extractStructuredPatchDiffFromMap(x, cwd); ok && len(diff) > len(best) {
+				best = diff
+			}
+			for _, nested := range x {
+				walk(nested, cwd)
+			}
+		case []any:
+			for _, nested := range x {
+				walk(nested, inheritedCWD)
+			}
+		}
+	}
+
+	walk(v, "")
+	if best == "" {
+		return "", false
+	}
+	return best, true
+}
+
+func extractFileSnapshotDiffFromValue(v any) (string, bool) {
+	best := ""
+
+	var walk func(node any, inheritedCWD string)
+	walk = func(node any, inheritedCWD string) {
+		switch x := node.(type) {
+		case map[string]any:
+			cwd := inheritedCWD
+			if s, ok := x["cwd"].(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					cwd = trimmed
+				}
+			}
+			if diff, ok := extractFileSnapshotDiffFromMap(x, cwd); ok && len(diff) > len(best) {
 				best = diff
 			}
 			for _, nested := range x {
@@ -222,6 +261,131 @@ func extractStructuredPatchDiffFromMap(obj map[string]any, cwd string) (string, 
 		return "", false
 	}
 	return diff, true
+}
+
+func extractFileSnapshotDiffFromMap(obj map[string]any, cwd string) (string, bool) {
+	filePath := ""
+	for _, key := range []string{"filePath", "file_path", "path"} {
+		if s, ok := obj[key].(string); ok {
+			filePath = strings.TrimSpace(s)
+			if filePath != "" {
+				break
+			}
+		}
+	}
+	if filePath == "" {
+		return "", false
+	}
+
+	rawContent := ""
+	for _, key := range []string{"content", "fileContent", "file_content", "text"} {
+		if s, ok := obj[key].(string); ok {
+			rawContent = strings.ReplaceAll(s, "\r\n", "\n")
+			break
+		}
+	}
+	if strings.TrimSpace(rawContent) == "" {
+		return "", false
+	}
+
+	lines := strings.Split(rawContent, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return "", false
+	}
+
+	stripped, catNumbered := stripCatNumbering(lines)
+	if catNumbered {
+		lines = stripped
+	}
+	if !catNumbered && !hasAnyKey(obj, "numLines", "totalLines", "startLine", "endLine") {
+		// Restrict plain content snapshots to known file-metadata payloads to
+		// avoid treating arbitrary JSON fields as pseudo-diffs.
+		return "", false
+	}
+
+	hasAnyContent := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			hasAnyContent = true
+			break
+		}
+	}
+	if !hasAnyContent {
+		return "", false
+	}
+
+	candidates := buildStructuredPatchPathCandidates(filePath, cwd)
+	if len(candidates) == 0 {
+		return "", false
+	}
+
+	var out strings.Builder
+	for _, p := range candidates {
+		if out.Len() > 0 {
+			out.WriteString("\n")
+		}
+		out.WriteString("diff --git a/")
+		out.WriteString(p)
+		out.WriteString(" b/")
+		out.WriteString(p)
+		out.WriteString("\n--- /dev/null\n+++ b/")
+		out.WriteString(p)
+		out.WriteString("\n")
+		out.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+		for _, line := range lines {
+			out.WriteString("+")
+			out.WriteString(line)
+			out.WriteString("\n")
+		}
+	}
+
+	diff := strings.TrimSpace(out.String())
+	if diff == "" || !looksLikeUnifiedDiff(diff) {
+		return "", false
+	}
+	return diff, true
+}
+
+var catNumberPrefixPattern = regexp.MustCompile(`^\s*\d+\s*(?:→|\t|\||:)\s?`)
+
+func stripCatNumbering(lines []string) ([]string, bool) {
+	out := make([]string, 0, len(lines))
+	nonEmpty := 0
+	matched := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			out = append(out, line)
+			continue
+		}
+		nonEmpty++
+		if loc := catNumberPrefixPattern.FindStringIndex(line); loc != nil && loc[0] == 0 {
+			out = append(out, line[loc[1]:])
+			matched++
+			continue
+		}
+		out = append(out, line)
+	}
+	if nonEmpty == 0 {
+		return out, false
+	}
+	// Require a strong signal before stripping; otherwise preserve content.
+	if nonEmpty < 3 || matched*100 < nonEmpty*70 {
+		return lines, false
+	}
+	return out, true
+}
+
+func hasAnyKey(obj map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		if _, ok := obj[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func toStringSlice(v any) ([]string, bool) {
