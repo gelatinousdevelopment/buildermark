@@ -184,7 +184,7 @@
 		<span class="message-diff-stats">{statsLabel}</span>
 	{:else}
 		{@const stats = diffStats(content)}
-		{#if stats.files.length > 1}
+		{#if stats.files > 1}
 			<DiffCount added={stats.added} removed={stats.removed} files={stats.files} showFiles={true} />
 		{/if}
 	{/if}

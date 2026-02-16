@@ -40,6 +40,26 @@
 	);
 	let collapsedDiffPaths: string[] = $state([]);
 
+	let allExpanded = $derived.by(() => {
+		if (!detail) return false;
+		const allMsgsExpanded =
+			detail.messages.length === 0 ||
+			detail.messages.every((m) => expandedMessageIds.includes(m.id));
+		const allDiffsExpanded = collapsedDiffPaths.length === 0;
+		return allMsgsExpanded && allDiffsExpanded;
+	});
+
+	function toggleExpandAll() {
+		if (!detail) return;
+		if (allExpanded) {
+			expandedMessageIds = [];
+			collapsedDiffPaths = renderableDiffFiles.map((f) => f.path);
+		} else {
+			expandedMessageIds = detail.messages.map((m) => m.id);
+			collapsedDiffPaths = [];
+		}
+	}
+
 	function isExpanded(id: string): boolean {
 		return expandedMessageIds.includes(id);
 	}
@@ -214,57 +234,74 @@
 		<p>No non-ignored file diffs to display.</p>
 	{:else}
 		{#each renderableDiffFiles as file (file.path)}
+			{@const fileExpanded = isDiffExpanded(file.path)}
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div
 				class="commit-diff-section diff-card"
+				class:diff-card-collapsed={!fileExpanded}
 				id={diffAnchor(file.path)}
-				role="button"
-				tabindex="0"
-				onclick={() => toggleDiffPath(file.path)}
-				onkeydown={(e: KeyboardEvent) => {
-					if (e.key === 'Enter' || e.key === ' ') {
-						e.preventDefault();
-						toggleDiffPath(file.path);
-					}
-				}}
+				role={!fileExpanded ? 'button' : undefined}
+				tabindex={!fileExpanded ? 0 : undefined}
+				onclick={!fileExpanded ? () => toggleDiffPath(file.path) : undefined}
+				onkeydown={!fileExpanded
+					? (e: KeyboardEvent) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								toggleDiffPath(file.path);
+							}
+						}
+					: undefined}
 			>
 				<DiffMessageCard
 					label={file.path}
 					content={diffSectionByPath.get(file.path) ?? ''}
-					expanded={isDiffExpanded(file.path)}
+					expanded={fileExpanded}
 					agentPercent={file.linePercent}
+					onToggle={fileExpanded ? () => toggleDiffPath(file.path) : undefined}
 				/>
 			</div>
 		{/each}
 	{/if}
 
-	<h3>Matched Messages</h3>
+	<div class="section-header">
+		<h3>Matched Messages</h3>
+		<button class="btn-expand-all" onclick={toggleExpandAll}>
+			{allExpanded ? 'Collapse All' : 'Expand All'}
+		</button>
+	</div>
 	{#if detail.messages.length === 0}
 		<p>No tracked diff messages matched this commit.</p>
 	{:else}
 		{#each detail.messages as message (message.id)}
+			{@const msgExpanded = isExpanded(message.id)}
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div
 				class="diff-card"
-				role="button"
-				tabindex="0"
-				onclick={() => toggleExpanded(message.id)}
-				onkeydown={(e: KeyboardEvent) => {
-					if (e.key === 'Enter' || e.key === ' ') {
-						e.preventDefault();
-						toggleExpanded(message.id);
-					}
-				}}
+				class:diff-card-collapsed={!msgExpanded}
+				role={!msgExpanded ? 'button' : undefined}
+				tabindex={!msgExpanded ? 0 : undefined}
+				onclick={!msgExpanded ? () => toggleExpanded(message.id) : undefined}
+				onkeydown={!msgExpanded
+					? (e: KeyboardEvent) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								toggleExpanded(message.id);
+							}
+						}
+					: undefined}
 			>
 				<DiffMessageCard
 					timestamp={message.timestamp}
 					model={message.model ?? ''}
 					content={message.content}
-					expanded={isExpanded(message.id)}
+					expanded={msgExpanded}
 					statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
 					linkHref={resolve('/local/projects/[project_id]/conversations/[id]', {
 						project_id: detail.commit.projectId,
 						id: message.conversationId
 					})}
 					linkLabel={`Conversation: ${message.conversationTitle || message.conversationId}`}
+					onToggle={msgExpanded ? () => toggleExpanded(message.id) : undefined}
 				/>
 			</div>
 		{/each}
@@ -318,6 +355,31 @@
 		color: #8a8a8a;
 	}
 
+	.section-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.section-header h3 {
+		margin: 0;
+	}
+
+	.btn-expand-all {
+		padding: 0.15rem 0.5rem;
+		font-size: 0.8rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		background: #f5f5f5;
+		cursor: pointer;
+		color: #555;
+	}
+
+	.btn-expand-all:hover {
+		border-color: var(--accent-color);
+		color: var(--accent-color);
+	}
+
 	.commit-diff-section {
 		margin-top: 0.5rem;
 	}
@@ -328,10 +390,13 @@
 		border: 1px solid #eee;
 		border-radius: 4px;
 		background: #fafafa;
+	}
+
+	.diff-card-collapsed {
 		cursor: pointer;
 	}
 
-	.diff-card:hover {
+	.diff-card-collapsed:hover {
 		border-color: var(--accent-color);
 		background: var(--accent-color-ultralight);
 	}
