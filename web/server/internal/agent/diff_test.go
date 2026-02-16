@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -139,5 +142,39 @@ func TestExtractReliableDiffFromJSONFunctionCallCmdHeredoc(t *testing.T) {
 	}
 	if !strings.Contains(diff, "diff --git a/src/a.txt b/src/a.txt") {
 		t.Fatalf("expected diff header in heredoc JSON extraction, got: %q", diff)
+	}
+}
+
+func TestExtractReliableDiffFromStructuredPatchJSON(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := filepath.Join(repo, "web", "frontend")
+	filePath := filepath.Join(cwd, "src", "app.ts")
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"toolUseResult":{
+			"filePath":%q,
+			"structuredPatch":[
+				{"oldStart":10,"oldLines":3,"newStart":10,"newLines":3,"lines":[" line1","-old"," +badprefix","+new"]}
+			]
+		}
+	}`, cwd, filePath)
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from structuredPatch JSON")
+	}
+	if !strings.Contains(diff, "diff --git a/web/frontend/src/app.ts b/web/frontend/src/app.ts") {
+		t.Fatalf("expected repo-relative path variant in diff, got: %q", diff)
+	}
+	if got := strings.Count(diff, "diff --git "); got != 1 {
+		t.Fatalf("expected exactly one diff header, got %d in %q", got, diff)
+	}
+	if !strings.Contains(diff, "@@ -10,3 +10,3 @@") {
+		t.Fatalf("expected hunk header from structuredPatch metadata, got: %q", diff)
+	}
+	if !strings.Contains(diff, "\n-old\n") || !strings.Contains(diff, "\n+new") {
+		t.Fatalf("expected added and removed lines from structuredPatch, got: %q", diff)
 	}
 }

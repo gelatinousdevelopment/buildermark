@@ -3,6 +3,8 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -77,11 +79,248 @@ func ExtractReliableDiffFromJSON(raw string) (string, bool) {
 			best = diff
 		}
 	})
+	if diff, ok := extractStructuredPatchDiffFromValue(value); ok && len(diff) > len(best) {
+		best = diff
+	}
 
 	if best == "" {
 		return "", false
 	}
 	return best, true
+}
+
+func extractStructuredPatchDiffFromValue(v any) (string, bool) {
+	best := ""
+
+	var walk func(node any, inheritedCWD string)
+	walk = func(node any, inheritedCWD string) {
+		switch x := node.(type) {
+		case map[string]any:
+			cwd := inheritedCWD
+			if s, ok := x["cwd"].(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					cwd = trimmed
+				}
+			}
+
+			if diff, ok := extractStructuredPatchDiffFromMap(x, cwd); ok && len(diff) > len(best) {
+				best = diff
+			}
+			for _, nested := range x {
+				walk(nested, cwd)
+			}
+		case []any:
+			for _, nested := range x {
+				walk(nested, inheritedCWD)
+			}
+		}
+	}
+
+	walk(v, "")
+	if best == "" {
+		return "", false
+	}
+	return best, true
+}
+
+type structuredPatchHunk struct {
+	oldStart int
+	oldLines int
+	newStart int
+	newLines int
+	lines    []string
+}
+
+func extractStructuredPatchDiffFromMap(obj map[string]any, cwd string) (string, bool) {
+	rawPatches, ok := obj["structuredPatch"].([]any)
+	if !ok || len(rawPatches) == 0 {
+		return "", false
+	}
+
+	filePath := ""
+	for _, key := range []string{"filePath", "file_path", "path"} {
+		if s, ok := obj[key].(string); ok {
+			filePath = strings.TrimSpace(s)
+			if filePath != "" {
+				break
+			}
+		}
+	}
+	if filePath == "" {
+		return "", false
+	}
+
+	hunks := make([]structuredPatchHunk, 0, len(rawPatches))
+	hasChange := false
+	for _, raw := range rawPatches {
+		patchObj, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		lines, ok := toStringSlice(patchObj["lines"])
+		if !ok || len(lines) == 0 {
+			continue
+		}
+		for _, line := range lines {
+			if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+				hasChange = true
+				break
+			}
+		}
+		hunks = append(hunks, structuredPatchHunk{
+			oldStart: toIntDefault(patchObj["oldStart"], 1),
+			oldLines: toIntDefault(patchObj["oldLines"], 0),
+			newStart: toIntDefault(patchObj["newStart"], 1),
+			newLines: toIntDefault(patchObj["newLines"], 0),
+			lines:    lines,
+		})
+	}
+
+	if len(hunks) == 0 || !hasChange {
+		return "", false
+	}
+
+	candidates := buildStructuredPatchPathCandidates(filePath, cwd)
+	if len(candidates) == 0 {
+		return "", false
+	}
+
+	var out strings.Builder
+	for _, path := range candidates {
+		if out.Len() > 0 {
+			out.WriteString("\n")
+		}
+		out.WriteString("diff --git a/")
+		out.WriteString(path)
+		out.WriteString(" b/")
+		out.WriteString(path)
+		out.WriteString("\n--- a/")
+		out.WriteString(path)
+		out.WriteString("\n+++ b/")
+		out.WriteString(path)
+		out.WriteString("\n")
+		for _, h := range hunks {
+			out.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", h.oldStart, h.oldLines, h.newStart, h.newLines))
+			for _, line := range h.lines {
+				if line == "" {
+					out.WriteString(" \n")
+					continue
+				}
+				if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+					out.WriteString(line)
+				} else {
+					out.WriteString(" ")
+					out.WriteString(line)
+				}
+				out.WriteString("\n")
+			}
+		}
+	}
+
+	diff := strings.TrimSpace(out.String())
+	if diff == "" || !looksLikeUnifiedDiff(diff) {
+		return "", false
+	}
+	return diff, true
+}
+
+func toStringSlice(v any) ([]string, bool) {
+	items, ok := v.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, s)
+	}
+	return out, true
+}
+
+func toIntDefault(v any, fallback int) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	default:
+		return fallback
+	}
+}
+
+func buildStructuredPatchPathCandidates(filePath, cwd string) []string {
+	normalize := func(path string) string {
+		path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
+		path = strings.TrimPrefix(path, "./")
+		path = strings.TrimPrefix(path, "/")
+		return path
+	}
+
+	path := strings.TrimSpace(filePath)
+	if path == "" {
+		return nil
+	}
+
+	// Relative file paths from tool payloads are already canonical enough.
+	if !filepath.IsAbs(path) {
+		if n := normalize(path); n != "" {
+			return []string{n}
+		}
+		return nil
+	}
+
+	absFile := filepath.Clean(path)
+	if cwd = strings.TrimSpace(cwd); cwd != "" {
+		if root, ok := findGitRoot(cwd); ok {
+			if rel, ok := relIfContained(root, absFile); ok {
+				return []string{normalize(rel)}
+			}
+		}
+		if rel, ok := relIfContained(cwd, absFile); ok {
+			return []string{normalize(rel)}
+		}
+	}
+
+	if n := normalize(absFile); n != "" {
+		return []string{n}
+	}
+	return nil
+}
+
+func relIfContained(base, target string) (string, bool) {
+	rel, err := filepath.Rel(filepath.Clean(base), filepath.Clean(target))
+	if err != nil {
+		return "", false
+	}
+	if rel == "." || rel == "" {
+		return "", false
+	}
+	prefix := ".." + string(filepath.Separator)
+	if rel == ".." || strings.HasPrefix(rel, prefix) {
+		return "", false
+	}
+	return rel, true
+}
+
+func findGitRoot(start string) (string, bool) {
+	dir := filepath.Clean(start)
+	for {
+		gitPath := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitPath); err == nil {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", false
 }
 
 func extractFencedDiffBlocks(content string) []string {

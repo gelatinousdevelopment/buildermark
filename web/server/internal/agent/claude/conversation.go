@@ -13,9 +13,10 @@ import (
 
 // conversationEntry represents a single entry in a Claude conversation JSONL file.
 type conversationEntry struct {
-	Type      string `json:"type"`
-	Timestamp string `json:"timestamp"`
-	Message   struct {
+	Type                    string `json:"type"`
+	Timestamp               string `json:"timestamp"`
+	SourceToolAssistantUUID string `json:"sourceToolAssistantUUID"`
+	Message                 struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 }
@@ -76,6 +77,10 @@ func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
 		if entry.Type != "user" {
 			return
 		}
+		if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" {
+			// Tool results are logged as "user" entries but are not user prompts.
+			return
+		}
 
 		text := extractUserText(entry.Message.Content)
 		if text == "" || isSystemMessage(text) {
@@ -108,16 +113,24 @@ func extractUserText(raw json.RawMessage) string {
 	}
 
 	// Try as array of content blocks.
-	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	}
+	var blocks []map[string]any
 	if err := json.Unmarshal(raw, &blocks); err == nil {
 		for _, b := range blocks {
-			if b.Type == "text" {
-				text := strings.TrimSpace(b.Text)
-				if text != "" {
-					return text
+			typ, _ := b["type"].(string)
+			switch typ {
+			case "text":
+				if text, ok := b["text"].(string); ok {
+					text = strings.TrimSpace(text)
+					if text != "" {
+						return text
+					}
+				}
+			case "tool_result":
+				if content, ok := b["content"].(string); ok {
+					content = strings.TrimSpace(content)
+					if content != "" {
+						return content
+					}
 				}
 			}
 		}
@@ -147,6 +160,10 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 		role := "agent"
 		if entry.Type == "user" {
 			role = "user"
+			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" {
+				// Claude logs tool_result as type=user; this is assistant-produced output.
+				role = "agent"
+			}
 		}
 
 		result = append(result, conversationLogEntry{

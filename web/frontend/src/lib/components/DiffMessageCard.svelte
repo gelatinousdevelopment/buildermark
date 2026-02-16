@@ -180,9 +180,6 @@
 			{#if agentPercent !== undefined}
 				<span class="agent-pct">{agentPercent.toFixed(1)}% agent</span>
 			{/if}
-			<span class="expansion-indicator">
-				<span class="chevron">{expanded ? '▾' : '▸'}</span>
-			</span>
 		</div>
 		{#if showFileList}
 			<div class="file-stats-list">
@@ -219,6 +216,11 @@
 		background: #fafafa;
 	}
 
+	.message-collapsed:hover {
+		border-color: var(--accent-color);
+		background: var(--accent-color-ultralight);
+	}
+
 	.message-header {
 		font-size: 0.85rem;
 		color: #666;
@@ -252,16 +254,6 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.expansion-indicator {
-		margin-left: auto;
-		color: #888;
-	}
-
-	.chevron {
-		display: inline-block;
-		width: 0.8rem;
-	}
-
 	.file-stats-list {
 		margin-top: 0.15rem;
 	}
@@ -272,6 +264,7 @@
 		gap: 0.5rem;
 		font-size: 0.82rem;
 		padding: 0.05rem 0;
+		justify-content: space-between;
 	}
 
 	.file-stats-path {

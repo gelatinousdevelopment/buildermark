@@ -190,7 +190,12 @@
 		// Subtract 1s from user prompt timestamps so they sort before
 		// the model messages that share the same second-level timestamp.
 		for (const message of conversation.messages) {
-			if (!matchedMessageIds.has(message.id)) {
+			if (
+				!matchedMessageIds.has(message.id) &&
+				message.content.trim() != '' &&
+				message.content.trim() != '[user]' &&
+				!message.content.trim().startsWith('<command-message>')
+			) {
 				const adjust = isUserPromptMessage(message) ? 1000 : 0;
 				items.push({ kind: 'message', message, time: message.timestamp - adjust });
 			}
@@ -397,9 +402,6 @@
 					<button class="message-summary-btn" onclick={() => toggleLogGroup(item.id)}>
 						<div class="message-header">
 							<strong>{messages.length} logs from {groupModelLabel(messages)}</strong>
-							<span class="expansion-indicator">
-								<span class="chevron">{expandedLogGroups.has(item.id) ? '▾' : '▸'}</span>
-							</span>
 						</div>
 					</button>
 					{#if expandedLogGroups.has(item.id)}
@@ -488,9 +490,10 @@
 
 <style>
 	.message {
-		margin-bottom: 1rem;
+		background: #fffff4;
+		margin-bottom: 0.5rem;
 		padding: 0.75rem;
-		border: 1px solid #ccc;
+		border: 1px solid #ddddaa;
 		border-radius: 4px;
 	}
 
@@ -570,19 +573,8 @@
 		margin-top: 0.35rem;
 	}
 
-	.markdown-body :global(p) {
-		margin: 0.25rem 0;
-	}
-
-	.markdown-body :global(pre) {
-		overflow-x: auto;
-		padding: 0.5rem;
-		background: #f7f7f7;
-		border-radius: 4px;
-	}
-
-	.markdown-body :global(code) {
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	.markdown-body {
+		font-size: 1rem;
 	}
 
 	.rating-card {
@@ -600,14 +592,25 @@
 	}
 
 	.log-group {
-		border-color: #e5e5e5;
-		width: fit-content;
+		background: none;
+		border: none;
 		margin-left: 1rem;
+		padding: 0.3rem;
+		width: fit-content;
 	}
 
-	.log-group :global(.message-summary-btn .message-header strong) {
+	.log-group :global(> .message-summary-btn .message-header strong) {
+		color: #828282;
 		font-size: 0.9rem;
 		font-weight: normal;
+	}
+
+	.log-group.message-collapsed:hover {
+		background: var(--accent-color-ultralight);
+	}
+
+	.log-group.message-collapsed:hover :global(> .message-summary-btn .message-header strong) {
+		color: var(--accent-color);
 	}
 
 	.log-group-items {

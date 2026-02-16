@@ -725,6 +725,13 @@ func TestExtractUserTextToolResult(t *testing.T) {
 	}
 }
 
+func TestExtractUserTextToolResultContent(t *testing.T) {
+	raw := json.RawMessage(`[{"type":"tool_result","tool_use_id":"abc","content":"patch output"}]`)
+	if text := extractUserText(raw); text != "patch output" {
+		t.Errorf("text = %q, want %q", text, "patch output")
+	}
+}
+
 func TestExtractUserTextEmpty(t *testing.T) {
 	if text := extractUserText(nil); text != "" {
 		t.Errorf("text = %q, want empty", text)
@@ -804,6 +811,32 @@ func TestProcessEntriesAddsFirstPromptFromConversationFile(t *testing.T) {
 	}
 	if !containsSubstring(content, "Implement the plan") {
 		t.Errorf("first message content = %q, want to contain %q", content, "Implement the plan")
+	}
+}
+
+func TestReadFirstPromptSkipsToolResultUserEntries(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	projectPath := "/proj/d"
+	sessionID := "sess-tool-result"
+	dirName := "-proj-d"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	lines := []string{
+		`{"type":"user","sourceToolAssistantUUID":"assist-1","timestamp":"2026-01-01T00:00:00.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"abc","content":"not a user prompt"}]}}`,
+		`{"type":"user","timestamp":"2026-01-01T00:00:01.000Z","message":{"content":"real prompt"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\n", joinLines(lines))), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	text, _ := readFirstPrompt(tmpDir, projectPath, sessionID)
+	if text != "real prompt" {
+		t.Errorf("text = %q, want %q", text, "real prompt")
 	}
 }
 

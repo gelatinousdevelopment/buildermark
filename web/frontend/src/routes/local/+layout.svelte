@@ -1,5 +1,6 @@
 <script lang="ts">
 	import './local.css';
+	import './markdown.css';
 	import { resolve } from '$app/paths';
 
 	let { children } = $props();

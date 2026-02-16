@@ -1,5 +1,6 @@
 :root {
 	--accent-color: #0066cc;
+	--accent-color-ultralight: #eff7ff;
 
 	/* Agent colors (known coding agents) */
 	--agent-color-claude: #e07b39;
