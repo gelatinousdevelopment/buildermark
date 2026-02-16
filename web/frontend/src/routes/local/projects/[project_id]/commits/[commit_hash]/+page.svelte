@@ -214,12 +214,23 @@
 		<p>No non-ignored file diffs to display.</p>
 	{:else}
 		{#each renderableDiffFiles as file (file.path)}
-			<div class="commit-diff-section" id={diffAnchor(file.path)}>
+			<div
+				class="commit-diff-section diff-card"
+				id={diffAnchor(file.path)}
+				role="button"
+				tabindex="0"
+				onclick={() => toggleDiffPath(file.path)}
+				onkeydown={(e: KeyboardEvent) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						toggleDiffPath(file.path);
+					}
+				}}
+			>
 				<DiffMessageCard
 					label={file.path}
 					content={diffSectionByPath.get(file.path) ?? ''}
 					expanded={isDiffExpanded(file.path)}
-					onToggle={() => toggleDiffPath(file.path)}
 					agentPercent={file.linePercent}
 				/>
 			</div>
@@ -231,19 +242,31 @@
 		<p>No tracked diff messages matched this commit.</p>
 	{:else}
 		{#each detail.messages as message (message.id)}
-			<DiffMessageCard
-				timestamp={message.timestamp}
-				model={message.model ?? ''}
-				content={message.content}
-				expanded={isExpanded(message.id)}
-				onToggle={() => toggleExpanded(message.id)}
-				statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
-				linkHref={resolve('/local/projects/[project_id]/conversations/[id]', {
-					project_id: detail.commit.projectId,
-					id: message.conversationId
-				})}
-				linkLabel={`Conversation: ${message.conversationTitle || message.conversationId}`}
-			/>
+			<div
+				class="diff-card"
+				role="button"
+				tabindex="0"
+				onclick={() => toggleExpanded(message.id)}
+				onkeydown={(e: KeyboardEvent) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						toggleExpanded(message.id);
+					}
+				}}
+			>
+				<DiffMessageCard
+					timestamp={message.timestamp}
+					model={message.model ?? ''}
+					content={message.content}
+					expanded={isExpanded(message.id)}
+					statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
+					linkHref={resolve('/local/projects/[project_id]/conversations/[id]', {
+						project_id: detail.commit.projectId,
+						id: message.conversationId
+					})}
+					linkLabel={`Conversation: ${message.conversationTitle || message.conversationId}`}
+				/>
+			</div>
 		{/each}
 	{/if}
 {/if}
@@ -297,6 +320,20 @@
 
 	.commit-diff-section {
 		margin-top: 0.5rem;
+	}
+
+	.diff-card {
+		margin-bottom: 1rem;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid #eee;
+		border-radius: 4px;
+		background: #fafafa;
+		cursor: pointer;
+	}
+
+	.diff-card:hover {
+		border-color: var(--accent-color);
+		background: var(--accent-color-ultralight);
 	}
 
 	.detail-bar {

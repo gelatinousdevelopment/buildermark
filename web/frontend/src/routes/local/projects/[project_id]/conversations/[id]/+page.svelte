@@ -2,11 +2,13 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { getConversation, createRating } from '$lib/api';
-	import { stars, fmtTime } from '$lib/utils';
-	import { marked } from 'marked';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
+	import { isUserPromptMessage, isDiffMessage, messageModel } from '$lib/messageUtils';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
+	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
+	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
+	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -20,74 +22,12 @@
 	let loading = $state(true);
 	let error: string | null = $state(null);
 
-	let inlineRatingMessageId: string | null = $state(null);
-	let inlineRatingValue: number = $state(0);
-	let inlineNote: string = $state('');
-	let inlineSubmitting: boolean = $state(false);
-	let inlineError: string | null = $state(null);
 	let bottomRatingValue: number = $state(0);
 	let bottomNote: string = $state('');
 	let bottomSubmitting: boolean = $state(false);
 	let bottomError: string | null = $state(null);
 	let expandedMessages = new SvelteSet<string>();
 	let expandedLogGroups = new SvelteSet<string>();
-
-	function isUserPromptMessage(message: MessageRead): boolean {
-		if (message.role !== 'user') return false;
-		const trimmed = message.content.trimStart();
-		if (trimmed.startsWith('/zrate') || trimmed.startsWith('$zrate')) return false;
-		return true;
-	}
-
-	function isDiffMessage(message: MessageRead): boolean {
-		const trimmed = message.content.trimStart();
-		if (trimmed.startsWith('```diff') || trimmed.startsWith('diff --git ')) return true;
-		try {
-			const obj = JSON.parse(message.rawJson) as Record<string, unknown>;
-			return obj.source === 'derived_diff';
-		} catch {
-			return false;
-		}
-	}
-
-	function escapeHtml(s: string): string {
-		return s
-			.replaceAll('&', '&amp;')
-			.replaceAll('<', '&lt;')
-			.replaceAll('>', '&gt;')
-			.replaceAll('"', '&quot;')
-			.replaceAll("'", '&#39;');
-	}
-
-	function renderMarkdown(content: string): string {
-		return marked.parse(escapeHtml(content), { gfm: true, breaks: true }) as string;
-	}
-
-	function firstLine(s: string): string {
-		return s.replace(/\s+/g, ' ').trim();
-	}
-
-	function messageTypeLabel(message: MessageRead): string {
-		if (isDiffMessage(message)) return 'diff';
-		try {
-			const obj = JSON.parse(message.rawJson) as Record<string, unknown>;
-			const t = typeof obj.type === 'string' ? obj.type : '';
-			if (t) return t;
-		} catch {
-			// ignore parse failures
-		}
-		return message.role;
-	}
-
-	function messageSummary(message: MessageRead): string {
-		const line = firstLine(message.content);
-		if (!line) return `[${messageTypeLabel(message)}]`;
-		return line.length > 120 ? `${line.slice(0, 117)}...` : line;
-	}
-
-	function messageModel(message: MessageRead): string {
-		return typeof message.model === 'string' ? message.model.trim() : '';
-	}
 
 	function toggleExpanded(messageId: string) {
 		if (expandedMessages.has(messageId)) {
@@ -103,35 +43,6 @@
 			return;
 		}
 		expandedLogGroups.add(groupId);
-	}
-
-	function openInlineRating(messageId: string, starValue: number) {
-		inlineRatingMessageId = messageId;
-		inlineRatingValue = starValue;
-		inlineNote = '';
-		inlineError = null;
-	}
-
-	function cancelInlineRating() {
-		inlineRatingMessageId = null;
-		inlineRatingValue = 0;
-		inlineNote = '';
-		inlineError = null;
-	}
-
-	async function submitInlineRating() {
-		if (!conversation || !inlineRatingMessageId || inlineRatingValue < 1) return;
-		inlineSubmitting = true;
-		inlineError = null;
-		try {
-			const newRating = await createRating(conversation.id, inlineRatingValue, inlineNote);
-			conversation.ratings = [...conversation.ratings, newRating];
-			cancelInlineRating();
-		} catch (e) {
-			inlineError = e instanceof Error ? e.message : 'Failed to submit rating';
-		} finally {
-			inlineSubmitting = false;
-		}
 	}
 
 	async function submitBottomRating() {
@@ -225,16 +136,6 @@
 		return models;
 	});
 
-	function groupModelLabel(messages: MessageRead[]): string {
-		const models = new SvelteSet<string>();
-		for (const message of messages) {
-			const model = messageModel(message);
-			if (model) models.add(model);
-		}
-		if (models.size === 1) return Array.from(models)[0] ?? 'model';
-		return 'model';
-	}
-
 	let displayItems: DisplayItem[] = $derived.by(() => {
 		const items: DisplayItem[] = [];
 		let logRun: MessageRead[] = [];
@@ -269,9 +170,20 @@
 		return items;
 	});
 
-	let hasBottomRating = $derived.by(() => {
-		if (timeline.length === 0) return false;
-		return timeline[timeline.length - 1]?.kind === 'rating';
+	let hasRatingAfterLastUser = $derived.by(() => {
+		let lastUserIdx = -1;
+		for (let i = timeline.length - 1; i >= 0; i--) {
+			const item = timeline[i];
+			if (item.kind === 'message' && isUserPromptMessage(item.message)) {
+				lastUserIdx = i;
+				break;
+			}
+		}
+		if (lastUserIdx === -1) return false;
+		for (let i = lastUserIdx + 1; i < timeline.length; i++) {
+			if (timeline[i].kind === 'rating') return true;
+		}
+		return false;
 	});
 
 	onMount(async () => {
@@ -311,148 +223,58 @@
 		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
 			{#if item.kind === 'message' && isUserPromptMessage(item.message)}
 				<div class="message">
-					<div class="message-header">
-						<strong>{item.message.role}</strong> &middot; {fmtTime(item.message.timestamp)}
-						{#if messageModel(item.message)}
-							<span class="message-model">{messageModel(item.message)}</span>
-						{/if}
-					</div>
-					<div class="message-content markdown-body">
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						{@html renderMarkdown(item.message.content)}
-					</div>
-				</div>
-				<div class="inline-rating">
-					{#if inlineRatingMessageId === item.message.id}
-						<div class="inline-rating-expanded">
-							<div class="inline-stars">
-								{#each [1, 2, 3, 4, 5] as star (star)}
-									<button
-										class="star-btn"
-										class:active={star <= inlineRatingValue}
-										onclick={() => (inlineRatingValue = star)}
-									>
-										{star <= inlineRatingValue ? '★' : '☆'}
-									</button>
-								{/each}
-							</div>
-							<input
-								type="text"
-								class="inline-note"
-								placeholder="Optional note..."
-								bind:value={inlineNote}
-							/>
-							<div class="inline-actions">
-								<button
-									class="btn-sm"
-									disabled={inlineSubmitting || inlineRatingValue < 1}
-									onclick={submitInlineRating}
-								>
-									{inlineSubmitting ? 'Submitting...' : 'Submit'}
-								</button>
-								<button class="btn-sm btn-cancel" onclick={cancelInlineRating}> Cancel </button>
-							</div>
-							{#if inlineError}
-								<p class="inline-error">{inlineError}</p>
-							{/if}
-						</div>
-					{:else}
-						<div class="inline-stars-collapsed">
-							{#each [1, 2, 3, 4, 5] as star (star)}
-								<button
-									class="star-btn faded"
-									onclick={() => openInlineRating(item.message.id, star)}
-								>
-									☆
-								</button>
-							{/each}
-						</div>
-					{/if}
+					<UserPromptMessageCard message={item.message} />
 				</div>
 			{:else if item.kind === 'message' && isDiffMessage(item.message)}
-				<DiffMessageCard
-					timestamp={item.message.timestamp}
-					model={messageModel(item.message)}
-					content={item.message.content}
-					expanded={expandedMessages.has(item.message.id)}
-					onToggle={() => toggleExpanded(item.message.id)}
-				/>
+				<div
+					class="message message-collapsed"
+					role="button"
+					tabindex="0"
+					onclick={() => toggleExpanded(item.message.id)}
+					onkeydown={(e: KeyboardEvent) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							toggleExpanded(item.message.id);
+						}
+					}}
+				>
+					<DiffMessageCard
+						timestamp={item.message.timestamp}
+						model={messageModel(item.message)}
+						content={item.message.content}
+						expanded={expandedMessages.has(item.message.id)}
+					/>
+				</div>
 			{:else if item.kind === 'rating'}
 				<div class="rating-card">
-					<div class="message-header">
-						<strong>Rating</strong> &middot; {fmtTime(item.rating.createdAt)}
-					</div>
-					<div class="rating-stars">{stars(item.rating.rating)}</div>
-					{#if item.rating.note}
-						<div class="rating-field"><strong>Note:</strong> {item.rating.note}</div>
-					{/if}
-					{#if item.rating.analysis}
-						<div class="rating-field">
-							<strong>Analysis:</strong>
-							<div class="markdown-body">
-								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-								{@html renderMarkdown(item.rating.analysis)}
-							</div>
-						</div>
-					{/if}
+					<RatingMessageCard rating={item.rating} />
 				</div>
 			{:else if item.kind === 'log-group'}
-				{@const messages = item.messages}
-				<div class="message message-collapsed log-group">
-					<button class="message-summary-btn" onclick={() => toggleLogGroup(item.id)}>
-						<div class="message-header">
-							<strong>{messages.length} logs from {groupModelLabel(messages)}</strong>
-						</div>
-					</button>
-					{#if expandedLogGroups.has(item.id)}
-						<div class="log-group-items">
-							{#each messages as logMessage (logMessage.id)}
-								{#if isDiffMessage(logMessage)}
-									<DiffMessageCard
-										timestamp={logMessage.timestamp}
-										model={messageModel(logMessage)}
-										content={logMessage.content}
-										expanded={expandedMessages.has(logMessage.id)}
-										onToggle={() => toggleExpanded(logMessage.id)}
-									/>
-								{:else}
-									<div class="message message-collapsed">
-										<button
-											class="message-summary-btn"
-											onclick={() => toggleExpanded(logMessage.id)}
-										>
-											<div class="message-header">
-												<strong>{messageTypeLabel(logMessage)}</strong> &middot;
-												{fmtTime(logMessage.timestamp)}
-												{#if messageModel(logMessage)}
-													<span class="message-model">{messageModel(logMessage)}</span>
-												{/if}
-												<span class="expansion-indicator">
-													<span class="chevron"
-														>{expandedMessages.has(logMessage.id) ? '▾' : '▸'}</span
-													>
-												</span>
-											</div>
-											<div class="message-summary">{messageSummary(logMessage)}</div>
-										</button>
-										{#if expandedMessages.has(logMessage.id)}
-											<div class="message-content markdown-body">
-												<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-												{@html renderMarkdown(logMessage.content)}
-											</div>
-										{/if}
-									</div>
-								{/if}
-							{/each}
-						</div>
-					{/if}
+				<div
+					class="message message-collapsed log-group"
+					role="button"
+					tabindex="0"
+					onclick={() => toggleLogGroup(item.id)}
+					onkeydown={(e: KeyboardEvent) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							toggleLogGroup(item.id);
+						}
+					}}
+				>
+					<LogGroupCard
+						messages={item.messages}
+						expanded={expandedLogGroups.has(item.id)}
+						{expandedMessages}
+						onToggleMessage={toggleExpanded}
+					/>
 				</div>
 			{/if}
 		{/each}
 	{/if}
-	{#if !hasBottomRating}
+	{#if !hasRatingAfterLastUser}
 		<div class="rating-card rating-input">
-			<div class="message-header">
+			<div class="rating-input-header">
 				<strong>Add rating</strong>
 			</div>
 			<div class="inline-stars">
@@ -500,19 +322,12 @@
 	.message-collapsed {
 		padding: 0.5rem 0.75rem;
 		background: #fafafa;
+		cursor: pointer;
 	}
 
-	.message-header {
-		font-size: 0.85rem;
-		color: #666;
-		/*margin-bottom: 0.25rem;*/
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.message-model {
-		color: #9a9a9a;
+	.message-collapsed:hover {
+		border-color: var(--accent-color);
+		background: var(--accent-color-ultralight);
 	}
 
 	.models-summary {
@@ -540,43 +355,6 @@
 		color: #888;
 	}
 
-	.expansion-indicator {
-		margin-left: auto;
-		color: #888;
-	}
-
-	.chevron {
-		display: inline-block;
-		width: 0.8rem;
-	}
-
-	.message-summary-btn {
-		display: block;
-		width: 100%;
-		text-align: left;
-		background: transparent;
-		border: 0;
-		padding: 0;
-		cursor: pointer;
-	}
-
-	.message-summary {
-		font-size: 1rem;
-		color: #333;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.message-content {
-		font-size: 1rem;
-		margin-top: 0.35rem;
-	}
-
-	.markdown-body {
-		font-size: 1rem;
-	}
-
 	.rating-card {
 		margin-bottom: 1rem;
 		padding: 0.75rem;
@@ -591,6 +369,11 @@
 		gap: 0.5rem;
 	}
 
+	.rating-input-header {
+		font-size: 0.85rem;
+		color: #666;
+	}
+
 	.log-group {
 		background: none;
 		border: none;
@@ -599,7 +382,7 @@
 		width: fit-content;
 	}
 
-	.log-group :global(> .message-summary-btn .message-header strong) {
+	.log-group :global(.log-group-header strong) {
 		color: #828282;
 		font-size: 0.9rem;
 		font-weight: normal;
@@ -609,32 +392,8 @@
 		background: var(--accent-color-ultralight);
 	}
 
-	.log-group.message-collapsed:hover :global(> .message-summary-btn .message-header strong) {
+	.log-group.message-collapsed:hover :global(.log-group-header strong) {
 		color: var(--accent-color);
-	}
-
-	.log-group-items {
-		margin-top: 0.5rem;
-	}
-
-	.rating-stars {
-		font-size: 1.1rem;
-		margin-bottom: 0.25rem;
-	}
-
-	.rating-field {
-		font-size: 0.9rem;
-		margin-top: 0.25rem;
-	}
-
-	.inline-rating {
-		margin-bottom: 1rem;
-		padding-left: 0.75rem;
-	}
-
-	.inline-stars-collapsed {
-		display: flex;
-		gap: 2px;
 	}
 
 	.star-btn {
@@ -650,22 +409,6 @@
 	.star-btn:hover,
 	.star-btn.active {
 		color: #f0c040;
-	}
-
-	.star-btn.faded {
-		color: #ccc;
-	}
-
-	.star-btn.faded:hover,
-	.inline-stars-collapsed:hover .star-btn.faded {
-		color: #f0c040;
-	}
-
-	.inline-rating-expanded {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		max-width: 400px;
 	}
 
 	.inline-stars {
@@ -697,10 +440,6 @@
 	.btn-sm:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-	}
-
-	.btn-cancel {
-		background: #fff;
 	}
 
 	.inline-error {

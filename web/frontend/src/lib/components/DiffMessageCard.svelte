@@ -14,7 +14,6 @@
 		statsLabel?: string | null;
 		linkHref?: string | null;
 		linkLabel?: string | null;
-		onToggle?: (() => void) | null;
 		/** When provided, shows agent percentage in the header. */
 		agentPercent?: number;
 	}
@@ -28,7 +27,6 @@
 		statsLabel = null,
 		linkHref = null,
 		linkLabel = null,
-		onToggle = null,
 		agentPercent
 	}: Props = $props();
 
@@ -144,10 +142,6 @@
 		}
 	}
 
-	function handleToggle() {
-		onToggle?.();
-	}
-
 	let fileStats = $derived(perFileDiffStats(content));
 
 	/** Show file list when it adds info the header doesn't already convey. */
@@ -156,71 +150,45 @@
 	);
 </script>
 
-<div class="message message-collapsed">
-	<button class="message-summary-btn" onclick={handleToggle}>
-		<div class="message-header">
-			<strong>{label}</strong>
-			{#if timestamp !== undefined}
-				<span>&middot; {fmtTime(timestamp)}</span>
-			{/if}
-			{#if model}
-				<span class="message-model">{model}</span>
-			{/if}
-			{#if statsLabel}
-				<span class="message-diff-stats">{statsLabel}</span>
-			{:else}
-				{@const stats = diffStats(content)}
-				<DiffCount
-					added={stats.added}
-					removed={stats.removed}
-					files={stats.files}
-					showFiles={true}
-				/>
-			{/if}
-			{#if agentPercent !== undefined}
-				<span class="agent-pct">{agentPercent.toFixed(1)}% agent</span>
-			{/if}
-		</div>
-		{#if showFileList}
-			<div class="file-stats-list">
-				{#each fileStats as f (f.path)}
-					<div class="file-stats-item">
-						<span class="file-stats-path">{f.path}</span>
-						<DiffCount added={f.added} removed={f.removed} />
-					</div>
-				{/each}
-			</div>
-		{/if}
-		{#if linkHref && linkLabel}
-			<div class="conversation-link"><a href={linkHref}>{linkLabel}</a></div>
-		{/if}
-	</button>
-	{#if expanded}
-		<div class="message-content diff-body">
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			{@html renderDiff(content)}
-		</div>
+<div class="message-header">
+	<strong>{label}</strong>
+	{#if timestamp !== undefined}
+		<span>&middot; {fmtTime(timestamp)}</span>
+	{/if}
+	{#if model}
+		<span class="message-model">{model}</span>
+	{/if}
+	{#if statsLabel}
+		<span class="message-diff-stats">{statsLabel}</span>
+	{:else}
+		{@const stats = diffStats(content)}
+		<DiffCount added={stats.added} removed={stats.removed} files={stats.files} showFiles={true} />
+	{/if}
+	{#if agentPercent !== undefined}
+		<span class="agent-pct">{agentPercent.toFixed(1)}% agent</span>
 	{/if}
 </div>
+{#if showFileList}
+	<div class="file-stats-list">
+		{#each fileStats as f (f.path)}
+			<div class="file-stats-item">
+				<span class="file-stats-path">{f.path}</span>
+				<DiffCount added={f.added} removed={f.removed} />
+			</div>
+		{/each}
+	</div>
+{/if}
+{#if linkHref && linkLabel}
+	<div class="conversation-link"><a href={linkHref}>{linkLabel}</a></div>
+{/if}
+{#if expanded}
+	<div class="message-content diff-body">
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+		{@html renderDiff(content)}
+	</div>
+{/if}
 
 <style>
-	.message {
-		margin-bottom: 1rem;
-		padding: 0.75rem;
-		border: 1px solid #eee;
-		border-radius: 4px;
-	}
-
-	.message-collapsed {
-		padding: 0.5rem 0.75rem;
-		background: #fafafa;
-	}
-
-	.message-collapsed:hover {
-		border-color: var(--accent-color);
-		background: var(--accent-color-ultralight);
-	}
-
 	.message-header {
 		font-size: 0.85rem;
 		color: #666;
@@ -228,16 +196,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.message-summary-btn {
-		display: block;
-		width: 100%;
-		text-align: left;
-		background: transparent;
-		border: 0;
-		padding: 0;
-		cursor: pointer;
 	}
 
 	.message-model {
