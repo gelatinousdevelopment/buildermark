@@ -16,6 +16,8 @@
 		linkLabel?: string | null;
 		/** When provided, shows agent percentage in the header. */
 		agentPercent?: number;
+		/** When provided, the header becomes clickable to collapse. */
+		onToggle?: () => void;
 	}
 
 	let {
@@ -27,7 +29,8 @@
 		statsLabel = null,
 		linkHref = null,
 		linkLabel = null,
-		agentPercent
+		agentPercent,
+		onToggle
 	}: Props = $props();
 
 	interface FileDiffStat {
@@ -150,7 +153,26 @@
 	);
 </script>
 
-<div class="message-header">
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div
+	class="message-header"
+	class:message-header-clickable={onToggle}
+	role={onToggle ? 'button' : undefined}
+	tabindex={onToggle ? 0 : undefined}
+	onclick={(e: MouseEvent) => {
+		if (onToggle) {
+			e.stopPropagation();
+			onToggle();
+		}
+	}}
+	onkeydown={(e: KeyboardEvent) => {
+		if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
+			e.preventDefault();
+			e.stopPropagation();
+			onToggle();
+		}
+	}}
+>
 	<strong>{label}</strong>
 	{#if timestamp !== undefined}
 		<span>&middot; {fmtTime(timestamp)}</span>
@@ -162,7 +184,9 @@
 		<span class="message-diff-stats">{statsLabel}</span>
 	{:else}
 		{@const stats = diffStats(content)}
-		<DiffCount added={stats.added} removed={stats.removed} files={stats.files} showFiles={true} />
+		{#if stats.files.length > 1}
+			<DiffCount added={stats.added} removed={stats.removed} files={stats.files} showFiles={true} />
+		{/if}
 	{/if}
 	{#if agentPercent !== undefined}
 		<span class="agent-pct">{agentPercent.toFixed(1)}% agent</span>
@@ -196,6 +220,21 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	.message-header-clickable {
+		cursor: pointer;
+		border-radius: 3px;
+		padding: 0.15rem 0.3rem;
+		margin: -0.15rem -0.3rem;
+		border: 1px solid transparent;
+		margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);
+	}
+
+	.message-header-clickable:hover {
+		background: var(--accent-color-ultralight);
+		color: var(--accent-color);
+		border-color: var(--accent-color);
 	}
 
 	.message-model {
@@ -236,6 +275,7 @@
 	}
 
 	.message-content {
+		background: #fff;
 		font-size: 0.9rem;
 		margin-top: 0.35rem;
 	}

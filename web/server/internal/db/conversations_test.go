@@ -114,6 +114,105 @@ func TestGetConversationDetail(t *testing.T) {
 	}
 }
 
+func TestGetConversationDetailFiltersMessages(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-filter", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	messages := []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "real prompt"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "conv-filter", Role: "agent", Content: "response"},
+		// Should be filtered out:
+		{Timestamp: 3000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: ""},
+		{Timestamp: 4000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "  "},
+		{Timestamp: 5000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[user]"},
+		{Timestamp: 6000, ProjectID: pid, ConversationID: "conv-filter", Role: "agent", Content: "<command-message>something</command-message>"},
+		{Timestamp: 7000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "/clear"},
+		{Timestamp: 8000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "/new"},
+		{Timestamp: 9000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[Pasted text #1 from clipboard]"},
+		{Timestamp: 10000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[Pasted text #42 some long description here]"},
+	}
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	detail, err := GetConversationDetail(ctx, db, "conv-filter")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+
+	// Only "real prompt" and "response" should survive.
+	if len(detail.Messages) != 2 {
+		contents := make([]string, len(detail.Messages))
+		for i, m := range detail.Messages {
+			contents[i] = m.Content
+		}
+		t.Fatalf("got %d messages %v, want 2", len(detail.Messages), contents)
+	}
+}
+
+func TestGetConversationDetailRatingMatching(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-rate", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// The /zrate message timestamp and rating createdAt are within 120s.
+	ratingCreatedAt := time.Now().UTC()
+	zrateTimestamp := ratingCreatedAt.UnixMilli() + 500 // 500ms after rating
+
+	messages := []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "do something"},
+		{Timestamp: zrateTimestamp, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "/zrate 5"},
+	}
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	rating, err := InsertRating(ctx, db, "conv-rate", 5, "", "")
+	if err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	detail, err := GetConversationDetail(ctx, db, "conv-rate")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+
+	// The /zrate message should be removed from messages.
+	if len(detail.Messages) != 1 {
+		t.Fatalf("got %d messages, want 1 (zrate message should be removed)", len(detail.Messages))
+	}
+	if detail.Messages[0].Content != "do something" {
+		t.Errorf("remaining message = %q, want %q", detail.Messages[0].Content, "do something")
+	}
+
+	// The rating should have a matched timestamp.
+	if len(detail.Ratings) != 1 {
+		t.Fatalf("got %d ratings, want 1", len(detail.Ratings))
+	}
+	_ = rating
+	if detail.Ratings[0].MatchedTimestamp == nil {
+		t.Fatal("expected MatchedTimestamp to be set")
+	}
+	if *detail.Ratings[0].MatchedTimestamp != zrateTimestamp {
+		t.Errorf("MatchedTimestamp = %d, want %d", *detail.Ratings[0].MatchedTimestamp, zrateTimestamp)
+	}
+}
+
 func TestGetConversationDetailNotFound(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

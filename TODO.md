@@ -11,8 +11,11 @@
 - [x] Give hover state to clickable messages
 - [x] From the conversation detail page, move the message content of each different message type into a separate svelte component, similar to how DiffMessageCard is a component, except we want the shell `<div class="message">`, `<div class="rating-card">`, `<div class="message log-group">`, etc tag in the +page.svelte file (including for the DiffMessageCard too, so move some of that outer styling up to the +page.svelte), so we can handle styling of that outer tag there. Move the onclick for toggling expansion up to this top level div as well, so we manage that in the +page.svelte file.
 - [x] Remove the inline add rating widget from the list of messages, but keep the full Add rating box at the bottom. However, for the Add rating box at the bottom, show it only if there isn't already a rating after the last user message.
-- [ ] Move some of the message filtering to go, but keep the log-group calculation in svelte. Specifically, move: rating matching, message.content.trim() != '', message.content.trim() != '[user]', and !message.content.trim().startsWith('<command-message>').
-- [ ] Also hide user messages where the content is just `/clear` or `/new`
+- [x] Move some of the message filtering to go, but keep the log-group calculation in svelte. Specifically, move: rating matching, message.content.trim() != '', message.content.trim() != '[user]', and !message.content.trim().startsWith('<command-message>').
+- [x] Also hide user messages where the content is just `/clear` or `/new`
+- [x] Also filter out user messages that include the text like `[Pasted text #1 ...]`, but do a regex to allow for the number to change and any text where I wrote `...`. This is because the next user message has the full text expanded, so we don't need this ones that say pasted text.
+- [x] In the DiffMessageCard.svelte when there is only one file, hide the summary's DiffCount component
+- [ ] Add time length of model/agent messages to "6 logs from agent", like "6 logs from agent over 30 seconds"
 - [ ] Improve design of conversation header
 
 ## Later

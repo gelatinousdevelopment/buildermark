@@ -64,59 +64,20 @@
 	let timeline: TimelineItem[] = $derived.by(() => {
 		if (!conversation) return [];
 
-		const matchedMessageIds = new SvelteSet<string>();
-		const matchedRatingIds = new SvelteSet<string>();
 		const items: TimelineItem[] = [];
 
-		// Match each rating to the closest /zrate user message within 120s
-		for (const rating of conversation.ratings) {
-			const ratingTime = new Date(rating.createdAt).getTime();
-			let bestMessage: MessageRead | null = null;
-			let bestDelta = Infinity;
-
-			for (const message of conversation.messages) {
-				const trimmed = message.content.trimStart();
-				if (
-					message.role !== 'user' ||
-					(!trimmed.startsWith('/zrate') && !trimmed.startsWith('$zrate'))
-				) {
-					continue;
-				}
-				if (matchedMessageIds.has(message.id)) continue;
-				const delta = Math.abs(message.timestamp - ratingTime);
-				if (delta < bestDelta && delta <= 120_000) {
-					bestDelta = delta;
-					bestMessage = message;
-				}
-			}
-
-			if (bestMessage) {
-				matchedMessageIds.add(bestMessage.id);
-				matchedRatingIds.add(rating.id);
-				items.push({ kind: 'rating', rating, time: bestMessage.timestamp });
-			}
-		}
-
-		// Add unmatched messages
+		// Messages are pre-filtered server-side.
 		// Subtract 1s from user prompt timestamps so they sort before
 		// the model messages that share the same second-level timestamp.
 		for (const message of conversation.messages) {
-			if (
-				!matchedMessageIds.has(message.id) &&
-				message.content.trim() != '' &&
-				message.content.trim() != '[user]' &&
-				!message.content.trim().startsWith('<command-message>')
-			) {
-				const adjust = isUserPromptMessage(message) ? 1000 : 0;
-				items.push({ kind: 'message', message, time: message.timestamp - adjust });
-			}
+			const adjust = isUserPromptMessage(message) ? 1000 : 0;
+			items.push({ kind: 'message', message, time: message.timestamp - adjust });
 		}
 
-		// Add unmatched ratings
+		// Ratings have matchedTimestamp from server-side rating matching.
 		for (const rating of conversation.ratings) {
-			if (!matchedRatingIds.has(rating.id)) {
-				items.push({ kind: 'rating', rating, time: new Date(rating.createdAt).getTime() });
-			}
+			const time = rating.matchedTimestamp ?? new Date(rating.createdAt).getTime();
+			items.push({ kind: 'rating', rating, time });
 		}
 
 		items.sort((a, b) => a.time - b.time);
@@ -226,23 +187,29 @@
 					<UserPromptMessageCard message={item.message} />
 				</div>
 			{:else if item.kind === 'message' && isDiffMessage(item.message)}
+				{@const diffExpanded = expandedMessages.has(item.message.id)}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
-					class="message message-collapsed"
-					role="button"
-					tabindex="0"
-					onclick={() => toggleExpanded(item.message.id)}
-					onkeydown={(e: KeyboardEvent) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault();
-							toggleExpanded(item.message.id);
-						}
-					}}
+					class="message"
+					class:message-collapsed={!diffExpanded}
+					role={!diffExpanded ? 'button' : undefined}
+					tabindex={!diffExpanded ? 0 : undefined}
+					onclick={!diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
+					onkeydown={!diffExpanded
+						? (e: KeyboardEvent) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault();
+									toggleExpanded(item.message.id);
+								}
+							}
+						: undefined}
 				>
 					<DiffMessageCard
 						timestamp={item.message.timestamp}
 						model={messageModel(item.message)}
 						content={item.message.content}
-						expanded={expandedMessages.has(item.message.id)}
+						expanded={diffExpanded}
+						onToggle={diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
 					/>
 				</div>
 			{:else if item.kind === 'rating'}
@@ -250,23 +217,29 @@
 					<RatingMessageCard rating={item.rating} />
 				</div>
 			{:else if item.kind === 'log-group'}
+				{@const groupExpanded = expandedLogGroups.has(item.id)}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
-					class="message message-collapsed log-group"
-					role="button"
-					tabindex="0"
-					onclick={() => toggleLogGroup(item.id)}
-					onkeydown={(e: KeyboardEvent) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault();
-							toggleLogGroup(item.id);
-						}
-					}}
+					class="message log-group"
+					class:message-collapsed={!groupExpanded}
+					role={!groupExpanded ? 'button' : undefined}
+					tabindex={!groupExpanded ? 0 : undefined}
+					onclick={!groupExpanded ? () => toggleLogGroup(item.id) : undefined}
+					onkeydown={!groupExpanded
+						? (e: KeyboardEvent) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault();
+									toggleLogGroup(item.id);
+								}
+							}
+						: undefined}
 				>
 					<LogGroupCard
 						messages={item.messages}
-						expanded={expandedLogGroups.has(item.id)}
+						expanded={groupExpanded}
 						{expandedMessages}
 						onToggleMessage={toggleExpanded}
+						onToggle={groupExpanded ? () => toggleLogGroup(item.id) : undefined}
 					/>
 				</div>
 			{/if}

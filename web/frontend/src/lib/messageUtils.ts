@@ -64,6 +64,6 @@ export function groupModelLabel(messages: MessageRead[]): string {
 		const model = messageModel(message);
 		if (model) models.add(model);
 	}
-	if (models.size === 1) return Array.from(models)[0] ?? 'model';
-	return 'model';
+	if (models.size === 1) return Array.from(models)[0] ?? 'agent';
+	return 'agent';
 }

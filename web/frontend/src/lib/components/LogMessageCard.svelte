@@ -11,12 +11,33 @@
 	interface Props {
 		message: MessageRead;
 		expanded: boolean;
+		/** When provided, the header becomes clickable to collapse. */
+		onToggle?: () => void;
 	}
 
-	let { message, expanded }: Props = $props();
+	let { message, expanded, onToggle }: Props = $props();
 </script>
 
-<div class="message-header">
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div
+	class="message-header"
+	class:message-header-clickable={onToggle}
+	role={onToggle ? 'button' : undefined}
+	tabindex={onToggle ? 0 : undefined}
+	onclick={(e: MouseEvent) => {
+		if (onToggle) {
+			e.stopPropagation();
+			onToggle();
+		}
+	}}
+	onkeydown={(e: KeyboardEvent) => {
+		if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
+			e.preventDefault();
+			e.stopPropagation();
+			onToggle();
+		}
+	}}
+>
 	<strong>{messageTypeLabel(message)}</strong> &middot;
 	{fmtTime(message.timestamp)}
 	{#if messageModel(message)}
@@ -41,6 +62,20 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	.message-header-clickable {
+		cursor: pointer;
+		border-radius: 3px;
+		padding: 0.15rem 0.3rem;
+		border: 1px solid transparent;
+		margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);
+	}
+
+	.message-header-clickable:hover {
+		background: var(--accent-color-ultralight);
+		color: var(--accent-color);
+		border-color: var(--accent-color);
 	}
 
 	.message-model {

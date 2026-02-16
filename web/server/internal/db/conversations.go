@@ -4,7 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"strings"
 )
+
+var pastedTextRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 
 // Conversation represents a row in the conversations table.
 type Conversation struct {
@@ -120,7 +124,69 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		return nil, fmt.Errorf("iterate ratings: %w", err)
 	}
 
+	// Match each rating to the closest /zrate user message within 120s.
+	matchedMessageIDs := make(map[string]bool)
+	for i := range c.Ratings {
+		ratingTime := c.Ratings[i].CreatedAt.UnixMilli()
+		var bestIdx int
+		var bestDelta int64 = 120_001
+		for j := range c.Messages {
+			msg := &c.Messages[j]
+			if msg.Role != "user" {
+				continue
+			}
+			trimmed := strings.TrimLeft(msg.Content, " \t\n\r")
+			if !strings.HasPrefix(trimmed, "/zrate") && !strings.HasPrefix(trimmed, "$zrate") {
+				continue
+			}
+			if matchedMessageIDs[msg.ID] {
+				continue
+			}
+			delta := abs64(msg.Timestamp - ratingTime)
+			if delta < bestDelta {
+				bestDelta = delta
+				bestIdx = j
+			}
+		}
+		if bestDelta <= 120_000 {
+			matchedMessageIDs[c.Messages[bestIdx].ID] = true
+			ts := c.Messages[bestIdx].Timestamp
+			c.Ratings[i].MatchedTimestamp = &ts
+		}
+	}
+
+	// Filter messages: remove matched /zrate messages, empty content,
+	// [user] markers, <command-message> tags, and /clear or /new commands.
+	filtered := make([]MessageRead, 0, len(c.Messages))
+	for _, msg := range c.Messages {
+		if matchedMessageIDs[msg.ID] {
+			continue
+		}
+		trimmed := strings.TrimSpace(msg.Content)
+		if trimmed == "" || trimmed == "[user]" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "<command-message>") {
+			continue
+		}
+		if msg.Role == "user" && (trimmed == "/clear" || trimmed == "/new") {
+			continue
+		}
+		if msg.Role == "user" && pastedTextRe.MatchString(trimmed) {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	c.Messages = filtered
+
 	return &c, nil
+}
+
+func abs64(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // UntitledConversation is a conversation with an empty title, joined with its project path.

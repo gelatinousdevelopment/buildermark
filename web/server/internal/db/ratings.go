@@ -15,6 +15,9 @@ type Rating struct {
 	Note           string    `json:"note"`
 	Analysis       string    `json:"analysis"`
 	CreatedAt      time.Time `json:"createdAt"`
+	// MatchedTimestamp is the message timestamp of the /zrate user message
+	// that was matched to this rating (within 120s). Nil if unmatched.
+	MatchedTimestamp *int64 `json:"matchedTimestamp,omitempty"`
 }
 
 // InsertRating creates a new rating and returns the persisted record.

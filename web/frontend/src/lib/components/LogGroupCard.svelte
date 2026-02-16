@@ -10,9 +10,11 @@
 		expanded: boolean;
 		expandedMessages: SvelteSet<string>;
 		onToggleMessage: (id: string) => void;
+		/** When provided, the group header becomes clickable to collapse. */
+		onToggle?: () => void;
 	}
 
-	let { messages, expanded, expandedMessages, onToggleMessage }: Props = $props();
+	let { messages, expanded, expandedMessages, onToggleMessage, onToggle }: Props = $props();
 
 	function handleKeydown(e: KeyboardEvent, id: string) {
 		if (e.key === 'Enter' || e.key === ' ') {
@@ -22,8 +24,30 @@
 	}
 </script>
 
-<div class="log-group-header">
-	<strong>{messages.length} logs from {groupModelLabel(messages)}</strong>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div
+	class="log-group-header"
+	class:log-group-header-clickable={onToggle}
+	role={onToggle ? 'button' : undefined}
+	tabindex={onToggle ? 0 : undefined}
+	onclick={(e: MouseEvent) => {
+		if (onToggle) {
+			e.stopPropagation();
+			onToggle();
+		}
+	}}
+	onkeydown={(e: KeyboardEvent) => {
+		if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
+			e.preventDefault();
+			e.stopPropagation();
+			onToggle();
+		}
+	}}
+>
+	<strong
+		>{messages.length}
+		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(messages)}</strong
+	>
 </div>
 {#if expanded}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -33,30 +57,44 @@
 		onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
 	>
 		{#each messages as logMessage (logMessage.id)}
+			{@const logExpanded = expandedMessages.has(logMessage.id)}
 			{#if isDiffMessage(logMessage)}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
-					class="log-item log-item-collapsed"
-					role="button"
-					tabindex="0"
-					onclick={() => onToggleMessage(logMessage.id)}
-					onkeydown={(e: KeyboardEvent) => handleKeydown(e, logMessage.id)}
+					class="log-item"
+					class:log-item-collapsed={!logExpanded}
+					role={!logExpanded ? 'button' : undefined}
+					tabindex={!logExpanded ? 0 : undefined}
+					onclick={!logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
+					onkeydown={!logExpanded
+						? (e: KeyboardEvent) => handleKeydown(e, logMessage.id)
+						: undefined}
 				>
 					<DiffMessageCard
 						timestamp={logMessage.timestamp}
 						model={messageModel(logMessage)}
 						content={logMessage.content}
-						expanded={expandedMessages.has(logMessage.id)}
+						expanded={logExpanded}
+						onToggle={logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
 					/>
 				</div>
 			{:else}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
-					class="log-item log-item-collapsed"
-					role="button"
-					tabindex="0"
-					onclick={() => onToggleMessage(logMessage.id)}
-					onkeydown={(e: KeyboardEvent) => handleKeydown(e, logMessage.id)}
+					class="log-item"
+					class:log-item-collapsed={!logExpanded}
+					role={!logExpanded ? 'button' : undefined}
+					tabindex={!logExpanded ? 0 : undefined}
+					onclick={!logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
+					onkeydown={!logExpanded
+						? (e: KeyboardEvent) => handleKeydown(e, logMessage.id)
+						: undefined}
 				>
-					<LogMessageCard message={logMessage} expanded={expandedMessages.has(logMessage.id)} />
+					<LogMessageCard
+						message={logMessage}
+						expanded={logExpanded}
+						onToggle={logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
+					/>
 				</div>
 			{/if}
 		{/each}
@@ -70,6 +108,23 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	.log-group-header-clickable {
+		cursor: pointer;
+		border-radius: 3px;
+		padding: 0.15rem 0.3rem;
+		border: 1px solid transparent;
+		margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);
+	}
+
+	.log-group-header-clickable:hover {
+		background: var(--accent-color-ultralight);
+		border-color: var(--accent-color);
+	}
+
+	.log-group-header-clickable:hover :global(strong) {
+		color: var(--accent-color);
 	}
 
 	.log-group-items {

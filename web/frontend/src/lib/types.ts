@@ -59,6 +59,7 @@ export interface Rating {
 	note: string;
 	analysis: string;
 	createdAt: string;
+	matchedTimestamp?: number;
 }
 
 export interface ProjectCommitCoverageResponse {
