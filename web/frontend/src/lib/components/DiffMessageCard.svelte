@@ -8,6 +8,8 @@
 		label?: string;
 		/** Timestamp to display. Omit to hide. */
 		timestamp?: number | string;
+		/** Message role, e.g. "agent" or "user". */
+		role?: string;
 		model?: string;
 		content: string;
 		expanded?: boolean;
@@ -23,6 +25,7 @@
 	let {
 		label = 'diff',
 		timestamp,
+		role = '',
 		model = '',
 		content,
 		expanded = false,
@@ -177,8 +180,8 @@
 	{#if timestamp !== undefined}
 		<span>&middot; {fmtTime(timestamp)}</span>
 	{/if}
-	{#if model}
-		<span class="message-model">{model}</span>
+	{#if role || model}
+		<span class="message-model">{[role, model].filter(Boolean).join(' · ')}</span>
 	{/if}
 	{#if statsLabel}
 		<span class="message-diff-stats">{statsLabel}</span>

@@ -274,7 +274,7 @@ func isSystemMessage(text string) bool {
 		"[Request interrupted",
 	}
 	for _, p := range skipPrefixes {
-		if strings.HasPrefix(text, p) {
+		if strings.HasPrefix(strings.TrimSpace(text), p) {
 			return true
 		}
 	}

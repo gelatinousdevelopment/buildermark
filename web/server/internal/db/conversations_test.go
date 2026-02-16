@@ -133,11 +133,14 @@ func TestGetConversationDetailFiltersMessages(t *testing.T) {
 		{Timestamp: 3000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: ""},
 		{Timestamp: 4000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "  "},
 		{Timestamp: 5000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[user]"},
-		{Timestamp: 6000, ProjectID: pid, ConversationID: "conv-filter", Role: "agent", Content: "<command-message>something</command-message>"},
+		{Timestamp: 6000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "<command-message>something</command-message>"},
+		{Timestamp: 6500, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>"},
 		{Timestamp: 7000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "/clear"},
 		{Timestamp: 8000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "/new"},
 		{Timestamp: 9000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[Pasted text #1 from clipboard]"},
 		{Timestamp: 10000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[Pasted text #42 some long description here]"},
+		// Should be preserved (agent/system logs are intentionally visible):
+		{Timestamp: 11000, ProjectID: pid, ConversationID: "conv-filter", Role: "agent", Content: "<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>"},
 	}
 	if err := InsertMessages(ctx, db, messages); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
@@ -148,13 +151,13 @@ func TestGetConversationDetailFiltersMessages(t *testing.T) {
 		t.Fatalf("GetConversationDetail: %v", err)
 	}
 
-	// Only "real prompt" and "response" should survive.
-	if len(detail.Messages) != 2 {
+	// "real prompt", "response", and the agent command/system log should survive.
+	if len(detail.Messages) != 3 {
 		contents := make([]string, len(detail.Messages))
 		for i, m := range detail.Messages {
 			contents[i] = m.Content
 		}
-		t.Fatalf("got %d messages %v, want 2", len(detail.Messages), contents)
+		t.Fatalf("got %d messages %v, want 3", len(detail.Messages), contents)
 	}
 }
 

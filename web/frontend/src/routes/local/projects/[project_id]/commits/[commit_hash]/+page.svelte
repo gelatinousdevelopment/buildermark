@@ -40,23 +40,19 @@
 	);
 	let collapsedDiffPaths: string[] = $state([]);
 
-	let allExpanded = $derived.by(() => {
+	let allMessagesExpanded = $derived.by(() => {
 		if (!detail) return false;
-		const allMsgsExpanded =
-			detail.messages.length === 0 ||
-			detail.messages.every((m) => expandedMessageIds.includes(m.id));
-		const allDiffsExpanded = collapsedDiffPaths.length === 0;
-		return allMsgsExpanded && allDiffsExpanded;
+		return (
+			detail.messages.length > 0 && detail.messages.every((m) => expandedMessageIds.includes(m.id))
+		);
 	});
 
-	function toggleExpandAll() {
+	function toggleExpandAllMessages() {
 		if (!detail) return;
-		if (allExpanded) {
+		if (allMessagesExpanded) {
 			expandedMessageIds = [];
-			collapsedDiffPaths = renderableDiffFiles.map((f) => f.path);
 		} else {
 			expandedMessageIds = detail.messages.map((m) => m.id);
-			collapsedDiffPaths = [];
 		}
 	}
 
@@ -265,8 +261,8 @@
 
 	<div class="section-header">
 		<h3>Matched Messages</h3>
-		<button class="btn-expand-all" onclick={toggleExpandAll}>
-			{allExpanded ? 'Collapse All' : 'Expand All'}
+		<button class="btn-expand-all" onclick={toggleExpandAllMessages}>
+			{allMessagesExpanded ? 'Collapse All' : 'Expand All'}
 		</button>
 	</div>
 	{#if detail.messages.length === 0}

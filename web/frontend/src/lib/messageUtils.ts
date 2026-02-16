@@ -58,6 +58,30 @@ export function messageSummary(message: MessageRead): string {
 	return line.length > 120 ? `${line.slice(0, 117)}...` : line;
 }
 
+export function formatDuration(ms: number): string {
+	const seconds = Math.round(ms / 1000);
+	if (seconds < 60) return `${seconds}s`;
+	const minutes = Math.floor(seconds / 60);
+	const remainingSeconds = seconds % 60;
+	if (minutes < 60) {
+		return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+	}
+	const hours = Math.floor(minutes / 60);
+	const remainingMinutes = minutes % 60;
+	return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+export function groupTimeSpan(messages: MessageRead[]): number {
+	if (messages.length < 2) return 0;
+	let min = messages[0].timestamp;
+	let max = messages[0].timestamp;
+	for (const m of messages) {
+		if (m.timestamp < min) min = m.timestamp;
+		if (m.timestamp > max) max = m.timestamp;
+	}
+	return max - min;
+}
+
 export function groupModelLabel(messages: MessageRead[]): string {
 	const models = new Set<string>();
 	for (const message of messages) {

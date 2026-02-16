@@ -183,7 +183,7 @@
 	{:else}
 		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
 			{#if item.kind === 'message' && isUserPromptMessage(item.message)}
-				<div class="message">
+				<div class="message" data-message-id={item.message.id}>
 					<UserPromptMessageCard message={item.message} />
 				</div>
 			{:else if item.kind === 'message' && isDiffMessage(item.message)}
@@ -206,6 +206,7 @@
 				>
 					<DiffMessageCard
 						timestamp={item.message.timestamp}
+						role={item.message.role}
 						model={messageModel(item.message)}
 						content={item.message.content}
 						expanded={diffExpanded}

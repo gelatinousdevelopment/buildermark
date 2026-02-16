@@ -9,6 +9,15 @@ import (
 )
 
 var pastedTextRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
+var hiddenMessagePrefixes = []string{
+	"<command-message>",
+	"<command-name>",
+	"<command-args>",
+	"<local-command",
+	"<system-reminder>",
+	"<user-prompt-submit-hook>",
+	"[Request interrupted",
+}
 
 // Conversation represents a row in the conversations table.
 type Conversation struct {
@@ -156,17 +165,14 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	}
 
 	// Filter messages: remove matched /zrate messages, empty content,
-	// [user] markers, <command-message> tags, and /clear or /new commands.
+	// system/meta command markers, and /clear or /new commands.
 	filtered := make([]MessageRead, 0, len(c.Messages))
 	for _, msg := range c.Messages {
 		if matchedMessageIDs[msg.ID] {
 			continue
 		}
 		trimmed := strings.TrimSpace(msg.Content)
-		if trimmed == "" || trimmed == "[user]" {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "<command-message>") {
+		if shouldHideMessageContent(msg.Role, trimmed) {
 			continue
 		}
 		if msg.Role == "user" && (trimmed == "/clear" || trimmed == "/new") {
@@ -187,6 +193,21 @@ func abs64(x int64) int64 {
 		return -x
 	}
 	return x
+}
+
+func shouldHideMessageContent(role, trimmed string) bool {
+	if trimmed == "" || trimmed == "[user]" {
+		return true
+	}
+	if role != "user" {
+		return false
+	}
+	for _, prefix := range hiddenMessagePrefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // UntitledConversation is a conversation with an empty title, joined with its project path.

@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { isDiffMessage, messageModel, groupModelLabel } from '$lib/messageUtils';
+	import {
+		isDiffMessage,
+		messageModel,
+		groupModelLabel,
+		groupTimeSpan,
+		formatDuration
+	} from '$lib/messageUtils';
 	import type { MessageRead } from '$lib/types';
 	import type { SvelteSet } from 'svelte/reactivity';
 	import DiffMessageCard from './DiffMessageCard.svelte';
@@ -15,6 +21,8 @@
 	}
 
 	let { messages, expanded, expandedMessages, onToggleMessage, onToggle }: Props = $props();
+
+	let timeSpan = $derived(groupTimeSpan(messages));
 
 	function handleKeydown(e: KeyboardEvent, id: string) {
 		if (e.key === 'Enter' || e.key === ' ') {
@@ -46,7 +54,8 @@
 >
 	<strong
 		>{messages.length}
-		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(messages)}</strong
+		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(messages)}{#if timeSpan > 0}
+			&nbsp({formatDuration(timeSpan)}){/if}</strong
 	>
 </div>
 {#if expanded}
@@ -72,6 +81,7 @@
 				>
 					<DiffMessageCard
 						timestamp={logMessage.timestamp}
+						role={logMessage.role}
 						model={messageModel(logMessage)}
 						content={logMessage.content}
 						expanded={logExpanded}
