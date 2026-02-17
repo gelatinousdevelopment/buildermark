@@ -131,21 +131,29 @@
 		gap: 0.5rem;
 		padding: 0.15rem 0.3rem;
 		border: 1px solid transparent;
+		border-radius: 5px;
+		margin: -1px;
 	}
 
-	.log-group-header-clickable {
+	.log-group-header strong {
+		color: #828282;
+		font-size: 0.9rem;
+		font-weight: normal;
+	}
+
+	.log-group-header.log-group-header-clickable {
 		cursor: pointer;
-		border-radius: 3px;
 		border: 1px solid transparent;
 		/*margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);*/
 	}
 
-	.log-group-header-clickable:hover {
+	.log-group-header.log-group-header-clickable:hover {
 		background: var(--accent-color-ultralight);
 		border-color: var(--accent-color);
+		color: var(--accent-color);
 	}
 
-	.log-group-header-clickable:hover :global(strong) {
+	.log-group-header.log-group-header-clickable strong {
 		color: var(--accent-color);
 	}
 

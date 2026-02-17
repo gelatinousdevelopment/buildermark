@@ -357,20 +357,16 @@
 
 	.log-group {
 		background: none;
-		border: none;
+		border: 1px solid transparent;
 		margin-left: 1rem;
-		padding: 0.3rem;
+		padding: 0;
 		width: fit-content;
-	}
-
-	.log-group :global(.log-group-header strong) {
-		color: #828282;
-		font-size: 0.9rem;
-		font-weight: normal;
+		border-radius: 5px;
 	}
 
 	.log-group.message-collapsed:hover {
 		background: var(--accent-color-ultralight);
+		border: 1px solid var(--accent-color);
 	}
 
 	.log-group.message-collapsed:hover :global(.log-group-header strong) {
