@@ -150,6 +150,13 @@ type diffToken struct {
 	Chars int
 }
 
+type tokenSource struct {
+	msgIdx   int
+	tokenPos int
+}
+
+const maxFormattingWindowLines = 5
+
 func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request) {
 	projects, err := db.ListProjects(r.Context(), s.DB, false)
 	if err != nil {
@@ -860,7 +867,10 @@ func attributeCommitToMessages(
 ) ([]commitContributionMessage, int, int, map[string]commitFileCoverage, map[string]int) {
 	matchedLines := 0
 	matchedChars := 0
-	tokenSources := make(map[string][]int)
+	tokenSources := make(map[string][]tokenSource)
+	messageTokensByPath := make(map[int]map[string][]int)
+	messageTokenUsed := make(map[int][]bool)
+	commitMatched := make([]bool, len(commitTokens))
 	// Keep a full multiset of normalized message lines for copied-file detection.
 	// This must not be decremented by exact path matches, otherwise copied files
 	// can be severely under-attributed when the same lines also appear elsewhere.
@@ -869,17 +879,23 @@ func attributeCommitToMessages(
 		if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
 			continue
 		}
-		for _, tok := range msg.Tokens {
-			tokenSources[tok.Key] = append(tokenSources[tok.Key], i)
+		pathTokens := make(map[string][]int)
+		messageTokenUsed[i] = make([]bool, len(msg.Tokens))
+		for pos, tok := range msg.Tokens {
+			tokenSources[tok.Key] = append(tokenSources[tok.Key], tokenSource{msgIdx: i, tokenPos: pos})
+			if tok.Path != "" {
+				pathTokens[tok.Path] = append(pathTokens[tok.Path], pos)
+			}
 			if tok.Norm != "" {
 				normSources[tok.Norm]++
 			}
 		}
+		messageTokensByPath[i] = pathTokens
 	}
 
 	contribByIndex := make(map[int]*commitContributionMessage)
 	fileCoverageByPath := make(map[string]commitFileCoverage)
-	for _, tok := range commitTokens {
+	for tokIdx, tok := range commitTokens {
 		path := tok.Path
 		if path == "" {
 			path = "(unknown)"
@@ -893,16 +909,18 @@ func attributeCommitToMessages(
 			fileCoverageByPath[path] = fileCov
 			continue
 		}
-		msgIdx := sources[0]
+		source := sources[0]
 		tokenSources[tok.Key] = sources[1:]
+		messageTokenUsed[source.msgIdx][source.tokenPos] = true
+		commitMatched[tokIdx] = true
 
 		matchedLines++
 		matchedChars += tok.Chars
 		fileCov.Removed++
 		fileCoverageByPath[path] = fileCov
-		contrib := contribByIndex[msgIdx]
+		contrib := contribByIndex[source.msgIdx]
 		if contrib == nil {
-			msg := messages[msgIdx]
+			msg := messages[source.msgIdx]
 			contrib = &commitContributionMessage{
 				ID:                msg.ID,
 				Timestamp:         msg.Timestamp,
@@ -912,10 +930,104 @@ func attributeCommitToMessages(
 				Model:             msg.Model,
 				Content:           msg.Content,
 			}
-			contribByIndex[msgIdx] = contrib
+			contribByIndex[source.msgIdx] = contrib
 		}
 		contrib.LinesMatched++
 		contrib.CharsMatched += tok.Chars
+	}
+
+	// Second pass: recover attribution for formatting-only changes that alter
+	// line breaks. We compare normalized windows (up to 5 lines on either side)
+	// within the same file path and allow different line counts when the joined
+	// normalized content is identical.
+	commitByPath := make(map[string][]int)
+	for i, tok := range commitTokens {
+		if tok.Path == "" || tok.Norm == "" || commitMatched[i] {
+			continue
+		}
+		commitByPath[tok.Path] = append(commitByPath[tok.Path], i)
+	}
+
+	for path, indices := range commitByPath {
+		for cursor := 0; cursor < len(indices); {
+			matchedWindow := false
+			maxCommitWindow := maxFormattingWindowLines
+			if remaining := len(indices) - cursor; remaining < maxCommitWindow {
+				maxCommitWindow = remaining
+			}
+
+			for commitWindow := maxCommitWindow; commitWindow >= 1 && !matchedWindow; commitWindow-- {
+				commitNorm := concatCommitNorms(commitTokens, indices[cursor:cursor+commitWindow])
+				if commitNorm == "" {
+					continue
+				}
+
+				for msgIdx, msg := range messages {
+					positions := messageTokensByPath[msgIdx][path]
+					if len(positions) == 0 {
+						continue
+					}
+					maxMessageWindow := maxFormattingWindowLines
+					if len(positions) < maxMessageWindow {
+						maxMessageWindow = len(positions)
+					}
+					for messageWindow := 1; messageWindow <= maxMessageWindow && !matchedWindow; messageWindow++ {
+						for start := 0; start+messageWindow <= len(positions); start++ {
+							windowPositions := positions[start : start+messageWindow]
+							if !messageWindowAvailable(messageTokenUsed[msgIdx], windowPositions) {
+								continue
+							}
+							if concatMessageNorms(msg.Tokens, windowPositions) != commitNorm {
+								continue
+							}
+
+							for _, idx := range indices[cursor : cursor+commitWindow] {
+								commitMatched[idx] = true
+								matchedLines++
+								matchedChars += commitTokens[idx].Chars
+								fileCov := fileCoverageByPath[path]
+								fileCov.Path = path
+								fileCov.Removed++
+								fileCoverageByPath[path] = fileCov
+							}
+
+							for _, pos := range windowPositions {
+								messageTokenUsed[msgIdx][pos] = true
+							}
+
+							contrib := contribByIndex[msgIdx]
+							if contrib == nil {
+								contrib = &commitContributionMessage{
+									ID:                msg.ID,
+									Timestamp:         msg.Timestamp,
+									ConversationID:    msg.ConversationID,
+									ConversationTitle: msg.ConversationTitle,
+									Agent:             msg.Agent,
+									Model:             msg.Model,
+									Content:           msg.Content,
+								}
+								contribByIndex[msgIdx] = contrib
+							}
+							for _, idx := range indices[cursor : cursor+commitWindow] {
+								contrib.LinesMatched++
+								contrib.CharsMatched += commitTokens[idx].Chars
+							}
+
+							cursor += commitWindow
+							matchedWindow = true
+							break
+						}
+					}
+					if matchedWindow {
+						break
+					}
+				}
+			}
+
+			if !matchedWindow {
+				cursor++
+			}
+		}
 	}
 
 	indices := make([]int, 0, len(contribByIndex))
@@ -930,6 +1042,45 @@ func attributeCommitToMessages(
 	}
 
 	return out, matchedLines, matchedChars, fileCoverageByPath, normSources
+}
+
+func concatCommitNorms(tokens []diffToken, indices []int) string {
+	if len(indices) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, idx := range indices {
+		norm := tokens[idx].Norm
+		if norm == "" {
+			return ""
+		}
+		b.WriteString(norm)
+	}
+	return b.String()
+}
+
+func concatMessageNorms(tokens []diffToken, positions []int) string {
+	if len(positions) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, pos := range positions {
+		norm := tokens[pos].Norm
+		if norm == "" {
+			return ""
+		}
+		b.WriteString(norm)
+	}
+	return b.String()
+}
+
+func messageWindowAvailable(used []bool, positions []int) bool {
+	for _, pos := range positions {
+		if used[pos] {
+			return false
+		}
+	}
+	return true
 }
 
 func detectModelFromJSON(rawJSON string) string {
