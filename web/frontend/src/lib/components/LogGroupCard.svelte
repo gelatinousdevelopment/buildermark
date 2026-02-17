@@ -21,8 +21,14 @@
 		onToggle?: () => void;
 	}
 
-	let { messages, agent = 'agent', expanded, expandedMessages, onToggleMessage, onToggle }: Props =
-		$props();
+	let {
+		messages,
+		agent = 'agent',
+		expanded,
+		expandedMessages,
+		onToggleMessage,
+		onToggle
+	}: Props = $props();
 
 	let timeSpan = $derived(groupTimeSpan(messages));
 
@@ -56,7 +62,10 @@
 >
 	<strong
 		>{messages.length}
-		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(messages, agent)}{#if timeSpan > 0}
+		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(
+			messages,
+			agent
+		)}{#if timeSpan > 0}
 			&nbsp({formatDuration(timeSpan)}){/if}</strong
 	>
 </div>

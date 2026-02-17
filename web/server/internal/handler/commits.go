@@ -21,7 +21,6 @@ import (
 )
 
 const (
-	mainBranch              = "main"
 	workingCopyCommitHash   = "working-copy"
 	defaultMessageWindowMs  = int64(24 * 60 * 60 * 1000)
 	commitWindowLookaheadMs = int64(5 * 60 * 1000)
@@ -31,6 +30,7 @@ const (
 
 type projectCommitsResponse struct {
 	Branch       string                  `json:"branch"`
+	Branches     []string                `json:"branches"`
 	CurrentUser  string                  `json:"currentUser"`
 	CurrentEmail string                  `json:"currentEmail"`
 	Summary      projectCommitSummary    `json:"summary"`
@@ -66,6 +66,7 @@ type projectCommitCoverage struct {
 
 type projectCommitDetailResponse struct {
 	Branch   string                      `json:"branch"`
+	Branches []string                    `json:"branches"`
 	Commit   projectCommitCoverage       `json:"commit"`
 	Diff     string                      `json:"diff"`
 	Files    []commitFileCoverage        `json:"files"`
@@ -74,6 +75,7 @@ type projectCommitDetailResponse struct {
 
 type projectCommitPageResponse struct {
 	Branch       string                  `json:"branch"`
+	Branches     []string                `json:"branches"`
 	CurrentUser  string                  `json:"currentUser"`
 	CurrentEmail string                  `json:"currentEmail"`
 	Project      db.Project              `json:"project"`
@@ -158,6 +160,10 @@ type tokenSource struct {
 const maxFormattingWindowLines = 5
 
 func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request) {
+	branch := strings.TrimSpace(r.URL.Query().Get("branch"))
+	if branch == "" {
+		branch = "main"
+	}
 	projects, err := db.ListProjects(r.Context(), s.DB, false)
 	if err != nil {
 		log.Printf("error listing projects for commits: %v", err)
@@ -179,6 +185,11 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 		}
 		projectMap[repoProject.ID] = repoProject
 
+		defaultBranch := ensureProjectDefaultBranch(r.Context(), s.DB, repoProject)
+		if defaultBranch != "" && branch == "main" {
+			branch = defaultBranch
+		}
+
 		identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 		if err != nil {
 			continue
@@ -189,12 +200,12 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 		}
 
 		// Trigger default ingestion if needed.
-		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity); err != nil {
+		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
 			log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
 		}
 
 		// Read commits from database.
-		dbCommits, err := db.ListCommitsByProjectIDs(r.Context(), s.DB, projectIDs(group))
+		dbCommits, err := db.ListCommitsByProjectIDs(r.Context(), s.DB, projectIDs(group), branch)
 		if err != nil {
 			log.Printf("error listing db commits for %s: %v", repoProject.Path, err)
 			continue
@@ -217,7 +228,8 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 
 	summary := summarizeCommitCoverage(all)
 	writeSuccess(w, http.StatusOK, projectCommitsResponse{
-		Branch:       mainBranch,
+		Branch:       branch,
+		Branches:     []string{branch},
 		CurrentUser:  currentUser,
 		CurrentEmail: currentEmail,
 		Summary:      summary,
@@ -226,6 +238,7 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) {
+	branch := strings.TrimSpace(r.URL.Query().Get("branch"))
 	projectID := strings.TrimSpace(r.PathValue("projectId"))
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project id is required")
@@ -247,6 +260,12 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, "project not found")
 		return
 	}
+	if branch == "" {
+		branch = strings.TrimSpace(project.DefaultBranch)
+		if branch == "" {
+			branch = "main"
+		}
+	}
 
 	groups, err := listAllProjectGroups(r.Context(), s.DB)
 	if err != nil {
@@ -267,13 +286,19 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	defaultBranch := ensureProjectDefaultBranch(r.Context(), s.DB, repoProject)
+	if branch == "" && defaultBranch != "" {
+		branch = defaultBranch
+	}
+	branches, _ := listRepoBranches(r.Context(), repoProject.Path, defaultBranch)
+
 	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "git identity not configured for project")
 		return
 	}
 
-	commits, err := listCommitsByIdentity(r.Context(), repoProject.Path, identity)
+	commits, err := listCommitsByIdentity(r.Context(), repoProject.Path, branch, identity)
 	if err != nil {
 		log.Printf("error listing commits for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -296,7 +321,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
-			Branch:   mainBranch,
+			Branch:   branch,
 			Commit:   coverage,
 			Diff:     diffText,
 			Files:    files,
@@ -306,7 +331,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Try to load from database first.
-	dbCommit, err := db.GetCommitByHash(r.Context(), s.DB, repoProject.ID, commitHash)
+	dbCommit, err := db.GetCommitByHash(r.Context(), s.DB, repoProject.ID, branch, commitHash)
 	if err != nil {
 		log.Printf("error checking db for commit %s: %v", commitHash, err)
 	}
@@ -408,7 +433,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	files := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
-		Branch: mainBranch,
+		Branch:   branch,
+		Branches: branches,
 		Commit: projectCommitCoverage{
 			ProjectID:        project.ID,
 			ProjectLabel:     project.Label,
@@ -431,6 +457,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *http.Request) {
+	branch := strings.TrimSpace(r.URL.Query().Get("branch"))
 	projectID := strings.TrimSpace(r.PathValue("projectId"))
 	if projectID == "" {
 		writeError(w, http.StatusBadRequest, "project id is required")
@@ -448,6 +475,12 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	if project == nil {
 		writeError(w, http.StatusNotFound, "project not found")
 		return
+	}
+	if branch == "" {
+		branch = strings.TrimSpace(project.DefaultBranch)
+		if branch == "" {
+			branch = "main"
+		}
 	}
 
 	groups, err := listAllProjectGroups(r.Context(), s.DB)
@@ -467,6 +500,12 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusNotFound, "repository for project not found")
 		return
 	}
+	defaultBranch := ensureProjectDefaultBranch(r.Context(), s.DB, repoProject)
+	if branch == "" && defaultBranch != "" {
+		branch = defaultBranch
+	}
+	branches, _ := listRepoBranches(r.Context(), repoProject.Path, defaultBranch)
+
 	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "git identity not configured for project")
@@ -474,12 +513,12 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	// Trigger default ingestion if needed (first page load).
-	if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity); err != nil {
+	if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
 		log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
 	}
 
 	// Read commits from database.
-	total, err := db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID)
+	total, err := db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID, branch)
 	if err != nil {
 		log.Printf("error counting commits for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to count commits")
@@ -498,7 +537,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		offset = 0
 	}
 
-	dbCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, commitsPageSize, offset)
+	dbCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, branch, commitsPageSize, offset)
 	if err != nil {
 		log.Printf("error listing commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -512,7 +551,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	// Compute summary from all DB commits.
-	allDBCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, total, 0)
+	allDBCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, branch, total, 0)
 	if err != nil {
 		log.Printf("error listing all commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -526,7 +565,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	// Add working copy on page 1.
 	if page == 1 {
 		ignorePatterns := groupIgnoreDiffPatterns(group)
-		gitCommits, _ := listCommitsByIdentity(r.Context(), repoProject.Path, identity)
+		gitCommits, _ := listCommitsByIdentity(r.Context(), repoProject.Path, branch, identity)
 		workingCopy, ok := computeWorkingCopyCoverage(r.Context(), s.DB, repoProject, projectIDs(group), ignorePatterns, gitCommits)
 		if ok {
 			paged = append([]projectCommitCoverage{workingCopy}, paged...)
@@ -534,7 +573,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	writeSuccess(w, http.StatusOK, projectCommitPageResponse{
-		Branch:       mainBranch,
+		Branch:       branch,
+		Branches:     branches,
 		CurrentUser:  identity.Name,
 		CurrentEmail: identity.Email,
 		Project:      *project,
@@ -593,11 +633,12 @@ func findProjectGroupByProjectID(groups []projectGroup, projectID string) (proje
 
 func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*db.Project, error) {
 	var p db.Project
-	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(
+	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, default_branch, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(
 		&p.ID,
 		&p.Path,
 		&p.Label,
 		&p.GitID,
+		&p.DefaultBranch,
 		&p.Ignored,
 		&p.IgnoreDiffPaths,
 		&p.IgnoreDefaultDiffPaths,
@@ -681,9 +722,9 @@ func resolveGitIdentity(ctx context.Context, path string) (gitIdentity, error) {
 	return id, nil
 }
 
-func listCommitsByIdentity(ctx context.Context, path string, identity gitIdentity) ([]gitCommit, error) {
+func listCommitsByIdentity(ctx context.Context, path, branch string, identity gitIdentity) ([]gitCommit, error) {
 	out, err := runGit(ctx, path,
-		"log", mainBranch,
+		"log", branch,
 		"--pretty=format:%H%x1f%an%x1f%ae%x1f%ct%x1f%s%x1e",
 		"--reverse",
 		fmt.Sprintf("--max-count=%d", maxCommitsPerProject),

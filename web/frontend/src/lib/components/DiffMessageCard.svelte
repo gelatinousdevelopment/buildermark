@@ -206,6 +206,7 @@
 	</div>
 {/if}
 {#if linkHref && linkLabel}
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 	<div class="conversation-link"><a href={linkHref}>{linkLabel}</a></div>
 {/if}
 {#if expanded}

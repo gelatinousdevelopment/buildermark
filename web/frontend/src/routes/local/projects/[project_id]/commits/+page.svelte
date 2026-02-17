@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
@@ -13,6 +14,7 @@
 	let loadMoreCount = $state(20);
 	let loadingMore = $state(false);
 	let loadMoreError: string | null = $state(null);
+	let selectedBranch = $state('');
 
 	function percent(value: number): string {
 		return `${value.toFixed(1)}%`;
@@ -25,14 +27,15 @@
 	async function load(pageNum: number) {
 		const projectId = page.params.project_id;
 		if (!projectId) throw new Error('Missing project ID');
-		data = await listProjectCommitsPage(projectId, pageNum);
+		data = await listProjectCommitsPage(projectId, pageNum, selectedBranch);
+		if (!selectedBranch && data.branch) selectedBranch = data.branch;
 	}
 
 	async function loadIngestionStatus() {
 		const projectId = page.params.project_id;
 		if (!projectId) return;
 		try {
-			ingestionStatus = await getCommitIngestionStatus(projectId);
+			ingestionStatus = await getCommitIngestionStatus(projectId, selectedBranch);
 		} catch {
 			// Non-critical, just hide the load more button.
 			ingestionStatus = null;
@@ -59,7 +62,7 @@
 		loadingMore = true;
 		loadMoreError = null;
 		try {
-			await ingestMoreCommits(projectId, loadMoreCount);
+			await ingestMoreCommits(projectId, loadMoreCount, selectedBranch);
 			// Reload current page and status.
 			await load(data?.pagination.page ?? 1);
 			await loadIngestionStatus();
@@ -109,6 +112,15 @@
 		</div>
 	</section>
 
+	<div class="branch-picker">
+		<label for="branch">Branch</label>
+		<select id="branch" bind:value={selectedBranch} onchange={() => goToPage(1)}>
+			{#each data.branches as b (b)}
+				<option value={b}>{b}</option>
+			{/each}
+		</select>
+	</div>
+
 	<div class="summary-bar">
 		<AgentPercentageBar agentPercent={data.summary.linePercent} showManual={true} />
 	</div>
@@ -129,14 +141,19 @@
 					<td>{formatTime(c.authoredAtUnixMs)}</td>
 					<td>
 						<div>
-							<a
-								href={resolve('/local/projects/[project_id]/commits/[commit_hash]', {
-									project_id: c.projectId,
-									commit_hash: c.commitHash
-								})}
+							<button
+								type="button"
+								class="link-button"
+								onclick={() =>
+									goto(
+										resolve('/local/projects/[project_id]/commits/[commit_hash]', {
+											project_id: c.projectId,
+											commit_hash: c.commitHash
+										})
+									)}
 							>
 								{c.subject || c.commitHash.slice(0, 8)}
-							</a>
+							</button>
 						</div>
 						{#if !c.workingCopy}
 							<div class="commit-meta">{c.commitHash.slice(0, 12)}</div>
@@ -144,7 +161,9 @@
 					</td>
 					<td>{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
 					<td>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td>
-					<td class="bar-col"><AgentPercentageBar agentPercent={c.linePercent} showKey={false} /></td>
+					<td class="bar-col"
+						><AgentPercentageBar agentPercent={c.linePercent} showKey={false} /></td
+					>
 				</tr>
 			{/each}
 		</tbody>
@@ -232,6 +251,16 @@
 		margin-top: 0.2rem;
 		font-size: 0.8rem;
 		color: #777;
+	}
+
+	.link-button {
+		background: none;
+		border: 0;
+		padding: 0;
+		color: var(--link-color, #1f4cd1);
+		cursor: pointer;
+		font: inherit;
+		text-decoration: underline;
 	}
 
 	.commit-meta {

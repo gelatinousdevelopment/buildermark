@@ -104,7 +104,7 @@
 		</div>
 		{#if showDefaultPaths}
 			<ul class="default-paths-list">
-				{#each defaultPaths as p}
+				{#each defaultPaths as p (p)}
 					<li><code>{p}</code></li>
 				{/each}
 			</ul>
