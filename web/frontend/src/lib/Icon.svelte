@@ -1,5 +1,8 @@
 <script lang="ts">
 	import gridLine2Svg from '$lib/icons/gridLine2.svg?raw';
+	import githubSvg from '$lib/icons/github.svg?raw';
+	import chevronRightSvg from '$lib/icons/chevronRight.svg?raw';
+	import wrenchSvg from '$lib/icons/wrench.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -7,7 +10,10 @@
 	export let fillColor: string | undefined = undefined;
 
 	const icons: { [key in Icon]: string } = {
-		gridLine2: gridLine2Svg
+		gridLine2: gridLine2Svg,
+		github: githubSvg,
+		chevronRight: chevronRightSvg,
+		wrench: wrenchSvg
 	};
 </script>
 

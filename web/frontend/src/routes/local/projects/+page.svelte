@@ -29,7 +29,6 @@
 {:else if projects.length === 0}
 	<p>No tracked projects with git IDs found.</p>
 {:else}
-	<h2>Projects</h2>
 	<table class="data">
 		<thead>
 			<tr>
