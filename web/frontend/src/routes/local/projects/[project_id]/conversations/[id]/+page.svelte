@@ -206,7 +206,7 @@
 				>
 					<DiffMessageCard
 						timestamp={item.message.timestamp}
-						role={item.message.role}
+						role={item.message.role === 'agent' ? conversation.agent : item.message.role}
 						model={messageModel(item.message)}
 						content={item.message.content}
 						expanded={diffExpanded}
@@ -237,6 +237,7 @@
 				>
 					<LogGroupCard
 						messages={item.messages}
+						agent={conversation.agent}
 						expanded={groupExpanded}
 						{expandedMessages}
 						onToggleMessage={toggleExpanded}

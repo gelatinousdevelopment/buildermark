@@ -33,7 +33,9 @@ export function isDiffMessage(message: MessageRead): boolean {
 }
 
 export function messageModel(message: MessageRead): string {
-	return typeof message.model === 'string' ? message.model.trim() : '';
+	const model = typeof message.model === 'string' ? message.model.trim() : '';
+	if (model) return model;
+	return detectModelFromRawJson(message.rawJson);
 }
 
 export function messageTypeLabel(message: MessageRead): string {
@@ -82,12 +84,42 @@ export function groupTimeSpan(messages: MessageRead[]): number {
 	return max - min;
 }
 
-export function groupModelLabel(messages: MessageRead[]): string {
+export function groupModelLabel(messages: MessageRead[], fallbackAgent = 'agent'): string {
 	const models = new Set<string>();
 	for (const message of messages) {
 		const model = messageModel(message);
 		if (model) models.add(model);
 	}
-	if (models.size === 1) return Array.from(models)[0] ?? 'agent';
-	return 'agent';
+	if (models.size === 1) return Array.from(models)[0] ?? fallbackAgent;
+	return fallbackAgent;
+}
+
+function detectModelFromRawJson(rawJson: string): string {
+	try {
+		const parsed = JSON.parse(rawJson) as unknown;
+		return findModel(parsed);
+	} catch {
+		return '';
+	}
+}
+
+function findModel(value: unknown): string {
+	if (!value || typeof value !== 'object') return '';
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			const model = findModel(item);
+			if (model) return model;
+		}
+		return '';
+	}
+	const map = value as Record<string, unknown>;
+	for (const key of ['model', 'modelName', 'model_name', 'model_slug', 'modelSlug']) {
+		const model = typeof map[key] === 'string' ? map[key].trim() : '';
+		if (model) return model;
+	}
+	for (const nested of Object.values(map)) {
+		const model = findModel(nested);
+		if (model) return model;
+	}
+	return '';
 }

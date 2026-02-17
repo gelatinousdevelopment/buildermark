@@ -13,6 +13,7 @@
 
 	interface Props {
 		messages: MessageRead[];
+		agent?: string;
 		expanded: boolean;
 		expandedMessages: SvelteSet<string>;
 		onToggleMessage: (id: string) => void;
@@ -20,7 +21,8 @@
 		onToggle?: () => void;
 	}
 
-	let { messages, expanded, expandedMessages, onToggleMessage, onToggle }: Props = $props();
+	let { messages, agent = 'agent', expanded, expandedMessages, onToggleMessage, onToggle }: Props =
+		$props();
 
 	let timeSpan = $derived(groupTimeSpan(messages));
 
@@ -54,7 +56,7 @@
 >
 	<strong
 		>{messages.length}
-		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(messages)}{#if timeSpan > 0}
+		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(messages, agent)}{#if timeSpan > 0}
 			&nbsp({formatDuration(timeSpan)}){/if}</strong
 	>
 </div>
@@ -81,7 +83,7 @@
 				>
 					<DiffMessageCard
 						timestamp={logMessage.timestamp}
-						role={logMessage.role}
+						role={logMessage.role === 'agent' ? agent : logMessage.role}
 						model={messageModel(logMessage)}
 						content={logMessage.content}
 						expanded={logExpanded}

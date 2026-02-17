@@ -135,6 +135,7 @@ func TestGetConversationDetailFiltersMessages(t *testing.T) {
 		{Timestamp: 5000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[user]"},
 		{Timestamp: 6000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "<command-message>something</command-message>"},
 		{Timestamp: 6500, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>"},
+		{Timestamp: 6750, ProjectID: pid, ConversationID: "conv-filter", Role: "User", Content: "<command-name source=\"shell\">/clear</command-name>"},
 		{Timestamp: 7000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "/clear"},
 		{Timestamp: 8000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "/new"},
 		{Timestamp: 9000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[Pasted text #1 from clipboard]"},

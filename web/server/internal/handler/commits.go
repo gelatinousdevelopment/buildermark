@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -93,6 +94,7 @@ type commitContributionMessage struct {
 	Timestamp         int64  `json:"timestamp"`
 	ConversationID    string `json:"conversationId"`
 	ConversationTitle string `json:"conversationTitle"`
+	Agent             string `json:"agent"`
 	Model             string `json:"model"`
 	Content           string `json:"content"`
 	LinesMatched      int    `json:"linesMatched"`
@@ -135,6 +137,7 @@ type messageDiff struct {
 	Timestamp         int64
 	ConversationID    string
 	ConversationTitle string
+	Agent             string
 	Model             string
 	Content           string
 	Tokens            []diffToken
@@ -789,7 +792,7 @@ func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs [
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
 	query := fmt.Sprintf(
-		`SELECT m.id, m.timestamp, m.conversation_id, c.title, m.model, m.content, m.raw_json
+		`SELECT m.id, m.timestamp, m.conversation_id, c.title, c.agent, m.model, m.content, m.raw_json
 		 FROM messages m
 		 JOIN conversations c ON c.id = m.conversation_id
 		 WHERE m.role = 'agent'
@@ -814,8 +817,11 @@ func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs [
 	for rows.Next() {
 		var m messageDiff
 		var rawJSON string
-		if err := rows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.ConversationTitle, &m.Model, &m.Content, &rawJSON); err != nil {
+		if err := rows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.ConversationTitle, &m.Agent, &m.Model, &m.Content, &rawJSON); err != nil {
 			return nil, fmt.Errorf("scan derived diff message: %w", err)
+		}
+		if strings.TrimSpace(m.Model) == "" {
+			m.Model = detectModelFromJSON(rawJSON)
 		}
 
 		diff, ok := agent.ExtractReliableDiff(m.Content)
@@ -902,6 +908,7 @@ func attributeCommitToMessages(
 				Timestamp:         msg.Timestamp,
 				ConversationID:    msg.ConversationID,
 				ConversationTitle: msg.ConversationTitle,
+				Agent:             msg.Agent,
 				Model:             msg.Model,
 				Content:           msg.Content,
 			}
@@ -923,6 +930,44 @@ func attributeCommitToMessages(
 	}
 
 	return out, matchedLines, matchedChars, fileCoverageByPath, normSources
+}
+
+func detectModelFromJSON(rawJSON string) string {
+	rawJSON = strings.TrimSpace(rawJSON)
+	if rawJSON == "" {
+		return ""
+	}
+	var v any
+	if err := json.Unmarshal([]byte(rawJSON), &v); err != nil {
+		return ""
+	}
+	return findModelInJSON(v)
+}
+
+func findModelInJSON(v any) string {
+	switch t := v.(type) {
+	case map[string]any:
+		for _, k := range []string{"model", "modelName", "model_name", "model_slug", "modelSlug"} {
+			if s, ok := t[k].(string); ok {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					return s
+				}
+			}
+		}
+		for _, nested := range t {
+			if m := findModelInJSON(nested); m != "" {
+				return m
+			}
+		}
+	case []any:
+		for _, item := range t {
+			if m := findModelInJSON(item); m != "" {
+				return m
+			}
+		}
+	}
+	return ""
 }
 
 func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {

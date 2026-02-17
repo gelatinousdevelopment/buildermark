@@ -10,9 +10,9 @@ import (
 
 var pastedTextRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 var hiddenMessagePrefixes = []string{
-	"<command-message>",
-	"<command-name>",
-	"<command-args>",
+	"<command-message",
+	"<command-name",
+	"<command-args",
 	"<local-command",
 	"<system-reminder>",
 	"<user-prompt-submit-hook>",
@@ -199,7 +199,7 @@ func shouldHideMessageContent(role, trimmed string) bool {
 	if trimmed == "" || trimmed == "[user]" {
 		return true
 	}
-	if role != "user" {
+	if strings.ToLower(strings.TrimSpace(role)) != "user" {
 		return false
 	}
 	for _, prefix := range hiddenMessagePrefixes {

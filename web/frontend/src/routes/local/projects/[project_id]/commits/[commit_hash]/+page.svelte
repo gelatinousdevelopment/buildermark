@@ -288,6 +288,7 @@
 			>
 				<DiffMessageCard
 					timestamp={message.timestamp}
+					role={message.agent || 'agent'}
 					model={message.model ?? ''}
 					content={message.content}
 					expanded={msgExpanded}

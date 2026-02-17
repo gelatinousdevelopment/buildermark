@@ -16,9 +16,10 @@
 - [x] Also filter out user messages that include the text like `[Pasted text #1 ...]`, but do a regex to allow for the number to change and any text where I wrote `...`. This is because the next user message has the full text expanded, so we don't need this ones that say pasted text.
 - [x] In the DiffMessageCard.svelte when there is only one file, hide the summary's DiffCount component
 - [x] Add "Expand All" button next to "Matched Messages" to expand all of the diffs on the commit detail page
-- [ ] Show the agent and model in the DiffMessageCard header
+- [x] Show the agent and model in the DiffMessageCard header
 - [x] Add time length of model/agent messages to "6 logs from agent", like "6 logs from agent over 30 seconds"
 - [x] The "Matched Messages" "Expand All" button should apply only to the Matched Messages list, not the stuff above it
+- [x] The mechanism in conversation.go to ignore user messages that start with "<command-name>" and other things doesn't seem to be working. For instance, message id `BecL-QoaOaq_V4F72FrRz` is appearing on http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03 when it shouldn't. Fix that filtering mechanism.
 
 - [ ] Are we incorrectly detecting some diffs, like the last diff on [ba9dc20a-7886-4abf-9fec-6101551c8d03](http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03), which appears to be replacing the full file instead of doing a diff. Should we do a diff ourselves, by importing the `[file-history-snapshot]` that is logged just before it?
 
@@ -26,7 +27,6 @@
 - [ ] Improve normalization of code (like code formatting) when comparing agent diffs to commit diffs
 - [ ] Is the go process continuously monitoring conversation logs and importing? I think it's not, at least for claude.
 
-- [ ] The mechanism in conversation.go to ignore user messages that start with "<command-name>" and other things doesn't seem to be working. For instance, message id `BecL-QoaOaq_V4F72FrRz` is appearing on http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03 when it shouldn't. Fix that filtering mechanism.
 
 ## Later
 

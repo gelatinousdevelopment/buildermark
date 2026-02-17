@@ -113,6 +113,7 @@ export interface ProjectCommitContributionMessage {
 	timestamp: number;
 	conversationId: string;
 	conversationTitle: string;
+	agent: string;
 	model: string;
 	content: string;
 	linesMatched: number;
