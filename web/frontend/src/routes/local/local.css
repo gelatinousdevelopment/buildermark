@@ -1,6 +1,9 @@
 :root {
 	--accent-color: #0066cc;
 	--accent-color-ultralight: #eff7ff;
+	--color-text: #444;
+	--color-divider: #e0e0e0;
+	--color-status-green: #55bb33;
 
 	/* Agent colors (known coding agents) */
 	--agent-color-claude: #e07b39;
@@ -17,40 +20,6 @@ body {
 	font-size: 14px;
 	margin: 0;
 	padding: 0;
-}
-
-/* Layout */
-
-.dashboard-header {
-	display: flex;
-	align-items: center;
-	gap: 1.5rem;
-	padding: 1rem 1.5rem;
-	border-bottom: 1px solid #e0e0e0;
-}
-
-.dashboard-header h1 {
-	margin: 0;
-	font-size: 1.25rem;
-}
-
-.dashboard-header nav {
-	display: flex;
-	gap: 1rem;
-}
-
-.dashboard-header nav a {
-	color: #555;
-	text-decoration: none;
-}
-
-.dashboard-header nav a:hover {
-	color: #000;
-}
-
-.dashboard-content {
-	padding: 1.5rem;
-	max-width: 1200px;
 }
 
 /* Reusable button */
