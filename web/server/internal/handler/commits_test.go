@@ -782,6 +782,47 @@ func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
 	}
 }
 
+func TestAttributeCommitToMessages_MatchesFormattingOnlyLineWraps(t *testing.T) {
+	commitTokens := []diffToken{
+		{Path: "src/app.js", Norm: "constresult=foo(bar,baz);", Key: "src/app.js\x1fconstresult=foo(bar,baz);", Chars: 25},
+		{Path: "src/reflow.js", Norm: "returnalpha+", Key: "src/reflow.js\x1freturnalpha+", Chars: 12},
+		{Path: "src/reflow.js", Norm: "beta+gamma;", Key: "src/reflow.js\x1fbeta+gamma;", Chars: 11},
+	}
+
+	messages := []messageDiff{
+		{
+			ID:        "m1",
+			Timestamp: 1000,
+			Tokens: []diffToken{
+				{Path: "src/app.js", Norm: "constresult=foo(", Key: "src/app.js\x1fconstresult=foo(", Chars: 16},
+				{Path: "src/app.js", Norm: "bar,baz);", Key: "src/app.js\x1fbar,baz);", Chars: 9},
+				{Path: "src/reflow.js", Norm: "returnalpha+beta+gamma;", Key: "src/reflow.js\x1freturnalpha+beta+gamma;", Chars: 23},
+			},
+		},
+	}
+
+	contrib, lines, chars, fileAgent, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	if lines != 3 {
+		t.Fatalf("matched lines = %d, want 3", lines)
+	}
+	if chars != 48 {
+		t.Fatalf("matched chars = %d, want 48", chars)
+	}
+	if len(contrib) != 1 {
+		t.Fatalf("contrib len = %d, want 1", len(contrib))
+	}
+	if contrib[0].LinesMatched != 3 {
+		t.Fatalf("contrib lines = %d, want 3", contrib[0].LinesMatched)
+	}
+
+	if fileAgent["src/app.js"].Removed != 1 {
+		t.Fatalf("src/app.js removed = %d, want 1", fileAgent["src/app.js"].Removed)
+	}
+	if fileAgent["src/reflow.js"].Removed != 2 {
+		t.Fatalf("src/reflow.js removed = %d, want 2", fileAgent["src/reflow.js"].Removed)
+	}
+}
+
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
