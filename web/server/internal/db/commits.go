@@ -24,8 +24,8 @@ type Commit struct {
 	CharsFromAgent int    `json:"charsFromAgent"`
 }
 
-// UpsertCommit inserts or updates a commit row. On conflict (same project_id + branch_name + commit_hash),
-// it updates the diff_content and coverage fields.
+// UpsertCommit inserts or updates a commit row. On conflict (same project_id + commit_hash),
+// it updates branch metadata, diff_content, and coverage fields.
 func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
 	if c.ID == "" {
 		c.ID = newID()
@@ -33,7 +33,8 @@ func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
 	_, err := db.ExecContext(ctx,
 		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(project_id, branch_name, commit_hash) DO UPDATE SET
+		 ON CONFLICT(project_id, commit_hash) DO UPDATE SET
+		   branch_name = excluded.branch_name,
 		   subject = excluded.subject,
 		   author_name = excluded.author_name,
 		   author_email = excluded.author_email,
@@ -66,7 +67,8 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 	stmt, err := tx.PrepareContext(ctx,
 		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(project_id, branch_name, commit_hash) DO UPDATE SET
+		 ON CONFLICT(project_id, commit_hash) DO UPDATE SET
+		   branch_name = excluded.branch_name,
 		   subject = excluded.subject,
 		   author_name = excluded.author_name,
 		   author_email = excluded.author_email,
