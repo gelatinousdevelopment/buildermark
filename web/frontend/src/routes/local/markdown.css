@@ -30,4 +30,8 @@
 .markdown-body code {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	font-size: 0.8em;
+	border: 1px solid #ddd;
+	background: #fafafa;
+	padding: 0.2rem 0.4rem;
+	border-radius: 5px;
 }

@@ -129,14 +129,15 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		padding: 0.15rem 0.3rem;
+		border: 1px solid transparent;
 	}
 
 	.log-group-header-clickable {
 		cursor: pointer;
 		border-radius: 3px;
-		padding: 0.15rem 0.3rem;
 		border: 1px solid transparent;
-		margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);
+		/*margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);*/
 	}
 
 	.log-group-header-clickable:hover {

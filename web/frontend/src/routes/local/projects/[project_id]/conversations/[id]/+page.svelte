@@ -183,7 +183,7 @@
 	{:else}
 		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
 			{#if item.kind === 'message' && isUserPromptMessage(item.message)}
-				<div class="message" data-message-id={item.message.id}>
+				<div class="message user-message" data-message-id={item.message.id}>
 					<UserPromptMessageCard message={item.message} />
 				</div>
 			{:else if item.kind === 'message' && isDiffMessage(item.message)}
@@ -287,15 +287,15 @@
 
 <style>
 	.message {
-		background: #fffff4;
+		background: #ffffff;
 		margin-bottom: 0.5rem;
-		padding: 0.75rem;
-		border: 1px solid #ddddaa;
-		border-radius: 4px;
+		padding: 0.6rem 1rem;
+		border: 1px solid #dddddd;
+		border-radius: 8px;
+		line-height: 1.4em;
 	}
 
 	.message-collapsed {
-		padding: 0.5rem 0.75rem;
 		background: #fafafa;
 		cursor: pointer;
 	}
@@ -303,6 +303,12 @@
 	.message-collapsed:hover {
 		border-color: var(--accent-color);
 		background: var(--accent-color-ultralight);
+	}
+
+	.message.user-message {
+		background: #ebfddd;
+		border: 1px solid #a8ef70;
+		color: #626262;
 	}
 
 	.models-summary {
