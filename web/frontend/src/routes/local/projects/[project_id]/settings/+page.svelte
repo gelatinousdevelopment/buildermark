@@ -9,26 +9,29 @@
 	import type { ProjectDetail } from '$lib/types';
 
 	const defaultPaths = [
-		'package-lock.json',
-		'yarn.lock',
-		'pnpm-lock.yaml',
-		'go.sum',
-		'Cargo.lock',
-		'Gemfile.lock',
-		'composer.lock',
-		'poetry.lock',
-		'Pipfile.lock',
-		'*.min.js',
-		'*.min.css',
-		'*.map',
 		'**/.git/**',
-		'**/node_modules/**',
-		'**/vendor/**',
-		'**/dist/**',
-		'**/build/**',
-		'**/__pycache__/**',
 		'**/.next/**',
-		'**/.nuxt/**'
+		'**/.nuxt/**',
+		'**/__pycache__/**',
+		'**/node_modules/**',
+		'*.map',
+		'*.min.css',
+		'*.min.js',
+		'bun.lockb',
+		'Cargo.lock',
+		'composer.lock',
+		'Gemfile.lock',
+		'go.sum',
+		'npm-shrinkwrap.json',
+		'package-lock.json',
+		'packages.lock.json',
+		'paket.lock',
+		'pdm.lock',
+		'Pipfile.lock',
+		'pnpm-lock.yaml',
+		'poetry.lock',
+		'poetry.lock',
+		'yarn.lock'
 	];
 
 	let project: ProjectDetail | null = $state(null);
