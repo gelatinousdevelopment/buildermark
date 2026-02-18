@@ -32,12 +32,14 @@
 	<div class="projects">
 		{#each projects as project (project.id)}
 			<div class="project">
-				<div class="column meta">
+				<div class="meta">
 					<div class="label">{project.label || project.path}</div>
 					<div class="path">{project.path}</div>
 				</div>
-				<div class="column conversations">Conversations</div>
-				<div class="column commits">Commits</div>
+				<div class="content">
+					<div class="column conversations"><div class="heading">Agent Conversations</div></div>
+					<div class="column commits"><div class="heading">Git Commits</div></div>
+				</div>
 			</div>
 		{/each}
 	</div>
@@ -78,39 +80,106 @@
 		gap: 1rem;
 	}
 
-	.project {
+	.project .content {
 		align-items: stretch;
 		background: #fbfbfb;
-		border-radius: 10px;
+		border-radius: 12px;
 		border: 0.5px solid #ccc;
 		display: flex;
 		flex-direction: row;
 		justify-content: space-between;
-		min-height: 10rem;
 		padding: 0;
 	}
 
-	.project:hover {
+	@media (max-width: 1023px) {
+		.project .content {
+			flex-direction: column;
+		}
+	}
+
+	.project:has(.content:hover) {
+		.meta .label {
+			opacity: 1;
+			color: var(--accent-color);
+		}
+
+		.content .column .heading {
+			opacity: 0.75;
+		}
+	}
+
+	.project:has(.content) .meta .label::before {
 		background: var(--accent-color-ultralight);
-		border-color: var(--accent-color);
-		box-shadow: 1px 1px 3px 1px rgba(0, 0, 0, 0.1);
+		border-radius: 5px;
+		content: '';
+		inset: 0px auto 0px 0px;
+		position: absolute;
+		transition: width 150ms ease-in-out;
+		width: 0%;
+		z-index: -1;
+	}
+
+	.project:has(.content:hover) .meta .label::before {
+		width: 100%;
+	}
+
+	.project .content:hover {
+		background: #f8f8f8;
+		border-color: #bbb;
 	}
 
 	.project .column {
+		min-height: 18rem;
 		padding: 1rem;
 	}
 
+	.project .column .heading {
+		font-weight: 600;
+		text-transform: uppercase;
+		font-size: 0.9rem;
+		opacity: 0.5;
+	}
+
 	.meta {
-		flex: 1.3;
+		display: flex;
+		gap: 1rem;
+		align-items: flex-end;
+		justify-content: space-between;
+		padding: 0.5rem 1rem 1rem 1rem;
+	}
+
+	.meta .label {
+		box-sizing: border-box;
+		font-size: 1.8rem;
+		font-weight: 300;
+		letter-spacing: 0.03rem;
+		opacity: 0.7;
+		padding: 0.2rem 0.8rem;
+		margin: -0.2rem -0.8rem;
+		border: 1px solid transparent;
+		border-radius: 5px;
+		position: relative;
+	}
+
+	.meta .path {
+		font-size: 0.9rem;
+		font-weight: 400;
+		opacity: 0.5;
 	}
 
 	.conversations {
-		border-left: 0.5px solid var(--color-divider);
 		flex: 2;
 	}
 
 	.commits {
 		border-left: 0.5px solid var(--color-divider);
 		flex: 2;
+	}
+
+	@media (max-width: 1023px) {
+		.commits {
+			border-left: 0;
+			border-top: 0.5px solid var(--color-divider);
+		}
 	}
 </style>

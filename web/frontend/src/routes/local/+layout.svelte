@@ -10,23 +10,25 @@
 <header>
 	<section>
 		<div class="brand">
-			<a href={resolve('/local')}><Icon name="wrench" width="13px" /> Strigidev Local</a>
+			<a href={resolve('/local')} class="item"
+				><Icon name="wrench" width="13px" /> Strigidev Local</a
+			>
 		</div>
 	</section>
 	<hr class="divider" />
 	<section>
 		<nav class="breadcrumbs">
 			<!-- <a href={resolve('/local')}>Dashboard</a> -->
-			<a href={resolve('/local/projects')}>Projects</a>
+			<a href={resolve('/local/projects')} class="item">Projects</a>
 			<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
 			<!-- <span class="chevron"></span> -->
-			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5')}>zrate</a>
+			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5')} class="item">zrate</a>
 			<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
 			<!-- <span class="chevron"></span> -->
-			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations')} class="selected"
+			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations')} class="selected item"
 				>Conversations</a
 			>
-			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/commits')}>Commits</a>
+			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/commits')} class="item">Commits</a>
 			<!-- <span class="chevron"></span>
 			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations')}
 				>Feb 16, 2026 5:29:46 PM</a
@@ -38,19 +40,21 @@
 	<hr class="divider" />
 	<section>
 		<nav class="right">
-			<a href="https://github.com/gelatinousdevelopment"><Icon name="github" width="15px" /></a>
+			<a href="https://github.com/gelatinousdevelopment" class="item"
+				><Icon name="github" width="15px" /></a
+			>
 		</nav>
 	</section>
 	<hr class="divider" />
 	<section>
 		<nav class="right">
-			<a href={resolve('/local')}><Icon name="gridLine2" width="15px" /></a>
+			<a href={resolve('/local')} class="item"><Icon name="gear" width="17px" /></a>
 		</nav>
 	</section>
 	<hr class="divider" />
 	<section>
 		<nav class="right">
-			<div class="status-dot running"></div>
+			<button class="item" title="Binary Status"><div class="status-dot running"></div></button>
 		</nav>
 	</section>
 </header>
@@ -60,28 +64,43 @@
 </div>
 
 <style>
-	/* Layout */
-
 	header {
 		align-items: stretch;
 		border-bottom: 0.5px solid var(--color-divider);
 		border-top: 0.5px solid var(--color-divider);
-		font-size: 1rem;
 		display: flex;
+		font-size: 1rem;
 		padding: 0;
 	}
 
 	header section {
-		display: flex;
 		align-items: center;
-		padding: 0.6rem 1rem;
+		display: flex;
+	}
+
+	header section button {
+		background: none;
+		border: none;
+	}
+
+	header section .item {
+		align-content: center;
+		box-sizing: border-box;
+		height: 32px;
+		padding: 0 1rem;
+		white-space: nowrap;
+	}
+
+	header section .item:hover {
+		background: var(--accent-color-ultralight);
 	}
 
 	header hr.divider {
 		background: var(--color-divider);
 		border: 0;
-		width: 0.5px;
 		margin: 0;
+		min-width: 0.5px;
+		width: 0.5px;
 	}
 
 	header .brand {
@@ -90,18 +109,17 @@
 	}
 
 	header .brand a {
-		display: flex;
 		align-items: center;
+		color: var(--color-text);
+		display: flex;
 		gap: 0.5rem;
 		text-decoration: none;
-		color: var(--color-text);
-		padding: 0.6rem 1rem;
-		margin: -0.6rem -1rem;
 	}
 
 	header .brand a:hover {
-		background: var(--accent-color-ultralight);
-		color: var(--accent-color);
+		background: var(--accent-color);
+		color: var(--accent-color-ultralight);
+		position: relative;
 	}
 
 	header nav {
@@ -112,6 +130,7 @@
 
 	header nav.breadcrumbs {
 		gap: 0rem;
+		padding-left: 0.5rem;
 	}
 
 	header nav.breadcrumbs .chevron-right {
@@ -119,9 +138,9 @@
 	}
 
 	header nav.breadcrumbs a {
-		padding: 0.4rem 0.6rem;
-		margin: -0.4rem 0rem;
-		border-radius: 4px;
+		padding: 0 0.6rem;
+		margin: 0 0rem;
+		/*border-radius: 4px;*/
 	}
 
 	header nav.breadcrumbs a.selected {
@@ -130,12 +149,6 @@
 		padding: 0.4rem 0.8rem;
 		margin: -0.4rem 0.2rem;
 	}
-
-	/*header nav.breadcrumbs .chevron {
-		border-left: 1px solid var(--color-divider);
-		height: 1.4em;
-		transform: rotate(20deg);
-	}*/
 
 	header nav.right {
 		gap: 1.5rem;
@@ -147,11 +160,13 @@
 	}
 
 	header nav a:hover {
-		color: #000;
+		color: var(--accent-color);
 		text-decoration: underline;
 	}
 
 	.dashboard-content {
+		margin: 0 auto;
+		/*max-width: 100rem;*/
 		padding: 1rem;
 	}
 

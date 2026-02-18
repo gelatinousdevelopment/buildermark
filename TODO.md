@@ -27,7 +27,7 @@
 - [ ] Improve normalization of code (like code formatting) when comparing agent diffs to commit diffs
 - [ ] Is the go process continuously monitoring conversation logs and importing? I think it's not, at least for claude.
 - [ ] Implement a list of projects in Settings, with a checkbox for each indicating if it's tracked (checked means tracked) or ignored.
-- [ ] Consider old reddit style header design
+- [ ] In split view of Agent Conversations and Git Commits, highlight related items in the opposite column on hover
 
 ## Later
 

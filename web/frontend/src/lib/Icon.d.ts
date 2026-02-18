@@ -1,5 +1,5 @@
 export {};
 
 declare global {
-	type Icon = 'gridLine2' | 'github' | 'chevronRight' | 'wrench';
+	type Icon = 'gridLine2' | 'github' | 'chevronRight' | 'wrench' | 'gear';
 }

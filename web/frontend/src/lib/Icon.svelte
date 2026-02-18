@@ -3,6 +3,7 @@
 	import githubSvg from '$lib/icons/github.svg?raw';
 	import chevronRightSvg from '$lib/icons/chevronRight.svg?raw';
 	import wrenchSvg from '$lib/icons/wrench.svg?raw';
+	import gearSvg from '$lib/icons/gear.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -13,7 +14,8 @@
 		gridLine2: gridLine2Svg,
 		github: githubSvg,
 		chevronRight: chevronRightSvg,
-		wrench: wrenchSvg
+		wrench: wrenchSvg,
+		gear: gearSvg
 	};
 </script>
 
