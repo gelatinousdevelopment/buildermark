@@ -9,6 +9,7 @@
 	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
+	import AgentTag from '$lib/components/AgentTag.svelte';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -166,7 +167,7 @@
 	<p class="error">{error}</p>
 {:else if conversation}
 	<h2>{conversation.title || conversation.id}</h2>
-	<p>Agent: {conversation.agent}</p>
+	<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
 	{#if conversationModels.length > 0}
 		<div class="models-summary">
 			<span class="models-label">Models:</span>
@@ -309,6 +310,12 @@
 		background: #ebfddd;
 		border: 1px solid #a8ef70;
 		color: #626262;
+	}
+
+	.agent-header {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 
 	.models-summary {

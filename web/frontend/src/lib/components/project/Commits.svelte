@@ -1,11 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import {
-		listProjectCommitsPage,
-		ingestMoreCommits,
-		getCommitIngestionStatus
-	} from '$lib/api';
+	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
 	import type { ProjectCommitPageResponse, CommitIngestionStatusResponse } from '$lib/types';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
@@ -26,6 +22,7 @@
 		showCoverageBar?: boolean;
 		showPagination?: boolean;
 		showLoadMore?: boolean;
+		showColumnNames?: boolean;
 		onPageChange?: PageChangeHandler;
 		onBranchChange?: BranchChangeHandler;
 		autoload?: boolean;
@@ -47,6 +44,7 @@
 		showCoverageBar = false,
 		showPagination = false,
 		showLoadMore = false,
+		showColumnNames = false,
 		onPageChange,
 		onBranchChange,
 		autoload = true,
@@ -111,7 +109,9 @@
 			return;
 		}
 		try {
-			ingestionStatus = await withOptionalQueue(() => getCommitIngestionStatus(projectId, branchValue));
+			ingestionStatus = await withOptionalQueue(() =>
+				getCommitIngestionStatus(projectId, branchValue)
+			);
 		} catch {
 			ingestionStatus = null;
 		}
@@ -127,7 +127,9 @@
 		error = null;
 		try {
 			const pageNum = Math.max(1, currentPage);
-			const loaded = await withOptionalQueue(() => listProjectCommitsPage(projectId, pageNum, selectedBranch));
+			const loaded = await withOptionalQueue(() =>
+				listProjectCommitsPage(projectId, pageNum, selectedBranch)
+			);
 			if (myToken !== requestToken) return;
 			data = loaded;
 			if (branch === undefined && !internalBranch && loaded.branch) {
@@ -195,11 +197,11 @@
 {/if}
 
 {#if loading}
-	<p class="loading">Loading commits...</p>
+	<p class="message loading">Loading commits...</p>
 {:else if error}
-	<p class="error">{error}</p>
+	<p class="message error">{error}</p>
 {:else if !data || visibleCommits.length === 0}
-	<p>No commits found for this project and current git user.</p>
+	<p class="message">No commits found for this project and current git user.</p>
 {:else}
 	{#if showSummary}
 		<section class="summary-grid">
@@ -241,49 +243,61 @@
 	{/if}
 
 	<table class="data" class:compact>
-		<thead>
-			<tr>
-				<th>Time</th>
-				<th>Commit</th>
-				<th>Lines</th>
-				{#if !compact}
-					<th>Chars</th>
-				{/if}
-				<th class="bar-col">Agent %</th>
-			</tr>
-		</thead>
+		<colgroup>
+			{#if !compact}
+				<col class="time-col" />
+			{/if}
+			<col class="title-col" />
+			{#if !compact}
+				<col class="stats-col" />
+				<col class="stats-col" />
+			{/if}
+			<col class="bar-col" />
+		</colgroup>
+		{#if showColumnNames}
+			<thead>
+				<tr>
+					{#if !compact}
+						<th class="time-col">Time</th>
+					{/if}
+					<th>Commit</th>
+					{#if !compact}
+						<th class="stats-col">Lines</th>
+						<th class="stats-col">Chars</th>
+					{/if}
+					<th class="bar-col">Agent %</th>
+				</tr>
+			</thead>
+		{/if}
 		<tbody>
 			{#each visibleCommits as c (c.commitHash)}
 				<tr>
-					<td>{formatTime(c.authoredAtUnixMs)}</td>
-					<td>
+					{#if !compact}
+						<td class="time">{formatTime(c.authoredAtUnixMs)}</td>
+					{/if}
+					<td class="title">
 						<div>
-							<button
-								type="button"
+							<a
+								href={resolve('/local/projects/[project_id]/commits/[commit_hash]', {
+									project_id: c.projectId,
+									commit_hash: c.commitHash
+								})}
 								class="link-button"
-								onclick={() =>
-									goto(
-										resolve('/local/projects/[project_id]/commits/[commit_hash]', {
-											project_id: c.projectId,
-											commit_hash: c.commitHash
-										})
-									)
-								}
 							>
 								{c.subject || c.commitHash.slice(0, 8)}
-							</button>
+							</a>
 						</div>
-						{#if !c.workingCopy}
+						<!-- {#if !c.workingCopy}
 							<div class="commit-meta">{c.commitHash.slice(0, 12)}</div>
-						{/if}
+						{/if} -->
 					</td>
-					<td>{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
 					{#if !compact}
-						<td>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td>
+						<td class="stats">{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
+						<td class="stats"
+							>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td
+						>
 					{/if}
-					<td class="bar-col"
-						><AgentPercentageBar agentPercent={c.linePercent} showKey={false} /></td
-					>
+					<td class="bar"><AgentPercentageBar agentPercent={c.linePercent} showKey={false} /></td>
 				</tr>
 			{/each}
 		</tbody>
@@ -378,18 +392,23 @@
 	}
 
 	.link-button {
+		display: block;
+		max-width: 100%;
 		background: none;
 		border: 0;
 		padding: 0;
 		color: var(--link-color, #1f4cd1);
 		cursor: pointer;
 		font: inherit;
-		text-decoration: underline;
+		text-decoration: none;
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
-	.commit-meta {
-		color: #777;
-		font-size: 0.78rem;
+	.link-button:hover {
+		text-decoration: underline;
 	}
 
 	.pager {
@@ -441,13 +460,77 @@
 		max-width: 600px;
 	}
 
+	.message {
+		padding-left: 1rem;
+		padding-right: 1rem;
+	}
+
+	table.data {
+		table-layout: fixed;
+	}
+
+	table.data tr {
+		border-bottom: 0px;
+	}
+
+	table.data tr:hover {
+		background: var(--accent-color-ultralight);
+	}
+
+	table.data td {
+		white-space: nowrap;
+	}
+
+	.time-col {
+		width: 180px;
+	}
+
+	.stats-col {
+		width: 170px;
+	}
+
 	.bar-col {
-		width: 120px;
-		min-width: 80px;
+		width: 140px;
 	}
 
 	.compact .bar-col {
-		width: 90px;
+		width: 120px;
+	}
+
+	.compact .stats-col {
+		width: 150px;
+	}
+
+	.time {
+		padding-left: 1rem;
+	}
+
+	.title {
+		overflow: hidden;
+	}
+
+	.compact .title {
+		padding-left: 1rem;
+	}
+
+	.title > div {
+		overflow: hidden;
+	}
+
+	.title a {
+		color: var(--color-text);
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.title a:hover {
+		color: var(--accent-color);
+	}
+
+	.bar {
+		padding-right: 1rem;
 	}
 
 	.branch-picker {

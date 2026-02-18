@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { listProjects, getProject, setProjectIgnored } from '$lib/api';
+	import AgentTag from '$lib/components/AgentTag.svelte';
 	import { fmtTimeWithSeconds, stars, shortId } from '$lib/utils';
 	import type { ProjectDetail } from '$lib/types';
 
@@ -141,7 +142,7 @@
 										{conv.title || shortId(conv.id)}
 									</a>
 								</td>
-								<td>{conv.agent}</td>
+								<td><AgentTag agent={conv.agent} /></td>
 								<td>{conv.lastMessageTimestamp ? fmtTimeWithSeconds(conv.lastMessageTimestamp) : '—'}</td>
 								<td class="ratings">
 									{#if conv.ratings.length > 0}

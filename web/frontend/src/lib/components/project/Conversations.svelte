@@ -2,6 +2,7 @@
 	import { getProject } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
 	import { stars, shortId } from '$lib/utils';
+	import AgentTag from '$lib/components/AgentTag.svelte';
 	import { resolve } from '$app/paths';
 	import type { ProjectDetail } from '$lib/types';
 
@@ -17,6 +18,7 @@
 		showAgentColumn?: boolean;
 		showRatingsColumn?: boolean;
 		showPagination?: boolean;
+		showColumnNames?: boolean;
 		onPageChange?: PageChangeHandler;
 		autoload?: boolean;
 		useLoadQueue?: boolean;
@@ -36,6 +38,7 @@
 		showAgentColumn = true,
 		showRatingsColumn = true,
 		showPagination = false,
+		showColumnNames = false,
 		onPageChange,
 		autoload = true,
 		useLoadQueue = false,
@@ -94,7 +97,9 @@
 		try {
 			const requestedPage = Math.max(1, currentPage);
 			const requestedPageSize = pageSize > 0 ? pageSize : undefined;
-			const detail = await withOptionalQueue(() => getProject(projectId, requestedPage, requestedPageSize));
+			const detail = await withOptionalQueue(() =>
+				getProject(projectId, requestedPage, requestedPageSize)
+			);
 			if (myToken !== requestToken) return;
 			project = detail;
 		} catch (e) {
@@ -133,28 +138,39 @@
 {/if}
 
 {#if loading}
-	<p class="loading">Loading conversations...</p>
+	<p class="message loading">Loading conversations...</p>
 {:else if error}
-	<p class="error">{error}</p>
+	<p class="message error">{error}</p>
 {:else if !project || visibleConversations.length === 0}
-	<p>No conversations.</p>
+	<p class="message">No conversations.</p>
 {:else}
 	<table class="data">
-		<thead>
-			<tr>
-				<th>Conversation</th>
-				{#if showAgentColumn}
-					<th>Agent</th>
-				{/if}
-				{#if showRatingsColumn}
-					<th>Ratings</th>
-				{/if}
-			</tr>
-		</thead>
+		<colgroup>
+			<col />
+			{#if showAgentColumn}
+				<col class="agent-col" />
+			{/if}
+			{#if showRatingsColumn}
+				<col class="ratings-col" />
+			{/if}
+		</colgroup>
+		{#if showColumnNames}
+			<thead>
+				<tr>
+					<th>Conversation</th>
+					{#if showAgentColumn}
+						<th>Agent</th>
+					{/if}
+					{#if showRatingsColumn}
+						<th>Ratings</th>
+					{/if}
+				</tr>
+			</thead>
+		{/if}
 		<tbody>
 			{#each visibleConversations as conv (conv.id)}
 				<tr>
-					<td>
+					<td class="title">
 						<a
 							href={resolve('/local/projects/[project_id]/conversations/[id]', {
 								project_id: project.id,
@@ -165,7 +181,7 @@
 						</a>
 					</td>
 					{#if showAgentColumn}
-						<td>{conv.agent}</td>
+						<td class="agent"><AgentTag agent={conv.agent} /></td>
 					{/if}
 					{#if showRatingsColumn}
 						<td class="ratings">
@@ -174,7 +190,7 @@
 									<span title={formatRatingTitle(r.note, r.analysis)}>{stars(r.rating)}</span>
 								{/each}
 							{:else}
-								—
+								&nbsp;
 							{/if}
 						</td>
 					{/if}
@@ -185,14 +201,13 @@
 
 	{#if showPagination && (project.conversationPagination.totalPages ?? 0) > 1}
 		<div class="pager">
-			<button
-				class="btn-sm"
-				disabled={currentPage <= 1}
-				onclick={() => goToPage(currentPage - 1)}
-			>
+			<button class="btn-sm" disabled={currentPage <= 1} onclick={() => goToPage(currentPage - 1)}>
 				Previous
 			</button>
-			<span>Page {project.conversationPagination.page} of {project.conversationPagination.totalPages}</span>
+			<span
+				>Page {project.conversationPagination.page} of {project.conversationPagination
+					.totalPages}</span
+			>
 			<button
 				class="btn-sm"
 				disabled={currentPage >= project.conversationPagination.totalPages}
@@ -213,10 +228,57 @@
 		margin-bottom: 0.75rem;
 	}
 
+	.message {
+		padding-left: 1rem;
+		padding-right: 1rem;
+	}
+
+	table.data {
+		table-layout: fixed;
+	}
+
+	table.data tr {
+		border-bottom: 0px;
+	}
+
+	table.data tr:hover {
+		background: var(--accent-color-ultralight);
+	}
+
+	.agent-col {
+		width: 80px;
+	}
+
+	.ratings-col {
+		width: 78px;
+	}
+
+	.title {
+		overflow: hidden;
+		padding-left: 1rem;
+	}
+
+	.title a {
+		color: var(--color-text);
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.title a:hover {
+		color: var(--accent-color);
+	}
+
+	.agent {
+		text-align: center;
+	}
+
 	.ratings {
-		display: flex;
 		align-items: center;
+		display: flex;
 		gap: 0.5rem;
+		padding-right: 1rem;
 	}
 
 	.pager {

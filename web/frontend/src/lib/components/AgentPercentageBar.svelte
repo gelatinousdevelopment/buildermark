@@ -82,7 +82,7 @@
 				{
 					name: 'Agent',
 					percent: agentPercent,
-					color: agentColor('claude', 0)
+					color: agentColor('generic', 0)
 				}
 			];
 		}
@@ -138,12 +138,12 @@
 	}
 
 	.apb-bar {
-		display: flex;
-		width: 100%;
-		height: 8px;
-		border-radius: 4px;
-		overflow: hidden;
 		background: var(--agent-color-manual, #656565);
+		border-radius: 2px;
+		display: flex;
+		height: 8px;
+		overflow: hidden;
+		width: 100%;
 	}
 
 	.apb-segment {

@@ -37,7 +37,7 @@
 	{:else if error}
 		<p class="error">{error}</p>
 	{:else if project}
-		<div class="nav">
+		<!-- <div class="nav">
 			<h2>{project.label || project.path}</h2>
 			<a
 				href={'/local/projects/' + page.params.project_id + '/commits'}
@@ -52,7 +52,9 @@
 		</div>
 		{#if project.label}
 			<p class="project-path">{project.path}</p>
-		{/if}
+		{/if} -->
+		<h2>{project.label || project.path}</h2>
+		<p class="project-path">{project.path}</p>
 	{/if}
 </div>
 
@@ -60,34 +62,22 @@
 
 <style>
 	.project-header {
-		margin-bottom: 1rem;
-	}
-
-	.nav {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-	}
-
-	.nav .link {
-		font-size: 0.9rem;
-		text-decoration: none;
-		padding: 0.4rem 0.6rem;
-		border-radius: 3px;
-	}
-
-	.nav .link.selected {
-		background: var(--accent-color-ultralight);
+		border-bottom: 0.5px solid var(--color-divider);
+		margin: 0 -1rem 1rem -1rem;
+		padding: 0 1rem 1rem 1rem;
+		min-height: 4rem;
 	}
 
 	.project-header h2 {
-		font-size: 1.1rem;
+		font-size: 1.8rem;
+		font-weight: 300;
+		letter-spacing: 0.03rem;
+		opacity: 0.7;
 		margin: 0 0.5rem 0 0;
-		color: #333;
 	}
 
 	.project-path {
-		font-size: 0.8rem;
+		font-size: 0.9rem;
 		color: #999;
 		margin: 0.3rem 0 0 0;
 	}

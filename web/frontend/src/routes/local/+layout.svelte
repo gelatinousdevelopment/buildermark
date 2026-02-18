@@ -28,67 +28,75 @@
 	}
 </script>
 
-<header>
-	<section>
-		<div class="brand">
-			<a href={resolve('/local')} class="item"
-				><Icon name="wrench" width="13px" /> Strigidev Local</a
-			>
-		</div>
-	</section>
-	<hr class="divider" />
-	<section>
-		<nav class="breadcrumbs">
-			<a
-				href={resolve('/local/projects')}
-				class="item"
-				class:selected={page.route.id === '/local/projects'}>Projects</a
-			>
-			{#if projectId}
-				<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
-				<a href={resolve('/local/projects/[project_id]', { project_id: projectId })} class="item"
-					>{navStore.projectName || projectId}</a
+<div class="site">
+	<header>
+		<section>
+			<div class="brand">
+				<a href={resolve('/local')} class="item"
+					><Icon name="wrench" width="13px" /> Strigidev Local</a
 				>
-				<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
-				{#each projectTabs as tab (tab.segment)}
-					<a
-						href={resolve(tab.route, { project_id: projectId })}
-						class="item"
-						class:selected={isTabSelected(tab.segment)}>{tab.label}</a
+			</div>
+		</section>
+		<hr class="divider" />
+		<section>
+			<nav class="breadcrumbs">
+				<a
+					href={resolve('/local/projects')}
+					class="item"
+					class:selected={page.route.id === '/local/projects'}>Projects</a
+				>
+				{#if projectId}
+					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
+					<a href={resolve('/local/projects/[project_id]', { project_id: projectId })} class="item"
+						>{navStore.projectName || projectId}</a
 					>
-				{/each}
-			{/if}
-		</nav>
-	</section>
-	<!-- <hr class="divider" /> -->
-	<section style:flex="1"></section>
-	<hr class="divider" />
-	<section>
-		<nav class="right">
-			<a href="https://github.com/gelatinousdevelopment" class="item"
-				><Icon name="github" width="15px" /></a
-			>
-		</nav>
-	</section>
-	<hr class="divider" />
-	<section>
-		<nav class="right">
-			<a href={resolve('/local')} class="item"><Icon name="gear" width="17px" /></a>
-		</nav>
-	</section>
-	<hr class="divider" />
-	<section>
-		<nav class="right">
-			<button class="item" title="Binary Status"><div class="status-dot running"></div></button>
-		</nav>
-	</section>
-</header>
+					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
+					{#each projectTabs as tab (tab.segment)}
+						<a
+							href={resolve(tab.route, { project_id: projectId })}
+							class="item"
+							class:selected={isTabSelected(tab.segment)}>{tab.label}</a
+						>
+					{/each}
+				{/if}
+			</nav>
+		</section>
+		<!-- <hr class="divider" /> -->
+		<section style:flex="1"></section>
+		<hr class="divider" />
+		<section>
+			<nav class="right">
+				<a href="https://github.com/gelatinousdevelopment" class="item"
+					><Icon name="github" width="15px" /></a
+				>
+			</nav>
+		</section>
+		<hr class="divider" />
+		<section>
+			<nav class="right">
+				<a href={resolve('/local')} class="item"><Icon name="gear" width="17px" /></a>
+			</nav>
+		</section>
+		<hr class="divider" />
+		<section>
+			<nav class="right">
+				<button class="item" title="Binary Status"><div class="status-dot running"></div></button>
+			</nav>
+		</section>
+	</header>
 
-<div class="dashboard-content">
-	{@render children()}
+	<div class="dashboard-content">
+		{@render children()}
+	</div>
 </div>
 
 <style>
+	.site {
+		display: flex;
+		flex-direction: column;
+		min-height: 100vh;
+	}
+
 	header {
 		align-items: stretch;
 		border-bottom: 0.5px solid var(--color-divider);
@@ -190,9 +198,11 @@
 	}
 
 	.dashboard-content {
+		background: #fcfcfc;
 		margin: 0 auto;
 		/*max-width: 100rem;*/
 		padding: 1rem;
+		flex: 1;
 	}
 
 	.status-dot {

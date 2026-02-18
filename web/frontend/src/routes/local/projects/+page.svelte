@@ -35,7 +35,8 @@
 				projects.map(async (project): Promise<ProjectRow> => {
 					try {
 						const conversationData = await getProject(project.id, 1, 10);
-						const latestConversationTs = conversationData.conversations[0]?.lastMessageTimestamp ?? 0;
+						const latestConversationTs =
+							conversationData.conversations[0]?.lastMessageTimestamp ?? 0;
 						return {
 							project,
 							conversationData,
@@ -73,7 +74,11 @@
 		{#each rows as row, index (row.project.id)}
 			<div class="project">
 				<div class="meta">
-					<div class="label">{projectName(row.project)}</div>
+					<div class="label">
+						<a href={resolve('/local/projects/[project_id]', { project_id: row.project.id })}
+							>{projectName(row.project)}</a
+						>
+					</div>
 					<div class="path">{row.project.path}</div>
 				</div>
 				<div class="content">
@@ -133,6 +138,9 @@
 		flex-direction: row;
 		justify-content: space-between;
 		padding: 0;
+
+		background: #fff;
+		border-color: var(--color-divider);
 	}
 
 	@media (max-width: 1023px) {
@@ -141,20 +149,41 @@
 		}
 	}
 
+	.project .meta .label a {
+		color: var(--color-text);
+		text-decoration: none;
+	}
+
+	.project .meta .label a:hover {
+		color: var(--accent-color);
+		text-decoration: underline;
+	}
+
+	.project .meta .label:has(a:hover) {
+		opacity: 1;
+	}
+
 	.project:has(.content:hover) {
 		.meta .label {
 			opacity: 1;
+		}
+
+		.meta .label a {
 			color: var(--accent-color);
 		}
 
 		.content .column .heading {
 			opacity: 0.75;
 		}
+
+		.commits {
+			border-left-color: var(--accent-color-divider);
+		}
 	}
 
 	.project:has(.content) .meta .label::before {
-		background: var(--accent-color-ultralight);
-		border-radius: 5px;
+		background: none;
+		border-radius: 4px;
 		content: '';
 		inset: 0px auto 0px 0px;
 		position: absolute;
@@ -164,17 +193,22 @@
 	}
 
 	.project:has(.content:hover) .meta .label::before {
+		/*border: 0.5px solid var(--accent-color);*/
 		width: 100%;
 	}
 
 	.project .content:hover {
-		background: #f8f8f8;
-		border-color: #bbb;
+		/*background: #f8f8f8;*/
+		border-color: var(--accent-color-divider);
+		/*box-shadow: 1px 2px 0px var(--accent-color-divider);*/
+		box-shadow: 1px 1px 7px rgb(0, 0, 0, 0.1);
 	}
 
 	.project .column {
-		min-height: 18rem;
-		padding: 1rem;
+		min-height: 16rem;
+		padding: 1rem 0 0.7rem 0;
+		flex: 1;
+		max-width: 50%;
 	}
 
 	.project .column .heading {
@@ -183,6 +217,7 @@
 		font-size: 0.9rem;
 		opacity: 0.5;
 		margin-bottom: 0.75rem;
+		margin-left: 1rem;
 	}
 
 	.project .column .heading a {
@@ -199,19 +234,19 @@
 		gap: 1rem;
 		align-items: flex-end;
 		justify-content: space-between;
-		padding: 0.5rem 1rem 1rem 1rem;
+		padding: 0rem 1rem 0.7rem 1rem;
 	}
 
 	.meta .label {
+		border-radius: 5px;
+		border: 1px solid transparent;
 		box-sizing: border-box;
 		font-size: 1.8rem;
 		font-weight: 300;
 		letter-spacing: 0.03rem;
+		margin: -0.2rem -0.8rem;
 		opacity: 0.7;
 		padding: 0.2rem 0.8rem;
-		margin: -0.2rem -0.8rem;
-		border: 1px solid transparent;
-		border-radius: 5px;
 		position: relative;
 	}
 
@@ -221,13 +256,8 @@
 		opacity: 0.5;
 	}
 
-	.conversations {
-		flex: 2;
-	}
-
 	.commits {
 		border-left: 0.5px solid var(--color-divider);
-		flex: 2;
 	}
 
 	@media (max-width: 1023px) {

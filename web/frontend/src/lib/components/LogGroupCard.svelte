@@ -10,6 +10,7 @@
 	import type { SvelteSet } from 'svelte/reactivity';
 	import DiffMessageCard from './DiffMessageCard.svelte';
 	import LogMessageCard from './LogMessageCard.svelte';
+	import AgentTag from './AgentTag.svelte';
 
 	interface Props {
 		messages: MessageRead[];
@@ -31,6 +32,7 @@
 	}: Props = $props();
 
 	let timeSpan = $derived(groupTimeSpan(messages));
+	let groupedModelLabel = $derived(groupModelLabel(messages, agent));
 
 	function handleKeydown(e: KeyboardEvent, id: string) {
 		if (e.key === 'Enter' || e.key === ' ') {
@@ -60,14 +62,18 @@
 		}
 	}}
 >
-	<strong
-		>{messages.length}
-		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(
-			messages,
-			agent
-		)}{#if timeSpan > 0}
-			&nbsp({formatDuration(timeSpan)}){/if}</strong
-	>
+	<strong>
+		{messages.length}
+		{messages.length == 1 ? 'log' : 'logs'} from
+		{#if groupedModelLabel === agent}
+			<AgentTag agent={agent} />
+		{:else}
+			{groupedModelLabel}
+		{/if}
+		{#if timeSpan > 0}
+			&nbsp;({formatDuration(timeSpan)})
+		{/if}
+	</strong>
 </div>
 {#if expanded}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->

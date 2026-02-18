@@ -1,17 +1,22 @@
 :root {
 	--accent-color: #0066cc;
 	--accent-color-ultralight: #eff7ff;
+	--accent-color-divider: #9fbbd6;
 	--color-text: #444;
 	--color-divider: #bbb;
 	--color-status-green: #55bb33;
 
 	/* Agent colors (known coding agents) */
-	--agent-color-claude: #e07b39;
-	--agent-color-codex: #10b981;
+	--agent-color-generic: #a7439b;
+	--agent-foreground-color-generic: rgb(255, 255, 255, 0.9);
+	--agent-color-manual: #d2d2d2;
+	--agent-foreground-color-manual: #fff;
+	--agent-color-claude: #cf6f30;
+	--agent-foreground-color-claude: rgb(255, 255, 255, 0.9);
+	--agent-color-codex: #34a869;
+	--agent-foreground-color-codex: rgb(255, 255, 255, 0.9);
 	--agent-color-gemini: #3b82f6;
-
-	/* Manual (non-agent) color */
-	--agent-color-manual: #656565;
+	--agent-foreground-color-gemini: rgb(255, 255, 255, 0.9);
 }
 
 html,
@@ -57,7 +62,6 @@ body {
 table.data {
 	width: 100%;
 	border-collapse: collapse;
-	margin-bottom: 1rem;
 }
 
 table.data tr {
