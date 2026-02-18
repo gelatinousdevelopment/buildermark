@@ -152,10 +152,11 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 			content = "[entry]"
 		}
 
-		ts := time.Now().UnixMilli()
-		if parsed, err := time.Parse(time.RFC3339Nano, entry.Timestamp); err == nil {
-			ts = parsed.UnixMilli()
+		parsed, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+		if err != nil {
+			return
 		}
+		ts := parsed.UnixMilli()
 
 		role := "agent"
 		if entry.Type == "user" {

@@ -44,7 +44,7 @@ type geminiLogEntry struct {
 func parseGeminiTimestamp(s string) int64 {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return time.Now().UnixMilli()
+		return 0
 	}
 
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
@@ -60,7 +60,7 @@ func parseGeminiTimestamp(s string) int64 {
 		return n * 1000
 	}
 
-	return time.Now().UnixMilli()
+	return 0
 }
 
 func extractMessageText(msg geminiMessage) string {

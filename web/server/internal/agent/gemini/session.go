@@ -92,6 +92,9 @@ func searchRecentLogs(tmpDir string, rating int, note string, maxAge time.Durati
 				continue
 			}
 			ts := parseGeminiTimestamp(e.Timestamp)
+			if ts <= 0 {
+				continue
+			}
 			entryTime := time.UnixMilli(ts)
 			if entryTime.Before(cutoff) {
 				break
@@ -183,8 +186,13 @@ func (a *Agent) collectSessionEntries(path string) ([]agent.Entry, string, strin
 
 		rawJSON, _ := json.Marshal(m)
 
+		ts := parseGeminiTimestamp(m.Timestamp)
+		if ts <= 0 {
+			continue
+		}
+
 		entries = append(entries, agent.Entry{
-			Timestamp: parseGeminiTimestamp(m.Timestamp),
+			Timestamp: ts,
 			SessionID: conv.SessionID,
 			Project:   project,
 			Role:      role,

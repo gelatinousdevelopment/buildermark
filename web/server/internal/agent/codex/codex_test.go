@@ -82,6 +82,18 @@ func TestName(t *testing.T) {
 	}
 }
 
+func TestParseCodexTimestampInvalidReturnsZero(t *testing.T) {
+	if got := parseCodexTimestamp(nil); got != 0 {
+		t.Fatalf("parseCodexTimestamp(nil) = %d, want 0", got)
+	}
+	if got := parseCodexTimestamp(json.RawMessage(`null`)); got != 0 {
+		t.Fatalf("parseCodexTimestamp(null) = %d, want 0", got)
+	}
+	if got := parseCodexTimestamp(json.RawMessage(`"not-a-time"`)); got != 0 {
+		t.Fatalf("parseCodexTimestamp(invalid) = %d, want 0", got)
+	}
+}
+
 // --- Watcher tests ---
 
 func TestWatcherProcessSessionFile(t *testing.T) {

@@ -174,6 +174,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		}
 
 		ts := parseCodexTimestamp(event.Timestamp)
+		if ts <= 0 {
+			continue
+		}
 
 		switch event.Type {
 		case "session_meta":

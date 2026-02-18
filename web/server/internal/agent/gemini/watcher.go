@@ -160,6 +160,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		rawJSON, _ := json.Marshal(m)
 
 		ts := parseGeminiTimestamp(m.Timestamp)
+		if ts <= 0 {
+			continue
+		}
 		messages = append(messages, db.Message{
 			Timestamp:      ts,
 			ProjectID:      projectID,
@@ -202,6 +205,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 
 		rawJSON, _ := json.Marshal(entry)
 		ts := parseGeminiTimestamp(entry.Timestamp)
+		if ts <= 0 {
+			continue
+		}
 		messages = append(messages, db.Message{
 			Timestamp:      ts,
 			ProjectID:      projectID,

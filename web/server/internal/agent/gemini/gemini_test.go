@@ -70,6 +70,15 @@ func TestName(t *testing.T) {
 	}
 }
 
+func TestParseGeminiTimestampInvalidReturnsZero(t *testing.T) {
+	if got := parseGeminiTimestamp(""); got != 0 {
+		t.Fatalf("parseGeminiTimestamp(empty) = %d, want 0", got)
+	}
+	if got := parseGeminiTimestamp("not-a-time"); got != 0 {
+		t.Fatalf("parseGeminiTimestamp(invalid) = %d, want 0", got)
+	}
+}
+
 func TestWatcherProcessSessionFile(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()
