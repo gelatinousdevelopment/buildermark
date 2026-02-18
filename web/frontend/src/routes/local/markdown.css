@@ -18,6 +18,7 @@
 
 .markdown-body p {
 	margin: 0.25rem 0;
+	word-wrap: break-word;
 }
 
 .markdown-body pre {

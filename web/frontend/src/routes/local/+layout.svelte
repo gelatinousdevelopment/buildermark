@@ -203,6 +203,9 @@
 		/*max-width: 100rem;*/
 		padding: 1rem;
 		flex: 1;
+
+		max-width: 100vw;
+		box-sizing: border-box;
 	}
 
 	.status-dot {

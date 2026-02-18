@@ -17,8 +17,8 @@
 		<Conversations
 			{projectId}
 			page={1}
-			pageSize={20}
-			limit={20}
+			pageSize={30}
+			limit={30}
 			showAgentColumn={true}
 			showRatingsColumn={true}
 		/>
@@ -37,7 +37,7 @@
 				>Git Commits</a
 			>
 		</div>
-		<Commits {projectId} page={1} limit={20} compact={true} />
+		<Commits {projectId} page={1} limit={30} compact={true} />
 		<div class="more">
 			<a
 				class="btn-sm"
@@ -49,11 +49,12 @@
 
 <style>
 	.project-content {
+		align-items: stretch;
+		border-bottom: 0.5px solid var(--color-divider);
 		display: flex;
 		flex-direction: row;
 		justify-content: space-between;
-		align-items: stretch;
-		margin: -1rem 0;
+		margin: -1rem;
 	}
 
 	.column {
@@ -68,6 +69,7 @@
 		font-size: 0.9rem;
 		opacity: 0.5;
 		margin-bottom: 0.75rem;
+		padding: 0 1rem;
 	}
 
 	.heading a {
@@ -85,11 +87,11 @@
 
 	.commits {
 		border-left: 0.5px solid var(--color-divider);
-		padding-left: 1rem;
 	}
 
 	.more {
 		margin-top: 0.75rem;
+		margin-left: 1rem;
 	}
 
 	@media (max-width: 1023px) {
