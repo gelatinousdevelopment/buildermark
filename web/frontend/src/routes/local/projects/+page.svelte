@@ -29,7 +29,20 @@
 {:else if projects.length === 0}
 	<p>No tracked projects with git IDs found.</p>
 {:else}
-	<table class="data">
+	<div class="projects">
+		{#each projects as project (project.id)}
+			<div class="project">
+				<div class="column meta">
+					<div class="label">{project.label || project.path}</div>
+					<div class="path">{project.path}</div>
+				</div>
+				<div class="column conversations">Conversations</div>
+				<div class="column commits">Commits</div>
+			</div>
+		{/each}
+	</div>
+
+	<!-- <table class="data">
 		<thead>
 			<tr>
 				<th>Project</th>
@@ -55,5 +68,49 @@
 				</tr>
 			{/each}
 		</tbody>
-	</table>
+	</table> -->
 {/if}
+
+<style>
+	.projects {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.project {
+		align-items: stretch;
+		background: #fbfbfb;
+		border-radius: 10px;
+		border: 0.5px solid #ccc;
+		display: flex;
+		flex-direction: row;
+		justify-content: space-between;
+		min-height: 10rem;
+		padding: 0;
+	}
+
+	.project:hover {
+		background: var(--accent-color-ultralight);
+		border-color: var(--accent-color);
+		box-shadow: 1px 1px 3px 1px rgba(0, 0, 0, 0.1);
+	}
+
+	.project .column {
+		padding: 1rem;
+	}
+
+	.meta {
+		flex: 1.3;
+	}
+
+	.conversations {
+		border-left: 0.5px solid var(--color-divider);
+		flex: 2;
+	}
+
+	.commits {
+		border-left: 0.5px solid var(--color-divider);
+		flex: 2;
+	}
+</style>
