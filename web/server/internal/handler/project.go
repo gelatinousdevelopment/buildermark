@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
@@ -100,7 +101,16 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := db.GetProjectDetail(r.Context(), s.DB, id)
+	page := 1
+	pageSize := 0
+	pageRaw := strings.TrimSpace(r.URL.Query().Get("page"))
+	pageSizeRaw := strings.TrimSpace(r.URL.Query().Get("pageSize"))
+	if pageRaw != "" || pageSizeRaw != "" {
+		page = parsePositiveInt(pageRaw, 1)
+		pageSize = parsePositiveInt(pageSizeRaw, 10)
+	}
+
+	project, err := db.GetProjectDetailPage(r.Context(), s.DB, id, page, pageSize)
 	if err != nil {
 		log.Printf("error getting project: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to get project")

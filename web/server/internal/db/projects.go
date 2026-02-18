@@ -5,8 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sort"
-	"time"
+	"strings"
 )
 
 // ErrNotFound is returned when a requested record does not exist.
@@ -34,15 +33,24 @@ type ProjectDetail struct {
 	Ignored                bool                      `json:"ignored"`
 	IgnoreDiffPaths        string                    `json:"ignoreDiffPaths"`
 	IgnoreDefaultDiffPaths bool                      `json:"ignoreDefaultDiffPaths"`
+	ConversationPagination ConversationPagination    `json:"conversationPagination"`
 	Conversations          []ConversationWithRatings `json:"conversations"`
 }
 
 // ConversationWithRatings is a conversation summary including its ratings.
 type ConversationWithRatings struct {
-	ID      string   `json:"id"`
-	Agent   string   `json:"agent"`
-	Title   string   `json:"title"`
-	Ratings []Rating `json:"ratings"`
+	ID                   string   `json:"id"`
+	Agent                string   `json:"agent"`
+	Title                string   `json:"title"`
+	LastMessageTimestamp int64    `json:"lastMessageTimestamp"`
+	Ratings              []Rating `json:"ratings"`
+}
+
+type ConversationPagination struct {
+	Page       int `json:"page"`
+	PageSize   int `json:"pageSize"`
+	Total      int `json:"total"`
+	TotalPages int `json:"totalPages"`
 }
 
 // ListProjects returns projects filtered by ignored status.
@@ -83,6 +91,12 @@ func SetProjectIgnored(ctx context.Context, db *sql.DB, projectID string, ignore
 // GetProjectDetail returns a project with all its conversations and each
 // conversation's ratings.
 func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*ProjectDetail, error) {
+	return GetProjectDetailPage(ctx, db, projectID, 1, 0)
+}
+
+// GetProjectDetailPage returns a project with conversations sorted by most
+// recent message first. If pageSize <= 0, all conversations are returned.
+func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, page, pageSize int) (*ProjectDetail, error) {
 	var p ProjectDetail
 	err := db.QueryRowContext(ctx, "SELECT id, path, label, git_id, default_branch, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path, &p.Label, &p.GitID, &p.DefaultBranch, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths)
 	if err == sql.ErrNoRows {
@@ -92,8 +106,56 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 		return nil, fmt.Errorf("query project: %w", err)
 	}
 
-	// Fetch conversations for this project.
-	convRows, err := db.QueryContext(ctx, "SELECT id, agent, title FROM conversations WHERE project_id = ? ORDER BY id", projectID)
+	if page < 1 {
+		page = 1
+	}
+
+	var total int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM conversations WHERE project_id = ?", projectID).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count conversations: %w", err)
+	}
+
+	if pageSize <= 0 {
+		pageSize = total
+	}
+
+	totalPages := 0
+	if pageSize > 0 && total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+	}
+	offset := 0
+	if pageSize > 0 {
+		offset = (page - 1) * pageSize
+		if offset < 0 {
+			offset = 0
+		}
+	}
+	p.ConversationPagination = ConversationPagination{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
+	}
+
+	limit := pageSize
+	if limit <= 0 {
+		limit = total
+	}
+
+	// Fetch conversations for this project ordered by recency.
+	convRows, err := db.QueryContext(ctx,
+		`SELECT c.id, c.agent, c.title, COALESCE(MAX(m.timestamp), 0) AS last_message_timestamp
+		 FROM conversations c
+		 LEFT JOIN messages m ON m.conversation_id = c.id
+		 WHERE c.project_id = ?
+		 GROUP BY c.id, c.agent, c.title
+		 ORDER BY last_message_timestamp DESC, c.id DESC
+		 LIMIT ? OFFSET ?`,
+		projectID, limit, offset,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -104,7 +166,7 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 
 	for convRows.Next() {
 		var c ConversationWithRatings
-		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title); err != nil {
+		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title, &c.LastMessageTimestamp); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		c.Ratings = []Rating{}
@@ -124,9 +186,14 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 
 	// Fetch ratings for all conversations in this project.
 	if len(convIDs) > 0 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(convIDs)), ",")
+		args := make([]any, 0, len(convIDs))
+		for _, id := range convIDs {
+			args = append(args, id)
+		}
 		ratRows, err := db.QueryContext(ctx,
-			"SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (SELECT id FROM conversations WHERE project_id = ?) ORDER BY created_at DESC",
-			projectID,
+			fmt.Sprintf("SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (%s) ORDER BY created_at DESC", placeholders),
+			args...,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("query ratings for project: %w", err)
@@ -151,18 +218,6 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 			return nil, fmt.Errorf("iterate ratings: %w", err)
 		}
 	}
-
-	sort.SliceStable(p.Conversations, func(i, j int) bool {
-		ti := latestRatingTime(p.Conversations[i].Ratings)
-		tj := latestRatingTime(p.Conversations[j].Ratings)
-		if ti.IsZero() != tj.IsZero() {
-			return !ti.IsZero()
-		}
-		if !ti.Equal(tj) {
-			return ti.After(tj)
-		}
-		return p.Conversations[i].ID < p.Conversations[j].ID
-	})
 
 	return &p, nil
 }
@@ -283,14 +338,4 @@ func ListAllProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
 		projects = append(projects, p)
 	}
 	return projects, rows.Err()
-}
-
-func latestRatingTime(ratings []Rating) time.Time {
-	var latest time.Time
-	for _, r := range ratings {
-		if r.CreatedAt.After(latest) {
-			latest = r.CreatedAt
-		}
-	}
-	return latest
 }

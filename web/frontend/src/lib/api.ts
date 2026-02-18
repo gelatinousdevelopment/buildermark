@@ -54,8 +54,12 @@ export function setProjectLabel(id: string, label: string): Promise<void> {
 	});
 }
 
-export function getProject(id: string): Promise<ProjectDetail> {
-	return api(`/api/v1/projects/${id}`);
+export function getProject(id: string, page?: number, pageSize?: number): Promise<ProjectDetail> {
+	const params = new URLSearchParams();
+	if (page !== undefined) params.set('page', String(page));
+	if (pageSize !== undefined) params.set('pageSize', String(pageSize));
+	const q = params.size > 0 ? `?${params.toString()}` : '';
+	return api(`/api/v1/projects/${id}${q}`);
 }
 
 export function setProjectIgnoreDiffPaths(id: string, ignoreDiffPaths: string): Promise<void> {

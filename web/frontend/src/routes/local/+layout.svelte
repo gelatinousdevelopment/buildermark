@@ -18,21 +18,14 @@
 	<hr class="divider" />
 	<section>
 		<nav class="breadcrumbs">
-			<!-- <a href={resolve('/local')}>Dashboard</a> -->
 			<a href={resolve('/local/projects')} class="item">Projects</a>
 			<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
-			<!-- <span class="chevron"></span> -->
 			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5')} class="item">zrate</a>
 			<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
-			<!-- <span class="chevron"></span> -->
 			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations')} class="selected item"
 				>Conversations</a
 			>
 			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/commits')} class="item">Commits</a>
-			<!-- <span class="chevron"></span>
-			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations')}
-				>Feb 16, 2026 5:29:46 PM</a
-			> -->
 		</nav>
 	</section>
 	<!-- <hr class="divider" /> -->

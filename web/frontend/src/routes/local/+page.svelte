@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { listProjects, getProject, setProjectIgnored } from '$lib/api';
-	import { stars, shortId } from '$lib/utils';
+	import { fmtTimeWithSeconds, stars, shortId } from '$lib/utils';
 	import type { ProjectDetail } from '$lib/types';
 
 	let projects: ProjectDetail[] = $state([]);
@@ -34,8 +34,8 @@
 	async function load() {
 		const [active, ignored] = await Promise.all([listProjects(false), listProjects(true)]);
 		const [activeDetails, ignoredDetails] = await Promise.all([
-			Promise.all(active.map((p) => getProject(p.id))),
-			Promise.all(ignored.map((p) => getProject(p.id)))
+			Promise.all(active.map((p) => getProject(p.id, 1, 10))),
+			Promise.all(ignored.map((p) => getProject(p.id, 1, 10)))
 		]);
 		projects = sortByRecentRating(activeDetails);
 		ignoredProjects = sortByRecentRating(ignoredDetails);
@@ -114,11 +114,17 @@
 			{#if project.conversations.length === 0}
 				<p>No conversations.</p>
 			{:else}
+				{#if project.conversationPagination.total > project.conversations.length}
+					<p class="conversation-count">
+						Showing {project.conversations.length} of {project.conversationPagination.total} conversations
+					</p>
+				{/if}
 				<table class="data">
 					<thead>
 						<tr>
 							<th>Conversation</th>
 							<th>Agent</th>
+							<th>Last Activity</th>
 							<th>Ratings</th>
 						</tr>
 					</thead>
@@ -136,6 +142,7 @@
 									</a>
 								</td>
 								<td>{conv.agent}</td>
+								<td>{conv.lastMessageTimestamp ? fmtTimeWithSeconds(conv.lastMessageTimestamp) : '—'}</td>
 								<td class="ratings">
 									{#if conv.ratings.length > 0}
 										{#each conv.ratings as r (r.id)}
@@ -208,6 +215,12 @@
 		margin-top: 2.5rem;
 		padding-top: 1rem;
 		border-top: 1px solid #e0e0e0;
+	}
+
+	.conversation-count {
+		margin: 0 0 0.5rem 0;
+		font-size: 0.8rem;
+		color: #888;
 	}
 
 	.ignored-section h3 {

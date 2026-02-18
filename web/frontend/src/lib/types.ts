@@ -18,13 +18,22 @@ export interface ProjectDetail {
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
+	conversationPagination: ConversationPagination;
 	conversations: ConversationWithRatings[];
+}
+
+export interface ConversationPagination {
+	page: number;
+	pageSize: number;
+	total: number;
+	totalPages: number;
 }
 
 export interface ConversationWithRatings {
 	id: string;
 	agent: string;
 	title: string;
+	lastMessageTimestamp: number;
 	ratings: Rating[];
 }
 
