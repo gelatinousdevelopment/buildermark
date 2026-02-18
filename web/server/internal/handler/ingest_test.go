@@ -132,7 +132,7 @@ func TestIngestEndpointsAndStatus(t *testing.T) {
 		t.Fatalf("reachedRoot = %v, want false", got)
 	}
 
-	c, err := db.GetCommitByHash(ctx, s.DB, projectID, binaryHash)
+	c, err := db.GetCommitByHash(ctx, s.DB, projectID, "main", binaryHash)
 	if err != nil {
 		t.Fatalf("GetCommitByHash: %v", err)
 	}

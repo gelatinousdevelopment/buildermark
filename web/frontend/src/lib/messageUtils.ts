@@ -11,7 +11,7 @@ export function escapeHtml(s: string): string {
 }
 
 export function renderMarkdown(content: string): string {
-	return marked.parse(escapeHtml(content), { gfm: true, breaks: true }) as string;
+	return marked.parse(content, { gfm: true, breaks: true }) as string;
 }
 
 export function isUserPromptMessage(message: MessageRead): boolean {

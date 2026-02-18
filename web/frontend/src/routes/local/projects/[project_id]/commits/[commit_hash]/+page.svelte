@@ -149,7 +149,8 @@
 			if (!projectId || !commitHash) {
 				throw new Error('Missing project or commit ID');
 			}
-			detail = await getProjectCommitDetail(projectId, commitHash);
+			const branch = new URLSearchParams(window.location.search).get('branch') ?? '';
+			detail = await getProjectCommitDetail(projectId, commitHash, branch);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load commit detail';
 		} finally {

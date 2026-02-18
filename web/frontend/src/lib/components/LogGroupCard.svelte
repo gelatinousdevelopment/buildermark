@@ -10,6 +10,7 @@
 	import type { SvelteSet } from 'svelte/reactivity';
 	import DiffMessageCard from './DiffMessageCard.svelte';
 	import LogMessageCard from './LogMessageCard.svelte';
+	import AgentTag from './AgentTag.svelte';
 
 	interface Props {
 		messages: MessageRead[];
@@ -21,10 +22,17 @@
 		onToggle?: () => void;
 	}
 
-	let { messages, agent = 'agent', expanded, expandedMessages, onToggleMessage, onToggle }: Props =
-		$props();
+	let {
+		messages,
+		agent = 'agent',
+		expanded,
+		expandedMessages,
+		onToggleMessage,
+		onToggle
+	}: Props = $props();
 
 	let timeSpan = $derived(groupTimeSpan(messages));
+	let groupedModelLabel = $derived(groupModelLabel(messages, agent));
 
 	function handleKeydown(e: KeyboardEvent, id: string) {
 		if (e.key === 'Enter' || e.key === ' ') {
@@ -54,11 +62,18 @@
 		}
 	}}
 >
-	<strong
-		>{messages.length}
-		{messages.length == 1 ? 'log' : 'logs'} from {groupModelLabel(messages, agent)}{#if timeSpan > 0}
-			&nbsp({formatDuration(timeSpan)}){/if}</strong
-	>
+	<strong>
+		{messages.length}
+		{messages.length == 1 ? 'log' : 'logs'} from
+		{#if groupedModelLabel === agent}
+			<AgentTag agent={agent} />
+		{:else}
+			{groupedModelLabel}
+		{/if}
+		{#if timeSpan > 0}
+			&nbsp;({formatDuration(timeSpan)})
+		{/if}
+	</strong>
 </div>
 {#if expanded}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -120,22 +135,31 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-	}
-
-	.log-group-header-clickable {
-		cursor: pointer;
-		border-radius: 3px;
 		padding: 0.15rem 0.3rem;
 		border: 1px solid transparent;
-		margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);
+		border-radius: 5px;
+		margin: -1px;
 	}
 
-	.log-group-header-clickable:hover {
+	.log-group-header strong {
+		color: #828282;
+		font-size: 0.9rem;
+		font-weight: normal;
+	}
+
+	.log-group-header.log-group-header-clickable {
+		cursor: pointer;
+		border: 1px solid transparent;
+		/*margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);*/
+	}
+
+	.log-group-header.log-group-header-clickable:hover {
 		background: var(--accent-color-ultralight);
 		border-color: var(--accent-color);
+		color: var(--accent-color);
 	}
 
-	.log-group-header-clickable:hover :global(strong) {
+	.log-group-header.log-group-header-clickable strong {
 		color: var(--accent-color);
 	}
 

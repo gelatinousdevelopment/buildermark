@@ -54,8 +54,12 @@ export function setProjectLabel(id: string, label: string): Promise<void> {
 	});
 }
 
-export function getProject(id: string): Promise<ProjectDetail> {
-	return api(`/api/v1/projects/${id}`);
+export function getProject(id: string, page?: number, pageSize?: number): Promise<ProjectDetail> {
+	const params = new URLSearchParams();
+	if (page !== undefined) params.set('page', String(page));
+	if (pageSize !== undefined) params.set('pageSize', String(pageSize));
+	const q = params.size > 0 ? `?${params.toString()}` : '';
+	return api(`/api/v1/projects/${id}${q}`);
 }
 
 export function setProjectIgnoreDiffPaths(id: string, ignoreDiffPaths: string): Promise<void> {
@@ -101,29 +105,37 @@ export function createRating(
 	});
 }
 
-export function listProjectCommits(): Promise<ProjectCommitCoverageResponse> {
-	return api('/api/v1/projects/commits');
+export function listProjectCommits(branch = ''): Promise<ProjectCommitCoverageResponse> {
+	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+	return api(`/api/v1/projects/commits${q}`);
 }
 
 export function listProjectCommitsPage(
 	projectId: string,
-	page = 1
+	page = 1,
+	branch = ''
 ): Promise<ProjectCommitPageResponse> {
-	return api(`/api/v1/projects/${projectId}/commits?page=${page}`);
+	const params = new URLSearchParams({ page: String(page) });
+	if (branch) params.set('branch', branch);
+	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }
 
 export function getProjectCommitDetail(
 	projectId: string,
-	commitHash: string
+	commitHash: string,
+	branch = ''
 ): Promise<ProjectCommitDetailResponse> {
-	return api(`/api/v1/projects/${projectId}/commits/${commitHash}`);
+	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+	return api(`/api/v1/projects/${projectId}/commits/${commitHash}${q}`);
 }
 
 export function ingestMoreCommits(
 	projectId: string,
-	count: number
+	count: number,
+	branch = ''
 ): Promise<IngestCommitsResponse> {
-	return api(`/api/v1/projects/${projectId}/ingest-commits`, {
+	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+	return api(`/api/v1/projects/${projectId}/ingest-commits${q}`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ count })
@@ -131,7 +143,9 @@ export function ingestMoreCommits(
 }
 
 export function getCommitIngestionStatus(
-	projectId: string
+	projectId: string,
+	branch = ''
 ): Promise<CommitIngestionStatusResponse> {
-	return api(`/api/v1/projects/${projectId}/commit-ingestion-status`);
+	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+	return api(`/api/v1/projects/${projectId}/commit-ingestion-status${q}`);
 }

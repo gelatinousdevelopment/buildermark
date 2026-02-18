@@ -75,6 +75,32 @@ func TestName(t *testing.T) {
 	}
 }
 
+func TestReadConversationLogEntriesSkipsInvalidTimestamp(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/proj/test"
+	sessionID := "sess-1"
+
+	convPath := conversationPath(home, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	lines := []string{
+		`{"type":"assistant","timestamp":"not-a-time","message":{"content":"bad"}}`,
+		`{"type":"assistant","timestamp":"2026-02-18T10:00:00.000Z","message":{"content":"ok"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write conversation file: %v", err)
+	}
+
+	entries := readConversationLogEntries(home, projectPath, sessionID)
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1", len(entries))
+	}
+	if got := entries[0].Content; got != "ok" {
+		t.Fatalf("content = %q, want %q", got, "ok")
+	}
+}
+
 func TestWatcherProcessEntries(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

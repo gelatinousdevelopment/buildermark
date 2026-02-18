@@ -849,3 +849,71 @@ func gitRun(t *testing.T, repo string, extraEnv []string, args ...string) string
 	}
 	return string(out)
 }
+
+func TestListProjectCommitsForProject_ByBranch(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	appPath := filepath.Join(repo, "app.txt")
+	mustWriteFile(t, appPath, "start\n")
+	gitRun(t, repo, nil, "add", "app.txt")
+	gitRun(t, repo, nil, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	gitRun(t, repo, nil, "checkout", "-b", "feature/demo")
+	mustWriteFile(t, appPath, "start\nfeature\n")
+	gitRun(t, repo, nil, "add", "app.txt")
+	gitRun(t, repo, nil, "commit", "-m", "feature change")
+
+	pid, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, pid, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.UpdateProjectDefaultBranch(ctx, s.DB, pid, "main"); err != nil {
+		t.Fatalf("UpdateProjectDefaultBranch: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+pid+"/commits?page=1&branch=feature/demo", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	if got := data["branch"].(string); got != "feature/demo" {
+		t.Fatalf("branch = %q, want %q", got, "feature/demo")
+	}
+	commits := data["commits"].([]any)
+	if len(commits) == 0 {
+		t.Fatalf("expected commits for feature branch")
+	}
+	found := false
+	for _, raw := range commits {
+		item := raw.(map[string]any)
+		if item["subject"].(string) == "feature change" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("feature branch response missing feature commit")
+	}
+}

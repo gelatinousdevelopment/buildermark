@@ -206,6 +206,9 @@ func collectSessionEntries(path string) ([]agent.Entry, string) {
 		}
 
 		ts := parseCodexTimestamp(event.Timestamp)
+		if ts <= 0 {
+			continue
+		}
 
 		switch event.Type {
 		case "session_meta":

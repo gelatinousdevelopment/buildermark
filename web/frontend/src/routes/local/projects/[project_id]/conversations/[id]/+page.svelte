@@ -9,6 +9,7 @@
 	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
+	import AgentTag from '$lib/components/AgentTag.svelte';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -166,7 +167,7 @@
 	<p class="error">{error}</p>
 {:else if conversation}
 	<h2>{conversation.title || conversation.id}</h2>
-	<p>Agent: {conversation.agent}</p>
+	<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
 	{#if conversationModels.length > 0}
 		<div class="models-summary">
 			<span class="models-label">Models:</span>
@@ -183,7 +184,7 @@
 	{:else}
 		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
 			{#if item.kind === 'message' && isUserPromptMessage(item.message)}
-				<div class="message" data-message-id={item.message.id}>
+				<div class="message user-message" data-message-id={item.message.id}>
 					<UserPromptMessageCard message={item.message} />
 				</div>
 			{:else if item.kind === 'message' && isDiffMessage(item.message)}
@@ -287,15 +288,15 @@
 
 <style>
 	.message {
-		background: #fffff4;
+		background: #ffffff;
 		margin-bottom: 0.5rem;
-		padding: 0.75rem;
-		border: 1px solid #ddddaa;
-		border-radius: 4px;
+		padding: 0.6rem 1rem;
+		border: 1px solid #dddddd;
+		border-radius: 8px;
+		line-height: 1.4em;
 	}
 
 	.message-collapsed {
-		padding: 0.5rem 0.75rem;
 		background: #fafafa;
 		cursor: pointer;
 	}
@@ -303,6 +304,18 @@
 	.message-collapsed:hover {
 		border-color: var(--accent-color);
 		background: var(--accent-color-ultralight);
+	}
+
+	.message.user-message {
+		background: #ebfddd;
+		border: 1px solid #a8ef70;
+		color: #626262;
+	}
+
+	.agent-header {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
 	}
 
 	.models-summary {
@@ -351,20 +364,16 @@
 
 	.log-group {
 		background: none;
-		border: none;
+		border: 1px solid transparent;
 		margin-left: 1rem;
-		padding: 0.3rem;
+		padding: 0;
 		width: fit-content;
-	}
-
-	.log-group :global(.log-group-header strong) {
-		color: #828282;
-		font-size: 0.9rem;
-		font-weight: normal;
+		border-radius: 5px;
 	}
 
 	.log-group.message-collapsed:hover {
 		background: var(--accent-color-ultralight);
+		border: 1px solid var(--accent-color);
 	}
 
 	.log-group.message-collapsed:hover :global(.log-group-header strong) {

@@ -24,8 +24,9 @@ type ingestCommitsRequest struct {
 }
 
 type ingestCommitsResponse struct {
-	Ingested    int  `json:"ingested"`
-	ReachedRoot bool `json:"reachedRoot"`
+	Ingested    int    `json:"ingested"`
+	ReachedRoot bool   `json:"reachedRoot"`
+	Branch      string `json:"branch"`
 }
 
 func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request) {
@@ -51,6 +52,7 @@ func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request)
 		req.Count = 500
 	}
 
+	branch := strings.TrimSpace(r.URL.Query().Get("branch"))
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
 		log.Printf("error loading project %s: %v", projectID, err)
@@ -60,6 +62,12 @@ func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request)
 	if project == nil {
 		writeError(w, http.StatusNotFound, "project not found")
 		return
+	}
+	if branch == "" {
+		branch = strings.TrimSpace(project.DefaultBranch)
+		if branch == "" {
+			branch = "main"
+		}
 	}
 
 	groups, err := listAllProjectGroups(r.Context(), s.DB)
@@ -86,7 +94,7 @@ func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ingested, reachedRoot, err := ingestMoreCommitsForProject(r.Context(), s.DB, repoProject, group, identity, req.Count)
+	ingested, reachedRoot, err := ingestMoreCommitsForProject(r.Context(), s.DB, repoProject, group, identity, branch, req.Count)
 	if err != nil {
 		log.Printf("error ingesting commits for %s: %v", projectID, err)
 		writeError(w, http.StatusInternalServerError, "failed to ingest commits")
@@ -96,6 +104,7 @@ func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request)
 	writeSuccess(w, http.StatusOK, ingestCommitsResponse{
 		Ingested:    ingested,
 		ReachedRoot: reachedRoot,
+		Branch:      branch,
 	})
 }
 
@@ -108,10 +117,11 @@ func ingestMoreCommitsForProject(
 	repoProject *db.Project,
 	group projectGroup,
 	identity gitIdentity,
+	branch string,
 	count int,
 ) (int, bool, error) {
 	// Get ALL commits from git for this user (oldest first).
-	allGitCommits, err := listAllCommitsByIdentity(ctx, repoProject.Path, identity)
+	allGitCommits, err := listAllCommitsByIdentity(ctx, repoProject.Path, branch, identity)
 	if err != nil {
 		return 0, false, fmt.Errorf("list git commits: %w", err)
 	}
@@ -120,7 +130,7 @@ func ingestMoreCommitsForProject(
 	}
 
 	// Find the oldest already-ingested commit.
-	oldest, err := db.OldestCommitByProject(ctx, database, repoProject.ID)
+	oldest, err := db.OldestCommitByProject(ctx, database, repoProject.ID, branch)
 	if err != nil {
 		return 0, false, fmt.Errorf("oldest commit: %w", err)
 	}
@@ -158,7 +168,7 @@ func ingestMoreCommitsForProject(
 		return 0, true, nil
 	}
 
-	ingested, err := ingestCommits(ctx, database, repoProject, group, toIngest)
+	ingested, err := ingestCommits(ctx, database, repoProject, group, branch, toIngest)
 	if err != nil {
 		return 0, false, err
 	}
@@ -180,8 +190,9 @@ func IngestDefaultCommits(
 	repoProject *db.Project,
 	group projectGroup,
 	identity gitIdentity,
+	branch string,
 ) error {
-	commits, err := listCommitsByIdentity(ctx, repoProject.Path, identity)
+	commits, err := listCommitsByIdentity(ctx, repoProject.Path, branch, identity)
 	if err != nil {
 		return err
 	}
@@ -193,7 +204,7 @@ func IngestDefaultCommits(
 	if start < 0 {
 		start = 0
 	}
-	_, err = ingestCommits(ctx, database, repoProject, group, commits[start:])
+	_, err = ingestCommits(ctx, database, repoProject, group, branch, commits[start:])
 	return err
 }
 
@@ -202,6 +213,7 @@ func ingestCommits(
 	database *sql.DB,
 	repoProject *db.Project,
 	group projectGroup,
+	branch string,
 	toIngest []gitCommit,
 ) (int, error) {
 	if len(toIngest) == 0 {
@@ -252,6 +264,7 @@ func ingestCommits(
 
 		dbCommits = append(dbCommits, db.Commit{
 			ProjectID:      repoProject.ID,
+			BranchName:     branch,
 			CommitHash:     gc.Hash,
 			Subject:        gc.Subject,
 			AuthorName:     gc.AuthorName,
@@ -274,9 +287,9 @@ func ingestCommits(
 
 // listAllCommitsByIdentity is like listCommitsByIdentity but without the max-count limit,
 // so we can see all commits for pagination/ingestion purposes.
-func listAllCommitsByIdentity(ctx context.Context, path string, identity gitIdentity) ([]gitCommit, error) {
+func listAllCommitsByIdentity(ctx context.Context, path, branch string, identity gitIdentity) ([]gitCommit, error) {
 	out, err := runGit(ctx, path,
-		"log", mainBranch,
+		"log", branch,
 		"--pretty=format:%H%x1f%an%x1f%ae%x1f%ct%x1f%s%x1e",
 		"--reverse",
 	)
@@ -346,9 +359,9 @@ func stripBinaryDiffs(diff string) string {
 }
 
 type commitIngestionStatusResponse struct {
-	IngestedCount    int  `json:"ingestedCount"`
-	TotalGitCommits  int  `json:"totalGitCommits"`
-	ReachedRoot      bool `json:"reachedRoot"`
+	IngestedCount   int  `json:"ingestedCount"`
+	TotalGitCommits int  `json:"totalGitCommits"`
+	ReachedRoot     bool `json:"reachedRoot"`
 }
 
 func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Request) {
@@ -358,6 +371,7 @@ func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	branch := strings.TrimSpace(r.URL.Query().Get("branch"))
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
 		log.Printf("error loading project %s: %v", projectID, err)
@@ -369,7 +383,14 @@ func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ingestedCount, err := db.CountCommitsByProject(r.Context(), s.DB, project.ID)
+	if branch == "" {
+		branch = strings.TrimSpace(project.DefaultBranch)
+		if branch == "" {
+			branch = "main"
+		}
+	}
+
+	ingestedCount, err := db.CountCommitsByProject(r.Context(), s.DB, project.ID, branch)
 	if err != nil {
 		log.Printf("error counting commits for %s: %v", projectID, err)
 		writeError(w, http.StatusInternalServerError, "failed to count commits")
@@ -412,7 +433,7 @@ func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	allGitCommits, err := listAllCommitsByIdentity(r.Context(), repoProject.Path, identity)
+	allGitCommits, err := listAllCommitsByIdentity(r.Context(), repoProject.Path, branch, identity)
 	if err != nil {
 		log.Printf("error listing all git commits for %s: %v", projectID, err)
 		writeSuccess(w, http.StatusOK, commitIngestionStatusResponse{
@@ -425,7 +446,7 @@ func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Requ
 
 	reachedRoot := ingestedCount >= len(allGitCommits)
 	if !reachedRoot && ingestedCount > 0 {
-		oldest, err := db.OldestCommitByProject(r.Context(), s.DB, project.ID)
+		oldest, err := db.OldestCommitByProject(r.Context(), s.DB, project.ID, branch)
 		if err == nil && oldest != nil && len(allGitCommits) > 0 {
 			reachedRoot = oldest.CommitHash == allGitCommits[0].Hash
 		}

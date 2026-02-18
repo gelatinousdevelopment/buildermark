@@ -3,6 +3,7 @@ export interface Project {
 	path: string;
 	label: string;
 	gitId: string;
+	defaultBranch: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
@@ -13,16 +14,26 @@ export interface ProjectDetail {
 	path: string;
 	label: string;
 	gitId: string;
+	defaultBranch: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
+	conversationPagination: ConversationPagination;
 	conversations: ConversationWithRatings[];
+}
+
+export interface ConversationPagination {
+	page: number;
+	pageSize: number;
+	total: number;
+	totalPages: number;
 }
 
 export interface ConversationWithRatings {
 	id: string;
 	agent: string;
 	title: string;
+	lastMessageTimestamp: number;
 	ratings: Rating[];
 }
 
@@ -64,6 +75,7 @@ export interface Rating {
 
 export interface ProjectCommitCoverageResponse {
 	branch: string;
+	branches: string[];
 	currentUser: string;
 	currentEmail: string;
 	summary: ProjectCommitSummary;
@@ -72,6 +84,7 @@ export interface ProjectCommitCoverageResponse {
 
 export interface ProjectCommitPageResponse {
 	branch: string;
+	branches: string[];
 	currentUser: string;
 	currentEmail: string;
 	project: Project;
@@ -89,6 +102,7 @@ export interface ProjectCommitPagination {
 
 export interface ProjectCommitDetailResponse {
 	branch: string;
+	branches: string[];
 	commit: ProjectCommitCoverage;
 	diff: string;
 	files: ProjectCommitFileCoverage[];

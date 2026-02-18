@@ -158,6 +158,76 @@ func TestGetProjectNotFound(t *testing.T) {
 	}
 }
 
+func TestGetProjectSupportsConversationPagination(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"conv-1", "conv-2", "conv-3"} {
+		if err := db.EnsureConversation(ctx, s.DB, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-1", Role: "user", Content: "one", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: pid, ConversationID: "conv-3", Role: "user", Content: "three", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "conv-2", Role: "user", Content: "two", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+pid+"?page=1&pageSize=2", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := env.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("data is not an object: %T", env.Data)
+	}
+
+	pagination, ok := data["conversationPagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("conversationPagination is not an object: %T", data["conversationPagination"])
+	}
+	if got := int(pagination["page"].(float64)); got != 1 {
+		t.Fatalf("page = %d, want 1", got)
+	}
+	if got := int(pagination["pageSize"].(float64)); got != 2 {
+		t.Fatalf("pageSize = %d, want 2", got)
+	}
+	if got := int(pagination["total"].(float64)); got != 3 {
+		t.Fatalf("total = %d, want 3", got)
+	}
+
+	conversations, ok := data["conversations"].([]any)
+	if !ok {
+		t.Fatalf("conversations is not an array: %T", data["conversations"])
+	}
+	if len(conversations) != 2 {
+		t.Fatalf("got %d conversations, want 2", len(conversations))
+	}
+	first := conversations[0].(map[string]any)
+	second := conversations[1].(map[string]any)
+	if first["id"] != "conv-3" {
+		t.Fatalf("first conversation id = %v, want %q", first["id"], "conv-3")
+	}
+	if second["id"] != "conv-2" {
+		t.Fatalf("second conversation id = %v, want %q", second["id"], "conv-2")
+	}
+}
+
 func TestListProjectsIgnoredFilter(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()

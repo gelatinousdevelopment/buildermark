@@ -237,6 +237,63 @@ func TestGetProjectDetailWithRatings(t *testing.T) {
 	}
 }
 
+func TestGetProjectDetailPageSortsByLastMessageTimestampAndPaginates(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"conv-old", "conv-new", "conv-none"} {
+		if err := EnsureConversation(ctx, db, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+
+	msgs := []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-old", Role: "user", Content: "old", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: pid, ConversationID: "conv-new", Role: "user", Content: "new", RawJSON: "{}"},
+	}
+	if err := InsertMessages(ctx, db, msgs); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	page1, err := GetProjectDetailPage(ctx, db, pid, 1, 2)
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage page1: %v", err)
+	}
+	if len(page1.Conversations) != 2 {
+		t.Fatalf("page1 conversations = %d, want 2", len(page1.Conversations))
+	}
+	if got := page1.Conversations[0].ID; got != "conv-new" {
+		t.Fatalf("page1 first conversation = %q, want %q", got, "conv-new")
+	}
+	if got := page1.Conversations[1].ID; got != "conv-old" {
+		t.Fatalf("page1 second conversation = %q, want %q", got, "conv-old")
+	}
+	if got := page1.ConversationPagination.Total; got != 3 {
+		t.Fatalf("page1 total = %d, want 3", got)
+	}
+	if got := page1.ConversationPagination.TotalPages; got != 2 {
+		t.Fatalf("page1 totalPages = %d, want 2", got)
+	}
+
+	page2, err := GetProjectDetailPage(ctx, db, pid, 2, 2)
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage page2: %v", err)
+	}
+	if len(page2.Conversations) != 1 {
+		t.Fatalf("page2 conversations = %d, want 1", len(page2.Conversations))
+	}
+	if got := page2.Conversations[0].ID; got != "conv-none" {
+		t.Fatalf("page2 conversation = %q, want %q", got, "conv-none")
+	}
+	if got := page2.Conversations[0].LastMessageTimestamp; got != 0 {
+		t.Fatalf("conv-none lastMessageTimestamp = %d, want 0", got)
+	}
+}
+
 func TestListProjectsReturnsLabel(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

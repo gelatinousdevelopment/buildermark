@@ -3,6 +3,7 @@
 	import 'diff2html/bundles/css/diff2html.min.css';
 	import { fmtTime } from '$lib/utils';
 	import DiffCount from './DiffCount.svelte';
+	import AgentTag from './AgentTag.svelte';
 
 	interface Props {
 		label?: string;
@@ -149,6 +150,8 @@
 	}
 
 	let fileStats = $derived(perFileDiffStats(content));
+	const nonAgentRoles = new Set(['user', 'system', 'tool', 'assistant']);
+	let isAgentRole = $derived(role ? !nonAgentRoles.has(role.toLowerCase()) : false);
 
 	/** Show file list when it adds info the header doesn't already convey. */
 	let showFileList = $derived(
@@ -181,7 +184,21 @@
 		<span>&middot; {fmtTime(timestamp)}</span>
 	{/if}
 	{#if role || model}
-		<span class="message-model">{[role, model].filter(Boolean).join(' · ')}</span>
+		<span class="message-model">
+			{#if role}
+				{#if isAgentRole}
+					<AgentTag agent={role} />
+				{:else}
+					<span>{role}</span>
+				{/if}
+			{/if}
+			{#if role && model}
+				<span>&middot;</span>
+			{/if}
+			{#if model}
+				<span>{model}</span>
+			{/if}
+		</span>
 	{/if}
 	{#if statsLabel}
 		<span class="message-diff-stats">{statsLabel}</span>
@@ -206,6 +223,7 @@
 	</div>
 {/if}
 {#if linkHref && linkLabel}
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 	<div class="conversation-link"><a href={linkHref}>{linkLabel}</a></div>
 {/if}
 {#if expanded}
@@ -229,9 +247,8 @@
 		cursor: pointer;
 		border-radius: 3px;
 		padding: 0.15rem 0.3rem;
-		margin: -0.15rem -0.3rem;
 		border: 1px solid transparent;
-		margin: calc(-0.15rem - 1px) calc(-0.3rem - 1px);
+		margin: calc(-0.1rem - 1px) calc(-0.3rem - 1px);
 	}
 
 	.message-header-clickable:hover {
@@ -242,6 +259,9 @@
 
 	.message-model {
 		color: #9a9a9a;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 	}
 
 	.message-diff-stats {

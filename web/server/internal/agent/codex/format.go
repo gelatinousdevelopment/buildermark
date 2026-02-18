@@ -57,7 +57,7 @@ type codexEventMsgPayload struct {
 
 func parseCodexTimestamp(raw json.RawMessage) int64 {
 	if len(raw) == 0 || string(raw) == "null" {
-		return time.Now().UnixMilli()
+		return 0
 	}
 
 	var n int64
@@ -67,11 +67,11 @@ func parseCodexTimestamp(raw json.RawMessage) int64 {
 
 	var s string
 	if err := json.Unmarshal(raw, &s); err != nil {
-		return time.Now().UnixMilli()
+		return 0
 	}
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return time.Now().UnixMilli()
+		return 0
 	}
 
 	if ts, err := time.Parse(time.RFC3339Nano, s); err == nil {
@@ -84,7 +84,7 @@ func parseCodexTimestamp(raw json.RawMessage) int64 {
 		return ms
 	}
 
-	return time.Now().UnixMilli()
+	return 0
 }
 
 func extractResponseItemText(blocks []codexResponseContentBlock) string {
