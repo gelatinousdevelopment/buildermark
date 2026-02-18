@@ -23,6 +23,10 @@
 
 - [ ] Are we incorrectly detecting some diffs, like the last diff on [ba9dc20a-7886-4abf-9fec-6101551c8d03](http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03), which appears to be replacing the full file instead of doing a diff. Should we do a diff ourselves, by importing the `[file-history-snapshot]` that is logged just before it?
 
+- [ ] Implement the nav in local/+layout.svelte in the "breadcrumbs" div. The Projects link should always exist, but it should have the "selected" state when on the /local/projects page. The relevant project name should show when in a `/projects/[id]` route, of course... and both the Conversations and Commits links should also appear when in a `projects/[id]` route, but only the relevant one should have the "selected" state, of course. Implement this cleanly and flexible enough to add more items, ideally. Figure out a good plan first.
+
+- [ ] Implement two svelte components: Conversations and Commits, based on the `local/projects/[id]/conversations` and `local/projects/[id]/commits` content, with optional pagination props/hooks so the route +page.svelte files can implement pagination in some places. We're going to reuse these two components on the `/local/projects` route, where each project has a full row, with two columns, one for conversations and one for commits. Show the most recent 10 for each of those. Make the data loading be asynchronous and load the most recently updated projects' data first, since the go server may need to do some work to check for any changes on disk before returning.
+
 - [ ] Improve design of conversation header
 - [ ] Improve normalization of code (like code formatting) when comparing agent diffs to commit diffs
 - [ ] Is the go process continuously monitoring conversation logs and importing? I think it's not, at least for claude.

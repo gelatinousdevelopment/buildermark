@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { getProject } from '$lib/api';
-	import { resolve } from '$app/paths';
 	import type { ProjectDetail } from '$lib/types';
+	import { navStore } from '$lib/stores/nav.svelte';
 
 	let { children } = $props();
 
@@ -16,11 +16,16 @@
 			const projectId = page.params.project_id;
 			if (!projectId) throw new Error('Missing project ID');
 			project = await getProject(projectId);
+			navStore.projectName = project.label || project.path;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load project';
 		} finally {
 			loading = false;
 		}
+	});
+
+	onDestroy(() => {
+		navStore.projectName = null;
 	});
 </script>
 

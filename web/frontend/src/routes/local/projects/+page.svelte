@@ -1,19 +1,59 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { listProjects } from '$lib/api';
-	import type { Project } from '$lib/types';
+	import { listProjects, getProject } from '$lib/api';
+	import Conversations from '$lib/components/project/Conversations.svelte';
+	import Commits from '$lib/components/project/Commits.svelte';
+	import type { Project, ProjectDetail } from '$lib/types';
 
-	let projects: Project[] = $state([]);
+	type ProjectRow = {
+		project: Project;
+		conversationData: ProjectDetail | null;
+		conversationError: string | null;
+		lastMessageTimestamp: number;
+	};
+
+	let rows: ProjectRow[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
 
+	function projectName(project: Project): string {
+		return project.label || project.path;
+	}
+
+	function sortRows(a: ProjectRow, b: ProjectRow): number {
+		if (a.lastMessageTimestamp !== b.lastMessageTimestamp) {
+			return b.lastMessageTimestamp - a.lastMessageTimestamp;
+		}
+		return projectName(a.project).localeCompare(projectName(b.project));
+	}
+
 	onMount(async () => {
 		try {
-			projects = await listProjects(false);
-			projects = projects
-				.filter((p) => p.gitId)
-				.sort((a, b) => (a.label || a.path).localeCompare(b.label || b.path));
+			const projects = (await listProjects(false)).filter((project) => project.gitId);
+			const loadedRows = await Promise.all(
+				projects.map(async (project): Promise<ProjectRow> => {
+					try {
+						const conversationData = await getProject(project.id, 1, 10);
+						const latestConversationTs = conversationData.conversations[0]?.lastMessageTimestamp ?? 0;
+						return {
+							project,
+							conversationData,
+							conversationError: null,
+							lastMessageTimestamp: latestConversationTs
+						};
+					} catch (e) {
+						return {
+							project,
+							conversationData: null,
+							conversationError:
+								e instanceof Error ? e.message : 'Failed to load project conversations',
+							lastMessageTimestamp: 0
+						};
+					}
+				})
+			);
+			rows = loadedRows.sort(sortRows);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load projects';
 		} finally {
@@ -26,51 +66,55 @@
 	<p class="loading">Loading projects...</p>
 {:else if error}
 	<p class="error">{error}</p>
-{:else if projects.length === 0}
+{:else if rows.length === 0}
 	<p>No tracked projects with git IDs found.</p>
 {:else}
 	<div class="projects">
-		{#each projects as project (project.id)}
+		{#each rows as row, index (row.project.id)}
 			<div class="project">
 				<div class="meta">
-					<div class="label">{project.label || project.path}</div>
-					<div class="path">{project.path}</div>
+					<div class="label">{projectName(row.project)}</div>
+					<div class="path">{row.project.path}</div>
 				</div>
 				<div class="content">
-					<div class="column conversations"><div class="heading">Agent Conversations</div></div>
-					<div class="column commits"><div class="heading">Git Commits</div></div>
+					<div class="column conversations">
+						<div class="heading">
+							<a
+								href={resolve('/local/projects/[project_id]/conversations', {
+									project_id: row.project.id
+								})}>Agent Conversations</a
+							>
+						</div>
+						<Conversations
+							projectId={row.project.id}
+							limit={10}
+							autoload={false}
+							initialData={row.conversationData}
+							initialError={row.conversationError}
+							showAgentColumn={true}
+							showRatingsColumn={true}
+						/>
+					</div>
+					<div class="column commits">
+						<div class="heading">
+							<a
+								href={resolve('/local/projects/[project_id]/commits', {
+									project_id: row.project.id
+								})}>Git Commits</a
+							>
+						</div>
+						<Commits
+							projectId={row.project.id}
+							limit={10}
+							compact={true}
+							useLoadQueue={true}
+							loadPriority={index}
+						/>
+					</div>
 				</div>
 			</div>
 		{/each}
 	</div>
-
-	<!-- <table class="data">
-		<thead>
-			<tr>
-				<th>Project</th>
-				<th>Path</th>
-				<th></th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each projects as project (project.id)}
-				<tr>
-					<td>{project.label || project.path}</td>
-					<td>{project.path}</td>
-					<td>
-						<a href={resolve('/local/projects/[project_id]/commits', { project_id: project.id })}
-							>Commits</a
-						>
-						<a
-							href={resolve('/local/projects/[project_id]/conversations', {
-								project_id: project.id
-							})}>Conversations</a
-						>
-					</td>
-				</tr>
-			{/each}
-		</tbody>
-	</table> -->
 {/if}
 
 <style>
@@ -138,6 +182,16 @@
 		text-transform: uppercase;
 		font-size: 0.9rem;
 		opacity: 0.5;
+		margin-bottom: 0.75rem;
+	}
+
+	.project .column .heading a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.project .column .heading a:hover {
+		text-decoration: underline;
 	}
 
 	.meta {
