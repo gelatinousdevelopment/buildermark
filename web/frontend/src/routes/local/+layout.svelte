@@ -2,9 +2,30 @@
 	import './local.css';
 	import './markdown.css';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import Icon from '$lib/Icon.svelte';
+	import { navStore } from '$lib/stores/nav.svelte';
 
 	let { children } = $props();
+
+	let projectId = $derived(page.params.project_id);
+
+	const projectTabs = [
+		{
+			label: 'Conversations',
+			segment: 'conversations',
+			route: '/local/projects/[project_id]/conversations' as const
+		},
+		{
+			label: 'Commits',
+			segment: 'commits',
+			route: '/local/projects/[project_id]/commits' as const
+		}
+	];
+
+	function isTabSelected(segment: string): boolean {
+		return page.url.pathname.includes('/' + segment);
+	}
 </script>
 
 <header>
@@ -18,14 +39,25 @@
 	<hr class="divider" />
 	<section>
 		<nav class="breadcrumbs">
-			<a href={resolve('/local/projects')} class="item">Projects</a>
-			<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
-			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5')} class="item">zrate</a>
-			<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
-			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations')} class="selected item"
-				>Conversations</a
+			<a
+				href={resolve('/local/projects')}
+				class="item"
+				class:selected={page.route.id === '/local/projects'}>Projects</a
 			>
-			<a href={resolve('/local/projects/oiSyQa5jX3iGHhcaykB-5/commits')} class="item">Commits</a>
+			{#if projectId}
+				<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
+				<a href={resolve('/local/projects/[project_id]', { project_id: projectId })} class="item"
+					>{navStore.projectName || projectId}</a
+				>
+				<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
+				{#each projectTabs as tab (tab.segment)}
+					<a
+						href={resolve(tab.route, { project_id: projectId })}
+						class="item"
+						class:selected={isTabSelected(tab.segment)}>{tab.label}</a
+					>
+				{/each}
+			{/if}
 		</nav>
 	</section>
 	<!-- <hr class="divider" /> -->
