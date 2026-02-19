@@ -104,6 +104,18 @@
 		return new Date(unixMs).toLocaleString();
 	}
 
+	function commitDetailsHref(projectId: string, commitHash: string): string {
+		const branchForLink = selectedBranch || data?.branch || '';
+		if (branchForLink) {
+			return resolve('/local/projects/[project_id]/commits/[branch]/[commit_hash]', {
+				project_id: projectId,
+				branch: branchForLink,
+				commit_hash: commitHash
+			});
+		}
+		return resolve('/local/projects/[project_id]/commits', { project_id: projectId });
+	}
+
 	function withOptionalQueue<T>(task: () => Promise<T>): Promise<T> {
 		if (useLoadQueue) return enqueueLoad(task, loadPriority);
 		return task();
@@ -264,17 +276,13 @@
 					{#if !compact}
 						<td class="time">{formatTime(c.authoredAtUnixMs)}</td>
 					{/if}
-					<td class="title">
-						<div>
-							<a
-								href={resolve('/local/projects/[project_id]/commits/[branch]/[commit_hash]', {
-									project_id: c.projectId,
-									branch: selectedBranch || data?.branch || '',
-									commit_hash: c.commitHash
-								})}
-								class="link-button"
-							>
-								{c.subject || c.commitHash.slice(0, 8)}
+						<td class="title">
+							<div>
+								<a
+									href={commitDetailsHref(c.projectId, c.commitHash)}
+									class="link-button"
+								>
+									{c.subject || c.commitHash.slice(0, 8)}
 							</a>
 						</div>
 						<!-- {#if !c.workingCopy}

@@ -108,3 +108,5 @@ This diff log (not a real diff) was found, but the diff was not matched to the f
 - [x] Improve normalization of code (like code formatting) when comparing agent diffs to commit diffs
 - [x] Support more than just main branch
 - [x] Maybe organize dashboard by Project > Commits (and Working Copy) > Conversations?
+- [x] Add a `/local/settings` route page
+- [x] Implement a list of projects in Settings, with a checkbox for each indicating if it's tracked (checked means tracked) or ignored. Remove the ignored ones from the `

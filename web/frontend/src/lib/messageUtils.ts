@@ -14,6 +14,10 @@ export function renderMarkdown(content: string): string {
 	return marked.parse(content, { gfm: true, breaks: true }) as string;
 }
 
+export function normalizeEscapedNewlines(content: string): string {
+	return content.replaceAll('\\r\\n', '\n').replaceAll('\\n', '\n');
+}
+
 export function isUserPromptMessage(message: MessageRead): boolean {
 	if (message.role !== 'user') return false;
 	const trimmed = message.content.trimStart();

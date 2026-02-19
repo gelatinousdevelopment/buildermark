@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { stars, fmtTime } from '$lib/utils';
-	import { renderMarkdown } from '$lib/messageUtils';
+	import { renderMarkdown, normalizeEscapedNewlines } from '$lib/messageUtils';
 	import type { Rating } from '$lib/types';
 
 	interface Props {
@@ -15,14 +15,20 @@
 </div>
 <div class="rating-stars">{stars(rating.rating)}</div>
 {#if rating.note}
-	<div class="rating-field"><strong>Note:</strong> {rating.note}</div>
+	<div class="rating-field">
+		<strong>Note:</strong>
+		<div class="markdown-body">
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			{@html renderMarkdown(normalizeEscapedNewlines(rating.note))}
+		</div>
+	</div>
 {/if}
 {#if rating.analysis}
 	<div class="rating-field">
 		<strong>Analysis:</strong>
 		<div class="markdown-body">
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			{@html renderMarkdown(rating.analysis)}
+			{@html renderMarkdown(normalizeEscapedNewlines(rating.analysis))}
 		</div>
 	</div>
 {/if}

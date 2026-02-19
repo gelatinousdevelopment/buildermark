@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Rating } from '$lib/types';
 	import { stars } from '$lib/utils';
-	import { renderMarkdown } from '$lib/messageUtils';
+	import { renderMarkdown, normalizeEscapedNewlines } from '$lib/messageUtils';
 	import Popover from './Popover.svelte';
 
 	interface Props {
@@ -28,13 +28,13 @@
 						{#if r.note}
 							<div class="rating-note markdown-body">
 								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-								{@html renderMarkdown(r.note)}
+								{@html renderMarkdown(normalizeEscapedNewlines(r.note))}
 							</div>
 						{/if}
 						{#if r.analysis}
 							<div class="rating-analysis markdown-body">
 								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-								{@html renderMarkdown(r.analysis)}
+								{@html renderMarkdown(normalizeEscapedNewlines(r.analysis))}
 							</div>
 						{/if}
 					</div>

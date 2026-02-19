@@ -28,6 +28,16 @@
 		return projectName(a.project).localeCompare(projectName(b.project));
 	}
 
+	function projectCommitsHref(projectId: string, branch: string): string {
+		if (branch) {
+			return resolve('/local/projects/[project_id]/commits/[branch]', {
+				project_id: projectId,
+				branch
+			});
+		}
+		return resolve('/local/projects/[project_id]/commits', { project_id: projectId });
+	}
+
 	onMount(async () => {
 		try {
 			const projects = (await listProjects(false)).filter((project) => project.gitId);
@@ -100,15 +110,12 @@
 							showRatingsColumn={true}
 						/>
 					</div>
-					<div class="column commits">
-						<div class="heading">
-							<a
-								href={resolve('/local/projects/[project_id]/commits/[branch]', {
-									project_id: row.project.id,
-									branch: row.project.defaultBranch
-								})}>Git Commits</a
-							>
-						</div>
+						<div class="column commits">
+							<div class="heading">
+								<a href={projectCommitsHref(row.project.id, row.project.defaultBranch)}
+									>Git Commits</a
+								>
+							</div>
 						<Commits
 							projectId={row.project.id}
 							branch={row.project.defaultBranch}
