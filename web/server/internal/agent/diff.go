@@ -300,9 +300,19 @@ func extractFileSnapshotDiffFromMap(obj map[string]any, cwd string) (string, boo
 	if catNumbered {
 		lines = stripped
 	}
-	if !catNumbered && !hasAnyKey(obj, "numLines", "totalLines", "startLine", "endLine") {
-		// Restrict plain content snapshots to known file-metadata payloads to
-		// avoid treating arbitrary JSON fields as pseudo-diffs.
+	mutationHints := hasAnyKey(obj,
+		"oldString", "newString", "replaceAll", "userModified",
+		"structuredPatch", "oldStart", "newStart", "oldLines", "newLines",
+	)
+	readHints := hasAnyKey(obj, "numLines", "totalLines", "startLine", "endLine")
+	if readHints && !mutationHints {
+		// Read-style file snapshots (line-count metadata without mutation hints)
+		// should not be treated as diffs.
+		return "", false
+	}
+	if !catNumbered && !mutationHints {
+		// Restrict plain content snapshots to payloads with explicit mutation
+		// signals to avoid generating pseudo-diffs from file reads.
 		return "", false
 	}
 

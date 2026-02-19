@@ -54,6 +54,7 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 	}
 
 	usedTimestamps := make(map[int64]struct{}, len(messages))
+	snapshotState := newClaudeSnapshotState()
 	for _, m := range messages {
 		usedTimestamps[m.Timestamp] = struct{}{}
 	}
@@ -61,9 +62,13 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 	out := make([]db.Message, 0, len(messages))
 	for _, m := range messages {
 		out = append(out, m)
+		snapshotState.ingestRawJSON(m.RawJSON)
 		diff, ok := agent.ExtractReliableDiff(m.Content)
 		if !ok {
 			diff, ok = agent.ExtractReliableDiffFromJSON(m.RawJSON)
+		}
+		if !ok {
+			diff, ok = deriveClaudeSnapshotDiff(m, snapshotState)
 		}
 		if !ok {
 			continue

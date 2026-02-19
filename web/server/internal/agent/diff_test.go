@@ -179,7 +179,7 @@ func TestExtractReliableDiffFromStructuredPatchJSON(t *testing.T) {
 	}
 }
 
-func TestExtractReliableDiffFromJSONFileSnapshot(t *testing.T) {
+func TestExtractReliableDiffFromJSONFileSnapshotReadOnlyRejected(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatalf("mkdir .git: %v", err)
@@ -200,14 +200,8 @@ func TestExtractReliableDiffFromJSONFileSnapshot(t *testing.T) {
 	}`, cwd, filePath)
 
 	diff, ok := ExtractReliableDiffFromJSON(raw)
-	if !ok || diff == "" {
-		t.Fatal("expected diff from JSON file snapshot")
-	}
-	if !strings.Contains(diff, "--- /dev/null") || !strings.Contains(diff, "+++ b/web/frontend/src/app.ts") {
-		t.Fatalf("expected add-file markers with repo-relative path, got: %q", diff)
-	}
-	if !strings.Contains(diff, "\n+line1\n+line2") {
-		t.Fatalf("expected snapshot content lines in diff, got: %q", diff)
+	if ok || diff != "" {
+		t.Fatalf("expected read-style snapshot to be rejected, got ok=%v diff=%q", ok, diff)
 	}
 }
 

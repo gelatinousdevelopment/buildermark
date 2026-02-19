@@ -225,6 +225,102 @@ func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
 	}
 }
 
+func TestAppendDiffDBMessagesDerivesDiffFromSnapshotBackup(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "web", "frontend", "src"), 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+
+	sessionID := "sess-snapshot"
+	backupDir := filepath.Join(home, ".claude", "file-history", sessionID)
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		t.Fatalf("mkdir backup dir: %v", err)
+	}
+	backupName := "abc123@v1"
+	if err := os.WriteFile(filepath.Join(backupDir, backupName), []byte("line1\nline2\nold\n"), 0o644); err != nil {
+		t.Fatalf("write backup file: %v", err)
+	}
+
+	rawSnapshot := `{"type":"file-history-snapshot","snapshot":{"trackedFileBackups":{"web/frontend/src/a.txt":{"backupFileName":"abc123@v1"}}}}`
+	rawToolResult := fmt.Sprintf(`{
+		"sessionId":"%s",
+		"cwd":%q,
+		"toolUseResult":{
+			"type":"text",
+			"file":{
+				"filePath":%q,
+				"content":"line1\nline2\nnew\n",
+				"numLines":3,
+				"startLine":1,
+				"totalLines":3
+			}
+		}
+	}`, sessionID, filepath.Join(repo, "web", "frontend"), filepath.Join(repo, "web", "frontend", "src", "a.txt"))
+
+	messages := []db.Message{
+		{Timestamp: 1000, ConversationID: sessionID, Role: "agent", Content: "[file-history-snapshot]", RawJSON: rawSnapshot},
+		{Timestamp: 2000, ConversationID: sessionID, Role: "agent", Content: "[tool_result]", RawJSON: rawToolResult},
+	}
+
+	out := appendDiffDBMessages(messages)
+	if len(out) != 3 {
+		t.Fatalf("len(out) = %d, want 3", len(out))
+	}
+	if out[2].Timestamp != 2001 {
+		t.Fatalf("diff timestamp = %d, want 2001", out[2].Timestamp)
+	}
+	if !strings.Contains(out[2].Content, "--- a/web/frontend/src/a.txt") ||
+		!strings.Contains(out[2].Content, "+++ b/web/frontend/src/a.txt") {
+		t.Fatalf("missing expected file path in derived diff: %q", out[2].Content)
+	}
+	if !strings.Contains(out[2].Content, "\n-old\n") || !strings.Contains(out[2].Content, "\n+new\n") {
+		t.Fatalf("derived diff does not include before/after changes: %q", out[2].Content)
+	}
+}
+
+func TestAppendDiffDBMessagesSnapshotBackupMissingSkipsDiff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	sessionID := "sess-snapshot-missing"
+	rawSnapshot := `{"type":"file-history-snapshot","snapshot":{"trackedFileBackups":{"web/frontend/src/a.txt":{"backupFileName":"missing@v1"}}}}`
+	rawToolResult := fmt.Sprintf(`{
+		"sessionId":"%s",
+		"cwd":%q,
+		"toolUseResult":{
+			"type":"text",
+			"file":{
+				"filePath":%q,
+				"content":"line1\nline2\nnew\n",
+				"numLines":3,
+				"startLine":1,
+				"totalLines":3
+			}
+		}
+	}`, sessionID, filepath.Join(repo, "web", "frontend"), filepath.Join(repo, "web", "frontend", "src", "a.txt"))
+
+	messages := []db.Message{
+		{Timestamp: 1000, ConversationID: sessionID, Role: "agent", Content: "[file-history-snapshot]", RawJSON: rawSnapshot},
+		{Timestamp: 2000, ConversationID: sessionID, Role: "agent", Content: "[tool_result]", RawJSON: rawToolResult},
+	}
+
+	out := appendDiffDBMessages(messages)
+	if len(out) != 2 {
+		t.Fatalf("len(out) = %d, want 2", len(out))
+	}
+}
+
 func TestWatcherFileRotation(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()
