@@ -58,14 +58,17 @@
 	{/if}
 </div>
 
-{@render children()}
+<div class="content">
+	{@render children()}
+</div>
 
 <style>
 	.project-header {
 		border-bottom: 0.5px solid var(--color-divider);
-		margin: 0 -1rem 1rem -1rem;
-		padding: 0 1rem 1rem 1rem;
-		min-height: 4rem;
+		/*margin: 0 -1rem 1rem -1rem;*/
+		/*padding: 0 1rem 1rem 1rem;*/
+		padding: 1rem;
+		/*min-height: 4rem;*/
 	}
 
 	.project-header h2 {
@@ -80,5 +83,11 @@
 		font-size: 0.9rem;
 		color: #999;
 		margin: 0.3rem 0 0 0;
+	}
+
+	.content {
+		background: var(--color-background-content);
+		flex: 1;
+		padding: 1rem;
 	}
 </style>

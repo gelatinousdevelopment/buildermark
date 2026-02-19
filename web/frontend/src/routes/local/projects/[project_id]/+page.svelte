@@ -49,6 +49,7 @@
 
 <style>
 	.project-content {
+		background: var(--color-background-content);
 		align-items: stretch;
 		border-bottom: 0.5px solid var(--color-divider);
 		display: flex;

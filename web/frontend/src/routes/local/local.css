@@ -5,6 +5,8 @@
 	--color-text: #444;
 	--color-divider: #bbb;
 	--color-status-green: #55bb33;
+	--color-background-content: #fff;
+	--color-background-page: #fcfcfc;
 
 	/* Agent colors (known coding agents) */
 	--agent-color-generic: #a7439b;

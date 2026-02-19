@@ -26,6 +26,7 @@
 - [ ] Implement the `local/projects/[id]/` route. It should have 2 columns, left side for conversations and right side for commits. This is basically like the boxes on the `/local/projects` route, but no border and only one project... also, show 20 items for each type, with a button at the bottom for "More..." that links to either the conversations or commits sub-route.
 
 - [ ] In AgentPercentageBar.svelte, add a popover that shows details above on hover
+- [ ] The places that we're using AgentPercentageBar.svelte don't pass the segments prop, so we're not seeing the breakdown of each type of agent. I'd like to show that. Is that possible? Do we need to track that differently in the database in order to achieve that or can we do it with an efficient sql query?
 - [ ] Are we incorrectly detecting some diffs, like the last diff on [ba9dc20a-7886-4abf-9fec-6101551c8d03](http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03), which appears to be replacing the full file instead of doing a diff. Should we do a diff ourselves, by importing the `[file-history-snapshot]` that is logged just before it?
 - [ ] Improve design of conversation header
 - [ ] Improve normalization of code (like code formatting) when comparing agent diffs to commit diffs

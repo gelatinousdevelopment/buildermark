@@ -47,7 +47,10 @@
 				>
 				{#if projectId}
 					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
-					<a href={resolve('/local/projects/[project_id]', { project_id: projectId })} class="item"
+					<a
+						href={resolve('/local/projects/[project_id]', { project_id: projectId })}
+						class="item"
+						class:selected={page.route.id === '/local/projects/[project_id]'}
 						>{navStore.projectName || projectId}</a
 					>
 					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
@@ -198,11 +201,14 @@
 	}
 
 	.dashboard-content {
-		background: #fcfcfc;
+		background: var(--color-background-page);
 		margin: 0 auto;
 		/*max-width: 100rem;*/
-		padding: 1rem;
+		/*padding: 1rem;*/
 		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
 
 		max-width: 100vw;
 		box-sizing: border-box;

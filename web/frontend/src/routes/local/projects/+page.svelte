@@ -127,6 +127,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+		padding: 1rem;
 	}
 
 	.project .content {
