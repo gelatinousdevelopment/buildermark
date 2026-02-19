@@ -4,6 +4,7 @@
 	import { getProject } from '$lib/api';
 	import type { ProjectDetail } from '$lib/types';
 	import { navStore } from '$lib/stores/nav.svelte';
+	import { layoutStore } from '$lib/stores/layout.svelte';
 
 	let { children } = $props();
 
@@ -58,7 +59,7 @@
 	{/if}
 </div>
 
-<div class="content">
+<div class="content" class:fixed-height={layoutStore.fixedHeight}>
 	{@render children()}
 </div>
 
@@ -89,5 +90,12 @@
 		background: var(--color-background-content);
 		flex: 1;
 		/*padding: 1rem;*/
+	}
+
+	.content.fixed-height {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
 	}
 </style>

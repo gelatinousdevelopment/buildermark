@@ -21,6 +21,8 @@
 		agentPercent?: number;
 		/** When provided, the header becomes clickable to collapse. */
 		onToggle?: () => void;
+		/** Render only the diff body and omit metadata/header elements. */
+		contentOnly?: boolean;
 	}
 
 	let {
@@ -34,7 +36,8 @@
 		linkHref = null,
 		linkLabel = null,
 		agentPercent,
-		onToggle
+		onToggle,
+		contentOnly = false
 	}: Props = $props();
 
 	interface FileDiffStat {
@@ -159,75 +162,82 @@
 	);
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
-	class="message-header"
-	class:message-header-clickable={onToggle}
-	role={onToggle ? 'button' : undefined}
-	tabindex={onToggle ? 0 : undefined}
-	onclick={(e: MouseEvent) => {
-		if (onToggle) {
-			e.stopPropagation();
-			onToggle();
-		}
-	}}
-	onkeydown={(e: KeyboardEvent) => {
-		if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
-			e.preventDefault();
-			e.stopPropagation();
-			onToggle();
-		}
-	}}
->
-	<strong>{label}</strong>
-	{#if timestamp !== undefined}
-		<span>&middot; {fmtTime(timestamp)}</span>
-	{/if}
-	{#if role || model}
-		<span class="message-model">
-			{#if role}
-				{#if isAgentRole}
-					<AgentTag agent={role} />
-				{:else}
-					<span>{role}</span>
-				{/if}
-			{/if}
-			{#if role && model}
-				<span>&middot;</span>
-			{/if}
-			{#if model}
-				<span>{model}</span>
-			{/if}
-		</span>
-	{/if}
-	{#if statsLabel}
-		<span class="message-diff-stats">{statsLabel}</span>
-	{:else}
-		{@const stats = diffStats(content)}
-		{#if stats.files > 1}
-			<DiffCount added={stats.added} removed={stats.removed} files={stats.files} showFiles={true} />
+{#if !contentOnly}
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+	<div
+		class="message-header"
+		class:message-header-clickable={onToggle}
+		role={onToggle ? 'button' : undefined}
+		tabindex={onToggle ? 0 : undefined}
+		onclick={(e: MouseEvent) => {
+			if (onToggle) {
+				e.stopPropagation();
+				onToggle();
+			}
+		}}
+		onkeydown={(e: KeyboardEvent) => {
+			if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
+				e.preventDefault();
+				e.stopPropagation();
+				onToggle();
+			}
+		}}
+	>
+		<strong>{label}</strong>
+		{#if timestamp !== undefined}
+			<span>&middot; {fmtTime(timestamp)}</span>
 		{/if}
-	{/if}
-	{#if agentPercent !== undefined}
-		<span class="agent-pct">{agentPercent.toFixed(1)}% agent</span>
-	{/if}
-</div>
-{#if showFileList}
-	<div class="file-stats-list">
-		{#each fileStats as f (f.path)}
-			<div class="file-stats-item">
-				<span class="file-stats-path">{f.path}</span>
-				<DiffCount added={f.added} removed={f.removed} />
-			</div>
-		{/each}
+		{#if role || model}
+			<span class="message-model">
+				{#if role}
+					{#if isAgentRole}
+						<AgentTag agent={role} />
+					{:else}
+						<span>{role}</span>
+					{/if}
+				{/if}
+				{#if role && model}
+					<span>&middot;</span>
+				{/if}
+				{#if model}
+					<span>{model}</span>
+				{/if}
+			</span>
+		{/if}
+		{#if statsLabel}
+			<span class="message-diff-stats">{statsLabel}</span>
+		{:else}
+			{@const stats = diffStats(content)}
+			{#if stats.files > 1}
+				<DiffCount
+					added={stats.added}
+					removed={stats.removed}
+					files={stats.files}
+					showFiles={true}
+				/>
+			{/if}
+		{/if}
+		{#if agentPercent !== undefined}
+			<span class="agent-pct">{agentPercent.toFixed(1)}% agent</span>
+		{/if}
 	</div>
+	{#if showFileList}
+		<div class="file-stats-list">
+			{#each fileStats as f (f.path)}
+				<div class="file-stats-item">
+					<span class="file-stats-path">{f.path}</span>
+					<DiffCount added={f.added} removed={f.removed} />
+				</div>
+			{/each}
+		</div>
+	{/if}
+	{#if linkHref && linkLabel}
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+		<div class="conversation-link"><a href={linkHref}>{linkLabel}</a></div>
+	{/if}
 {/if}
-{#if linkHref && linkLabel}
-	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-	<div class="conversation-link"><a href={linkHref}>{linkLabel}</a></div>
-{/if}
-{#if expanded}
-	<div class="message-content diff-body">
+{#if contentOnly || expanded}
+	<div class="message-content diff-body content-only">
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html renderDiff(content)}
 	</div>
@@ -285,11 +295,17 @@
 		font-size: 0.82rem;
 		padding: 0.05rem 0;
 		justify-content: space-between;
+		min-width: 0;
 	}
 
 	.file-stats-path {
 		color: #333;
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-family: var(--font-family-monospace);
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.conversation-link {
@@ -299,8 +315,21 @@
 
 	.message-content {
 		background: #fff;
-		font-size: 0.9rem;
+		font-size: 0.85rem;
 		margin-top: 0.35rem;
+	}
+
+	.message-content.content-only {
+		margin-top: 0px;
+	}
+
+	.diff-body :global(*) {
+		font-size: 1em;
+		line-height: 1em;
+	}
+
+	.diff-body :global(.d2h-file-name) {
+		font-family: var(--font-family-monospace);
 	}
 
 	.diff-body :global(.d2h-wrapper) {

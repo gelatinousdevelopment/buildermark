@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
 	import { getConversation, createRating } from '$lib/api';
+	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
 	import { isUserPromptMessage, isDiffMessage, messageModel } from '$lib/messageUtils';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
+	import LogMessageCard from '$lib/components/LogMessageCard.svelte';
 	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
@@ -29,6 +31,16 @@
 	let bottomError: string | null = $state(null);
 	let expandedMessages = new SvelteSet<string>();
 	let expandedLogGroups = new SvelteSet<string>();
+	let selectedMessage: MessageRead | null = $state(null);
+
+	function selectMessage(message: MessageRead) {
+		selectedMessage = selectedMessage?.id === message.id ? null : message;
+	}
+
+	function clearSelectionOnLeftBackground(e: MouseEvent) {
+		if (e.target !== e.currentTarget) return;
+		selectedMessage = null;
+	}
 
 	function toggleExpanded(messageId: string) {
 		if (expandedMessages.has(messageId)) {
@@ -149,6 +161,7 @@
 	});
 
 	onMount(async () => {
+		layoutStore.fixedHeight = true;
 		try {
 			const id = page.params.id;
 			if (!id) throw new Error('Missing conversation ID');
@@ -159,138 +172,233 @@
 			loading = false;
 		}
 	});
+
+	onDestroy(() => {
+		layoutStore.fixedHeight = false;
+	});
 </script>
 
 <div class="content">
-	{#if loading}
-		<p class="loading">Loading conversation...</p>
-	{:else if error}
-		<p class="error">{error}</p>
-	{:else if conversation}
-		<h2>{conversation.title || conversation.id}</h2>
-		<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
-		{#if conversationModels.length > 0}
-			<div class="models-summary">
-				<span class="models-label">Models:</span>
-				<ul class="models-list">
-					{#each conversationModels as model (model)}
-						<li>{model}</li>
-					{/each}
-				</ul>
-			</div>
-		{/if}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="column left" onclick={clearSelectionOnLeftBackground}>
+		{#if loading}
+			<p class="loading">Loading conversation...</p>
+		{:else if error}
+			<p class="error">{error}</p>
+		{:else if conversation}
+			<h2>{conversation.title || conversation.id}</h2>
+			<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
+			{#if conversationModels.length > 0}
+				<div class="models-summary">
+					<span class="models-label">Models:</span>
+					<ul class="models-list">
+						{#each conversationModels as model (model)}
+							<li>{model}</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 
-		{#if timeline.length === 0}
-			<p>No messages or ratings.</p>
-		{:else}
-			{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
-				{#if item.kind === 'message' && isUserPromptMessage(item.message)}
-					<div class="message user-message" data-message-id={item.message.id}>
-						<UserPromptMessageCard message={item.message} />
-					</div>
-				{:else if item.kind === 'message' && isDiffMessage(item.message)}
-					{@const diffExpanded = expandedMessages.has(item.message.id)}
-					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-					<div
-						class="message"
-						class:message-collapsed={!diffExpanded}
-						role={!diffExpanded ? 'button' : undefined}
-						tabindex={!diffExpanded ? 0 : undefined}
-						onclick={!diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
-						onkeydown={!diffExpanded
-							? (e: KeyboardEvent) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										toggleExpanded(item.message.id);
+			{#if timeline.length === 0}
+				<p>No messages or ratings.</p>
+			{:else}
+				{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
+					{#if item.kind === 'message' && isUserPromptMessage(item.message)}
+						<div class="message user-message" data-message-id={item.message.id}>
+							<UserPromptMessageCard message={item.message} />
+						</div>
+					{:else if item.kind === 'message' && isDiffMessage(item.message)}
+						{@const diffExpanded = expandedMessages.has(item.message.id)}
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<div
+							class="message inline-diff-message"
+							class:message-collapsed={!diffExpanded}
+							role={!diffExpanded ? 'button' : undefined}
+							tabindex={!diffExpanded ? 0 : undefined}
+							onclick={() => {
+								if (!diffExpanded) toggleExpanded(item.message.id);
+								selectMessage(item.message);
+							}}
+							onkeydown={!diffExpanded
+								? (e: KeyboardEvent) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											toggleExpanded(item.message.id);
+											selectMessage(item.message);
+										}
 									}
-								}
-							: undefined}
-					>
-						<DiffMessageCard
-							timestamp={item.message.timestamp}
-							role={item.message.role === 'agent' ? conversation.agent : item.message.role}
-							model={messageModel(item.message)}
-							content={item.message.content}
-							expanded={diffExpanded}
-							onToggle={diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
-						/>
-					</div>
-				{:else if item.kind === 'rating'}
-					<div class="rating-card">
-						<RatingMessageCard rating={item.rating} />
-					</div>
-				{:else if item.kind === 'log-group'}
-					{@const groupExpanded = expandedLogGroups.has(item.id)}
-					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-					<div
-						class="message log-group"
-						class:message-collapsed={!groupExpanded}
-						role={!groupExpanded ? 'button' : undefined}
-						tabindex={!groupExpanded ? 0 : undefined}
-						onclick={!groupExpanded ? () => toggleLogGroup(item.id) : undefined}
-						onkeydown={!groupExpanded
-							? (e: KeyboardEvent) => {
-									if (e.key === 'Enter' || e.key === ' ') {
-										e.preventDefault();
-										toggleLogGroup(item.id);
-									}
-								}
-							: undefined}
-					>
-						<LogGroupCard
-							messages={item.messages}
-							agent={conversation.agent}
-							expanded={groupExpanded}
-							{expandedMessages}
-							onToggleMessage={toggleExpanded}
-							onToggle={groupExpanded ? () => toggleLogGroup(item.id) : undefined}
-						/>
-					</div>
-				{/if}
-			{/each}
-		{/if}
-		{#if !hasRatingAfterLastUser}
-			<div class="rating-card rating-input">
-				<div class="rating-input-header">
-					<strong>Add rating</strong>
-				</div>
-				<div class="inline-stars">
-					{#each [1, 2, 3, 4, 5] as star (star)}
-						<button
-							class="star-btn"
-							class:active={star <= bottomRatingValue}
-							onclick={() => (bottomRatingValue = star)}
+								: undefined}
 						>
-							{star <= bottomRatingValue ? '★' : '☆'}
+							<DiffMessageCard
+								timestamp={item.message.timestamp}
+								role={item.message.role === 'agent' ? conversation.agent : item.message.role}
+								model={messageModel(item.message)}
+								content={item.message.content}
+								expanded={diffExpanded}
+								onToggle={diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
+							/>
+						</div>
+					{:else if item.kind === 'rating'}
+						<div class="rating-card">
+							<RatingMessageCard rating={item.rating} />
+						</div>
+					{:else if item.kind === 'log-group'}
+						{@const groupExpanded = expandedLogGroups.has(item.id)}
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<div
+							class="message log-group"
+							class:message-collapsed={!groupExpanded}
+							role={!groupExpanded ? 'button' : undefined}
+							tabindex={!groupExpanded ? 0 : undefined}
+							onclick={!groupExpanded ? () => toggleLogGroup(item.id) : undefined}
+							onkeydown={!groupExpanded
+								? (e: KeyboardEvent) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											toggleLogGroup(item.id);
+										}
+									}
+								: undefined}
+						>
+							<LogGroupCard
+								messages={item.messages}
+								agent={conversation.agent}
+								expanded={groupExpanded}
+								{expandedMessages}
+								onToggleMessage={toggleExpanded}
+								onSelectMessage={selectMessage}
+								onToggle={groupExpanded ? () => toggleLogGroup(item.id) : undefined}
+							/>
+						</div>
+					{/if}
+				{/each}
+			{/if}
+			{#if !hasRatingAfterLastUser}
+				<div class="rating-card rating-input">
+					<div class="rating-input-header">
+						<strong>Add rating</strong>
+					</div>
+					<div class="inline-stars">
+						{#each [1, 2, 3, 4, 5] as star (star)}
+							<button
+								class="star-btn"
+								class:active={star <= bottomRatingValue}
+								onclick={() => (bottomRatingValue = star)}
+							>
+								{star <= bottomRatingValue ? '★' : '☆'}
+							</button>
+						{/each}
+					</div>
+					<input
+						type="text"
+						class="inline-note"
+						placeholder="Optional note..."
+						bind:value={bottomNote}
+					/>
+					<div class="inline-actions">
+						<button
+							class="btn-sm"
+							disabled={bottomSubmitting || bottomRatingValue < 1}
+							onclick={submitBottomRating}
+						>
+							{bottomSubmitting ? 'Submitting...' : 'Submit'}
 						</button>
-					{/each}
+					</div>
+					{#if bottomError}
+						<p class="inline-error">{bottomError}</p>
+					{/if}
 				</div>
-				<input
-					type="text"
-					class="inline-note"
-					placeholder="Optional note..."
-					bind:value={bottomNote}
-				/>
-				<div class="inline-actions">
-					<button
-						class="btn-sm"
-						disabled={bottomSubmitting || bottomRatingValue < 1}
-						onclick={submitBottomRating}
-					>
-						{bottomSubmitting ? 'Submitting...' : 'Submit'}
-					</button>
-				</div>
-				{#if bottomError}
-					<p class="inline-error">{bottomError}</p>
-				{/if}
-			</div>
+			{/if}
 		{/if}
-	{/if}
+	</div>
+	<hr class="divider" />
+	<div class="column right">
+		{#if selectedMessage}
+			{#if isDiffMessage(selectedMessage)}
+				<!-- <div class="message right-message"> -->
+				<DiffMessageCard
+					timestamp={selectedMessage.timestamp}
+					role={selectedMessage.role === 'agent' ? conversation?.agent : selectedMessage.role}
+					model={messageModel(selectedMessage)}
+					content={selectedMessage.content}
+					expanded={true}
+					contentOnly={true}
+				/>
+				<!-- </div> -->
+			{:else}
+				<!-- <div class="message right-message"> -->
+				<LogMessageCard message={selectedMessage} expanded={true} contentOnly={true} />
+				<!-- </div> -->
+			{/if}
+		{:else}
+			<div class="empty">No message selected</div>
+		{/if}
+	</div>
 </div>
 
 <style>
 	.content {
+		display: flex;
+		flex-direction: row;
+		align-items: stretch;
+		flex: 1;
+		min-height: 0;
+	}
+
+	.column {
+		box-sizing: border-box;
+		flex: 1;
+		max-width: 50%;
+		overflow-y: scroll;
+		position: relative;
+	}
+
+	.column.left {
 		padding: 0 1rem;
+	}
+
+	.content .divider {
+		display: block;
+		background: var(--color-divider);
+		width: 0.5px;
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+
+	.column.right {
+		padding: 0.5rem;
+	}
+
+	.column.right .empty {
+		/*align-self: center;*/
+		justify-self: center;
+		margin-top: 40vh;
+		opacity: 0.4;
+		font-size: 1.3rem;
+	}
+
+	.column.left .inline-diff-message :global(.message-content),
+	.column.left .inline-diff-message :global(.file-stats-list),
+	.column.left :global(.log-item .message-content),
+	.column.left :global(.log-item .file-stats-list) {
+		display: none;
+	}
+
+	@media (max-width: 1023px) {
+		.column {
+			max-width: 100%;
+		}
+		.column.right {
+			display: none;
+		}
+		.column.left .inline-diff-message :global(.message-content),
+		.column.left .inline-diff-message :global(.file-stats-list),
+		.column.left :global(.log-item .message-content),
+		.column.left :global(.log-item .file-stats-list) {
+			display: block;
+		}
 	}
 
 	.message {

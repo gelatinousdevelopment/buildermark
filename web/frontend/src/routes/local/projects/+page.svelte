@@ -93,6 +93,7 @@
 						<Conversations
 							projectId={row.project.id}
 							limit={10}
+							compact={true}
 							autoload={false}
 							initialData={row.conversationData}
 							initialError={row.conversationError}

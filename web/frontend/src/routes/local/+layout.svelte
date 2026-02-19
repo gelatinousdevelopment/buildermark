@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import Icon from '$lib/Icon.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
+	import { layoutStore } from '$lib/stores/layout.svelte';
 
 	let { children } = $props();
 
@@ -28,7 +29,7 @@
 	}
 </script>
 
-<div class="site">
+<div class="site" class:fixed-height={layoutStore.fixedHeight}>
 	<header>
 		<section>
 			<div class="brand">
@@ -98,6 +99,14 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 100vh;
+	}
+
+	.site.fixed-height {
+		height: 100vh;
+	}
+
+	.site.fixed-height .dashboard-content {
+		min-height: 0;
 	}
 
 	header {

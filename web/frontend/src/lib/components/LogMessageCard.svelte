@@ -13,42 +13,46 @@
 		expanded: boolean;
 		/** When provided, the header becomes clickable to collapse. */
 		onToggle?: () => void;
+		/** Render only the message body and omit metadata/header elements. */
+		contentOnly?: boolean;
 	}
 
-	let { message, expanded, onToggle }: Props = $props();
+	let { message, expanded, onToggle, contentOnly = false }: Props = $props();
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
-	class="message-header"
-	class:message-header-clickable={onToggle}
-	role={onToggle ? 'button' : undefined}
-	tabindex={onToggle ? 0 : undefined}
-	onclick={(e: MouseEvent) => {
-		if (onToggle) {
-			e.stopPropagation();
-			onToggle();
-		}
-	}}
-	onkeydown={(e: KeyboardEvent) => {
-		if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
-			e.preventDefault();
-			e.stopPropagation();
-			onToggle();
-		}
-	}}
->
-	<strong>{messageTypeLabel(message)}</strong> &middot;
-	{fmtTime(message.timestamp)}
-	{#if messageModel(message)}
-		<span class="message-model">{messageModel(message)}</span>
-	{/if}
-	<span class="expansion-indicator">
-		<span class="chevron">{expanded ? '▾' : '▸'}</span>
-	</span>
-</div>
-<div class="message-summary">{messageSummary(message)}</div>
-{#if expanded}
+{#if !contentOnly}
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+	<div
+		class="message-header"
+		class:message-header-clickable={onToggle}
+		role={onToggle ? 'button' : undefined}
+		tabindex={onToggle ? 0 : undefined}
+		onclick={(e: MouseEvent) => {
+			if (onToggle) {
+				e.stopPropagation();
+				onToggle();
+			}
+		}}
+		onkeydown={(e: KeyboardEvent) => {
+			if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
+				e.preventDefault();
+				e.stopPropagation();
+				onToggle();
+			}
+		}}
+	>
+		<strong>{messageTypeLabel(message)}</strong> &middot;
+		{fmtTime(message.timestamp)}
+		{#if messageModel(message)}
+			<span class="message-model">{messageModel(message)}</span>
+		{/if}
+		<span class="expansion-indicator">
+			<span class="chevron">{expanded ? '▾' : '▸'}</span>
+		</span>
+	</div>
+	<div class="message-summary">{messageSummary(message)}</div>
+{/if}
+{#if contentOnly || expanded}
 	<div class="message-content markdown-body">
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html renderMarkdown(message.content)}

@@ -18,6 +18,7 @@
 		expanded: boolean;
 		expandedMessages: SvelteSet<string>;
 		onToggleMessage: (id: string) => void;
+		onSelectMessage?: (message: MessageRead) => void;
 		/** When provided, the group header becomes clickable to collapse. */
 		onToggle?: () => void;
 	}
@@ -28,17 +29,28 @@
 		expanded,
 		expandedMessages,
 		onToggleMessage,
+		onSelectMessage,
 		onToggle
 	}: Props = $props();
 
 	let timeSpan = $derived(groupTimeSpan(messages));
 	let groupedModelLabel = $derived(groupModelLabel(messages, agent));
 
-	function handleKeydown(e: KeyboardEvent, id: string) {
+	function selectMessage(message: MessageRead) {
+		onSelectMessage?.(message);
+	}
+
+	function handleKeydown(e: KeyboardEvent, message: MessageRead) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			onToggleMessage(id);
+			onToggleMessage(message.id);
+			selectMessage(message);
 		}
+	}
+
+	function handleLogItemClick(message: MessageRead, expanded: boolean) {
+		if (!expanded) onToggleMessage(message.id);
+		selectMessage(message);
 	}
 </script>
 
@@ -91,9 +103,9 @@
 					class:log-item-collapsed={!logExpanded}
 					role={!logExpanded ? 'button' : undefined}
 					tabindex={!logExpanded ? 0 : undefined}
-					onclick={!logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
+					onclick={() => handleLogItemClick(logMessage, logExpanded)}
 					onkeydown={!logExpanded
-						? (e: KeyboardEvent) => handleKeydown(e, logMessage.id)
+						? (e: KeyboardEvent) => handleKeydown(e, logMessage)
 						: undefined}
 				>
 					<DiffMessageCard
@@ -112,9 +124,9 @@
 					class:log-item-collapsed={!logExpanded}
 					role={!logExpanded ? 'button' : undefined}
 					tabindex={!logExpanded ? 0 : undefined}
-					onclick={!logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
+					onclick={() => handleLogItemClick(logMessage, logExpanded)}
 					onkeydown={!logExpanded
-						? (e: KeyboardEvent) => handleKeydown(e, logMessage.id)
+						? (e: KeyboardEvent) => handleKeydown(e, logMessage)
 						: undefined}
 				>
 					<LogMessageCard

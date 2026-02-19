@@ -27,9 +27,9 @@
 				`/local/projects/${encodeURIComponent(projectId)}/conversations${query ? `?${query}` : ''}`
 			),
 			{
-			replaceState: true,
-			noScroll: true,
-			keepFocus: true
+				replaceState: true,
+				noScroll: true,
+				keepFocus: true
 			}
 		);
 	}
@@ -40,6 +40,7 @@
 		{projectId}
 		page={currentPage}
 		pageSize={20}
+		compact={false}
 		showPagination={true}
 		onPageChange={handlePageChange}
 	/>
@@ -47,6 +48,6 @@
 
 <style>
 	.project-section {
-		margin: 1rem 0;
+		margin: 0.5rem 0 1rem 0;
 	}
 </style>

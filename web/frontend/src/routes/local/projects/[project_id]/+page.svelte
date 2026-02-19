@@ -19,6 +19,7 @@
 			page={1}
 			pageSize={30}
 			limit={30}
+			compact={true}
 			showAgentColumn={true}
 			showRatingsColumn={true}
 		/>

@@ -110,3 +110,4 @@ This diff log (not a real diff) was found, but the diff was not matched to the f
 - [x] Maybe organize dashboard by Project > Commits (and Working Copy) > Conversations?
 - [x] Add a `/local/settings` route page
 - [x] Implement a list of projects in Settings, with a checkbox for each indicating if it's tracked (checked means tracked) or ignored. Remove the ignored ones from the `
+- [x] Are we incorrectly detecting some diffs, like the last diff on [ba9dc20a-7886-4abf-9fec-6101551c8d03](http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03), which appears to be replacing the full file instead of doing a diff. Should we do a diff ourselves, by importing the `[file-history-snapshot]` that is logged just before it?
