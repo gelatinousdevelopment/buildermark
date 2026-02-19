@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import Commits from '$lib/components/project/Commits.svelte';
 
 	const projectId = $derived(page.params.project_id ?? '');
@@ -15,22 +16,23 @@
 
 	async function handlePageChange(nextPage: number) {
 		if (!projectId) return;
-		const params = new URLSearchParams(page.url.searchParams);
+		const params = new SvelteURLSearchParams(page.url.searchParams);
 		if (nextPage <= 1) {
 			params.delete('page');
 		} else {
 			params.set('page', String(nextPage));
 		}
-		const base = resolve('/local/projects/[project_id]/commits/[branch]', {
-			project_id: projectId,
-			branch
-		});
 		const query = params.toString();
-		await goto(query ? `${base}?${query}` : base, {
+		await goto(
+			resolve(
+				`/local/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(branch)}${query ? `?${query}` : ''}`
+			),
+			{
 			replaceState: true,
 			noScroll: true,
 			keepFocus: true
-		});
+			}
+		);
 	}
 
 	async function handleBranchChange(nextBranch: string) {

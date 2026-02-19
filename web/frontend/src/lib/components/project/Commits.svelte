@@ -104,18 +104,6 @@
 		return new Date(unixMs).toLocaleString();
 	}
 
-	function commitDetailsHref(projectId: string, commitHash: string): string {
-		const branchForLink = selectedBranch || data?.branch || '';
-		if (branchForLink) {
-			return resolve('/local/projects/[project_id]/commits/[branch]/[commit_hash]', {
-				project_id: projectId,
-				branch: branchForLink,
-				commit_hash: commitHash
-			});
-		}
-		return resolve('/local/projects/[project_id]/commits', { project_id: projectId });
-	}
-
 	function withOptionalQueue<T>(task: () => Promise<T>): Promise<T> {
 		if (useLoadQueue) return enqueueLoad(task, loadPriority);
 		return task();
@@ -279,7 +267,11 @@
 						<td class="title">
 							<div>
 								<a
-									href={commitDetailsHref(c.projectId, c.commitHash)}
+									href={resolve(
+										(selectedBranch || data?.branch || '')
+											? `/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
+											: `/local/projects/${encodeURIComponent(c.projectId)}/commits`
+									)}
 									class="link-button"
 								>
 									{c.subject || c.commitHash.slice(0, 8)}

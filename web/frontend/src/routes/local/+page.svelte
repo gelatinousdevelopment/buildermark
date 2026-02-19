@@ -31,16 +31,6 @@
 		});
 	}
 
-	function projectCommitsHref(projectId: string, branch: string): string {
-		if (branch) {
-			return resolve('/local/projects/[project_id]/commits/[branch]', {
-				project_id: projectId,
-				branch
-			});
-		}
-		return resolve('/local/projects/[project_id]/commits', { project_id: projectId });
-	}
-
 	async function load() {
 		const active = await listProjects(false);
 		const activeDetails = await Promise.all(active.map((p) => getProject(p.id, 1, 10)));
@@ -71,7 +61,11 @@
 					<h2>{project.label || project.path}</h2>
 					<a
 						class="btn-sm settings-link"
-						href={projectCommitsHref(project.id, project.defaultBranch)}
+						href={resolve(
+							project.defaultBranch
+								? `/local/projects/${encodeURIComponent(project.id)}/commits/${encodeURIComponent(project.defaultBranch)}`
+								: `/local/projects/${encodeURIComponent(project.id)}/commits`
+						)}
 					>
 						Commits
 					</a>
