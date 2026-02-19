@@ -1,13 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { listProjects, getProject, setProjectIgnored } from '$lib/api';
+	import { listProjects, getProject } from '$lib/api';
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import { fmtTimeWithSeconds, stars, shortId } from '$lib/utils';
 	import type { ProjectDetail } from '$lib/types';
 
 	let projects: ProjectDetail[] = $state([]);
-	let ignoredProjects: ProjectDetail[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
 
@@ -33,13 +32,9 @@
 	}
 
 	async function load() {
-		const [active, ignored] = await Promise.all([listProjects(false), listProjects(true)]);
-		const [activeDetails, ignoredDetails] = await Promise.all([
-			Promise.all(active.map((p) => getProject(p.id, 1, 10))),
-			Promise.all(ignored.map((p) => getProject(p.id, 1, 10)))
-		]);
+		const active = await listProjects(false);
+		const activeDetails = await Promise.all(active.map((p) => getProject(p.id, 1, 10)));
 		projects = sortByRecentRating(activeDetails);
-		ignoredProjects = sortByRecentRating(ignoredDetails);
 	}
 
 	onMount(async () => {
@@ -51,31 +46,13 @@
 			loading = false;
 		}
 	});
-
-	async function ignoreProject(id: string) {
-		await setProjectIgnored(id, true);
-		const project = projects.find((p) => p.id === id);
-		if (project) {
-			projects = projects.filter((p) => p.id !== id);
-			ignoredProjects = [...ignoredProjects, project];
-		}
-	}
-
-	async function trackProject(id: string) {
-		await setProjectIgnored(id, false);
-		const project = ignoredProjects.find((p) => p.id === id);
-		if (project) {
-			ignoredProjects = ignoredProjects.filter((p) => p.id !== id);
-			projects = [...projects, project];
-		}
-	}
 </script>
 
 {#if loading}
 	<p class="loading">Loading projects...</p>
 {:else if error}
 	<p class="error">{error}</p>
-{:else if projects.length === 0 && ignoredProjects.length === 0}
+{:else if projects.length === 0}
 	<p>No projects found.</p>
 {:else}
 	{#each projects as project (project.id)}
@@ -106,9 +83,6 @@
 						>
 							Settings
 						</a>
-						<button class="menu-item" type="button" onclick={() => ignoreProject(project.id)}>
-							Ignore Project
-						</button>
 					</div>
 				</details>
 			</div>
@@ -146,7 +120,11 @@
 									</a>
 								</td>
 								<td><AgentTag agent={conv.agent} /></td>
-								<td>{conv.lastMessageTimestamp ? fmtTimeWithSeconds(conv.lastMessageTimestamp) : '—'}</td>
+								<td
+									>{conv.lastMessageTimestamp
+										? fmtTimeWithSeconds(conv.lastMessageTimestamp)
+										: '—'}</td
+								>
 								<td class="ratings">
 									{#if conv.ratings.length > 0}
 										{#each conv.ratings as r (r.id)}
@@ -165,33 +143,6 @@
 			{/if}
 		</div>
 	{/each}
-
-	{#if ignoredProjects.length > 0}
-		<div class="ignored-section">
-			<h3>Ignored Projects</h3>
-			{#each ignoredProjects as project (project.id)}
-				<div class="ignored-row">
-					<span>{project.label || project.path}</span>
-					<a
-						class="btn-sm settings-link"
-						href={resolve('/local/projects/[project_id]/settings', { project_id: project.id })}
-					>
-						Settings
-					</a>
-					<a
-						class="btn-sm settings-link"
-						href={resolve('/local/projects/[project_id]/commits/[branch]', {
-							project_id: project.id,
-							branch: project.defaultBranch
-						})}
-					>
-						Commits
-					</a>
-					<button class="btn-sm" onclick={() => trackProject(project.id)}>Track</button>
-				</div>
-			{/each}
-		</div>
-	{/if}
 {/if}
 
 <style>
@@ -218,32 +169,9 @@
 		margin: 0 0 0.5rem 0;
 	}
 
-	.ignored-section {
-		margin-top: 2.5rem;
-		padding-top: 1rem;
-		border-top: 1px solid #e0e0e0;
-	}
-
 	.conversation-count {
 		margin: 0 0 0.5rem 0;
 		font-size: 0.8rem;
-		color: #888;
-	}
-
-	.ignored-section h3 {
-		font-size: 0.9rem;
-		color: #999;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-		margin-bottom: 0.5rem;
-	}
-
-	.ignored-row {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.3rem 0;
-		font-size: 0.85rem;
 		color: #888;
 	}
 

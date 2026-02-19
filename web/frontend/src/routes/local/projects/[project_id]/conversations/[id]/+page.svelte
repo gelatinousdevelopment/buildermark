@@ -161,132 +161,138 @@
 	});
 </script>
 
-{#if loading}
-	<p class="loading">Loading conversation...</p>
-{:else if error}
-	<p class="error">{error}</p>
-{:else if conversation}
-	<h2>{conversation.title || conversation.id}</h2>
-	<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
-	{#if conversationModels.length > 0}
-		<div class="models-summary">
-			<span class="models-label">Models:</span>
-			<ul class="models-list">
-				{#each conversationModels as model (model)}
-					<li>{model}</li>
-				{/each}
-			</ul>
-		</div>
-	{/if}
+<div class="content">
+	{#if loading}
+		<p class="loading">Loading conversation...</p>
+	{:else if error}
+		<p class="error">{error}</p>
+	{:else if conversation}
+		<h2>{conversation.title || conversation.id}</h2>
+		<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
+		{#if conversationModels.length > 0}
+			<div class="models-summary">
+				<span class="models-label">Models:</span>
+				<ul class="models-list">
+					{#each conversationModels as model (model)}
+						<li>{model}</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 
-	{#if timeline.length === 0}
-		<p>No messages or ratings.</p>
-	{:else}
-		{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
-			{#if item.kind === 'message' && isUserPromptMessage(item.message)}
-				<div class="message user-message" data-message-id={item.message.id}>
-					<UserPromptMessageCard message={item.message} />
-				</div>
-			{:else if item.kind === 'message' && isDiffMessage(item.message)}
-				{@const diffExpanded = expandedMessages.has(item.message.id)}
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div
-					class="message"
-					class:message-collapsed={!diffExpanded}
-					role={!diffExpanded ? 'button' : undefined}
-					tabindex={!diffExpanded ? 0 : undefined}
-					onclick={!diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
-					onkeydown={!diffExpanded
-						? (e: KeyboardEvent) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									toggleExpanded(item.message.id);
+		{#if timeline.length === 0}
+			<p>No messages or ratings.</p>
+		{:else}
+			{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
+				{#if item.kind === 'message' && isUserPromptMessage(item.message)}
+					<div class="message user-message" data-message-id={item.message.id}>
+						<UserPromptMessageCard message={item.message} />
+					</div>
+				{:else if item.kind === 'message' && isDiffMessage(item.message)}
+					{@const diffExpanded = expandedMessages.has(item.message.id)}
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div
+						class="message"
+						class:message-collapsed={!diffExpanded}
+						role={!diffExpanded ? 'button' : undefined}
+						tabindex={!diffExpanded ? 0 : undefined}
+						onclick={!diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
+						onkeydown={!diffExpanded
+							? (e: KeyboardEvent) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										toggleExpanded(item.message.id);
+									}
 								}
-							}
-						: undefined}
-				>
-					<DiffMessageCard
-						timestamp={item.message.timestamp}
-						role={item.message.role === 'agent' ? conversation.agent : item.message.role}
-						model={messageModel(item.message)}
-						content={item.message.content}
-						expanded={diffExpanded}
-						onToggle={diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
-					/>
-				</div>
-			{:else if item.kind === 'rating'}
-				<div class="rating-card">
-					<RatingMessageCard rating={item.rating} />
-				</div>
-			{:else if item.kind === 'log-group'}
-				{@const groupExpanded = expandedLogGroups.has(item.id)}
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div
-					class="message log-group"
-					class:message-collapsed={!groupExpanded}
-					role={!groupExpanded ? 'button' : undefined}
-					tabindex={!groupExpanded ? 0 : undefined}
-					onclick={!groupExpanded ? () => toggleLogGroup(item.id) : undefined}
-					onkeydown={!groupExpanded
-						? (e: KeyboardEvent) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									toggleLogGroup(item.id);
-								}
-							}
-						: undefined}
-				>
-					<LogGroupCard
-						messages={item.messages}
-						agent={conversation.agent}
-						expanded={groupExpanded}
-						{expandedMessages}
-						onToggleMessage={toggleExpanded}
-						onToggle={groupExpanded ? () => toggleLogGroup(item.id) : undefined}
-					/>
-				</div>
-			{/if}
-		{/each}
-	{/if}
-	{#if !hasRatingAfterLastUser}
-		<div class="rating-card rating-input">
-			<div class="rating-input-header">
-				<strong>Add rating</strong>
-			</div>
-			<div class="inline-stars">
-				{#each [1, 2, 3, 4, 5] as star (star)}
-					<button
-						class="star-btn"
-						class:active={star <= bottomRatingValue}
-						onclick={() => (bottomRatingValue = star)}
+							: undefined}
 					>
-						{star <= bottomRatingValue ? '★' : '☆'}
+						<DiffMessageCard
+							timestamp={item.message.timestamp}
+							role={item.message.role === 'agent' ? conversation.agent : item.message.role}
+							model={messageModel(item.message)}
+							content={item.message.content}
+							expanded={diffExpanded}
+							onToggle={diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
+						/>
+					</div>
+				{:else if item.kind === 'rating'}
+					<div class="rating-card">
+						<RatingMessageCard rating={item.rating} />
+					</div>
+				{:else if item.kind === 'log-group'}
+					{@const groupExpanded = expandedLogGroups.has(item.id)}
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div
+						class="message log-group"
+						class:message-collapsed={!groupExpanded}
+						role={!groupExpanded ? 'button' : undefined}
+						tabindex={!groupExpanded ? 0 : undefined}
+						onclick={!groupExpanded ? () => toggleLogGroup(item.id) : undefined}
+						onkeydown={!groupExpanded
+							? (e: KeyboardEvent) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										toggleLogGroup(item.id);
+									}
+								}
+							: undefined}
+					>
+						<LogGroupCard
+							messages={item.messages}
+							agent={conversation.agent}
+							expanded={groupExpanded}
+							{expandedMessages}
+							onToggleMessage={toggleExpanded}
+							onToggle={groupExpanded ? () => toggleLogGroup(item.id) : undefined}
+						/>
+					</div>
+				{/if}
+			{/each}
+		{/if}
+		{#if !hasRatingAfterLastUser}
+			<div class="rating-card rating-input">
+				<div class="rating-input-header">
+					<strong>Add rating</strong>
+				</div>
+				<div class="inline-stars">
+					{#each [1, 2, 3, 4, 5] as star (star)}
+						<button
+							class="star-btn"
+							class:active={star <= bottomRatingValue}
+							onclick={() => (bottomRatingValue = star)}
+						>
+							{star <= bottomRatingValue ? '★' : '☆'}
+						</button>
+					{/each}
+				</div>
+				<input
+					type="text"
+					class="inline-note"
+					placeholder="Optional note..."
+					bind:value={bottomNote}
+				/>
+				<div class="inline-actions">
+					<button
+						class="btn-sm"
+						disabled={bottomSubmitting || bottomRatingValue < 1}
+						onclick={submitBottomRating}
+					>
+						{bottomSubmitting ? 'Submitting...' : 'Submit'}
 					</button>
-				{/each}
+				</div>
+				{#if bottomError}
+					<p class="inline-error">{bottomError}</p>
+				{/if}
 			</div>
-			<input
-				type="text"
-				class="inline-note"
-				placeholder="Optional note..."
-				bind:value={bottomNote}
-			/>
-			<div class="inline-actions">
-				<button
-					class="btn-sm"
-					disabled={bottomSubmitting || bottomRatingValue < 1}
-					onclick={submitBottomRating}
-				>
-					{bottomSubmitting ? 'Submitting...' : 'Submit'}
-				</button>
-			</div>
-			{#if bottomError}
-				<p class="inline-error">{bottomError}</p>
-			{/if}
-		</div>
+		{/if}
 	{/if}
-{/if}
+</div>
 
 <style>
+	.content {
+		padding: 0 1rem;
+	}
+
 	.message {
 		background: #ffffff;
 		margin-bottom: 0.5rem;

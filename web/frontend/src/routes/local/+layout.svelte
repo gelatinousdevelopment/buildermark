@@ -77,7 +77,7 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href={resolve('/local')} class="item"><Icon name="gear" width="17px" /></a>
+				<a href={resolve('/local/settings')} class="item"><Icon name="gear" width="17px" /></a>
 			</nav>
 		</section>
 		<hr class="divider" />
