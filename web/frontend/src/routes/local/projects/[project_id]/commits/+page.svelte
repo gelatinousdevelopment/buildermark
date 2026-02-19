@@ -33,7 +33,6 @@
 <Commits
 	{projectId}
 	page={currentPage}
-	showSummary={true}
 	showBranchPicker={true}
 	showCoverageBar={true}
 	showPagination={true}

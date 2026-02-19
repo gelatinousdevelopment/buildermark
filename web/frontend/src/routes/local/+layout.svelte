@@ -206,10 +206,12 @@
 		/*max-width: 100rem;*/
 		/*padding: 1rem;*/
 		flex: 1;
+
 		display: flex;
 		flex-direction: column;
 		align-items: stretch;
 
+		width: 100vw;
 		max-width: 100vw;
 		box-sizing: border-box;
 	}

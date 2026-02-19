@@ -238,7 +238,7 @@ func ingestCommits(
 	}
 	perCommitAgent := make(map[string]map[string]*agentStats)
 
-	for i, gc := range toIngest {
+	for _, gc := range toIngest {
 		rawDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", gc.Hash)
 		if err != nil {
 			log.Printf("warning: could not get diff for commit %s: %v", gc.Hash, err)
@@ -259,12 +259,6 @@ func ingestCommits(
 		matchedChars := 0
 		if len(commitTokens) > 0 && len(messages) > 0 {
 			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
-			if i > 0 {
-				prev := toIngest[i-1].TimestampUnix * 1000
-				if prev > windowStart {
-					windowStart = prev
-				}
-			}
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
 			contribs, ml, mc, _, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 			matchedLines = ml

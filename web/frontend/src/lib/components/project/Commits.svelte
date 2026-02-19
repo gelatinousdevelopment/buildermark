@@ -25,7 +25,6 @@
 		compact?: boolean;
 		showHeader?: boolean;
 		header?: string;
-		showSummary?: boolean;
 		showBranchPicker?: boolean;
 		showCoverageBar?: boolean;
 		showPagination?: boolean;
@@ -47,7 +46,6 @@
 		compact = false,
 		showHeader = false,
 		header = 'Git Commits',
-		showSummary = false,
 		showBranchPicker = false,
 		showCoverageBar = false,
 		showPagination = false,
@@ -211,28 +209,6 @@
 {:else if !data || visibleCommits.length === 0}
 	<p class="message">No commits found for this project and current git user.</p>
 {:else}
-	{#if showSummary}
-		<section class="summary-grid">
-			<div class="summary-card">
-				<div class="summary-label">Current User</div>
-				<div class="summary-value">{data.currentUser || 'Unknown'}</div>
-				{#if data.currentEmail}
-					<div class="summary-subtle">{data.currentEmail}</div>
-				{/if}
-			</div>
-			<div class="summary-card">
-				<div class="summary-label">Coverage (Lines)</div>
-				<div class="summary-value">{percent(data.summary.linePercent)}</div>
-				<div class="summary-subtle">{data.summary.linesFromAgent} / {data.summary.linesTotal}</div>
-			</div>
-			<div class="summary-card">
-				<div class="summary-label">Coverage (Characters)</div>
-				<div class="summary-value">{percent(data.summary.characterPercent)}</div>
-				<div class="summary-subtle">{data.summary.charsFromAgent} / {data.summary.charsTotal}</div>
-			</div>
-		</section>
-	{/if}
-
 	{#if showBranchPicker}
 		<div class="branch-picker">
 			<label for="branch-{projectId}">Branch</label>
@@ -375,40 +351,6 @@
 		margin-bottom: 0.75rem;
 	}
 
-	.summary-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 0.8rem;
-		margin-bottom: 1rem;
-	}
-
-	.summary-card {
-		border: 1px solid #e6e6e6;
-		border-radius: 6px;
-		padding: 0.8rem;
-		background: #fbfbfb;
-	}
-
-	.summary-label {
-		font-size: 0.78rem;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-		color: #777;
-		margin-bottom: 0.35rem;
-	}
-
-	.summary-value {
-		font-size: 1.3rem;
-		font-weight: 600;
-		color: #222;
-	}
-
-	.summary-subtle {
-		margin-top: 0.2rem;
-		font-size: 0.8rem;
-		color: #777;
-	}
-
 	.link-button {
 		display: block;
 		max-width: 100%;
@@ -474,7 +416,7 @@
 	}
 
 	.summary-bar {
-		margin-bottom: 1rem;
+		margin: 0 1rem 1rem 1rem;
 		max-width: 600px;
 	}
 
@@ -555,6 +497,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-bottom: 0.75rem;
+		margin: 1rem;
 	}
 </style>

@@ -425,20 +425,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
 
 	// Determine the time window for message matching.
-	commitIdx := -1
-	for i := range commits {
-		if commits[i].Hash == commitHash {
-			commitIdx = i
-			break
-		}
-	}
 	windowStart := commit.TimestampUnix*1000 - defaultMessageWindowMs
-	if commitIdx > 0 {
-		prev := commits[commitIdx-1].TimestampUnix * 1000
-		if prev > windowStart {
-			windowStart = prev
-		}
-	}
 	windowEnd := commit.TimestampUnix*1000 + commitWindowLookaheadMs
 
 	messages, err := listDerivedDiffMessages(r.Context(), s.DB, projectIDs(group), windowStart, windowEnd)
@@ -828,7 +815,7 @@ func computeCoverageForRepo(
 	}
 
 	coverage := make([]projectCommitCoverage, 0, len(commits))
-	for i, c := range commits {
+	for _, c := range commits {
 		commitDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-w", "--ignore-blank-lines", c.Hash)
 		if err != nil {
 			continue
@@ -839,12 +826,6 @@ func computeCoverageForRepo(
 		}
 
 		windowStart := c.TimestampUnix*1000 - defaultMessageWindowMs
-		if i > 0 {
-			prev := commits[i-1].TimestampUnix * 1000
-			if prev > windowStart {
-				windowStart = prev
-			}
-		}
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
 		totalLines, totalChars := tokenTotals(commitTokens)

@@ -42,6 +42,6 @@
 
 <style>
 	.project-section {
-		margin-bottom: 2rem;
+		margin: 1rem 0;
 	}
 </style>
