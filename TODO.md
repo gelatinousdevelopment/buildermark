@@ -25,6 +25,8 @@
 - [x] Everywhere that we show the agent name (claude, codex, etc) in a list or header or something, use a new component named AgentTag.svelte and style it with a pill shape with the color background from local.css, like `--agent-color-claude`. You'll also need to add a foreground variant for each, like `--agent-foreground-color-claude` with a constrasting color, close to white or black.
 - [x] Implement the `local/projects/[id]/` route. It should have 2 columns, left side for conversations and right side for commits. This is basically like the boxes on the `/local/projects` route, but no border and only one project... also, show 20 items for each type, with a button at the bottom for "More..." that links to either the conversations or commits sub-route.
 - [x] The places that we're using AgentPercentageBar.svelte don't pass the segments prop, so we're not seeing the breakdown of each type of agent. I'd like to show that. Is that possible? Do we need to track that differently in the database in order to achieve that or can we do it with an efficient sql query?
+- [x] Change 24-hour default commit search window to 72 hours or longer?
+- [x] When showing a list of diff files and diffs, like on the `http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/commits/60a6cb19e8554be30843298621f6af14d5bf991e` type page, if a file has no changes, then just hide it... don't show it at all in the frontend.
 
 - [ ] In AgentPercentageBar.svelte, add a popover that shows details above on hover
 - [ ] Are we incorrectly detecting some diffs, like the last diff on [ba9dc20a-7886-4abf-9fec-6101551c8d03](http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03), which appears to be replacing the full file instead of doing a diff. Should we do a diff ourselves, by importing the `[file-history-snapshot]` that is logged just before it?
@@ -34,7 +36,6 @@
 - [ ] In split view of Agent Conversations and Git Commits, highlight related items in the opposite column on hover
 - [ ] Add a route for the branch above the `[hash]` route, like `local/project/[id]/commits/[branch]/[hash]`. The plain `local/project/[id]/commits/` route should redirect to the default branch from the projects table.
 - [ ] Show branch name for each commit in the list on Projects page
-- [ ] Change 24-hour default commit search window to 72 hours or longer?
 
 ## Later
 

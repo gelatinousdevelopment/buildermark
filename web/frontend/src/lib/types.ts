@@ -120,6 +120,7 @@ export interface ProjectCommitFileCoverage {
 	linesTotal: number;
 	linesFromAgent: number;
 	linePercent: number;
+	agentSegments?: AgentCoverageSegment[];
 }
 
 export interface ProjectCommitContributionMessage {

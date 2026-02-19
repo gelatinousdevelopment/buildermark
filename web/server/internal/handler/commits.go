@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"path"
 	"sort"
@@ -22,11 +23,20 @@ import (
 
 const (
 	workingCopyCommitHash   = "working-copy"
-	defaultMessageWindowMs  = int64(24 * 60 * 60 * 1000)
 	commitWindowLookaheadMs = int64(5 * 60 * 1000)
 	maxCommitsPerProject    = 200
 	commitsPageSize         = 20
 )
+
+var defaultMessageWindowMs = func() int64 {
+	if v := os.Getenv("ZRATE_MESSAGE_WINDOW_HOURS"); v != "" {
+		if hours, err := strconv.ParseInt(v, 10, 64); err == nil && hours > 0 {
+			log.Printf("using custom message window: %d hours", hours)
+			return hours * 60 * 60 * 1000
+		}
+	}
+	return int64(7 * 24 * 60 * 60 * 1000) // 7 days
+}()
 
 type projectCommitsResponse struct {
 	Branch       string                  `json:"branch"`
@@ -113,16 +123,17 @@ type commitContributionMessage struct {
 }
 
 type commitFileCoverage struct {
-	Path            string  `json:"path"`
-	Added           int     `json:"added"`
-	Removed         int     `json:"removed"`
-	Ignored         bool    `json:"ignored"`
-	Moved           bool    `json:"moved"`
-	MovedFrom       string  `json:"movedFrom"`
-	CopiedFromAgent bool    `json:"copiedFromAgent"`
-	LinesTotal      int     `json:"linesTotal"`
-	LinesFromAgent  int     `json:"linesFromAgent"`
-	LinePercent     float64 `json:"linePercent"`
+	Path            string                 `json:"path"`
+	Added           int                    `json:"added"`
+	Removed         int                    `json:"removed"`
+	Ignored         bool                   `json:"ignored"`
+	Moved           bool                   `json:"moved"`
+	MovedFrom       string                 `json:"movedFrom"`
+	CopiedFromAgent bool                   `json:"copiedFromAgent"`
+	LinesTotal      int                    `json:"linesTotal"`
+	LinesFromAgent  int                    `json:"linesFromAgent"`
+	LinePercent     float64                `json:"linePercent"`
+	AgentSegments   []agentCoverageSegment `json:"agentSegments,omitempty"`
 }
 
 type gitIdentity struct {
@@ -953,6 +964,32 @@ func attributeCommitToMessages(
 
 	contribByIndex := make(map[int]*commitContributionMessage)
 	fileCoverageByPath := make(map[string]commitFileCoverage)
+	type fileAgentStats struct {
+		lines int
+		chars int
+	}
+	fileAgentByPath := make(map[string]map[string]*fileAgentStats)
+	recordFileAgentMatch := func(filePath string, msgIdx int, chars int) {
+		if filePath == "" {
+			filePath = "(unknown)"
+		}
+		agent := strings.TrimSpace(messages[msgIdx].Agent)
+		if agent == "" {
+			agent = "unknown"
+		}
+		byAgent := fileAgentByPath[filePath]
+		if byAgent == nil {
+			byAgent = make(map[string]*fileAgentStats)
+			fileAgentByPath[filePath] = byAgent
+		}
+		stats := byAgent[agent]
+		if stats == nil {
+			stats = &fileAgentStats{}
+			byAgent[agent] = stats
+		}
+		stats.lines++
+		stats.chars += chars
+	}
 	for tokIdx, tok := range commitTokens {
 		path := tok.Path
 		if path == "" {
@@ -976,6 +1013,7 @@ func attributeCommitToMessages(
 		matchedChars += tok.Chars
 		fileCov.Removed++
 		fileCoverageByPath[path] = fileCov
+		recordFileAgentMatch(path, source.msgIdx, tok.Chars)
 		contrib := contribByIndex[source.msgIdx]
 		if contrib == nil {
 			msg := messages[source.msgIdx]
@@ -1047,6 +1085,7 @@ func attributeCommitToMessages(
 								fileCov.Path = path
 								fileCov.Removed++
 								fileCoverageByPath[path] = fileCov
+								recordFileAgentMatch(path, msgIdx, commitTokens[idx].Chars)
 							}
 
 							for _, pos := range windowPositions {
@@ -1097,6 +1136,25 @@ func attributeCommitToMessages(
 	out := make([]commitContributionMessage, 0, len(indices))
 	for _, idx := range indices {
 		out = append(out, *contribByIndex[idx])
+	}
+	for filePath, byAgent := range fileAgentByPath {
+		fileCov := fileCoverageByPath[filePath]
+		agents := make([]string, 0, len(byAgent))
+		for agent := range byAgent {
+			agents = append(agents, agent)
+		}
+		sort.Strings(agents)
+		segments := make([]agentCoverageSegment, 0, len(agents))
+		for _, agent := range agents {
+			stats := byAgent[agent]
+			segments = append(segments, agentCoverageSegment{
+				Agent:          agent,
+				LinesFromAgent: stats.lines,
+				CharsFromAgent: stats.chars,
+			})
+		}
+		fileCov.AgentSegments = segments
+		fileCoverageByPath[filePath] = fileCov
 	}
 
 	return out, matchedLines, matchedChars, fileCoverageByPath, normSources
@@ -1698,6 +1756,17 @@ func summarizeDiffFiles(
 				// Exact attribution uses normalized token totals so whitespace-only
 				// diff lines do not lower percentages for otherwise exact matches.
 				c.LinePercent = percentage(c.LinesFromAgent, agent.Added)
+				if len(agent.AgentSegments) > 0 {
+					segments := make([]agentCoverageSegment, 0, len(agent.AgentSegments))
+					for _, seg := range agent.AgentSegments {
+						if seg.LinesFromAgent <= 0 {
+							continue
+						}
+						seg.LinePercent = percentage(seg.LinesFromAgent, agent.Added)
+						segments = append(segments, seg)
+					}
+					c.AgentSegments = segments
+				}
 			}
 			// Fallback: detect relocated/copied agent code by matching normalized
 			// lines independent of file path. Require at least 10 lines to reduce

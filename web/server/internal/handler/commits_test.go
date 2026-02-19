@@ -823,6 +823,64 @@ func TestAttributeCommitToMessages_MatchesFormattingOnlyLineWraps(t *testing.T) 
 	}
 }
 
+func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
+	commitTokens := []diffToken{
+		{Path: "src/app.ts", Norm: "line-a", Key: "src/app.ts\x1fline-a", Chars: 6},
+		{Path: "src/app.ts", Norm: "line-b", Key: "src/app.ts\x1fline-b", Chars: 6},
+	}
+	messages := []messageDiff{
+		{
+			ID:        "m1",
+			Timestamp: 1000,
+			Agent:     "codex",
+			Tokens: []diffToken{
+				{Path: "src/app.ts", Norm: "line-a", Key: "src/app.ts\x1fline-a", Chars: 6},
+			},
+		},
+		{
+			ID:        "m2",
+			Timestamp: 1000,
+			Agent:     "claude",
+			Tokens: []diffToken{
+				{Path: "src/app.ts", Norm: "line-b", Key: "src/app.ts\x1fline-b", Chars: 6},
+			},
+		},
+	}
+	diffText := strings.Join([]string{
+		"diff --git a/src/app.ts b/src/app.ts",
+		"--- a/src/app.ts",
+		"+++ b/src/app.ts",
+		"@@ -0,0 +1,2 @@",
+		"+line-a",
+		"+line-b",
+		"",
+	}, "\n")
+
+	_, _, _, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	files := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	if len(files) != 1 {
+		t.Fatalf("files len = %d, want 1", len(files))
+	}
+	f := files[0]
+	if f.LinePercent != 100 {
+		t.Fatalf("linePercent = %.1f, want 100.0", f.LinePercent)
+	}
+	if len(f.AgentSegments) != 2 {
+		t.Fatalf("agentSegments len = %d, want 2", len(f.AgentSegments))
+	}
+
+	byAgent := make(map[string]agentCoverageSegment, len(f.AgentSegments))
+	for _, seg := range f.AgentSegments {
+		byAgent[seg.Agent] = seg
+	}
+	if byAgent["codex"].LinesFromAgent != 1 || byAgent["codex"].LinePercent != 50 {
+		t.Fatalf("codex segment = %+v, want lines=1 percent=50", byAgent["codex"])
+	}
+	if byAgent["claude"].LinesFromAgent != 1 || byAgent["claude"].LinePercent != 50 {
+		t.Fatalf("claude segment = %+v, want lines=1 percent=50", byAgent["claude"])
+	}
+}
+
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

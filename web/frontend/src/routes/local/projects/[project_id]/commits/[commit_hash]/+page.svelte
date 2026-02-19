@@ -28,8 +28,11 @@
 	let diffSectionByPath = $derived.by(
 		() => new Map(diffSections.map((section) => [section.path, section.diffText]))
 	);
-	let renderableDiffFiles = $derived.by(
-		() => detail?.files.filter((file) => !file.ignored && diffSectionByPath.has(file.path)) ?? []
+	let visibleFiles = $derived.by(
+		() => detail?.files.filter((file) => file.added > 0 || file.removed > 0) ?? []
+	);
+	let renderableDiffFiles = $derived.by(() =>
+		visibleFiles.filter((file) => !file.ignored && diffSectionByPath.has(file.path))
 	);
 	let agentLinesTotal = $derived.by(
 		() =>
@@ -164,155 +167,164 @@
 	});
 </script>
 
-{#if loading}
-	<p class="loading">Loading commit...</p>
-{:else if error}
-	<p class="error">{error}</p>
-{:else if detail}
-	<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
-	<p>{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}</p>
-	<p>
-		Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} changed lines ({percent(
-			agentLinesFromAgent,
-			agentLinesTotal
-		).toFixed(1)}%) in non-ignored, non-moved files
-	</p>
-	<div class="detail-bar">
-		<AgentPercentageBar
-			agentPercent={percent(agentLinesFromAgent, agentLinesTotal)}
-			segments={toBarSegments(detail.commit.agentSegments)}
-			showManual={true}
-		/>
-	</div>
-	<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
-
-	<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
-	{#if detail.files.length === 0}
-		<p>No changed files in this diff.</p>
-	{:else}
-		<div class="file-table-wrap">
-			<table class="file-table">
-				<thead>
-					<tr>
-						<th>File</th>
-						<th>Changes</th>
-						<th class="pct-col">Agent</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each detail.files as file (file.path)}
-						<tr class:ignored-row={file.ignored || file.moved}>
-							<td>
-								{#if !file.ignored && diffSectionByPath.has(file.path)}
-									<a href={`#${diffAnchor(file.path)}`}>{file.path}</a>
-								{:else}
-									{file.path}
-								{/if}
-								{#if file.moved}
-									<span class="file-tag">[moved]</span>
-								{:else if file.copiedFromAgent}
-									<span class="file-tag">[copied-from-agent]</span>
-								{/if}
-							</td>
-							<td class="changes-col">
-								{#if !file.ignored}
-									<DiffCount added={file.added} removed={file.removed} />
-								{/if}
-							</td>
-							<td class="pct-col">
-								{#if !file.ignored && !file.moved}
-									<div class="file-bar-wrap">
-										<span class="file-pct">{file.linePercent.toFixed(1)}%</span>
-										<AgentPercentageBar agentPercent={file.linePercent} showKey={false} />
-									</div>
-								{/if}
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+<div class="content">
+	{#if loading}
+		<p class="loading">Loading commit...</p>
+	{:else if error}
+		<p class="error">{error}</p>
+	{:else if detail}
+		<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
+		<p>{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}</p>
+		<p>
+			Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} changed lines ({percent(
+				agentLinesFromAgent,
+				agentLinesTotal
+			).toFixed(1)}%) in non-ignored, non-moved files
+		</p>
+		<div class="detail-bar">
+			<AgentPercentageBar
+				agentPercent={percent(agentLinesFromAgent, agentLinesTotal)}
+				segments={toBarSegments(detail.commit.agentSegments)}
+				showManual={true}
+			/>
 		</div>
-	{/if}
-	{#if renderableDiffFiles.length === 0}
-		<p>No non-ignored file diffs to display.</p>
-	{:else}
-		{#each renderableDiffFiles as file (file.path)}
-			{@const fileExpanded = isDiffExpanded(file.path)}
-			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-			<div
-				class="commit-diff-section diff-card"
-				class:diff-card-collapsed={!fileExpanded}
-				id={diffAnchor(file.path)}
-				role={!fileExpanded ? 'button' : undefined}
-				tabindex={!fileExpanded ? 0 : undefined}
-				onclick={!fileExpanded ? () => toggleDiffPath(file.path) : undefined}
-				onkeydown={!fileExpanded
-					? (e: KeyboardEvent) => {
-							if (e.key === 'Enter' || e.key === ' ') {
-								e.preventDefault();
-								toggleDiffPath(file.path);
-							}
-						}
-					: undefined}
-			>
-				<DiffMessageCard
-					label={file.path}
-					content={diffSectionByPath.get(file.path) ?? ''}
-					expanded={fileExpanded}
-					agentPercent={file.linePercent}
-					onToggle={fileExpanded ? () => toggleDiffPath(file.path) : undefined}
-				/>
-			</div>
-		{/each}
-	{/if}
+		<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 
-	<div class="section-header">
-		<h3>Matched Messages</h3>
-		<button class="btn-expand-all" onclick={toggleExpandAllMessages}>
-			{allMessagesExpanded ? 'Collapse All' : 'Expand All'}
-		</button>
-	</div>
-	{#if detail.messages.length === 0}
-		<p>No tracked diff messages matched this commit.</p>
-	{:else}
-		{#each detail.messages as message (message.id)}
-			{@const msgExpanded = isExpanded(message.id)}
-			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-			<div
-				class="diff-card"
-				class:diff-card-collapsed={!msgExpanded}
-				role={!msgExpanded ? 'button' : undefined}
-				tabindex={!msgExpanded ? 0 : undefined}
-				onclick={!msgExpanded ? () => toggleExpanded(message.id) : undefined}
-				onkeydown={!msgExpanded
-					? (e: KeyboardEvent) => {
-							if (e.key === 'Enter' || e.key === ' ') {
-								e.preventDefault();
-								toggleExpanded(message.id);
-							}
-						}
-					: undefined}
-			>
-				<DiffMessageCard
-					timestamp={message.timestamp}
-					role={message.agent || 'agent'}
-					model={message.model ?? ''}
-					content={message.content}
-					expanded={msgExpanded}
-					statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
-					linkHref={resolve('/local/projects/[project_id]/conversations/[id]', {
-						project_id: detail.commit.projectId,
-						id: message.conversationId
-					})}
-					linkLabel={`Conversation: ${message.conversationTitle || message.conversationId}`}
-					onToggle={msgExpanded ? () => toggleExpanded(message.id) : undefined}
-				/>
+		<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
+		{#if visibleFiles.length === 0}
+			<p>No changed files in this diff.</p>
+		{:else}
+			<div class="file-table-wrap">
+				<table class="file-table">
+					<thead>
+						<tr>
+							<th>File</th>
+							<th>Changes</th>
+							<th class="pct-col">Agents</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each visibleFiles as file (file.path)}
+							<tr class:ignored-row={file.ignored || file.moved}>
+								<td>
+									{#if !file.ignored && diffSectionByPath.has(file.path)}
+										<a href={`#${diffAnchor(file.path)}`}>{file.path}</a>
+									{:else}
+										{file.path}
+									{/if}
+									{#if file.moved}
+										<span class="file-tag">[moved]</span>
+									{:else if file.copiedFromAgent}
+										<span class="file-tag">[copied-from-agent]</span>
+									{/if}
+								</td>
+								<td class="changes-col">
+									{#if !file.ignored}
+										<DiffCount added={file.added} removed={file.removed} />
+									{/if}
+								</td>
+								<td class="pct-col">
+									{#if !file.ignored && !file.moved}
+										<div class="file-bar-wrap">
+											<AgentPercentageBar
+												agentPercent={file.linePercent}
+												segments={toBarSegments(file.agentSegments)}
+												showKey={true}
+											/>
+										</div>
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
-		{/each}
+		{/if}
+		{#if renderableDiffFiles.length === 0}
+			<p>No non-ignored file diffs to display.</p>
+		{:else}
+			{#each renderableDiffFiles as file (file.path)}
+				{@const fileExpanded = isDiffExpanded(file.path)}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div
+					class="commit-diff-section diff-card"
+					class:diff-card-collapsed={!fileExpanded}
+					id={diffAnchor(file.path)}
+					role={!fileExpanded ? 'button' : undefined}
+					tabindex={!fileExpanded ? 0 : undefined}
+					onclick={!fileExpanded ? () => toggleDiffPath(file.path) : undefined}
+					onkeydown={!fileExpanded
+						? (e: KeyboardEvent) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault();
+									toggleDiffPath(file.path);
+								}
+							}
+						: undefined}
+				>
+					<DiffMessageCard
+						label={file.path}
+						content={diffSectionByPath.get(file.path) ?? ''}
+						expanded={fileExpanded}
+						agentPercent={file.linePercent}
+						onToggle={fileExpanded ? () => toggleDiffPath(file.path) : undefined}
+					/>
+				</div>
+			{/each}
+		{/if}
+
+		<div class="section-header">
+			<h3>Matched Messages</h3>
+			<button class="btn-expand-all" onclick={toggleExpandAllMessages}>
+				{allMessagesExpanded ? 'Collapse All' : 'Expand All'}
+			</button>
+		</div>
+		{#if detail.messages.length === 0}
+			<p>No tracked diff messages matched this commit.</p>
+		{:else}
+			{#each detail.messages as message (message.id)}
+				{@const msgExpanded = isExpanded(message.id)}
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div
+					class="diff-card"
+					class:diff-card-collapsed={!msgExpanded}
+					role={!msgExpanded ? 'button' : undefined}
+					tabindex={!msgExpanded ? 0 : undefined}
+					onclick={!msgExpanded ? () => toggleExpanded(message.id) : undefined}
+					onkeydown={!msgExpanded
+						? (e: KeyboardEvent) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault();
+									toggleExpanded(message.id);
+								}
+							}
+						: undefined}
+				>
+					<DiffMessageCard
+						timestamp={message.timestamp}
+						role={message.agent || 'agent'}
+						model={message.model ?? ''}
+						content={message.content}
+						expanded={msgExpanded}
+						statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
+						linkHref={resolve('/local/projects/[project_id]/conversations/[id]', {
+							project_id: detail.commit.projectId,
+							id: message.conversationId
+						})}
+						linkLabel={`Conversation: ${message.conversationTitle || message.conversationId}`}
+						onToggle={msgExpanded ? () => toggleExpanded(message.id) : undefined}
+					/>
+				</div>
+			{/each}
+		{/if}
 	{/if}
-{/if}
+</div>
 
 <style>
+	.content {
+		padding: 0 1rem;
+	}
+
 	.file-table-wrap {
 		overflow-x: auto;
 		margin-bottom: 0.75rem;
@@ -415,11 +427,5 @@
 		align-items: center;
 		gap: 0.4rem;
 		min-width: 100px;
-	}
-
-	.file-pct {
-		flex-shrink: 0;
-		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
 	}
 </style>
