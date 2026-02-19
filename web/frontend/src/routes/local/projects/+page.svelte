@@ -103,13 +103,15 @@
 					<div class="column commits">
 						<div class="heading">
 							<a
-								href={resolve('/local/projects/[project_id]/commits', {
-									project_id: row.project.id
+								href={resolve('/local/projects/[project_id]/commits/[branch]', {
+									project_id: row.project.id,
+									branch: row.project.defaultBranch
 								})}>Git Commits</a
 							>
 						</div>
 						<Commits
 							projectId={row.project.id}
+							branch={row.project.defaultBranch}
 							limit={10}
 							compact={true}
 							useLoadQueue={true}

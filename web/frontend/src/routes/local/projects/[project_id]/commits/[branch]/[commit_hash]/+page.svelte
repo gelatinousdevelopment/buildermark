@@ -153,11 +153,11 @@
 	onMount(async () => {
 		try {
 			const projectId = page.params.project_id;
+			const branch = page.params.branch;
 			const commitHash = page.params.commit_hash;
-			if (!projectId || !commitHash) {
-				throw new Error('Missing project or commit ID');
+			if (!projectId || !branch || !commitHash) {
+				throw new Error('Missing project, branch, or commit ID');
 			}
-			const branch = new URLSearchParams(window.location.search).get('branch') ?? '';
 			detail = await getProjectCommitDetail(projectId, commitHash, branch);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load commit detail';

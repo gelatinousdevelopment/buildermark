@@ -5,6 +5,7 @@
 	import Commits from '$lib/components/project/Commits.svelte';
 
 	const projectId = $derived(page.params.project_id ?? '');
+	const branch = $derived(page.params.branch ?? '');
 	const currentPage = $derived.by(() => {
 		const raw = page.url.searchParams.get('page');
 		if (!raw) return 1;
@@ -20,9 +21,25 @@
 		} else {
 			params.set('page', String(nextPage));
 		}
-		const base = resolve('/local/projects/[project_id]/commits', { project_id: projectId });
+		const base = resolve('/local/projects/[project_id]/commits/[branch]', {
+			project_id: projectId,
+			branch
+		});
 		const query = params.toString();
 		await goto(query ? `${base}?${query}` : base, {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true
+		});
+	}
+
+	async function handleBranchChange(nextBranch: string) {
+		if (!projectId || !nextBranch) return;
+		const base = resolve('/local/projects/[project_id]/commits/[branch]', {
+			project_id: projectId,
+			branch: nextBranch
+		});
+		await goto(base, {
 			replaceState: true,
 			noScroll: true,
 			keepFocus: true
@@ -32,10 +49,12 @@
 
 <Commits
 	{projectId}
+	{branch}
 	page={currentPage}
 	showBranchPicker={true}
 	showCoverageBar={true}
 	showPagination={true}
 	showLoadMore={true}
 	onPageChange={handlePageChange}
+	onBranchChange={handleBranchChange}
 />

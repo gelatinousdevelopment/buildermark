@@ -84,7 +84,10 @@
 				<h2>{project.label || project.path}</h2>
 				<a
 					class="btn-sm settings-link"
-					href={resolve('/local/projects/[project_id]/commits', { project_id: project.id })}
+					href={resolve('/local/projects/[project_id]/commits/[branch]', {
+						project_id: project.id,
+						branch: project.defaultBranch
+					})}
 				>
 					Commits
 				</a>
@@ -177,7 +180,10 @@
 					</a>
 					<a
 						class="btn-sm settings-link"
-						href={resolve('/local/projects/[project_id]/commits', { project_id: project.id })}
+						href={resolve('/local/projects/[project_id]/commits/[branch]', {
+							project_id: project.id,
+							branch: project.defaultBranch
+						})}
 					>
 						Commits
 					</a>

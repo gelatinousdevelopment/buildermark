@@ -28,13 +28,15 @@
 - [x] Change 24-hour default commit search window to 72 hours or longer?
 - [x] When showing a list of diff files and diffs, like on the `http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/commits/60a6cb19e8554be30843298621f6af14d5bf991e` type page, if a file has no changes, then just hide it... don't show it at all in the frontend.
 
+- [ ] Add a route for the branch above the `[hash]` route, like `local/project/[id]/commits/[branch]/[hash]`. The plain `local/project/[id]/commits/` route should redirect to the default branch from the projects table. Update all links accordingly, of course.
+
 - [ ] In AgentPercentageBar.svelte, add a popover that shows details above on hover
+- [ ] Move the ratings stars section of Conversations.svelte into a separate component. When there are multiple ratings, average them to show only one overall rating. Implement a similar popover for the rating component like we just did for AgentPercentageBar.svelte, but show it to the left. In fact, move the popover from that file into a separate component, so we can reuse it. Add options to show the popover above, below, leading, or trailing (leading as default), but always draw it so it stays on within the window's viewport, falling back to another position if necessary.
 - [ ] Are we incorrectly detecting some diffs, like the last diff on [ba9dc20a-7886-4abf-9fec-6101551c8d03](http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03), which appears to be replacing the full file instead of doing a diff. Should we do a diff ourselves, by importing the `[file-history-snapshot]` that is logged just before it?
 - [ ] Improve design of conversation header
 - [ ] Improve normalization of code (like code formatting) when comparing agent diffs to commit diffs
 - [ ] Implement a list of projects in Settings, with a checkbox for each indicating if it's tracked (checked means tracked) or ignored.
 - [ ] In split view of Agent Conversations and Git Commits, highlight related items in the opposite column on hover
-- [ ] Add a route for the branch above the `[hash]` route, like `local/project/[id]/commits/[branch]/[hash]`. The plain `local/project/[id]/commits/` route should redirect to the default branch from the projects table.
 - [ ] Show branch name for each commit in the list on Projects page
 
 ## Later

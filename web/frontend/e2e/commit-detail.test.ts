@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('commit detail renders contributing message and conversation link', async ({ page }) => {
-	await page.route('**/api/v1/projects/proj-1/commits/hash-1', async (route) => {
+	await page.route('**/api/v1/projects/proj-1/commits/hash-1?branch=main', async (route) => {
 		await route.fulfill({
 			status: 200,
 			contentType: 'application/json',
@@ -69,7 +69,7 @@ test('commit detail renders contributing message and conversation link', async (
 		});
 	});
 
-	await page.goto('/local/projects/proj-1/commits/hash-1');
+	await page.goto('/local/projects/proj-1/commits/main/hash-1');
 	await expect(page.getByText('agent change')).toBeVisible();
 	await expect(page.getByText('Conversation: Fix auth')).toBeVisible();
 	await expect(page.getByRole('link', { name: 'a.txt' })).toHaveAttribute('href', '#diff-a.txt');
@@ -83,7 +83,7 @@ test('commit detail renders contributing message and conversation link', async (
 });
 
 test('commit detail surfaces non-json API error cleanly', async ({ page }) => {
-	await page.route('**/api/v1/projects/proj-2/commits/hash-2', async (route) => {
+	await page.route('**/api/v1/projects/proj-2/commits/hash-2?branch=main', async (route) => {
 		await route.fulfill({
 			status: 404,
 			contentType: 'text/plain',
@@ -91,7 +91,7 @@ test('commit detail surfaces non-json API error cleanly', async ({ page }) => {
 		});
 	});
 
-	await page.goto('/local/projects/proj-2/commits/hash-2');
+	await page.goto('/local/projects/proj-2/commits/main/hash-2');
 	await expect(
 		page.getByText('API returned non-JSON response (404): 404 page not found')
 	).toBeVisible();

@@ -179,6 +179,7 @@
 		}
 		if (onBranchChange) {
 			await onBranchChange(value);
+			return;
 		}
 		await goToPage(1);
 	}
@@ -266,8 +267,9 @@
 					<td class="title">
 						<div>
 							<a
-								href={resolve('/local/projects/[project_id]/commits/[commit_hash]', {
+								href={resolve('/local/projects/[project_id]/commits/[branch]/[commit_hash]', {
 									project_id: c.projectId,
+									branch: selectedBranch || data?.branch || '',
 									commit_hash: c.commitHash
 								})}
 								class="link-button"
