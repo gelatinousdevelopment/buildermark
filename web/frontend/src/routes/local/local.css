@@ -19,6 +19,8 @@
 	--agent-foreground-color-codex: rgb(255, 255, 255, 0.9);
 	--agent-color-gemini: #3b82f6;
 	--agent-foreground-color-gemini: rgb(255, 255, 255, 0.9);
+
+	--font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 html,

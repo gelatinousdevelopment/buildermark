@@ -8,6 +8,7 @@
 		AgentCoverageSegment
 	} from '$lib/types';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
+	import { formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
 
 	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
 		if (!segs || segs.length === 0) return [];
@@ -98,10 +99,6 @@
 
 	function percent(value: number): string {
 		return `${value.toFixed(1)}%`;
-	}
-
-	function formatTime(unixMs: number): string {
-		return new Date(unixMs).toLocaleString();
 	}
 
 	function withOptionalQueue<T>(task: () => Promise<T>): Promise<T> {
@@ -262,7 +259,9 @@
 			{#each visibleCommits as c (c.commitHash)}
 				<tr>
 					{#if !compact}
-						<td class="time">{formatTime(c.authoredAtUnixMs)}</td>
+						<td class="time" title={formatFullDateTitle(c.authoredAtUnixMs)}
+							>{formatRelativeOrShortDate(c.authoredAtUnixMs)}</td
+						>
 					{/if}
 						<td class="title">
 							<div>

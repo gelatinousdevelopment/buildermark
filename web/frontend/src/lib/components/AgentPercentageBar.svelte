@@ -100,7 +100,7 @@
 	let barSegments: ResolvedSegment[] = $derived.by(() => {
 		const result = [...resolvedSegments];
 		if (manualPercent > 0) {
-			result.push({ name: 'Manual', percent: manualPercent, color: MANUAL_COLOR });
+			result.push({ name: 'manual', percent: manualPercent, color: MANUAL_COLOR });
 		}
 		return result;
 	});
@@ -174,7 +174,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
-		font-size: 0.78rem;
+		font-size: 1rem;
 	}
 
 	.apb-popover-name {

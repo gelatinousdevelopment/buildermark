@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { getProject } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
-	import { shortId } from '$lib/utils';
+	import { shortId, formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import RatingStars from '$lib/components/RatingStars.svelte';
 	import { resolve } from '$app/paths';
@@ -14,6 +14,7 @@
 		page?: number;
 		pageSize?: number;
 		limit?: number;
+		compact?: boolean;
 		showHeader?: boolean;
 		header?: string;
 		showAgentColumn?: boolean;
@@ -34,6 +35,7 @@
 		page = undefined,
 		pageSize = 0,
 		limit = 0,
+		compact = false,
 		showHeader = false,
 		header = 'Agent Conversations',
 		showAgentColumn = true,
@@ -142,6 +144,9 @@
 {:else}
 	<table class="data">
 		<colgroup>
+			{#if !compact}
+				<col class="date-col" />
+			{/if}
 			<col />
 			{#if showAgentColumn}
 				<col class="agent-col" />
@@ -153,6 +158,9 @@
 		{#if showColumnNames}
 			<thead>
 				<tr>
+					{#if !compact}
+						<th class="date-col">Date</th>
+					{/if}
 					<th>Conversation</th>
 					{#if showAgentColumn}
 						<th>Agent</th>
@@ -166,6 +174,11 @@
 		<tbody>
 			{#each visibleConversations as conv (conv.id)}
 				<tr>
+					{#if !compact}
+						<td class="date" title={formatFullDateTitle(conv.lastMessageTimestamp)}
+							>{formatRelativeOrShortDate(conv.lastMessageTimestamp)}</td
+						>
+					{/if}
 					<td class="title">
 						<a
 							href={resolve('/local/projects/[project_id]/conversations/[id]', {
@@ -239,8 +252,17 @@
 		width: 80px;
 	}
 
+	.date-col {
+		width: 140px;
+	}
+
 	.ratings-col {
 		width: 78px;
+	}
+
+	.date {
+		padding-left: 1rem;
+		white-space: nowrap;
 	}
 
 	.title {
