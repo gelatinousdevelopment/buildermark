@@ -2,8 +2,17 @@
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
-	import type { ProjectCommitPageResponse, CommitIngestionStatusResponse } from '$lib/types';
+	import type {
+		ProjectCommitPageResponse,
+		CommitIngestionStatusResponse,
+		AgentCoverageSegment
+	} from '$lib/types';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
+
+	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
+		if (!segs || segs.length === 0) return [];
+		return segs.map((s) => ({ name: s.agent, percent: s.linePercent }));
+	}
 
 	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type BranchChangeHandler = (branch: string) => void | Promise<void>;
@@ -237,7 +246,11 @@
 
 	{#if showCoverageBar}
 		<div class="summary-bar">
-			<AgentPercentageBar agentPercent={data.summary.linePercent} showManual={true} />
+			<AgentPercentageBar
+				agentPercent={data.summary.linePercent}
+				segments={toBarSegments(data.summary.agentSegments)}
+				showManual={true}
+			/>
 		</div>
 	{/if}
 
@@ -296,7 +309,13 @@
 							>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td
 						>
 					{/if}
-					<td class="bar"><AgentPercentageBar agentPercent={c.linePercent} showKey={false} /></td>
+					<td class="bar"
+						><AgentPercentageBar
+							agentPercent={c.linePercent}
+							segments={toBarSegments(c.agentSegments)}
+							showKey={false}
+						/></td
+					>
 				</tr>
 			{/each}
 		</tbody>

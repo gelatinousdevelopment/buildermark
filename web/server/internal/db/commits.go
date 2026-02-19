@@ -229,3 +229,83 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	}
 	return commits, rows.Err()
 }
+
+// CommitAgentCoverage represents a row in the commit_agent_coverage table.
+type CommitAgentCoverage struct {
+	ID             string `json:"id"`
+	CommitID       string `json:"commitId"`
+	Agent          string `json:"agent"`
+	LinesFromAgent int    `json:"linesFromAgent"`
+	CharsFromAgent int    `json:"charsFromAgent"`
+}
+
+// UpsertCommitAgentCoverage batch-upserts per-agent coverage rows.
+func UpsertCommitAgentCoverage(ctx context.Context, database *sql.DB, rows []CommitAgentCoverage) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO commit_agent_coverage (id, commit_id, agent, lines_from_agent, chars_from_agent)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(commit_id, agent) DO UPDATE SET
+		   lines_from_agent = excluded.lines_from_agent,
+		   chars_from_agent = excluded.chars_from_agent`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare upsert commit_agent_coverage: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, r := range rows {
+		if r.ID == "" {
+			r.ID = newID()
+		}
+		if _, err := stmt.ExecContext(ctx, r.ID, r.CommitID, r.Agent, r.LinesFromAgent, r.CharsFromAgent); err != nil {
+			return fmt.Errorf("upsert commit_agent_coverage: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// ListCommitAgentCoverageByCommitIDs bulk-fetches per-agent coverage keyed by commit ID.
+func ListCommitAgentCoverageByCommitIDs(ctx context.Context, database *sql.DB, commitIDs []string) (map[string][]CommitAgentCoverage, error) {
+	if len(commitIDs) == 0 {
+		return nil, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(commitIDs)), ",")
+	query := fmt.Sprintf(
+		`SELECT id, commit_id, agent, lines_from_agent, chars_from_agent
+		 FROM commit_agent_coverage
+		 WHERE commit_id IN (%s)
+		 ORDER BY commit_id, agent`,
+		placeholders,
+	)
+	args := make([]any, 0, len(commitIDs))
+	for _, id := range commitIDs {
+		args = append(args, id)
+	}
+
+	dbRows, err := database.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query commit_agent_coverage: %w", err)
+	}
+	defer dbRows.Close()
+
+	result := make(map[string][]CommitAgentCoverage)
+	for dbRows.Next() {
+		var r CommitAgentCoverage
+		if err := dbRows.Scan(&r.ID, &r.CommitID, &r.Agent, &r.LinesFromAgent, &r.CharsFromAgent); err != nil {
+			return nil, fmt.Errorf("scan commit_agent_coverage: %w", err)
+		}
+		result[r.CommitID] = append(result[r.CommitID], r)
+	}
+	return result, dbRows.Err()
+}

@@ -231,6 +231,13 @@ func ingestCommits(
 	}
 
 	dbCommits := make([]db.Commit, 0, len(toIngest))
+	// Per-commit, per-agent coverage: map from commit hash to agent->lines/chars.
+	type agentStats struct {
+		lines int
+		chars int
+	}
+	perCommitAgent := make(map[string]map[string]*agentStats)
+
 	for i, gc := range toIngest {
 		rawDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", gc.Hash)
 		if err != nil {
@@ -259,7 +266,28 @@ func ingestCommits(
 				}
 			}
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
-			_, matchedLines, matchedChars, _, _ = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			contribs, ml, mc, _, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			matchedLines = ml
+			matchedChars = mc
+
+			// Aggregate contribution messages by agent.
+			if len(contribs) > 0 {
+				byAgent := make(map[string]*agentStats)
+				for _, cm := range contribs {
+					agent := cm.Agent
+					if agent == "" {
+						agent = "unknown"
+					}
+					s := byAgent[agent]
+					if s == nil {
+						s = &agentStats{}
+						byAgent[agent] = s
+					}
+					s.lines += cm.LinesMatched
+					s.chars += cm.CharsMatched
+				}
+				perCommitAgent[gc.Hash] = byAgent
+			}
 		}
 
 		dbCommits = append(dbCommits, db.Commit{
@@ -280,6 +308,34 @@ func ingestCommits(
 
 	if err := db.UpsertCommits(ctx, database, dbCommits); err != nil {
 		return 0, fmt.Errorf("upsert commits: %w", err)
+	}
+
+	// Store per-agent coverage. We need the commit IDs from the DB.
+	if len(perCommitAgent) > 0 {
+		var agentCoverageRows []db.CommitAgentCoverage
+		for _, c := range dbCommits {
+			byAgent, ok := perCommitAgent[c.CommitHash]
+			if !ok {
+				continue
+			}
+			// We need the DB commit ID. Since UpsertCommits may have set it on conflict,
+			// look it up by hash.
+			dbCommit, err := db.GetCommitByHash(ctx, database, c.ProjectID, branch, c.CommitHash)
+			if err != nil || dbCommit == nil {
+				continue
+			}
+			for agent, stats := range byAgent {
+				agentCoverageRows = append(agentCoverageRows, db.CommitAgentCoverage{
+					CommitID:       dbCommit.ID,
+					Agent:          agent,
+					LinesFromAgent: stats.lines,
+					CharsFromAgent: stats.chars,
+				})
+			}
+		}
+		if err := db.UpsertCommitAgentCoverage(ctx, database, agentCoverageRows); err != nil {
+			log.Printf("warning: failed to upsert agent coverage: %v", err)
+		}
 	}
 
 	return len(dbCommits), nil

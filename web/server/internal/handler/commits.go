@@ -37,31 +37,40 @@ type projectCommitsResponse struct {
 	Commits      []projectCommitCoverage `json:"commits"`
 }
 
+type agentCoverageSegment struct {
+	Agent          string  `json:"agent"`
+	LinesFromAgent int     `json:"linesFromAgent"`
+	CharsFromAgent int     `json:"charsFromAgent"`
+	LinePercent    float64 `json:"linePercent"`
+}
+
 type projectCommitSummary struct {
-	CommitCount      int     `json:"commitCount"`
-	LinesTotal       int     `json:"linesTotal"`
-	LinesFromAgent   int     `json:"linesFromAgent"`
-	LinePercent      float64 `json:"linePercent"`
-	CharsTotal       int     `json:"charsTotal"`
-	CharsFromAgent   int     `json:"charsFromAgent"`
-	CharacterPercent float64 `json:"characterPercent"`
+	CommitCount      int                    `json:"commitCount"`
+	LinesTotal       int                    `json:"linesTotal"`
+	LinesFromAgent   int                    `json:"linesFromAgent"`
+	LinePercent      float64                `json:"linePercent"`
+	CharsTotal       int                    `json:"charsTotal"`
+	CharsFromAgent   int                    `json:"charsFromAgent"`
+	CharacterPercent float64                `json:"characterPercent"`
+	AgentSegments    []agentCoverageSegment `json:"agentSegments,omitempty"`
 }
 
 type projectCommitCoverage struct {
-	WorkingCopy      bool    `json:"workingCopy"`
-	ProjectID        string  `json:"projectId"`
-	ProjectLabel     string  `json:"projectLabel"`
-	ProjectPath      string  `json:"projectPath"`
-	ProjectGitID     string  `json:"projectGitId"`
-	CommitHash       string  `json:"commitHash"`
-	Subject          string  `json:"subject"`
-	AuthoredAtUnixMs int64   `json:"authoredAtUnixMs"`
-	LinesTotal       int     `json:"linesTotal"`
-	LinesFromAgent   int     `json:"linesFromAgent"`
-	LinePercent      float64 `json:"linePercent"`
-	CharsTotal       int     `json:"charsTotal"`
-	CharsFromAgent   int     `json:"charsFromAgent"`
-	CharacterPercent float64 `json:"characterPercent"`
+	WorkingCopy      bool                   `json:"workingCopy"`
+	ProjectID        string                 `json:"projectId"`
+	ProjectLabel     string                 `json:"projectLabel"`
+	ProjectPath      string                 `json:"projectPath"`
+	ProjectGitID     string                 `json:"projectGitId"`
+	CommitHash       string                 `json:"commitHash"`
+	Subject          string                 `json:"subject"`
+	AuthoredAtUnixMs int64                  `json:"authoredAtUnixMs"`
+	LinesTotal       int                    `json:"linesTotal"`
+	LinesFromAgent   int                    `json:"linesFromAgent"`
+	LinePercent      float64                `json:"linePercent"`
+	CharsTotal       int                    `json:"charsTotal"`
+	CharsFromAgent   int                    `json:"charsFromAgent"`
+	CharacterPercent float64                `json:"characterPercent"`
+	AgentSegments    []agentCoverageSegment `json:"agentSegments,omitempty"`
 }
 
 type projectCommitDetailResponse struct {
@@ -210,12 +219,23 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 			log.Printf("error listing db commits for %s: %v", repoProject.Path, err)
 			continue
 		}
+		// Collect commit IDs for bulk agent coverage lookup.
+		commitIDs := make([]string, 0, len(dbCommits))
+		for _, c := range dbCommits {
+			commitIDs = append(commitIDs, c.ID)
+		}
+		agentCovMap, _ := db.ListCommitAgentCoverageByCommitIDs(r.Context(), s.DB, commitIDs)
+
 		for _, c := range dbCommits {
 			rp := projectMap[c.ProjectID]
 			if rp == nil {
 				rp = repoProject
 			}
-			all = append(all, dbCommitToCoverage(c, rp))
+			cov := dbCommitToCoverage(c, rp)
+			if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
+				cov.AgentSegments = segs
+			}
+			all = append(all, cov)
 		}
 	}
 
@@ -449,6 +469,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			CharsTotal:       totalChars,
 			CharsFromAgent:   matchedChars,
 			CharacterPercent: percentage(matchedChars, totalChars),
+			AgentSegments:    agentSegmentsFromContribs(contribMessages, totalLines),
 		},
 		Diff:     commitDiff,
 		Files:    files,
@@ -544,22 +565,37 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Convert DB commits to coverage structs.
-	paged := make([]projectCommitCoverage, 0, len(dbCommits))
-	for _, c := range dbCommits {
-		paged = append(paged, dbCommitToCoverage(c, repoProject))
-	}
-
-	// Compute summary from all DB commits.
+	// Collect all commit IDs for agent coverage lookup.
 	allDBCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, branch, total, 0)
 	if err != nil {
 		log.Printf("error listing all commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
 		return
 	}
+	allCommitIDs := make([]string, 0, len(allDBCommits))
+	for _, c := range allDBCommits {
+		allCommitIDs = append(allCommitIDs, c.ID)
+	}
+	agentCovMap, _ := db.ListCommitAgentCoverageByCommitIDs(r.Context(), s.DB, allCommitIDs)
+
+	// Convert DB commits to coverage structs.
+	paged := make([]projectCommitCoverage, 0, len(dbCommits))
+	for _, c := range dbCommits {
+		cov := dbCommitToCoverage(c, repoProject)
+		if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
+			cov.AgentSegments = segs
+		}
+		paged = append(paged, cov)
+	}
+
+	// Compute summary from all DB commits.
 	allCoverage := make([]projectCommitCoverage, 0, len(allDBCommits))
 	for _, c := range allDBCommits {
-		allCoverage = append(allCoverage, dbCommitToCoverage(c, repoProject))
+		cov := dbCommitToCoverage(c, repoProject)
+		if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
+			cov.AgentSegments = segs
+		}
+		allCoverage = append(allCoverage, cov)
 	}
 
 	// Add working copy on page 1.
@@ -1384,15 +1420,96 @@ func normalizeWhitespace(s string) string {
 
 func summarizeCommitCoverage(commits []projectCommitCoverage) projectCommitSummary {
 	s := projectCommitSummary{CommitCount: len(commits)}
+	agentTotals := make(map[string][2]int) // agent -> [lines, chars]
 	for _, c := range commits {
 		s.LinesTotal += c.LinesTotal
 		s.LinesFromAgent += c.LinesFromAgent
 		s.CharsTotal += c.CharsTotal
 		s.CharsFromAgent += c.CharsFromAgent
+		for _, seg := range c.AgentSegments {
+			t := agentTotals[seg.Agent]
+			t[0] += seg.LinesFromAgent
+			t[1] += seg.CharsFromAgent
+			agentTotals[seg.Agent] = t
+		}
 	}
 	s.LinePercent = percentage(s.LinesFromAgent, s.LinesTotal)
 	s.CharacterPercent = percentage(s.CharsFromAgent, s.CharsTotal)
+	if len(agentTotals) > 0 {
+		agents := make([]string, 0, len(agentTotals))
+		for a := range agentTotals {
+			agents = append(agents, a)
+		}
+		sort.Strings(agents)
+		for _, a := range agents {
+			t := agentTotals[a]
+			s.AgentSegments = append(s.AgentSegments, agentCoverageSegment{
+				Agent:          a,
+				LinesFromAgent: t[0],
+				CharsFromAgent: t[1],
+				LinePercent:    percentage(t[0], s.LinesTotal),
+			})
+		}
+	}
 	return s
+}
+
+// agentSegmentsFromContribs builds per-agent segments from contribution messages.
+func agentSegmentsFromContribs(contribs []commitContributionMessage, linesTotal int) []agentCoverageSegment {
+	if len(contribs) == 0 {
+		return nil
+	}
+	type stats struct {
+		lines int
+		chars int
+	}
+	byAgent := make(map[string]*stats)
+	for _, cm := range contribs {
+		agent := cm.Agent
+		if agent == "" {
+			agent = "unknown"
+		}
+		s := byAgent[agent]
+		if s == nil {
+			s = &stats{}
+			byAgent[agent] = s
+		}
+		s.lines += cm.LinesMatched
+		s.chars += cm.CharsMatched
+	}
+	agents := make([]string, 0, len(byAgent))
+	for a := range byAgent {
+		agents = append(agents, a)
+	}
+	sort.Strings(agents)
+	out := make([]agentCoverageSegment, 0, len(agents))
+	for _, a := range agents {
+		s := byAgent[a]
+		out = append(out, agentCoverageSegment{
+			Agent:          a,
+			LinesFromAgent: s.lines,
+			CharsFromAgent: s.chars,
+			LinePercent:    percentage(s.lines, linesTotal),
+		})
+	}
+	return out
+}
+
+// agentSegmentsFromDBCoverage converts DB agent coverage rows into API segments.
+func agentSegmentsFromDBCoverage(rows []db.CommitAgentCoverage, linesTotal int) []agentCoverageSegment {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]agentCoverageSegment, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, agentCoverageSegment{
+			Agent:          r.Agent,
+			LinesFromAgent: r.LinesFromAgent,
+			CharsFromAgent: r.CharsFromAgent,
+			LinePercent:    percentage(r.LinesFromAgent, linesTotal),
+		})
+	}
+	return out
 }
 
 func percentage(part, total int) float64 {
@@ -1482,6 +1599,7 @@ func computeWorkingCopyDetail(
 		CharsTotal:       totalChars,
 		CharsFromAgent:   matchedChars,
 		CharacterPercent: percentage(matchedChars, totalChars),
+		AgentSegments:    agentSegmentsFromContribs(contribMessages, totalLines),
 	}, contribMessages, diffText, files, true
 }
 

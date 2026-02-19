@@ -134,6 +134,13 @@ export interface ProjectCommitContributionMessage {
 	charsMatched: number;
 }
 
+export interface AgentCoverageSegment {
+	agent: string;
+	linesFromAgent: number;
+	charsFromAgent: number;
+	linePercent: number;
+}
+
 export interface ProjectCommitSummary {
 	commitCount: number;
 	linesTotal: number;
@@ -142,6 +149,7 @@ export interface ProjectCommitSummary {
 	charsTotal: number;
 	charsFromAgent: number;
 	characterPercent: number;
+	agentSegments?: AgentCoverageSegment[];
 }
 
 export interface IngestCommitsResponse {
@@ -170,4 +178,5 @@ export interface ProjectCommitCoverage {
 	charsTotal: number;
 	charsFromAgent: number;
 	characterPercent: number;
+	agentSegments?: AgentCoverageSegment[];
 }

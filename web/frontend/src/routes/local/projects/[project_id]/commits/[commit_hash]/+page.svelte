@@ -4,10 +4,15 @@
 	import { resolve } from '$app/paths';
 	import { getProjectCommitDetail } from '$lib/api';
 	import { fmtTime } from '$lib/utils';
-	import type { ProjectCommitDetailResponse } from '$lib/types';
+	import type { ProjectCommitDetailResponse, AgentCoverageSegment } from '$lib/types';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
+
+	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
+		if (!segs || segs.length === 0) return [];
+		return segs.map((s) => ({ name: s.agent, percent: s.linePercent }));
+	}
 
 	let detail: ProjectCommitDetailResponse | null = $state(null);
 	let loading = $state(true);
@@ -175,6 +180,7 @@
 	<div class="detail-bar">
 		<AgentPercentageBar
 			agentPercent={percent(agentLinesFromAgent, agentLinesTotal)}
+			segments={toBarSegments(detail.commit.agentSegments)}
 			showManual={true}
 		/>
 	</div>
