@@ -107,6 +107,14 @@
 	let keySegments: ResolvedSegment[] = $derived.by(() => {
 		return showManual ? barSegments : resolvedSegments;
 	});
+
+	/** Key formatting: show decimals only for extreme values (<1% or >99%). */
+	function formatKeyPercent(percent: number): string {
+		if (percent < 1 || (percent > 99 && percent < 100)) {
+			return `${percent.toFixed(1)}%`;
+		}
+		return `${Math.round(percent)}%`;
+	}
 </script>
 
 <div class="apb">
@@ -125,7 +133,7 @@
 				<span class="apb-key-item">
 					<span class="apb-swatch" style="background:{seg.color}"></span>
 					<span class="apb-label">{seg.name}</span>
-					<span class="apb-pct">{seg.percent.toFixed(1)}%</span>
+					<span class="apb-pct">{formatKeyPercent(seg.percent)}</span>
 				</span>
 			{/each}
 		</div>
