@@ -29,6 +29,11 @@ type ingestCommitsResponse struct {
 	Branch      string `json:"branch"`
 }
 
+type recomputeCommitCoverageResponse struct {
+	Recomputed int    `json:"recomputed"`
+	Branch     string `json:"branch"`
+}
+
 func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request) {
 	projectID := strings.TrimSpace(r.PathValue("id"))
 	if projectID == "" {
@@ -105,6 +110,61 @@ func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request)
 		Ingested:    ingested,
 		ReachedRoot: reachedRoot,
 		Branch:      branch,
+	})
+}
+
+func (s *Server) handleRecomputeCommitCoverage(w http.ResponseWriter, r *http.Request) {
+	projectID := strings.TrimSpace(r.PathValue("id"))
+	if projectID == "" {
+		writeError(w, http.StatusBadRequest, "project id is required")
+		return
+	}
+
+	branch := strings.TrimSpace(r.URL.Query().Get("branch"))
+	project, err := getProjectByID(r.Context(), s.DB, projectID)
+	if err != nil {
+		log.Printf("error loading project %s: %v", projectID, err)
+		writeError(w, http.StatusInternalServerError, "failed to load project")
+		return
+	}
+	if project == nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	if branch == "" {
+		branch = strings.TrimSpace(project.DefaultBranch)
+		if branch == "" {
+			branch = "main"
+		}
+	}
+
+	groups, err := listAllProjectGroups(r.Context(), s.DB)
+	if err != nil {
+		log.Printf("error listing project groups: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to list projects")
+		return
+	}
+	group, ok := findProjectGroupByProjectID(groups, project.ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "project group not found")
+		return
+	}
+	repoProject, err := resolveRepoProject(r.Context(), group)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "repository for project not found")
+		return
+	}
+
+	n, err := recomputeCommitCoverageForProject(r.Context(), s.DB, repoProject, group, branch)
+	if err != nil {
+		log.Printf("error recomputing commit coverage for %s: %v", projectID, err)
+		writeError(w, http.StatusInternalServerError, "failed to recompute commit coverage")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, recomputeCommitCoverageResponse{
+		Recomputed: n,
+		Branch:     branch,
 	})
 }
 
@@ -333,6 +393,124 @@ func ingestCommits(
 	}
 
 	return len(dbCommits), nil
+}
+
+func recomputeCommitCoverageForProject(
+	ctx context.Context,
+	database *sql.DB,
+	repoProject *db.Project,
+	group projectGroup,
+	branch string,
+) (int, error) {
+	total, err := db.CountCommitsByProject(ctx, database, repoProject.ID, branch)
+	if err != nil {
+		return 0, fmt.Errorf("count commits: %w", err)
+	}
+	if total == 0 {
+		return 0, nil
+	}
+	commits, err := db.ListCommitsByProject(ctx, database, repoProject.ID, branch, total, 0)
+	if err != nil {
+		return 0, fmt.Errorf("list commits: %w", err)
+	}
+	if len(commits) == 0 {
+		return 0, nil
+	}
+
+	minTs := commits[0].AuthoredAt * 1000
+	maxTs := commits[0].AuthoredAt * 1000
+	for _, c := range commits {
+		ts := c.AuthoredAt * 1000
+		if ts < minTs {
+			minTs = ts
+		}
+		if ts > maxTs {
+			maxTs = ts
+		}
+	}
+	messages, err := listDerivedDiffMessages(ctx, database, projectIDs(group), minTs-defaultMessageWindowMs, maxTs+commitWindowLookaheadMs)
+	if err != nil {
+		return 0, fmt.Errorf("list derived diff messages: %w", err)
+	}
+	ignorePatterns := groupIgnoreDiffPatterns(group)
+
+	updatedCommits := make([]db.Commit, 0, len(commits))
+	type agentStats struct {
+		lines int
+		chars int
+	}
+	perCommitAgent := make(map[string]map[string]agentStats)
+
+	for _, c := range commits {
+		tokenDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
+		if err != nil {
+			tokenDiff = c.DiffContent
+		}
+		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
+		totalLines, totalChars := tokenTotals(commitTokens)
+
+		windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
+		windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
+		contribs, matchedLines, matchedChars, _, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+
+		updatedCommits = append(updatedCommits, db.Commit{
+			ID:             c.ID,
+			ProjectID:      c.ProjectID,
+			BranchName:     c.BranchName,
+			CommitHash:     c.CommitHash,
+			Subject:        c.Subject,
+			AuthorName:     c.AuthorName,
+			AuthorEmail:    c.AuthorEmail,
+			AuthoredAt:     c.AuthoredAt,
+			DiffContent:    c.DiffContent,
+			LinesTotal:     totalLines,
+			CharsTotal:     totalChars,
+			LinesFromAgent: matchedLines,
+			CharsFromAgent: matchedChars,
+		})
+
+		if len(contribs) == 0 {
+			continue
+		}
+		byAgent := make(map[string]agentStats)
+		for _, cm := range contribs {
+			agentName := cm.Agent
+			if strings.TrimSpace(agentName) == "" {
+				agentName = "unknown"
+			}
+			stats := byAgent[agentName]
+			stats.lines += cm.LinesMatched
+			stats.chars += cm.CharsMatched
+			byAgent[agentName] = stats
+		}
+		perCommitAgent[c.ID] = byAgent
+	}
+
+	if err := db.UpsertCommits(ctx, database, updatedCommits); err != nil {
+		return 0, fmt.Errorf("upsert recomputed commits: %w", err)
+	}
+	for _, c := range commits {
+		if err := db.DeleteCommitAgentCoverageByCommitID(ctx, database, c.ID); err != nil {
+			return 0, err
+		}
+		byAgent := perCommitAgent[c.ID]
+		if len(byAgent) == 0 {
+			continue
+		}
+		rows := make([]db.CommitAgentCoverage, 0, len(byAgent))
+		for agentName, stats := range byAgent {
+			rows = append(rows, db.CommitAgentCoverage{
+				CommitID:       c.ID,
+				Agent:          agentName,
+				LinesFromAgent: stats.lines,
+				CharsFromAgent: stats.chars,
+			})
+		}
+		if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {
+			return 0, fmt.Errorf("upsert recomputed commit agent coverage: %w", err)
+		}
+	}
+	return len(updatedCommits), nil
 }
 
 // listAllCommitsByIdentity is like listCommitsByIdentity but without the max-count limit,

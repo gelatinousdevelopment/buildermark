@@ -618,18 +618,18 @@ func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *t
 	}, "\n")
 
 	commitTokens := []diffToken{
-		{Path: "exact.txt", Norm: "alpha"},
-		{Path: "exact.txt", Norm: "beta"},
-		{Path: "copy.txt", Norm: "c1"},
-		{Path: "copy.txt", Norm: "c2"},
-		{Path: "copy.txt", Norm: "c3"},
-		{Path: "copy.txt", Norm: "c4"},
-		{Path: "copy.txt", Norm: "c5"},
-		{Path: "copy.txt", Norm: "c6"},
-		{Path: "copy.txt", Norm: "c7"},
-		{Path: "copy.txt", Norm: "c8"},
-		{Path: "copy.txt", Norm: "c9"},
-		{Path: "copy.txt", Norm: "c10"},
+		testToken("exact.txt", '+', "alpha", 5),
+		testToken("exact.txt", '+', "beta", 4),
+		testToken("copy.txt", '+', "c1", 2),
+		testToken("copy.txt", '+', "c2", 2),
+		testToken("copy.txt", '+', "c3", 2),
+		testToken("copy.txt", '+', "c4", 2),
+		testToken("copy.txt", '+', "c5", 2),
+		testToken("copy.txt", '+', "c6", 2),
+		testToken("copy.txt", '+', "c7", 2),
+		testToken("copy.txt", '+', "c8", 2),
+		testToken("copy.txt", '+', "c9", 2),
+		testToken("copy.txt", '+', "c10", 3),
 	}
 
 	fileAgent := map[string]commitFileCoverage{
@@ -691,42 +691,42 @@ func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *t
 
 func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
 	commitTokens := []diffToken{
-		{Path: "exact.txt", Norm: "c1", Key: "exact.txt\x1fc1", Chars: 2},
-		{Path: "exact.txt", Norm: "c2", Key: "exact.txt\x1fc2", Chars: 2},
-		{Path: "exact.txt", Norm: "c3", Key: "exact.txt\x1fc3", Chars: 2},
-		{Path: "exact.txt", Norm: "c4", Key: "exact.txt\x1fc4", Chars: 2},
-		{Path: "exact.txt", Norm: "c5", Key: "exact.txt\x1fc5", Chars: 2},
-		{Path: "exact.txt", Norm: "c6", Key: "exact.txt\x1fc6", Chars: 2},
-		{Path: "exact.txt", Norm: "c7", Key: "exact.txt\x1fc7", Chars: 2},
-		{Path: "exact.txt", Norm: "c8", Key: "exact.txt\x1fc8", Chars: 2},
-		{Path: "exact.txt", Norm: "c9", Key: "exact.txt\x1fc9", Chars: 2},
-		{Path: "exact.txt", Norm: "c10", Key: "exact.txt\x1fc10", Chars: 3},
-		{Path: "copy.txt", Norm: "c1", Key: "copy.txt\x1fc1", Chars: 2},
-		{Path: "copy.txt", Norm: "c2", Key: "copy.txt\x1fc2", Chars: 2},
-		{Path: "copy.txt", Norm: "c3", Key: "copy.txt\x1fc3", Chars: 2},
-		{Path: "copy.txt", Norm: "c4", Key: "copy.txt\x1fc4", Chars: 2},
-		{Path: "copy.txt", Norm: "c5", Key: "copy.txt\x1fc5", Chars: 2},
-		{Path: "copy.txt", Norm: "c6", Key: "copy.txt\x1fc6", Chars: 2},
-		{Path: "copy.txt", Norm: "c7", Key: "copy.txt\x1fc7", Chars: 2},
-		{Path: "copy.txt", Norm: "c8", Key: "copy.txt\x1fc8", Chars: 2},
-		{Path: "copy.txt", Norm: "c9", Key: "copy.txt\x1fc9", Chars: 2},
-		{Path: "copy.txt", Norm: "c10", Key: "copy.txt\x1fc10", Chars: 3},
+		testToken("exact.txt", '+', "c1", 2),
+		testToken("exact.txt", '+', "c2", 2),
+		testToken("exact.txt", '+', "c3", 2),
+		testToken("exact.txt", '+', "c4", 2),
+		testToken("exact.txt", '+', "c5", 2),
+		testToken("exact.txt", '+', "c6", 2),
+		testToken("exact.txt", '+', "c7", 2),
+		testToken("exact.txt", '+', "c8", 2),
+		testToken("exact.txt", '+', "c9", 2),
+		testToken("exact.txt", '+', "c10", 3),
+		testToken("copy.txt", '+', "c1", 2),
+		testToken("copy.txt", '+', "c2", 2),
+		testToken("copy.txt", '+', "c3", 2),
+		testToken("copy.txt", '+', "c4", 2),
+		testToken("copy.txt", '+', "c5", 2),
+		testToken("copy.txt", '+', "c6", 2),
+		testToken("copy.txt", '+', "c7", 2),
+		testToken("copy.txt", '+', "c8", 2),
+		testToken("copy.txt", '+', "c9", 2),
+		testToken("copy.txt", '+', "c10", 3),
 	}
 	messages := []messageDiff{
 		{
 			ID:        "m1",
 			Timestamp: 1000,
 			Tokens: []diffToken{
-				{Path: "exact.txt", Norm: "c1", Key: "exact.txt\x1fc1", Chars: 2},
-				{Path: "exact.txt", Norm: "c2", Key: "exact.txt\x1fc2", Chars: 2},
-				{Path: "exact.txt", Norm: "c3", Key: "exact.txt\x1fc3", Chars: 2},
-				{Path: "exact.txt", Norm: "c4", Key: "exact.txt\x1fc4", Chars: 2},
-				{Path: "exact.txt", Norm: "c5", Key: "exact.txt\x1fc5", Chars: 2},
-				{Path: "exact.txt", Norm: "c6", Key: "exact.txt\x1fc6", Chars: 2},
-				{Path: "exact.txt", Norm: "c7", Key: "exact.txt\x1fc7", Chars: 2},
-				{Path: "exact.txt", Norm: "c8", Key: "exact.txt\x1fc8", Chars: 2},
-				{Path: "exact.txt", Norm: "c9", Key: "exact.txt\x1fc9", Chars: 2},
-				{Path: "exact.txt", Norm: "c10", Key: "exact.txt\x1fc10", Chars: 3},
+				testToken("exact.txt", '+', "c1", 2),
+				testToken("exact.txt", '+', "c2", 2),
+				testToken("exact.txt", '+', "c3", 2),
+				testToken("exact.txt", '+', "c4", 2),
+				testToken("exact.txt", '+', "c5", 2),
+				testToken("exact.txt", '+', "c6", 2),
+				testToken("exact.txt", '+', "c7", 2),
+				testToken("exact.txt", '+', "c8", 2),
+				testToken("exact.txt", '+', "c9", 2),
+				testToken("exact.txt", '+', "c10", 3),
 			},
 		},
 	}
@@ -784,9 +784,9 @@ func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
 
 func TestAttributeCommitToMessages_MatchesFormattingOnlyLineWraps(t *testing.T) {
 	commitTokens := []diffToken{
-		{Path: "src/app.js", Norm: "constresult=foo(bar,baz);", Key: "src/app.js\x1fconstresult=foo(bar,baz);", Chars: 25},
-		{Path: "src/reflow.js", Norm: "returnalpha+", Key: "src/reflow.js\x1freturnalpha+", Chars: 12},
-		{Path: "src/reflow.js", Norm: "beta+gamma;", Key: "src/reflow.js\x1fbeta+gamma;", Chars: 11},
+		testToken("src/app.js", '+', "constresult=foo(bar,baz);", 25),
+		testToken("src/reflow.js", '+', "returnalpha+", 12),
+		testToken("src/reflow.js", '+', "beta+gamma;", 11),
 	}
 
 	messages := []messageDiff{
@@ -794,9 +794,9 @@ func TestAttributeCommitToMessages_MatchesFormattingOnlyLineWraps(t *testing.T) 
 			ID:        "m1",
 			Timestamp: 1000,
 			Tokens: []diffToken{
-				{Path: "src/app.js", Norm: "constresult=foo(", Key: "src/app.js\x1fconstresult=foo(", Chars: 16},
-				{Path: "src/app.js", Norm: "bar,baz);", Key: "src/app.js\x1fbar,baz);", Chars: 9},
-				{Path: "src/reflow.js", Norm: "returnalpha+beta+gamma;", Key: "src/reflow.js\x1freturnalpha+beta+gamma;", Chars: 23},
+				testToken("src/app.js", '+', "constresult=foo(", 16),
+				testToken("src/app.js", '+', "bar,baz);", 9),
+				testToken("src/reflow.js", '+', "returnalpha+beta+gamma;", 23),
 			},
 		},
 	}
@@ -825,8 +825,8 @@ func TestAttributeCommitToMessages_MatchesFormattingOnlyLineWraps(t *testing.T) 
 
 func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 	commitTokens := []diffToken{
-		{Path: "src/app.ts", Norm: "line-a", Key: "src/app.ts\x1fline-a", Chars: 6},
-		{Path: "src/app.ts", Norm: "line-b", Key: "src/app.ts\x1fline-b", Chars: 6},
+		testToken("src/app.ts", '+', "line-a", 6),
+		testToken("src/app.ts", '+', "line-b", 6),
 	}
 	messages := []messageDiff{
 		{
@@ -834,7 +834,7 @@ func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 			Timestamp: 1000,
 			Agent:     "codex",
 			Tokens: []diffToken{
-				{Path: "src/app.ts", Norm: "line-a", Key: "src/app.ts\x1fline-a", Chars: 6},
+				testToken("src/app.ts", '+', "line-a", 6),
 			},
 		},
 		{
@@ -842,7 +842,7 @@ func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 			Timestamp: 1000,
 			Agent:     "claude",
 			Tokens: []diffToken{
-				{Path: "src/app.ts", Norm: "line-b", Key: "src/app.ts\x1fline-b", Chars: 6},
+				testToken("src/app.ts", '+', "line-b", 6),
 			},
 		},
 	}
@@ -878,6 +878,77 @@ func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 	}
 	if byAgent["claude"].LinesFromAgent != 1 || byAgent["claude"].LinePercent != 50 {
 		t.Fatalf("claude segment = %+v, want lines=1 percent=50", byAgent["claude"])
+	}
+}
+
+func TestAttributeCommitToMessages_DeletionMatchesDeletingAgent(t *testing.T) {
+	commitTokens := []diffToken{
+		testToken("src/app.ts", '-', "oldline", 7),
+	}
+	messages := []messageDiff{
+		{
+			ID:        "m-old",
+			Timestamp: 900,
+			Agent:     "claude",
+			Tokens: []diffToken{
+				testToken("src/app.ts", '+', "oldline", 7),
+			},
+		},
+		{
+			ID:        "m-new",
+			Timestamp: 1000,
+			Agent:     "codex",
+			Tokens: []diffToken{
+				testToken("src/app.ts", '-', "oldline", 7),
+			},
+		},
+	}
+
+	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	if lines != 1 {
+		t.Fatalf("matched lines = %d, want 1", lines)
+	}
+	if len(contrib) != 1 {
+		t.Fatalf("contrib len = %d, want 1", len(contrib))
+	}
+	if contrib[0].Agent != "codex" {
+		t.Fatalf("matched agent = %q, want %q", contrib[0].Agent, "codex")
+	}
+}
+
+func TestParseUnifiedDiffTokens_IgnoresPunctuationOnlyForAttribution(t *testing.T) {
+	diff := strings.Join([]string{
+		"diff --git a/src/app.ts b/src/app.ts",
+		"--- a/src/app.ts",
+		"+++ b/src/app.ts",
+		"@@ -1,2 +1,2 @@",
+		"-}",
+		"+}",
+		"-value",
+		"+nextValue",
+		"",
+	}, "\n")
+
+	tokens := parseUnifiedDiffTokens(diff, nil)
+	if len(tokens) != 4 {
+		t.Fatalf("tokens len = %d, want 4", len(tokens))
+	}
+	if tokens[0].Attributable || tokens[1].Attributable {
+		t.Fatalf("punctuation-only tokens should not be attributable")
+	}
+	if !tokens[2].Attributable || !tokens[3].Attributable {
+		t.Fatalf("identifier tokens should be attributable")
+	}
+}
+
+func testToken(path string, sign byte, norm string, chars int) diffToken {
+	return diffToken{
+		Path:         path,
+		Sign:         sign,
+		Norm:         norm,
+		Key:          path + "\x1f" + string(sign) + "\x1f" + norm,
+		Chars:        chars,
+		Attributable: true,
 	}
 }
 

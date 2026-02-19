@@ -309,3 +309,14 @@ func ListCommitAgentCoverageByCommitIDs(ctx context.Context, database *sql.DB, c
 	}
 	return result, dbRows.Err()
 }
+
+// DeleteCommitAgentCoverageByCommitID removes all per-agent coverage rows for a commit.
+func DeleteCommitAgentCoverageByCommitID(ctx context.Context, database *sql.DB, commitID string) error {
+	if strings.TrimSpace(commitID) == "" {
+		return nil
+	}
+	if _, err := database.ExecContext(ctx, "DELETE FROM commit_agent_coverage WHERE commit_id = ?", commitID); err != nil {
+		return fmt.Errorf("delete commit_agent_coverage: %w", err)
+	}
+	return nil
+}

@@ -166,10 +166,12 @@ type messageDiff struct {
 }
 
 type diffToken struct {
-	Path  string
-	Norm  string
-	Key   string
-	Chars int
+	Path         string
+	Sign         byte
+	Norm         string
+	Key          string
+	Chars        int
+	Attributable bool
 }
 
 type tokenSource struct {
@@ -923,6 +925,9 @@ func tokenTotals(tokens []diffToken) (int, int) {
 	lines := 0
 	chars := 0
 	for _, tok := range tokens {
+		if !tok.Attributable {
+			continue
+		}
 		lines++
 		chars += tok.Chars
 	}
@@ -937,7 +942,7 @@ func attributeCommitToMessages(
 	matchedLines := 0
 	matchedChars := 0
 	tokenSources := make(map[string][]tokenSource)
-	messageTokensByPath := make(map[int]map[string][]int)
+	messageTokensByBucket := make(map[int]map[string][]int)
 	messageTokenUsed := make(map[int][]bool)
 	commitMatched := make([]bool, len(commitTokens))
 	// Keep a full multiset of normalized message lines for copied-file detection.
@@ -951,15 +956,16 @@ func attributeCommitToMessages(
 		pathTokens := make(map[string][]int)
 		messageTokenUsed[i] = make([]bool, len(msg.Tokens))
 		for pos, tok := range msg.Tokens {
-			tokenSources[tok.Key] = append(tokenSources[tok.Key], tokenSource{msgIdx: i, tokenPos: pos})
-			if tok.Path != "" {
-				pathTokens[tok.Path] = append(pathTokens[tok.Path], pos)
+			if !tok.Attributable {
+				continue
 			}
+			tokenSources[tok.Key] = append(tokenSources[tok.Key], tokenSource{msgIdx: i, tokenPos: pos})
+			pathTokens[tokenBucketKey(tok.Path, tok.Sign)] = append(pathTokens[tokenBucketKey(tok.Path, tok.Sign)], pos)
 			if tok.Norm != "" {
 				normSources[tok.Norm]++
 			}
 		}
-		messageTokensByPath[i] = pathTokens
+		messageTokensByBucket[i] = pathTokens
 	}
 
 	contribByIndex := make(map[int]*commitContributionMessage)
@@ -991,6 +997,9 @@ func attributeCommitToMessages(
 		stats.chars += chars
 	}
 	for tokIdx, tok := range commitTokens {
+		if !tok.Attributable {
+			continue
+		}
 		path := tok.Path
 		if path == "" {
 			path = "(unknown)"
@@ -1036,15 +1045,21 @@ func attributeCommitToMessages(
 	// line breaks. We compare normalized windows (up to 5 lines on either side)
 	// within the same file path and allow different line counts when the joined
 	// normalized content is identical.
-	commitByPath := make(map[string][]int)
+	type tokenBucket struct {
+		path string
+		sign byte
+	}
+	commitByPath := make(map[tokenBucket][]int)
 	for i, tok := range commitTokens {
-		if tok.Path == "" || tok.Norm == "" || commitMatched[i] {
+		if tok.Path == "" || tok.Norm == "" || commitMatched[i] || !tok.Attributable {
 			continue
 		}
-		commitByPath[tok.Path] = append(commitByPath[tok.Path], i)
+		commitByPath[tokenBucket{path: tok.Path, sign: tok.Sign}] = append(commitByPath[tokenBucket{path: tok.Path, sign: tok.Sign}], i)
 	}
 
-	for path, indices := range commitByPath {
+	for bucket, indices := range commitByPath {
+		path := bucket.path
+		bucketKey := tokenBucketKey(path, bucket.sign)
 		for cursor := 0; cursor < len(indices); {
 			matchedWindow := false
 			maxCommitWindow := maxFormattingWindowLines
@@ -1059,7 +1074,7 @@ func attributeCommitToMessages(
 				}
 
 				for msgIdx, msg := range messages {
-					positions := messageTokensByPath[msgIdx][path]
+					positions := messageTokensByBucket[msgIdx][bucketKey]
 					if len(positions) == 0 {
 						continue
 					}
@@ -1190,6 +1205,10 @@ func concatMessageNorms(tokens []diffToken, positions []int) string {
 	return b.String()
 }
 
+func tokenBucketKey(path string, sign byte) string {
+	return path + "\x1f" + string(sign)
+}
+
 func messageWindowAvailable(used []bool, positions []int) bool {
 	for _, pos := range positions {
 		if used[pos] {
@@ -1261,14 +1280,14 @@ func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
 			if shouldIgnoreDiffPath(newPath, ignorePatterns) {
 				continue
 			}
-			if tok, ok := makeDiffToken(newPath, line[1:]); ok {
+			if tok, ok := makeDiffToken(newPath, '+', line[1:]); ok {
 				tokens = append(tokens, tok)
 			}
 		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
 			if shouldIgnoreDiffPath(oldPath, ignorePatterns) {
 				continue
 			}
-			if tok, ok := makeDiffToken(oldPath, line[1:]); ok {
+			if tok, ok := makeDiffToken(oldPath, '-', line[1:]); ok {
 				tokens = append(tokens, tok)
 			}
 		}
@@ -1433,17 +1452,28 @@ func globMatchSegments(patternSegs, pathSegs []string) bool {
 	return match(0, 0)
 }
 
-func makeDiffToken(path, line string) (diffToken, bool) {
+func makeDiffToken(path string, sign byte, line string) (diffToken, bool) {
 	norm := normalizeWhitespace(line)
 	if norm == "" {
 		return diffToken{}, false
 	}
 	return diffToken{
-		Path:  path,
-		Norm:  norm,
-		Key:   path + "\x1f" + norm,
-		Chars: utf8.RuneCountInString(norm),
+		Path:         path,
+		Sign:         sign,
+		Norm:         norm,
+		Key:          path + "\x1f" + string(sign) + "\x1f" + norm,
+		Chars:        utf8.RuneCountInString(norm),
+		Attributable: isAttributionCandidate(norm),
 	}, true
+}
+
+func isAttributionCandidate(norm string) bool {
+	for _, r := range norm {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeWhitespace(s string) string {
@@ -1740,7 +1770,7 @@ func summarizeDiffFiles(
 	fileNorms := make(map[string][]string)
 	for _, tok := range commitTokens {
 		path := tok.Path
-		if path == "" || tok.Norm == "" {
+		if path == "" || tok.Norm == "" || !tok.Attributable {
 			continue
 		}
 		fileNorms[path] = append(fileNorms[path], tok.Norm)
