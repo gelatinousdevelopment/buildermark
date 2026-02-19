@@ -11,6 +11,8 @@
 	 *  - showManual (default false): include the Manual entry in the legend.
 	 */
 
+	import Popover from './Popover.svelte';
+
 	interface Segment {
 		name: string;
 		percent: number;
@@ -118,15 +120,32 @@
 </script>
 
 <div class="apb">
-	<div class="apb-bar" role="img" aria-label="Agent percentage bar">
-		{#each barSegments as seg (seg.name)}
-			<span
-				class="apb-segment"
-				style="width:{seg.percent}%;background:{seg.color}"
-				title="{seg.name}: {seg.percent.toFixed(1)}%"
-			></span>
-		{/each}
-	</div>
+	{#if showKey}
+		<div class="apb-bar" role="img" aria-label="Agent percentage bar">
+			{#each barSegments as seg (seg.name)}
+				<span class="apb-segment" style="width:{seg.percent}%;background:{seg.color}"></span>
+			{/each}
+		</div>
+	{:else}
+		<Popover position="leading">
+			<div class="apb-bar" role="img" aria-label="Agent percentage bar">
+				{#each barSegments as seg (seg.name)}
+					<span class="apb-segment" style="width:{seg.percent}%;background:{seg.color}"></span>
+				{/each}
+			</div>
+			{#snippet popover()}
+				<div class="apb-popover-content">
+					{#each barSegments as seg (seg.name)}
+						<div class="apb-popover-row">
+							<span class="apb-swatch" style="background:{seg.color}"></span>
+							<span class="apb-popover-name">{seg.name}</span>
+							<span class="apb-popover-pct">{seg.percent.toFixed(1)}%</span>
+						</div>
+					{/each}
+				</div>
+			{/snippet}
+		</Popover>
+	{/if}
 	{#if showKey && keySegments.length > 0}
 		<div class="apb-key">
 			{#each keySegments as seg (seg.name)}
@@ -143,6 +162,30 @@
 <style>
 	.apb {
 		width: 100%;
+	}
+
+	.apb-popover-content {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.apb-popover-row {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.78rem;
+	}
+
+	.apb-popover-name {
+		color: #333;
+	}
+
+	.apb-popover-pct {
+		color: #888;
+		margin-left: auto;
+		padding-left: 0.75rem;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.apb-bar {

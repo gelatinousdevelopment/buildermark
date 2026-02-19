@@ -27,17 +27,21 @@
 - [x] The places that we're using AgentPercentageBar.svelte don't pass the segments prop, so we're not seeing the breakdown of each type of agent. I'd like to show that. Is that possible? Do we need to track that differently in the database in order to achieve that or can we do it with an efficient sql query?
 - [x] Change 24-hour default commit search window to 72 hours or longer?
 - [x] When showing a list of diff files and diffs, like on the `http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/commits/60a6cb19e8554be30843298621f6af14d5bf991e` type page, if a file has no changes, then just hide it... don't show it at all in the frontend.
+- [x] Add a route for the branch above the `[hash]` route, like `local/project/[id]/commits/[branch]/[hash]`. The plain `local/project/[id]/commits/` route should redirect to the default branch from the projects table. Update all links accordingly, of course.
 
-- [ ] Add a route for the branch above the `[hash]` route, like `local/project/[id]/commits/[branch]/[hash]`. The plain `local/project/[id]/commits/` route should redirect to the default branch from the projects table. Update all links accordingly, of course.
+- [x] In AgentPercentageBar.svelte, add a popover that shows details above on hover
+- [x] Move the ratings stars section of Conversations.svelte into a separate component. When there are multiple ratings, average them to show only one overall rating. Implement a similar popover for the rating component like we just did for AgentPercentageBar.svelte, but show it to the left. In fact, move the popover from that file into a separate component, so we can reuse it. Add options to show the popover above, below, leading, or trailing (leading as default), but always draw it so it stays on within the window's viewport, falling back to another position if necessary.
 
-- [ ] In AgentPercentageBar.svelte, add a popover that shows details above on hover
-- [ ] Move the ratings stars section of Conversations.svelte into a separate component. When there are multiple ratings, average them to show only one overall rating. Implement a similar popover for the rating component like we just did for AgentPercentageBar.svelte, but show it to the left. In fact, move the popover from that file into a separate component, so we can reuse it. Add options to show the popover above, below, leading, or trailing (leading as default), but always draw it so it stays on within the window's viewport, falling back to another position if necessary.
 - [ ] Are we incorrectly detecting some diffs, like the last diff on [ba9dc20a-7886-4abf-9fec-6101551c8d03](http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/conversations/ba9dc20a-7886-4abf-9fec-6101551c8d03), which appears to be replacing the full file instead of doing a diff. Should we do a diff ourselves, by importing the `[file-history-snapshot]` that is logged just before it?
 - [ ] Improve design of conversation header
 - [ ] Improve normalization of code (like code formatting) when comparing agent diffs to commit diffs
 - [ ] Implement a list of projects in Settings, with a checkbox for each indicating if it's tracked (checked means tracked) or ignored.
 - [ ] In split view of Agent Conversations and Git Commits, highlight related items in the opposite column on hover
 - [ ] Show branch name for each commit in the list on Projects page
+
+- [ ] In this file `http://localhost:5173/local/projects/oiSyQa5jX3iGHhcaykB-5/commits/main/249ab93496f924fd588d9d864f4f2d74c074ad36`, 33% is incorrectly attributed to claude. It was all written by codex. Figure out why (you can see the matched messages at the bottom of the page and expand all, if necessary). I suspect that it has something to do with the `<span class="apb-pct">{seg.percent.toFixed(1)}%</span>` line because that line is found in the claude conversation id `aab413c2-8198-4ecd-b43f-64098b943db3`, but that's incorrect because that line is simply being edited by codex (technically, removed and replaced) in this commit, so the old line of code that's being deleted shouldn't have attribution for who originally added that line! Does that make sense? See if you can come up with a good plan to fix this issue for real and make sure it doesn't happen with similar situations in the future.
+
+- [ ] Add an invisible "bridge" div for me to move my mouse over to the popover, so I can interact with it (select text, etc) and continue showing the popover while my mouse is over the popover.
 
 ## Later
 

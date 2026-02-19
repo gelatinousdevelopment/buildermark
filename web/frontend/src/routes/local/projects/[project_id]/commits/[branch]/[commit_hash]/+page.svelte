@@ -34,18 +34,8 @@
 	let renderableDiffFiles = $derived.by(() =>
 		visibleFiles.filter((file) => !file.ignored && diffSectionByPath.has(file.path))
 	);
-	let agentLinesTotal = $derived.by(
-		() =>
-			detail?.files
-				.filter((f) => !f.ignored && !f.moved)
-				.reduce((sum, f) => sum + f.added + f.removed, 0) ?? 0
-	);
-	let agentLinesFromAgent = $derived.by(
-		() =>
-			detail?.files
-				.filter((f) => !f.ignored && !f.moved)
-				.reduce((sum, f) => sum + (f.added + f.removed) * (f.linePercent / 100), 0) ?? 0
-	);
+	let agentLinesTotal = $derived.by(() => detail?.commit.linesTotal ?? 0);
+	let agentLinesFromAgent = $derived.by(() => detail?.commit.linesFromAgent ?? 0);
 	let collapsedDiffPaths: string[] = $state([]);
 
 	let allMessagesExpanded = $derived.by(() => {
@@ -176,7 +166,7 @@
 		<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
 		<p>{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}</p>
 		<p>
-			Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} changed lines ({percent(
+			Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} attributable changed lines ({percent(
 				agentLinesFromAgent,
 				agentLinesTotal
 			).toFixed(1)}%) in non-ignored, non-moved files

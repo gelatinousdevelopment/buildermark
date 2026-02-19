@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { getProject } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
-	import { stars, shortId } from '$lib/utils';
+	import { shortId } from '$lib/utils';
 	import AgentTag from '$lib/components/AgentTag.svelte';
+	import RatingStars from '$lib/components/RatingStars.svelte';
 	import { resolve } from '$app/paths';
 	import type { ProjectDetail } from '$lib/types';
 
@@ -75,11 +76,6 @@
 		if (limit > 0) return all.slice(0, limit);
 		return all;
 	});
-
-	function formatRatingTitle(note: string, analysis: string): string {
-		if (!analysis) return note;
-		return `${note}\n\nAnalysis: ${analysis}`;
-	}
 
 	function withOptionalQueue<T>(task: () => Promise<T>): Promise<T> {
 		if (useLoadQueue) return enqueueLoad(task, loadPriority);
@@ -185,13 +181,7 @@
 					{/if}
 					{#if showRatingsColumn}
 						<td class="ratings">
-							{#if conv.ratings.length > 0}
-								{#each conv.ratings as r (r.id)}
-									<span title={formatRatingTitle(r.note, r.analysis)}>{stars(r.rating)}</span>
-								{/each}
-							{:else}
-								&nbsp;
-							{/if}
+							<RatingStars ratings={conv.ratings} />
 						</td>
 					{/if}
 				</tr>
