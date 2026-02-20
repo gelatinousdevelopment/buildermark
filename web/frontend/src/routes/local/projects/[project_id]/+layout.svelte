@@ -54,7 +54,7 @@
 		{#if project.label}
 			<p class="project-path">{project.path}</p>
 		{/if} -->
-		<h2>{project.label || project.path}</h2>
+		<!-- <h2>{project.label || project.path}</h2> -->
 		<p class="project-path">{project.path}</p>
 	{/if}
 </div>

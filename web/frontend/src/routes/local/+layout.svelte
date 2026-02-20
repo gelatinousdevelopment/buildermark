@@ -33,24 +33,28 @@
 	<header>
 		<section>
 			<div class="brand">
-				<a href={resolve('/local')} class="item"
-					><Icon name="wrench" width="13px" /> Strigidev Local</a
+				<a href={resolve('/local/projects')} class="item"
+					><Icon name="wrench" width="22px" />
+					<div class="text">
+						<div class="title">Strigidev</div>
+						<div class="subtitle">Local</div>
+					</div></a
 				>
 			</div>
 		</section>
 		<hr class="divider" />
 		<section>
 			<nav class="breadcrumbs">
-				<a
+				<!-- <a
 					href={resolve('/local/projects')}
 					class="item"
 					class:selected={page.route.id === '/local/projects'}>Projects</a
-				>
+				> -->
 				{#if projectId}
-					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
+					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<a
 						href={resolve('/local/projects/[project_id]', { project_id: projectId })}
-						class="item"
+						class="item project"
 						class:selected={page.route.id === '/local/projects/[project_id]'}
 						>{navStore.projectName || projectId}</a
 					>
@@ -131,9 +135,16 @@
 	header section .item {
 		align-content: center;
 		box-sizing: border-box;
-		height: 32px;
-		padding: 0 1rem;
+		font-size: 1.1rem;
+		font-weight: 500;
+		height: 40px;
+		padding: 0 1.3rem;
 		white-space: nowrap;
+	}
+
+	header section .item.project {
+		font-size: 1.3rem;
+		font-weight: 600;
 	}
 
 	header section .item:hover {
@@ -157,7 +168,9 @@
 		align-items: center;
 		color: var(--color-text);
 		display: flex;
-		gap: 0.5rem;
+		flex-direction: row;
+		font-size: 1rem;
+		gap: 0.6rem;
 		text-decoration: none;
 	}
 
@@ -165,6 +178,24 @@
 		background: var(--accent-color);
 		color: var(--accent-color-ultralight);
 		position: relative;
+	}
+
+	header .brand .text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		justify-content: center;
+	}
+
+	header .brand .text .title {
+		font-size: 1rem;
+		font-weight: 600;
+	}
+
+	header .brand .text .subtitle {
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
 	}
 
 	header nav {
@@ -183,16 +214,22 @@
 	}
 
 	header nav.breadcrumbs a {
-		padding: 0 0.6rem;
+		padding: 0 0.8rem;
 		margin: 0 0rem;
 		/*border-radius: 4px;*/
+	}
+
+	header nav.breadcrumbs a:hover {
+		text-decoration: none;
 	}
 
 	header nav.breadcrumbs a.selected {
 		background: var(--accent-color-ultralight);
 		color: var(--accent-color);
-		padding: 0.4rem 0.8rem;
-		margin: -0.4rem 0.2rem;
+		padding: 0.4rem 0.8rem calc(0.4rem - 2px) 0.8rem;
+		/*margin: -0.4rem 0.2rem;*/
+		border-bottom: 3px solid var(--accent-color);
+		margin-bottom: -1px;
 	}
 
 	header nav.right {
