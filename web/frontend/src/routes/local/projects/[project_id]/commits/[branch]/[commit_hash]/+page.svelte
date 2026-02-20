@@ -265,6 +265,7 @@
 						expanded={fileExpanded}
 						agentPercent={file.linePercent}
 						onToggle={fileExpanded ? () => toggleDiffPath(file.path) : undefined}
+						contentOnly={true}
 					/>
 				</div>
 			{/each}
