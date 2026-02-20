@@ -142,7 +142,7 @@
 {:else if !project || visibleConversations.length === 0}
 	<p class="message">No conversations.</p>
 {:else}
-	<table class="data">
+	<table class="data" class:compact>
 		<colgroup>
 			{#if !compact}
 				<col class="date-col" />
@@ -240,12 +240,21 @@
 		table-layout: fixed;
 	}
 
-	table.data tr {
+	table.data.compact tr {
 		border-bottom: 0px;
+	}
+
+	table.data:not(.compact) tr:nth-child(even) {
+		background: #f9f9f9;
 	}
 
 	table.data tr:hover {
 		background: var(--accent-color-ultralight);
+	}
+
+	table.data:not(.compact) td {
+		padding-bottom: 0.7rem;
+		padding-top: 0.7rem;
 	}
 
 	.agent-col {
@@ -298,5 +307,6 @@
 		align-items: center;
 		gap: 0.75rem;
 		margin-top: 1rem;
+		padding: 0 1rem;
 	}
 </style>
