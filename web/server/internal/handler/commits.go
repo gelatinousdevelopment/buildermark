@@ -100,10 +100,20 @@ type projectCommitPageResponse struct {
 	CurrentUser  string                  `json:"currentUser"`
 	CurrentEmail string                  `json:"currentEmail"`
 	Project      db.Project              `json:"project"`
+	Refresh      commitRefreshState      `json:"refresh"`
 	Summary      projectCommitSummary    `json:"summary"`
 	DailySummary []dailyCommitSummary    `json:"dailySummary"`
 	Pagination   projectCommitPagination `json:"pagination"`
 	Commits      []projectCommitCoverage `json:"commits"`
+}
+
+type commitRefreshState struct {
+	State          string `json:"state"`
+	IsStale        bool   `json:"isStale"`
+	LastStartedAt  int64  `json:"lastStartedAt"`
+	LastFinishedAt int64  `json:"lastFinishedAt"`
+	LastDurationMs int64  `json:"lastDurationMs"`
+	LastError      string `json:"lastError"`
 }
 
 type dailyCommitSummary struct {
@@ -586,22 +596,9 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Trigger default ingestion if needed (first page load).
-	if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
-		log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
-	}
-	staleCoverage, err := db.HasStaleCommitCoverage(r.Context(), s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
+	syncState, err := db.GetCommitSyncState(r.Context(), s.DB, repoProject.ID, branch)
 	if err != nil {
-		log.Printf("error checking stale coverage for %s: %v", repoProject.Path, err)
-		writeError(w, http.StatusInternalServerError, "failed to check commit coverage")
-		return
-	}
-	if staleCoverage {
-		if _, err := recomputeCommitCoverageForProject(r.Context(), s.DB, repoProject, group, branch); err != nil {
-			log.Printf("error auto-healing stale coverage for %s: %v", repoProject.Path, err)
-			writeError(w, http.StatusInternalServerError, "failed to recompute commit coverage")
-			return
-		}
+		log.Printf("error loading commit sync state for %s: %v", repoProject.Path, err)
 	}
 
 	// Read commits from database.
@@ -610,6 +607,41 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		log.Printf("error counting commits for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to count commits")
 		return
+	}
+	if total == 0 {
+		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
+			log.Printf("warning: seed commit ingestion failed for %s: %v", repoProject.Path, err)
+		}
+		total, err = db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID, branch)
+		if err != nil {
+			log.Printf("error counting commits after seed ingest for %s: %v", repoProject.Path, err)
+			writeError(w, http.StatusInternalServerError, "failed to count commits")
+			return
+		}
+	}
+
+	if head, headErr := latestCommitByIdentity(r.Context(), repoProject.Path, branch, identity); headErr == nil && head != nil {
+		latest, getErr := db.GetCommitByHash(r.Context(), s.DB, repoProject.ID, branch, head.Hash)
+		if getErr != nil || latest == nil {
+			if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
+				log.Printf("warning: latest-head ingestion failed for %s: %v", repoProject.Path, err)
+			} else if recount, countErr := db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID, branch); countErr == nil {
+				total = recount
+			}
+		}
+	}
+
+	staleCoverage := false
+	staleCoverage, err = db.HasStaleCommitCoverage(r.Context(), s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
+	if err != nil {
+		log.Printf("error checking stale coverage for %s: %v", repoProject.Path, err)
+		staleCoverage = false
+	} else if staleCoverage {
+		if _, recErr := recomputeCommitCoverageForProject(r.Context(), s.DB, repoProject, group, branch); recErr != nil {
+			log.Printf("error recomputing stale coverage for %s: %v", repoProject.Path, recErr)
+		} else {
+			staleCoverage = false
+		}
 	}
 
 	totalPages := 0
@@ -674,12 +706,25 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		}
 	}
 
+	refreshQueued := false
+	if shouldQueueCommitRefresh(r.Context(), s.DB, repoProject, identity, branch, total, syncState, staleCoverage) {
+		refreshQueued, _ = s.enqueueCommitRefresh(*repoProject, group, identity, branch)
+		if refreshQueued {
+			syncState = &db.CommitSyncState{
+				ProjectID:  repoProject.ID,
+				BranchName: branch,
+				State:      "queued",
+			}
+		}
+	}
+
 	writeSuccess(w, http.StatusOK, projectCommitPageResponse{
 		Branch:       branch,
 		Branches:     branches,
 		CurrentUser:  identity.Name,
 		CurrentEmail: identity.Email,
 		Project:      *project,
+		Refresh:      makeCommitRefreshState(syncState, staleCoverage),
 		Summary:      summarizeCommitCoverage(allCoverage),
 		DailySummary: buildDailySummary(allCoverage, 28),
 		Pagination: projectCommitPagination{
@@ -885,6 +930,69 @@ func listCommitsByIdentity(ctx context.Context, path, branch string, identity gi
 		}
 	}
 	return commits, nil
+}
+
+func latestCommitByIdentity(ctx context.Context, path, branch string, identity gitIdentity) (*gitCommit, error) {
+	commits, err := listCommitsByIdentity(ctx, path, branch, identity)
+	if err != nil {
+		return nil, err
+	}
+	if len(commits) == 0 {
+		return nil, nil
+	}
+	return &commits[len(commits)-1], nil
+}
+
+func shouldQueueCommitRefresh(
+	ctx context.Context,
+	database *sql.DB,
+	repoProject *db.Project,
+	identity gitIdentity,
+	branch string,
+	total int,
+	syncState *db.CommitSyncState,
+	staleCoverage bool,
+) bool {
+	if syncState != nil && (syncState.State == "queued" || syncState.State == "running") {
+		return false
+	}
+	if total == 0 || staleCoverage {
+		return true
+	}
+	head, err := latestCommitByIdentity(ctx, repoProject.Path, branch, identity)
+	if err != nil || head == nil {
+		return false
+	}
+	if syncState == nil {
+		latest, getErr := db.GetCommitByHash(ctx, database, repoProject.ID, branch, head.Hash)
+		return getErr != nil || latest == nil
+	}
+	if syncState.LastProcessedHeadHash == "" {
+		latest, getErr := db.GetCommitByHash(ctx, database, repoProject.ID, branch, head.Hash)
+		return getErr != nil || latest == nil
+	}
+	return syncState.LastProcessedHeadHash != head.Hash
+}
+
+func makeCommitRefreshState(syncState *db.CommitSyncState, stale bool) commitRefreshState {
+	if syncState == nil {
+		return commitRefreshState{
+			State:   "idle",
+			IsStale: stale,
+		}
+	}
+	state := strings.TrimSpace(syncState.State)
+	if state == "" {
+		state = "idle"
+	}
+	return commitRefreshState{
+		State:          state,
+		IsStale:        stale || state == "failed",
+		LastStartedAt:  syncState.LastStartedAtMs,
+		LastFinishedAt: syncState.LastFinishedAtMs,
+		LastDurationMs: syncState.LastDurationMs,
+		LastError:      syncState.LastError,
+	}
 }
 
 func commitMatchesIdentity(c gitCommit, identity gitIdentity) bool {

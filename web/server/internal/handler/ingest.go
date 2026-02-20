@@ -608,9 +608,15 @@ func stripBinaryDiffs(diff string) string {
 }
 
 type commitIngestionStatusResponse struct {
-	IngestedCount   int  `json:"ingestedCount"`
-	TotalGitCommits int  `json:"totalGitCommits"`
-	ReachedRoot     bool `json:"reachedRoot"`
+	IngestedCount         int    `json:"ingestedCount"`
+	TotalGitCommits       int    `json:"totalGitCommits"`
+	EstimatedTotalCommits int    `json:"estimatedTotalCommits"`
+	ReachedRoot           bool   `json:"reachedRoot"`
+	State                 string `json:"state"`
+	LastStartedAt         int64  `json:"lastStartedAt"`
+	LastFinishedAt        int64  `json:"lastFinishedAt"`
+	LastDurationMs        int64  `json:"lastDurationMs"`
+	LastError             string `json:"lastError"`
 }
 
 func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Request) {
@@ -646,65 +652,44 @@ func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	groups, err := listAllProjectGroups(r.Context(), s.DB)
+	syncState, err := db.GetCommitSyncState(r.Context(), s.DB, project.ID, branch)
 	if err != nil {
-		log.Printf("error listing project groups: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to list projects")
-		return
-	}
-	group, ok := findProjectGroupByProjectID(groups, project.ID)
-	if !ok {
-		writeSuccess(w, http.StatusOK, commitIngestionStatusResponse{
-			IngestedCount:   ingestedCount,
-			TotalGitCommits: 0,
-			ReachedRoot:     true,
-		})
-		return
+		log.Printf("error loading commit sync state for %s: %v", projectID, err)
 	}
 
-	repoProject, err := resolveRepoProject(r.Context(), group)
-	if err != nil {
-		writeSuccess(w, http.StatusOK, commitIngestionStatusResponse{
-			IngestedCount:   ingestedCount,
-			TotalGitCommits: 0,
-			ReachedRoot:     true,
-		})
-		return
-	}
-
-	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
-	if err != nil {
-		writeSuccess(w, http.StatusOK, commitIngestionStatusResponse{
-			IngestedCount:   ingestedCount,
-			TotalGitCommits: 0,
-			ReachedRoot:     true,
-		})
-		return
-	}
-
-	allGitCommits, err := listAllCommitsByIdentity(r.Context(), repoProject.Path, branch, identity)
-	if err != nil {
-		log.Printf("error listing all git commits for %s: %v", projectID, err)
-		writeSuccess(w, http.StatusOK, commitIngestionStatusResponse{
-			IngestedCount:   ingestedCount,
-			TotalGitCommits: 0,
-			ReachedRoot:     true,
-		})
-		return
-	}
-
-	reachedRoot := ingestedCount >= len(allGitCommits)
-	if !reachedRoot && ingestedCount > 0 {
-		oldest, err := db.OldestCommitByProject(r.Context(), s.DB, project.ID, branch)
-		if err == nil && oldest != nil && len(allGitCommits) > 0 {
-			reachedRoot = oldest.CommitHash == allGitCommits[0].Hash
+	total := 0
+	state := "idle"
+	var lastStarted, lastFinished, lastDuration int64
+	lastError := ""
+	if syncState != nil {
+		total = syncState.EstimatedTotalCommits
+		state = strings.TrimSpace(syncState.State)
+		if state == "" {
+			state = "idle"
 		}
+		lastStarted = syncState.LastStartedAtMs
+		lastFinished = syncState.LastFinishedAtMs
+		lastDuration = syncState.LastDurationMs
+		lastError = syncState.LastError
+	}
+
+	reachedRoot := false
+	if total > 0 {
+		reachedRoot = ingestedCount >= total
+	} else if ingestedCount == 0 {
+		reachedRoot = true
 	}
 
 	writeSuccess(w, http.StatusOK, commitIngestionStatusResponse{
-		IngestedCount:   ingestedCount,
-		TotalGitCommits: len(allGitCommits),
-		ReachedRoot:     reachedRoot,
+		IngestedCount:         ingestedCount,
+		TotalGitCommits:       total,
+		EstimatedTotalCommits: total,
+		ReachedRoot:           reachedRoot,
+		State:                 state,
+		LastStartedAt:         lastStarted,
+		LastFinishedAt:        lastFinished,
+		LastDurationMs:        lastDuration,
+		LastError:             lastError,
 	})
 }
 

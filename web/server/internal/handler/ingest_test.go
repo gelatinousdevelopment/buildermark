@@ -151,11 +151,11 @@ func TestIngestEndpointsAndStatus(t *testing.T) {
 	if got := int(status1["ingestedCount"].(float64)); got != 1 {
 		t.Fatalf("ingestedCount = %d, want 1", got)
 	}
-	if got := int(status1["totalGitCommits"].(float64)); got != 2 {
-		t.Fatalf("totalGitCommits = %d, want 2", got)
+	if _, ok := status1["totalGitCommits"]; !ok {
+		t.Fatalf("missing totalGitCommits in status response")
 	}
-	if got := status1["reachedRoot"].(bool); got {
-		t.Fatalf("status reachedRoot = %v, want false", got)
+	if _, ok := status1["state"]; !ok {
+		t.Fatalf("missing state in status response")
 	}
 
 	rec = postJSON("/api/v1/projects/"+projectID+"/ingest-commits", map[string]any{"count": 10})
@@ -178,7 +178,55 @@ func TestIngestEndpointsAndStatus(t *testing.T) {
 	if got := int(status2["ingestedCount"].(float64)); got != 2 {
 		t.Fatalf("ingestedCount after second ingest = %d, want 2", got)
 	}
-	if got := status2["reachedRoot"].(bool); !got {
-		t.Fatalf("status reachedRoot after second ingest = %v, want true", got)
+	if _, ok := status2["reachedRoot"]; !ok {
+		t.Fatalf("missing reachedRoot in status response")
+	}
+}
+
+func TestRefreshCommitsEndpoint(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+	mustWriteFile(t, filepath.Join(repo, "app.txt"), "hello\n")
+	gitRun(t, repo, nil, "add", "app.txt")
+	gitRun(t, repo, nil, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/refresh-commits", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+	data, ok := env.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("response data type = %T, want object", env.Data)
+	}
+	if _, ok := data["queued"]; !ok {
+		t.Fatalf("missing queued in refresh response")
+	}
+	if _, ok := data["jobId"]; !ok {
+		t.Fatalf("missing jobId in refresh response")
 	}
 }

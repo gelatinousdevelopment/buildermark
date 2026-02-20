@@ -91,10 +91,20 @@ export interface ProjectCommitPageResponse {
 	currentUser: string;
 	currentEmail: string;
 	project: Project;
+	refresh?: CommitRefreshState;
 	summary: ProjectCommitSummary;
 	dailySummary?: DailyCommitSummary[];
 	pagination: ProjectCommitPagination;
 	commits: ProjectCommitCoverage[];
+}
+
+export interface CommitRefreshState {
+	state: 'idle' | 'queued' | 'running' | 'failed' | string;
+	isStale: boolean;
+	lastStartedAt: number;
+	lastFinishedAt: number;
+	lastDurationMs: number;
+	lastError: string;
 }
 
 export interface DailyCommitSummary {
@@ -181,7 +191,13 @@ export interface IngestCommitsResponse {
 export interface CommitIngestionStatusResponse {
 	ingestedCount: number;
 	totalGitCommits: number;
+	estimatedTotalCommits?: number;
 	reachedRoot: boolean;
+	state?: 'idle' | 'queued' | 'running' | 'failed' | string;
+	lastStartedAt?: number;
+	lastFinishedAt?: number;
+	lastDurationMs?: number;
+	lastError?: string;
 }
 
 export interface ProjectCommitCoverage {

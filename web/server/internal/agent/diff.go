@@ -305,7 +305,7 @@ func extractFileSnapshotDiffFromMap(obj map[string]any, cwd string) (string, boo
 		"structuredPatch", "oldStart", "newStart", "oldLines", "newLines",
 	)
 	readHints := hasAnyKey(obj, "numLines", "totalLines", "startLine", "endLine")
-	if readHints && !mutationHints {
+	if readHints && !mutationHints && !catNumbered {
 		// Read-style file snapshots (line-count metadata without mutation hints)
 		// should not be treated as diffs.
 		return "", false

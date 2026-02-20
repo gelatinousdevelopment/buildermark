@@ -143,7 +143,7 @@
 			if (branch === undefined && !internalBranch && loaded.branch) {
 				internalBranch = loaded.branch;
 			}
-			await loadIngestionStatus(branch ?? internalBranch);
+			void loadIngestionStatus(branch ?? internalBranch);
 		} catch (e) {
 			if (myToken !== requestToken) return;
 			error = e instanceof Error ? e.message : 'Failed to load commit coverage';

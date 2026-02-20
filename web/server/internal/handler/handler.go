@@ -6,6 +6,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"sync"
 
 	"github.com/davidcann/zrate/web/server/internal/agent"
 )
@@ -14,6 +15,9 @@ import (
 type Server struct {
 	DB     *sql.DB
 	Agents *agent.Registry // may be nil if no agents are registered
+
+	refreshMu sync.Mutex
+	refresher *commitRefreshManager
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.
@@ -33,6 +37,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/conversations", s.handleListConversations)
 	mux.HandleFunc("GET /api/v1/conversations/{id}", s.handleGetConversation)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ingest-commits", s.handleIngestMoreCommits)
+	mux.HandleFunc("POST /api/v1/projects/{projectId}/refresh-commits", s.handleRefreshProjectCommits)
 	mux.HandleFunc("POST /api/v1/projects/{id}/recompute-commit-coverage", s.handleRecomputeCommitCoverage)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commit-ingestion-status", s.handleCommitIngestionStatus)
 	mux.HandleFunc("POST /api/v1/history/scan", s.handleHistoryScan)

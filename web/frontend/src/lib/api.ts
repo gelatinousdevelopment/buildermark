@@ -149,3 +149,13 @@ export function getCommitIngestionStatus(
 	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
 	return api(`/api/v1/projects/${projectId}/commit-ingestion-status${q}`);
 }
+
+export function refreshProjectCommits(
+	projectId: string,
+	branch = ''
+): Promise<{ queued: boolean }> {
+	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+	return api(`/api/v1/projects/${projectId}/refresh-commits${q}`, {
+		method: 'POST'
+	});
+}
