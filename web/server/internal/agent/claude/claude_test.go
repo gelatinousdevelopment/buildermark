@@ -1346,6 +1346,78 @@ func TestWatcherStoresAgentName(t *testing.T) {
 	}
 }
 
+func TestConversationLogDedupDoesNotDropDuplicateContent(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	repo := filepath.Join(tmpDir, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	projectPath := "/proj/edit"
+	sessionID := "sess-multi-edit"
+
+	// Create a history entry to establish the session.
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "edit both functions", Timestamp: 1000, SessionID: sessionID, Project: projectPath, Type: "user"},
+	})
+
+	// Create a conversation JSONL with two Edit tool_result entries for the same file.
+	// Both have identical content text but different structuredPatch data.
+	dirName := "-proj-edit"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0o755); err != nil {
+		t.Fatalf("mkdir conv dir: %v", err)
+	}
+
+	filePath := filepath.Join(repo, "main.go")
+	toolResult1 := fmt.Sprintf(`{"type":"user","sourceToolAssistantUUID":"assist-1","timestamp":"2026-02-18T10:00:01.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"edit1","content":"The file %s has been updated successfully."}]},"toolUseResult":{"filePath":%q,"structuredPatch":[{"oldStart":1,"oldLines":1,"newStart":1,"newLines":1,"lines":["-old1","+new1"]}]}}`, filePath, filePath)
+	toolResult2 := fmt.Sprintf(`{"type":"user","sourceToolAssistantUUID":"assist-2","timestamp":"2026-02-18T10:00:02.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"edit2","content":"The file %s has been updated successfully."}]},"toolUseResult":{"filePath":%q,"structuredPatch":[{"oldStart":5,"oldLines":1,"newStart":5,"newLines":1,"lines":["-old2","+new2"]}]}}`, filePath, filePath)
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	if err := os.WriteFile(convPath, []byte(toolResult1+"\n"+toolResult2+"\n"), 0o644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Count messages. We expect:
+	// 1 history entry ("edit both functions") +
+	// 1 tool_result (the second identical one is deduped by DB-layer dedup, which is fine) +
+	// 2 derived diffs (one per tool_result, with different content so not deduped) = 4 total
+	if n := countRows(t, database, "messages"); n != 4 {
+		t.Errorf("messages = %d, want 4 (1 history + 1 tool_result + 2 derived diffs)", n)
+	}
+
+	// Verify both derived diffs are present by checking for the specific diff content.
+	var diff1Found, diff2Found bool
+	rows, err := database.Query("SELECT content FROM messages WHERE conversation_id = ?", sessionID)
+	if err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var content string
+		rows.Scan(&content)
+		if strings.Contains(content, "-old1") && strings.Contains(content, "+new1") {
+			diff1Found = true
+		}
+		if strings.Contains(content, "-old2") && strings.Contains(content, "+new2") {
+			diff2Found = true
+		}
+	}
+	if !diff1Found {
+		t.Error("derived diff for first edit (old1->new1) not found")
+	}
+	if !diff2Found {
+		t.Error("derived diff for second edit (old2->new2) not found")
+	}
+}
+
 func TestWatcherExtractsModelFromNestedRawHistoryJSON(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

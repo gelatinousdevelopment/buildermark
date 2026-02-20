@@ -322,9 +322,10 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			})
 		}
 
+		historyCount := len(messages)
 		for _, e := range readConversationLogEntries(a.home, g.project, sid) {
 			alreadyPresent := false
-			for _, m := range messages {
+			for _, m := range messages[:historyCount] {
 				if m.Role == e.Role && m.Content == e.Content {
 					alreadyPresent = true
 					break

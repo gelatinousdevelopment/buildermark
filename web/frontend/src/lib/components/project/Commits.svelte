@@ -330,18 +330,23 @@
 						>
 					{/if}
 					{#if !compact}
-						<td class="stats">{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
-						<td class="stats"
-							>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td
-						>
+						{#if c.workingCopy}
+							<td class="stats"></td>
+							<td class="stats"></td>
+						{:else}
+							<td class="stats">{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
+							<td class="stats"
+								>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td
+							>
+						{/if}
 					{/if}
 					<td class="bar"
-						><AgentPercentageBar
-							agentPercent={c.linePercent}
-							segments={toBarSegments(c.agentSegments)}
-							totalLines={c.linesTotal}
-							showKey={false}
-						/></td
+						>{#if !c.workingCopy}<AgentPercentageBar
+								agentPercent={c.linePercent}
+								segments={toBarSegments(c.agentSegments)}
+								totalLines={c.linesTotal}
+								showKey={false}
+							/>{/if}</td
 					>
 				</tr>
 			{/each}

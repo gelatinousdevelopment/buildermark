@@ -699,11 +699,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 
 	// Add working copy on page 1.
 	if page == 1 {
-		ignorePatterns := groupIgnoreDiffPatterns(group)
-		gitCommits, _ := listCommitsByIdentity(r.Context(), repoProject.Path, branch, identity)
-		workingCopy, ok := computeWorkingCopyCoverage(r.Context(), s.DB, repoProject, projectIDs(group), ignorePatterns, gitCommits)
-		if ok {
-			paged = append([]projectCommitCoverage{workingCopy}, paged...)
+		if wc, ok := hasWorkingCopyChanges(r.Context(), repoProject); ok {
+			paged = append([]projectCommitCoverage{wc}, paged...)
 		}
 	}
 
@@ -1874,16 +1871,20 @@ func parsePositiveInt(raw string, fallback int) int {
 	return v
 }
 
-func computeWorkingCopyCoverage(
-	ctx context.Context,
-	database *sql.DB,
-	repoProject *db.Project,
-	projectIDs []string,
-	ignorePatterns []string,
-	commits []gitCommit,
-) (projectCommitCoverage, bool) {
-	coverage, _, _, _, ok := computeWorkingCopyDetail(ctx, database, repoProject, projectIDs, ignorePatterns, commits)
-	return coverage, ok
+func hasWorkingCopyChanges(ctx context.Context, repoProject *db.Project) (projectCommitCoverage, bool) {
+	cmd := exec.CommandContext(ctx, "git", "-C", repoProject.Path, "diff", "HEAD", "--quiet")
+	if err := cmd.Run(); err == nil {
+		return projectCommitCoverage{}, false
+	}
+	return projectCommitCoverage{
+		WorkingCopy:  true,
+		ProjectID:    repoProject.ID,
+		ProjectLabel: repoProject.Label,
+		ProjectPath:  repoProject.Path,
+		ProjectGitID: repoProject.GitID,
+		CommitHash:   workingCopyCommitHash,
+		Subject:      "Working Copy",
+	}, true
 }
 
 func computeWorkingCopyDetail(

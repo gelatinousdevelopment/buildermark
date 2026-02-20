@@ -192,8 +192,11 @@ func TestListProjectCommits(t *testing.T) {
 	if got := workingCopyRow["workingCopy"].(bool); !got {
 		t.Fatalf("first row workingCopy = %v, want true", got)
 	}
-	if got := int(workingCopyRow["linesTotal"].(float64)); got < 1 {
-		t.Fatalf("working copy linesTotal = %d, want >= 1", got)
+	if got := int(workingCopyRow["linesTotal"].(float64)); got != 0 {
+		t.Fatalf("working copy linesTotal = %d, want 0", got)
+	}
+	if got := int(workingCopyRow["linesFromAgent"].(float64)); got != 0 {
+		t.Fatalf("working copy linesFromAgent = %d, want 0", got)
 	}
 	if got := workingCopyRow["commitHash"].(string); got != "working-copy" {
 		t.Fatalf("working copy commitHash = %q, want %q", got, "working-copy")
