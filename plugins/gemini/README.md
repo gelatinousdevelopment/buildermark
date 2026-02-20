@@ -23,10 +23,13 @@ cp /path/to/zrate/plugins/gemini/commands/zrate.toml ~/.gemini/commands/zrate.to
 ## Usage
 
 ```text
+/zrate
 /zrate 4 Great help with refactoring
 /zrate 5
 /zrate 2 Got stuck on the wrong approach
 ```
+
+If you omit the rating, the model will infer a 0-5 rating from the conversation.
 
 ## Prerequisites
 

@@ -1,17 +1,17 @@
 ---
 name: zrate
 description: Rate this Codex CLI conversation (0-5 scale)
-argument-hint: <0-5> [note]
+argument-hint: "[0-5] [note]"
 allowed-tools: ["Bash"]
 ---
 
 The user wants to rate this conversation.
 
-Parse `$ARGUMENTS`: the first word is the rating (0–5), everything after is an optional note.
+Parse `$ARGUMENTS`:
+- If the first word is a rating (0–5), use it as the rating and treat everything after as an optional note.
+- If no rating is provided (including no args or note-only args), infer the rating (0–5) from conversation quality and treat all provided args as an optional note.
 
-If no arguments were provided, ask the user: "How would you rate this conversation? (0-5, with an optional note)"
-
-Otherwise, before submitting, review the conversation in light of the rating and optional note. Produce two sections:
+Before submitting, review the conversation in light of the rating and optional note. Produce two sections:
 
 **Prompt Suggestions** — short bullet points (max 3) on how the user's prompt could have been clearer or more effective.
 
@@ -29,7 +29,7 @@ Guidelines:
 Then run the submission script, passing your analysis text in the `ANALYSIS` environment variable:
 
 ```bash
-ANALYSIS="your analysis text here" bash plugins/codex/skills/zrate/scripts/submit-rating.sh $ARGUMENTS
+ANALYSIS="your analysis text here" bash plugins/codex/skills/zrate/scripts/submit-rating.sh <rating> [note...]
 ```
 
 If the output starts with "ok", confirm to the user: **Rated N/5** (include the note if one was given), print a clickable conversation link using the `conversation_url` value from script output, then show your analysis under `**Prompt Suggestions:**` and `**Model Failures:**` headings.
