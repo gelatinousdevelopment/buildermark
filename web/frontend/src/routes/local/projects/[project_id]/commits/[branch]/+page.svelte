@@ -30,5 +30,6 @@
 	showPagination={true}
 	showLoadMore={true}
 	syncPaginationWithUrl={true}
+	showBranch={false}
 	onBranchChange={handleBranchChange}
 />

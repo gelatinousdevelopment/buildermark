@@ -26,7 +26,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 1
+	currentCommitCoverageVersion = 2
 )
 
 var defaultMessageWindowMs = func() int64 {
@@ -81,6 +81,8 @@ type projectCommitCoverage struct {
 	CharsTotal       int                    `json:"charsTotal"`
 	CharsFromAgent   int                    `json:"charsFromAgent"`
 	CharacterPercent float64                `json:"characterPercent"`
+	LinesAdded       int                    `json:"linesAdded"`
+	LinesRemoved     int                    `json:"linesRemoved"`
 	AgentSegments    []agentCoverageSegment `json:"agentSegments,omitempty"`
 }
 
@@ -513,6 +515,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	files, fallbackLines, fallbackChars := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 	matchedLines += fallbackLines
 	matchedChars += fallbackChars
+	detailAdded, detailRemoved := countDiffAddedRemoved(commitDiff)
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 		Branch:    branch,
@@ -532,6 +535,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			CharsTotal:       totalChars,
 			CharsFromAgent:   matchedChars,
 			CharacterPercent: percentage(matchedChars, totalChars),
+			LinesAdded:       detailAdded,
+			LinesRemoved:     detailRemoved,
 			AgentSegments:    agentSegmentsFromContribs(contribMessages, totalLines),
 		},
 		Diff:     commitDiff,
@@ -750,6 +755,8 @@ func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCover
 		CharsTotal:       c.CharsTotal,
 		CharsFromAgent:   c.CharsFromAgent,
 		CharacterPercent: percentage(c.CharsFromAgent, c.CharsTotal),
+		LinesAdded:       c.LinesAdded,
+		LinesRemoved:     c.LinesRemoved,
 	}
 }
 
@@ -1042,6 +1049,7 @@ func computeCoverageForRepo(
 		matchedLines += fallbackLines
 		matchedChars += fallbackChars
 
+		cAdded, cRemoved := countDiffAddedRemoved(commitDiff)
 		coverage = append(coverage, projectCommitCoverage{
 			ProjectID:        repoProject.ID,
 			ProjectLabel:     repoProject.Label,
@@ -1056,6 +1064,8 @@ func computeCoverageForRepo(
 			CharsTotal:       totalChars,
 			CharsFromAgent:   matchedChars,
 			CharacterPercent: percentage(matchedChars, totalChars),
+			LinesAdded:       cAdded,
+			LinesRemoved:     cRemoved,
 		})
 	}
 
@@ -1117,6 +1127,19 @@ func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs [
 		return nil, fmt.Errorf("iterate derived diff messages: %w", err)
 	}
 	return messages, nil
+}
+
+// countDiffAddedRemoved counts the total lines added and removed from a unified diff.
+func countDiffAddedRemoved(diffText string) (added, removed int) {
+	for _, line := range strings.Split(diffText, "\n") {
+		switch {
+		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+			added++
+		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
+			removed++
+		}
+	}
+	return added, removed
 }
 
 func tokenTotals(tokens []diffToken) (int, int) {
@@ -1933,6 +1956,7 @@ func computeWorkingCopyDetail(
 	files, fallbackLines, fallbackChars := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 	matchedLines += fallbackLines
 	matchedChars += fallbackChars
+	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 
 	return projectCommitCoverage{
 		WorkingCopy:      true,
@@ -1949,6 +1973,8 @@ func computeWorkingCopyDetail(
 		CharsTotal:       totalChars,
 		CharsFromAgent:   matchedChars,
 		CharacterPercent: percentage(matchedChars, totalChars),
+		LinesAdded:       wcAdded,
+		LinesRemoved:     wcRemoved,
 		AgentSegments:    agentSegmentsFromContribs(contribMessages, totalLines),
 	}, contribMessages, diffText, files, true
 }

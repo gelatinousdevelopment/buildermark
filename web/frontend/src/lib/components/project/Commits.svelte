@@ -9,6 +9,7 @@
 		AgentCoverageSegment
 	} from '$lib/types';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
+	import DiffCount from '$lib/components/DiffCount.svelte';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import { formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
 
@@ -35,6 +36,7 @@
 		showLoadMore?: boolean;
 		showDate?: boolean;
 		showBranch?: boolean;
+		showDiffCount?: boolean;
 		showColumnNames?: boolean;
 		syncPaginationWithUrl?: boolean;
 		onPageChange?: PageChangeHandler;
@@ -60,6 +62,7 @@
 		showLoadMore = false,
 		showDate = false,
 		showBranch = false,
+		showDiffCount = true,
 		showColumnNames = false,
 		syncPaginationWithUrl = false,
 		onPageChange,
@@ -275,9 +278,8 @@
 			{#if showBranch}
 				<col class="branch-col" />
 			{/if}
-			{#if !compact}
-				<col class="stats-col" />
-				<col class="stats-col" />
+			{#if showDiffCount}
+				<col class="diff-col" />
 			{/if}
 			<col class="bar-col" />
 		</colgroup>
@@ -291,9 +293,8 @@
 					{#if showBranch}
 						<th class="branch-col">Branch</th>
 					{/if}
-					{#if !compact}
-						<th class="stats-col">Lines</th>
-						<th class="stats-col">Chars</th>
+					{#if showDiffCount}
+						<th class="diff-col">Diff</th>
 					{/if}
 					<th class="bar-col">Agent %</th>
 				</tr>
@@ -329,16 +330,14 @@
 							>{selectedBranch || data?.branch || ''}</td
 						>
 					{/if}
-					{#if !compact}
-						{#if c.workingCopy}
-							<td class="stats"></td>
-							<td class="stats"></td>
-						{:else}
-							<td class="stats">{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
-							<td class="stats"
-								>{c.charsFromAgent} / {c.charsTotal} ({percent(c.characterPercent)})</td
-							>
-						{/if}
+					{#if showDiffCount}
+						<td class="diff"
+							>{#if !c.workingCopy && (c.linesAdded > 0 || c.linesRemoved > 0)}<DiffCount
+									added={c.linesAdded}
+									removed={c.linesRemoved}
+									compact={true}
+								/>{/if}</td
+						>
 					{/if}
 					<td class="bar"
 						>{#if !c.workingCopy}<AgentPercentageBar
@@ -528,8 +527,8 @@
 		width: 130px;
 	}
 
-	.stats-col {
-		width: 170px;
+	.diff-col {
+		width: 140px;
 	}
 
 	.branch-col {
@@ -542,10 +541,6 @@
 
 	.compact .bar-col {
 		width: 120px;
-	}
-
-	.compact .stats-col {
-		width: 150px;
 	}
 
 	.branch {
@@ -583,6 +578,11 @@
 
 	.title a:hover {
 		color: var(--accent-color);
+	}
+
+	.diff {
+		padding-right: 1.5rem;
+		text-align: right;
 	}
 
 	.bar {

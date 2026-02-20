@@ -4,12 +4,13 @@
 		removed: number;
 		files?: number;
 		showFiles?: boolean;
+		compact?: boolean;
 	}
 
-	let { added, removed, files = 0, showFiles = false }: Props = $props();
+	let { added, removed, files = 0, showFiles = false, compact = false }: Props = $props();
 </script>
 
-<span class="diff-count">
+<span class="diff-count" class:compact>
 	{#if showFiles && files !== undefined}
 		<span class="files-count">{files} {files === 1 ? 'file' : 'files'}</span>
 	{/if}
@@ -24,6 +25,10 @@
 		gap: 0.35rem;
 		font-variant-numeric: tabular-nums;
 		font-size: inherit;
+	}
+
+	.diff-count.compact {
+		font-size: 0.85rem;
 	}
 
 	.files-count {

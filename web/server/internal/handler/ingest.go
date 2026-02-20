@@ -345,6 +345,7 @@ func ingestCommits(
 			}
 		}
 
+		ingestAdded, ingestRemoved := countDiffAddedRemoved(cleanDiff)
 		dbCommits = append(dbCommits, db.Commit{
 			ProjectID:       repoProject.ID,
 			BranchName:      branch,
@@ -358,6 +359,8 @@ func ingestCommits(
 			CharsTotal:      totalChars,
 			LinesFromAgent:  matchedLines,
 			CharsFromAgent:  matchedChars,
+			LinesAdded:      ingestAdded,
+			LinesRemoved:    ingestRemoved,
 			CoverageVersion: currentCommitCoverageVersion,
 		})
 	}
@@ -473,6 +476,7 @@ func recomputeCommitCoverageForProject(
 		matchedLines += fallbackLines
 		matchedChars += fallbackChars
 
+		recompAdded, recompRemoved := countDiffAddedRemoved(cleanDiff)
 		updatedCommits = append(updatedCommits, db.Commit{
 			ID:              c.ID,
 			ProjectID:       c.ProjectID,
@@ -487,6 +491,8 @@ func recomputeCommitCoverageForProject(
 			CharsTotal:      totalChars,
 			LinesFromAgent:  matchedLines,
 			CharsFromAgent:  matchedChars,
+			LinesAdded:      recompAdded,
+			LinesRemoved:    recompRemoved,
 			CoverageVersion: currentCommitCoverageVersion,
 		})
 

@@ -215,5 +215,7 @@ export interface ProjectCommitCoverage {
 	charsTotal: number;
 	charsFromAgent: number;
 	characterPercent: number;
+	linesAdded: number;
+	linesRemoved: number;
 	agentSegments?: AgentCoverageSegment[];
 }
