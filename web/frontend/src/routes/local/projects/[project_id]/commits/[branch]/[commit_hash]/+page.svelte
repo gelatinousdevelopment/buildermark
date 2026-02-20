@@ -164,12 +164,19 @@
 		<p class="error">{error}</p>
 	{:else if detail}
 		<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
-		<p>{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}</p>
 		<p>
-			Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} attributable changed lines ({percent(
-				agentLinesFromAgent,
-				agentLinesTotal
-			).toFixed(1)}%) in non-ignored, non-moved files
+			{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}
+			{#if detail.commitUrl}
+				|
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external URL -->
+				<a href={detail.commitUrl} target="_blank" rel="noopener noreferrer"
+					>{new URL(detail.commitUrl).hostname}</a
+				>
+			{/if}
+		</p>
+		<p>
+			Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} attributable changed lines
+			({percent(agentLinesFromAgent, agentLinesTotal).toFixed(1)}%) in non-ignored, non-moved files
 		</p>
 		<div class="detail-bar">
 			<AgentPercentageBar

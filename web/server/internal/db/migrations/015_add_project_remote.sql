@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN remote TEXT NOT NULL DEFAULT '';

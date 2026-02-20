@@ -4,6 +4,7 @@ export interface Project {
 	label: string;
 	gitId: string;
 	defaultBranch: string;
+	remote: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
@@ -15,6 +16,7 @@ export interface ProjectDetail {
 	label: string;
 	gitId: string;
 	defaultBranch: string;
+	remote: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
@@ -103,6 +105,7 @@ export interface ProjectCommitPagination {
 export interface ProjectCommitDetailResponse {
 	branch: string;
 	branches: string[];
+	commitUrl: string;
 	commit: ProjectCommitCoverage;
 	diff: string;
 	files: ProjectCommitFileCoverage[];

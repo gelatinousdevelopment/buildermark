@@ -84,12 +84,13 @@ type projectCommitCoverage struct {
 }
 
 type projectCommitDetailResponse struct {
-	Branch   string                      `json:"branch"`
-	Branches []string                    `json:"branches"`
-	Commit   projectCommitCoverage       `json:"commit"`
-	Diff     string                      `json:"diff"`
-	Files    []commitFileCoverage        `json:"files"`
-	Messages []commitContributionMessage `json:"messages"`
+	Branch    string                      `json:"branch"`
+	Branches  []string                    `json:"branches"`
+	CommitURL string                      `json:"commitUrl"`
+	Commit    projectCommitCoverage       `json:"commit"`
+	Diff      string                      `json:"diff"`
+	Files     []commitFileCoverage        `json:"files"`
+	Messages  []commitContributionMessage `json:"messages"`
 }
 
 type projectCommitPageResponse struct {
@@ -324,6 +325,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		branch = defaultBranch
 	}
 	branches, _ := listRepoBranches(r.Context(), repoProject.Path, defaultBranch)
+	remote := ensureProjectRemote(r.Context(), s.DB, repoProject)
 
 	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 	if err != nil {
@@ -453,8 +455,9 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	files := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
-		Branch:   branch,
-		Branches: branches,
+		Branch:    branch,
+		Branches:  branches,
+		CommitURL: commitURL(remote, commit.Hash),
 		Commit: projectCommitCoverage{
 			ProjectID:        project.ID,
 			ProjectLabel:     project.Label,
@@ -669,12 +672,13 @@ func findProjectGroupByProjectID(groups []projectGroup, projectID string) (proje
 
 func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*db.Project, error) {
 	var p db.Project
-	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, default_branch, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(
+	err := database.QueryRowContext(ctx, "SELECT id, path, label, git_id, default_branch, remote, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(
 		&p.ID,
 		&p.Path,
 		&p.Label,
 		&p.GitID,
 		&p.DefaultBranch,
+		&p.Remote,
 		&p.Ignored,
 		&p.IgnoreDiffPaths,
 		&p.IgnoreDefaultDiffPaths,
@@ -686,6 +690,27 @@ func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*d
 		return nil, fmt.Errorf("query project: %w", err)
 	}
 	return &p, nil
+}
+
+func ensureProjectRemote(ctx context.Context, database *sql.DB, project *db.Project) string {
+	if project == nil {
+		return ""
+	}
+	if project.Remote != "" {
+		return project.Remote
+	}
+	remote, err := runGit(ctx, project.Path, "remote", "get-url", "origin")
+	if err != nil {
+		return ""
+	}
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return ""
+	}
+	if err := db.UpdateProjectRemote(ctx, database, project.ID, remote); err == nil {
+		project.Remote = remote
+	}
+	return remote
 }
 
 func groupProjectsByGitID(projects []db.Project) []projectGroup {
