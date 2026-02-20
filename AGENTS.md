@@ -10,3 +10,4 @@
 ## Important Rules
 
 - Never edit or even read `TODO.md`, `TODO-archive.md`, or `ARCHITECTURE.md`
+- This is a greenfield project, so we do not need to maintain backwards compatibility for anything right now.
