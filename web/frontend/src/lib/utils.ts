@@ -27,6 +27,7 @@ export function fmtTimeWithSeconds(t: string | number): string {
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const YEAR_IN_MS = DAY_IN_MS * 365;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getTemporal(): any | null {
 	const temporal = (globalThis as { Temporal?: unknown }).Temporal;
 	if (!temporal || typeof temporal !== 'object') return null;

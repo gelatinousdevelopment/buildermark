@@ -72,13 +72,13 @@
 		/*min-height: 4rem;*/
 	}
 
-	.project-header h2 {
+	/*.project-header h2 {
 		font-size: 1.8rem;
 		font-weight: 300;
 		letter-spacing: 0.03rem;
 		opacity: 0.7;
 		margin: 0 0.5rem 0 0;
-	}
+	}*/
 
 	.project-path {
 		font-size: 0.9rem;
