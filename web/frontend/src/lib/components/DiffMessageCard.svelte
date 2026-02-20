@@ -338,4 +338,8 @@
 	.diff-body :global(.d2h-wrapper) {
 		overflow-x: auto;
 	}
+
+	.diff-body :global(.d2h-code-linenumber) {
+		border-left: 0;
+	}
 </style>
