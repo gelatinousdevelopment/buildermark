@@ -182,6 +182,7 @@
 			<AgentPercentageBar
 				agentPercent={percent(agentLinesFromAgent, agentLinesTotal)}
 				segments={toBarSegments(detail.commit.agentSegments)}
+				totalLines={agentLinesTotal}
 				showManual={true}
 			/>
 		</div>
@@ -226,6 +227,7 @@
 											<AgentPercentageBar
 												agentPercent={file.linePercent}
 												segments={toBarSegments(file.agentSegments)}
+												totalLines={file.added + file.removed}
 												showKey={true}
 											/>
 										</div>

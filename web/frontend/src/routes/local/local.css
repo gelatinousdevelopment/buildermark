@@ -7,6 +7,7 @@
 	--color-status-green: #55bb33;
 	--color-background-content: #fff;
 	--color-background-page: #fcfcfc;
+	--color-background-empty: #f0f0f0;
 
 	/* Agent colors (known coding agents) */
 	--agent-color-generic: #a7439b;

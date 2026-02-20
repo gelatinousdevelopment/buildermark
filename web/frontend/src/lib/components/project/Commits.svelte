@@ -315,6 +315,7 @@
 						><AgentPercentageBar
 							agentPercent={c.linePercent}
 							segments={toBarSegments(c.agentSegments)}
+							totalLines={c.linesTotal}
 							showKey={false}
 						/></td
 					>

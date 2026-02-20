@@ -24,13 +24,21 @@
 		agentPercent?: number;
 		/** Per-agent breakdown. When provided and non-empty, each agent gets its own color. */
 		segments?: Segment[];
+		/** Total lines in the denominator. When 0, bar shows empty (gray). */
+		totalLines?: number;
 		/** Show the key/legend below the bar. */
 		showKey?: boolean;
 		/** Include the Manual label in the key. */
 		showManual?: boolean;
 	}
 
-	let { agentPercent = 0, segments = [], showKey = true, showManual = false }: Props = $props();
+	let {
+		agentPercent = 0,
+		segments = [],
+		totalLines = -1,
+		showKey = true,
+		showManual = false
+	}: Props = $props();
 
 	interface ResolvedSegment {
 		name: string;
@@ -65,8 +73,9 @@
 		return Math.max(0, 100 - total);
 	});
 
-	/** All bar segments including Manual. */
+	/** All bar segments including Manual. Empty when totalLines is 0 (gray bar). */
 	let barSegments: ResolvedSegment[] = $derived.by(() => {
+		if (totalLines === 0) return [];
 		const result = [...resolvedSegments];
 		if (manualPercent > 0) {
 			result.push({ name: 'manual', percent: manualPercent, color: MANUAL_COLOR });
@@ -95,6 +104,8 @@
 				<span class="apb-segment" style="width:{seg.percent}%;background:{seg.color}"></span>
 			{/each}
 		</div>
+	{:else if barSegments.length === 0}
+		<div class="apb-bar" role="img" aria-label="Agent percentage bar"></div>
 	{:else}
 		<Popover position="leading">
 			<div class="apb-bar" role="img" aria-label="Agent percentage bar">
@@ -148,6 +159,7 @@
 
 	.apb-popover-name {
 		color: #333;
+		font-size: 15px;
 	}
 
 	.apb-popover-pct {
@@ -158,9 +170,10 @@
 	}
 
 	.apb-bar {
-		background: var(--agent-color-manual, #656565);
+		background: var(--color-background-empty, #f0f0f0);
 		border-radius: 2px;
 		display: flex;
+		gap: 0.5px;
 		height: 10px;
 		overflow: hidden;
 		width: 100%;

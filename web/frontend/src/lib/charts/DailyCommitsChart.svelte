@@ -200,7 +200,7 @@
 	}
 
 	.dc-bar-empty {
-		background: #f0f0f0;
+		background: var(--color-background-empty, #f0f0f0);
 	}
 
 	.dc-seg {
