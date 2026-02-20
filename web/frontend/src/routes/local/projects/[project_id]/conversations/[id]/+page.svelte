@@ -382,9 +382,7 @@
 	}
 
 	.column.left .inline-diff-message :global(.message-content),
-	.column.left .inline-diff-message :global(.file-stats-list),
-	.column.left :global(.log-item .message-content),
-	.column.left :global(.log-item .file-stats-list) {
+	.column.left :global(.log-item .message-content) {
 		display: none;
 	}
 
@@ -396,9 +394,7 @@
 			display: none;
 		}
 		.column.left .inline-diff-message :global(.message-content),
-		.column.left .inline-diff-message :global(.file-stats-list),
-		.column.left :global(.log-item .message-content),
-		.column.left :global(.log-item .file-stats-list) {
+		.column.left :global(.log-item .message-content) {
 			display: block;
 		}
 	}
