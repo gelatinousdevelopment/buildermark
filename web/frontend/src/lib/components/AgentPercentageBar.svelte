@@ -161,7 +161,7 @@
 		background: var(--agent-color-manual, #656565);
 		border-radius: 2px;
 		display: flex;
-		height: 8px;
+		height: 10px;
 		overflow: hidden;
 		width: 100%;
 	}

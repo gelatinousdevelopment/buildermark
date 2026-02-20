@@ -54,12 +54,14 @@
 			}
 
 			const agentLines: Record<string, number> = {};
+			let agentLinesSum = 0;
 			if (day.agentSegments) {
 				for (const seg of day.agentSegments) {
 					agentLines[seg.agent] = seg.linesFromAgent;
+					agentLinesSum += seg.linesFromAgent;
 				}
 			}
-			const manualLines = day.linesTotal - day.linesFromAgent;
+			const manualLines = day.linesTotal - agentLinesSum;
 
 			const segments: Segment[] = [];
 			for (const name of agentNames) {
@@ -92,20 +94,19 @@
 		return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 	}
 
-	function formatDateShort(dateStr: string): string {
-		const [, m, d] = dateStr.split('-').map(Number);
-		return `${m}/${d}`;
-	}
-
-	/** Show a date label every 7 days. */
-	function showDateLabel(index: number): boolean {
-		return index % 7 === 0;
+	function formatDateLabel(dateStr: string): string {
+		const [y, m, d] = dateStr.split('-').map(Number);
+		if (d === 1) {
+			const date = new Date(y, m - 1, d);
+			return date.toLocaleDateString(undefined, { month: 'short' });
+		}
+		return String(d);
 	}
 </script>
 
 <div class="dc-wrap">
 	<div class="dc-chart">
-		{#each columns as col, i (col.date)}
+		{#each columns as col (col.date)}
 			<div class="dc-col">
 				<div class="dc-bar-area">
 					{#if col.total > 0}
@@ -149,12 +150,12 @@
 								</div>
 							{/snippet}
 						</Popover>
+					{:else}
+						<div class="dc-bar dc-bar-empty"></div>
 					{/if}
 				</div>
-				<div class="dc-date" class:dc-date-visible={showDateLabel(i)}>
-					{#if showDateLabel(i)}
-						{formatDateShort(col.date)}
-					{/if}
+				<div class="dc-date">
+					{formatDateLabel(col.date)}
 				</div>
 			</div>
 		{/each}
@@ -195,6 +196,11 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column-reverse;
+		gap: 0.5px;
+	}
+
+	.dc-bar-empty {
+		background: #f0f0f0;
 	}
 
 	.dc-seg {
@@ -210,11 +216,6 @@
 		padding-top: 0.25rem;
 		height: 1rem;
 		white-space: nowrap;
-		visibility: hidden;
-	}
-
-	.dc-date-visible {
-		visibility: visible;
 	}
 
 	.dc-popover {
