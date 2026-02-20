@@ -38,7 +38,7 @@
 				>Git Commits</a
 			>
 		</div>
-		<Commits {projectId} page={1} limit={30} compact={true} showBranch={true} />
+		<Commits {projectId} page={1} limit={30} compact={true} showBranch={true} showDate={true} />
 		<div class="more">
 			<a
 				class="btn-sm"
@@ -56,7 +56,6 @@
 		display: flex;
 		flex-direction: row;
 		justify-content: space-between;
-		margin: -1rem;
 	}
 
 	.column {

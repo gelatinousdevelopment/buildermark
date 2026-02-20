@@ -30,6 +30,7 @@
 		showCoverageBar?: boolean;
 		showPagination?: boolean;
 		showLoadMore?: boolean;
+		showDate?: boolean;
 		showBranch?: boolean;
 		showColumnNames?: boolean;
 		onPageChange?: PageChangeHandler;
@@ -52,6 +53,7 @@
 		showCoverageBar = false,
 		showPagination = false,
 		showLoadMore = false,
+		showDate = false,
 		showBranch = false,
 		showColumnNames = false,
 		onPageChange,
@@ -232,7 +234,7 @@
 
 	<table class="data" class:compact>
 		<colgroup>
-			{#if !compact}
+			{#if !compact || showDate}
 				<col class="time-col" />
 			{/if}
 			<col class="title-col" />
@@ -248,7 +250,7 @@
 		{#if showColumnNames}
 			<thead>
 				<tr>
-					{#if !compact}
+					{#if !compact || showDate}
 						<th class="time-col">Time</th>
 					{/if}
 					<th>Commit</th>
@@ -266,7 +268,7 @@
 		<tbody>
 			{#each visibleCommits as c (c.commitHash)}
 				<tr>
-					{#if !compact}
+					{#if !compact || showDate}
 						<td class="time" title={formatFullDateTitle(c.authoredAtUnixMs)}
 							>{formatRelativeOrShortDate(c.authoredAtUnixMs)}</td
 						>
@@ -456,7 +458,7 @@
 	}
 
 	.time-col {
-		width: 180px;
+		width: 130px;
 	}
 
 	.stats-col {
