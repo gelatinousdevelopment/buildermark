@@ -236,6 +236,7 @@
 								model={messageModel(item.message)}
 								content={item.message.content}
 								expanded={diffExpanded}
+								subtleAgentTag={true}
 								onToggle={diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
 							/>
 						</div>
@@ -265,6 +266,7 @@
 								messages={item.messages}
 								agent={conversation.agent}
 								expanded={groupExpanded}
+								subtleAgentTag={true}
 								{expandedMessages}
 								onToggleMessage={toggleExpanded}
 								onSelectMessage={selectMessage}

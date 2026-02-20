@@ -21,6 +21,8 @@
 		onSelectMessage?: (message: MessageRead) => void;
 		/** When provided, the group header becomes clickable to collapse. */
 		onToggle?: () => void;
+		/** Render agent tag in subtle mode in group header and message rows. */
+		subtleAgentTag?: boolean;
 	}
 
 	let {
@@ -30,7 +32,8 @@
 		expandedMessages,
 		onToggleMessage,
 		onSelectMessage,
-		onToggle
+		onToggle,
+		subtleAgentTag = false
 	}: Props = $props();
 
 	let timeSpan = $derived(groupTimeSpan(messages));
@@ -78,7 +81,7 @@
 		{messages.length}
 		{messages.length == 1 ? 'log' : 'logs'} from
 		{#if groupedModelLabel === agent}
-			<AgentTag agent={agent} />
+			<AgentTag agent={agent} subtle={subtleAgentTag} />
 		{:else}
 			{groupedModelLabel}
 		{/if}
@@ -114,6 +117,7 @@
 						model={messageModel(logMessage)}
 						content={logMessage.content}
 						expanded={logExpanded}
+						{subtleAgentTag}
 						onToggle={logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
 					/>
 				</div>

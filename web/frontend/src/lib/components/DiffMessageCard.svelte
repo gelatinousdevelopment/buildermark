@@ -23,6 +23,8 @@
 		onToggle?: () => void;
 		/** Render only the diff body and omit metadata/header elements. */
 		contentOnly?: boolean;
+		/** Render agent role tag in subtle mode. */
+		subtleAgentTag?: boolean;
 	}
 
 	let {
@@ -37,7 +39,8 @@
 		linkLabel = null,
 		agentPercent,
 		onToggle,
-		contentOnly = false
+		contentOnly = false,
+		subtleAgentTag = false
 	}: Props = $props();
 
 	interface FileDiffStat {
@@ -191,7 +194,7 @@
 			<span class="message-model">
 				{#if role}
 					{#if isAgentRole}
-						<AgentTag agent={role} />
+						<AgentTag agent={role} subtle={subtleAgentTag} />
 					{:else}
 						<span>{role}</span>
 					{/if}
