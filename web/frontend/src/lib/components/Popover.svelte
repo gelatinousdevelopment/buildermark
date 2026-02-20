@@ -7,11 +7,13 @@
 		position?: Position;
 		width?: string;
 		padding?: string;
+		fixed?: boolean;
 		children: Snippet;
 		popover: Snippet;
 	}
 
-	let { position = 'leading', width, padding = '1rem', children, popover }: Props = $props();
+	let { position = 'leading', width, padding = '1rem', fixed = false, children, popover }: Props =
+		$props();
 
 	let visible = $state(false);
 	let wrapperEl: HTMLDivElement | undefined = $state();
@@ -21,6 +23,8 @@
 	let resolvedPosition: Position = $state('leading');
 	let maxHeight = $state('0px');
 	let positioned = $state(false);
+	let fixedLeft = $state(0);
+	let fixedTop = $state(0);
 
 	/** Safe area inset (px) from viewport edges. */
 	const MARGIN = 8; // 0.5rem
@@ -105,6 +109,24 @@
 		return { fits: false, shift, mh };
 	}
 
+	function placementTop(wrapRect: DOMRect, pos: Position, natW: number, natH: number, dy = 0): number {
+		if (pos === 'above') return wrapRect.top - GAP - natH + dy;
+		if (pos === 'below') return wrapRect.bottom + GAP + dy;
+		return wrapRect.top + wrapRect.height / 2 - natH / 2 + dy;
+	}
+
+	function placementLeft(
+		wrapRect: DOMRect,
+		pos: Position,
+		natW: number,
+		natH: number,
+		dx = 0
+	): number {
+		if (pos === 'leading') return wrapRect.left - GAP - natW + dx;
+		if (pos === 'trailing') return wrapRect.right + GAP + dx;
+		return wrapRect.left + wrapRect.width / 2 - natW / 2 + dx;
+	}
+
 	$effect(() => {
 		if (!visible || !popoverEl || !wrapperEl) {
 			maxHeight = '0px';
@@ -150,6 +172,8 @@
 			el.style.maxHeight = maxHeight;
 			offsetX = result.shift.dx;
 			offsetY = result.shift.dy;
+			fixedLeft = placementLeft(wrapRect, position, natW, natH, result.shift.dx);
+			fixedTop = placementTop(wrapRect, position, natW, natH, result.shift.dy);
 			positioned = true;
 			return;
 		}
@@ -163,6 +187,8 @@
 				el.style.maxHeight = maxHeight;
 				offsetX = result.shift.dx;
 				offsetY = result.shift.dy;
+				fixedLeft = placementLeft(wrapRect, candidate, natW, natH, result.shift.dx);
+				fixedTop = placementTop(wrapRect, candidate, natW, natH, result.shift.dy);
 				positioned = true;
 				return;
 			}
@@ -177,6 +203,8 @@
 		el.style.maxHeight = maxHeight;
 		offsetX = shift.dx;
 		offsetY = shift.dy;
+		fixedLeft = placementLeft(wrapRect, position, natW, natH, shift.dx);
+		fixedTop = placementTop(wrapRect, position, natW, natH, shift.dy);
 		positioned = true;
 	});
 
@@ -197,9 +225,12 @@
 		<div class="popover-bridge {resolvedPosition}"></div>
 		<div
 			class="popover-bubble {resolvedPosition}"
+			class:fixed
 			style:width
 			style:max-height={maxHeight}
-			style:transform={transformStyle}
+			style:transform={fixed ? null : transformStyle}
+			style:left={fixed ? `${fixedLeft}px` : null}
+			style:top={fixed ? `${fixedTop}px` : null}
 			style:padding
 			style:visibility={positioned ? null : 'hidden'}
 			bind:this={popoverEl}
@@ -263,23 +294,28 @@
 		overflow-y: auto;
 	}
 
-	.popover-bubble.above {
+	.popover-bubble:not(.fixed).above {
 		bottom: calc(100% + 6px);
 		left: 50%;
 	}
 
-	.popover-bubble.below {
+	.popover-bubble:not(.fixed).below {
 		top: calc(100% + 6px);
 		left: 50%;
 	}
 
-	.popover-bubble.leading {
+	.popover-bubble:not(.fixed).leading {
 		right: calc(100% + 6px);
 		top: 50%;
 	}
 
-	.popover-bubble.trailing {
+	.popover-bubble:not(.fixed).trailing {
 		left: calc(100% + 6px);
 		top: 50%;
+	}
+
+	.popover-bubble.fixed {
+		position: fixed;
+		z-index: 1000;
 	}
 </style>

@@ -287,6 +287,16 @@
 		text-overflow: ellipsis;
 	}
 
+	table.data:not(.compact) .title a {
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		display: -webkit-box;
+		line-clamp: 3;
+		line-height: 1.3;
+		overflow: hidden;
+		white-space: normal;
+	}
+
 	.title a:hover {
 		color: var(--accent-color);
 	}

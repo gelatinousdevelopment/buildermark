@@ -549,6 +549,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
+	pageSize := parsePositiveInt(r.URL.Query().Get("pageSize"), commitsPageSize)
 
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
@@ -646,17 +647,17 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 
 	totalPages := 0
 	if total > 0 {
-		totalPages = (total + commitsPageSize - 1) / commitsPageSize
+		totalPages = (total + pageSize - 1) / pageSize
 	}
 	if totalPages > 0 && page > totalPages {
 		page = totalPages
 	}
-	offset := (page - 1) * commitsPageSize
+	offset := (page - 1) * pageSize
 	if offset < 0 {
 		offset = 0
 	}
 
-	dbCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, branch, commitsPageSize, offset)
+	dbCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, branch, pageSize, offset)
 	if err != nil {
 		log.Printf("error listing commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -726,10 +727,10 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		Project:      *project,
 		Refresh:      makeCommitRefreshState(syncState, staleCoverage),
 		Summary:      summarizeCommitCoverage(allCoverage),
-		DailySummary: buildDailySummary(allCoverage, 28),
+		DailySummary: buildDailySummary(allCoverage, 90),
 		Pagination: projectCommitPagination{
 			Page:       page,
-			PageSize:   commitsPageSize,
+			PageSize:   pageSize,
 			Total:      total,
 			TotalPages: totalPages,
 		},

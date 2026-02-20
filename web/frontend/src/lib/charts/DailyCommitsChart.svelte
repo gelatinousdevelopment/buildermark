@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { tick } from 'svelte';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { agentColor, MANUAL_COLOR } from './chartColors';
 	import Popover from '$lib/components/Popover.svelte';
@@ -11,6 +12,8 @@
 	}
 
 	let { dailySummary, branch }: Props = $props();
+	let scrollWrap: HTMLDivElement | undefined;
+	let lastAutoScrollKey = '';
 
 	interface Segment {
 		key: string;
@@ -102,15 +105,31 @@
 		}
 		return String(d);
 	}
+
+	const autoScrollKey = $derived.by(() => {
+		const first = columns[0]?.date ?? '';
+		const last = columns[columns.length - 1]?.date ?? '';
+		return `${branch}:${columns.length}:${first}:${last}`;
+	});
+
+	$effect(() => {
+		const key = autoScrollKey;
+		if (!scrollWrap || !key || key === lastAutoScrollKey) return;
+		lastAutoScrollKey = key;
+		void tick().then(() => {
+			if (!scrollWrap) return;
+			scrollWrap.scrollLeft = scrollWrap.scrollWidth;
+		});
+	});
 </script>
 
-<div class="dc-wrap">
+<div class="dc-wrap" bind:this={scrollWrap}>
 	<div class="dc-chart">
 		{#each columns as col (col.date)}
 			<div class="dc-col">
 				<div class="dc-bar-area">
 					{#if col.total > 0}
-						<Popover position="below" width="250px" padding="0">
+						<Popover position="below" width="250px" padding="0" fixed={true}>
 							<div class="dc-bar">
 								{#each col.segments as seg (seg.key)}
 									<div class="dc-seg" style="height:{seg.percent}%;background:{seg.color}"></div>
@@ -164,18 +183,22 @@
 
 <style>
 	.dc-wrap {
-		max-width: 700px;
+		max-width: 100%;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding-bottom: 0.25rem;
 	}
 
 	.dc-chart {
-		display: flex;
+		display: inline-flex;
 		gap: 2px;
 		align-items: stretch;
+		min-width: max-content;
 	}
 
 	.dc-col {
-		flex: 1;
-		min-width: 0;
+		flex: 0 0 10px;
+		min-width: 20px;
 		display: flex;
 		flex-direction: column;
 	}

@@ -113,9 +113,10 @@ export function listProjectCommits(branch = ''): Promise<ProjectCommitCoverageRe
 export function listProjectCommitsPage(
 	projectId: string,
 	page = 1,
-	branch = ''
+	branch = '',
+	pageSize = 10
 ): Promise<ProjectCommitPageResponse> {
-	const params = new URLSearchParams({ page: String(page) });
+	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 	if (branch) params.set('branch', branch);
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }

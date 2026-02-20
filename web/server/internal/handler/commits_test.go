@@ -199,6 +199,29 @@ func TestListProjectCommits(t *testing.T) {
 		t.Fatalf("working copy commitHash = %q, want %q", got, "working-copy")
 	}
 
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+pid+"/commits?page=1&pageSize=1", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("project commits with pageSize status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	env = jsonEnvelope{}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode project commits with pageSize response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("project commits with pageSize ok=false, error=%v", env.Error)
+	}
+	projectCommits = env.Data.(map[string]any)
+	pagination = projectCommits["pagination"].(map[string]any)
+	if got := int(pagination["pageSize"].(float64)); got != 1 {
+		t.Fatalf("pagination.pageSize with query = %d, want 1", got)
+	}
+	commitRows = projectCommits["commits"].([]any)
+	if len(commitRows) != 2 {
+		t.Fatalf("project commits with pageSize len = %d, want 2 (working copy + 1 commit)", len(commitRows))
+	}
+
 	req = httptest.NewRequest("GET", "/api/v1/projects/"+pid+"/commits/working-copy", nil)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -1332,27 +1355,27 @@ func TestBuildDailySummary(t *testing.T) {
 		},
 	}
 
-	result := buildDailySummary(commits, 28)
+	result := buildDailySummary(commits, 90)
 
-	// Should return exactly 28 entries.
-	if len(result) != 28 {
-		t.Fatalf("len = %d, want 28", len(result))
+	// Should return exactly 90 entries.
+	if len(result) != 90 {
+		t.Fatalf("len = %d, want 90", len(result))
 	}
 
 	// Last entry should be today's date.
 	todayStr := today.Format("2006-01-02")
-	if result[27].Date != todayStr {
-		t.Fatalf("last date = %q, want %q", result[27].Date, todayStr)
+	if result[89].Date != todayStr {
+		t.Fatalf("last date = %q, want %q", result[89].Date, todayStr)
 	}
 
-	// First entry should be 27 days ago.
-	firstDate := today.AddDate(0, 0, -27).Format("2006-01-02")
+	// First entry should be 89 days ago.
+	firstDate := today.AddDate(0, 0, -89).Format("2006-01-02")
 	if result[0].Date != firstDate {
 		t.Fatalf("first date = %q, want %q", result[0].Date, firstDate)
 	}
 
-	// Today's entry (index 27) should aggregate both commits.
-	todayEntry := result[27]
+	// Today's entry (index 89) should aggregate both commits.
+	todayEntry := result[89]
 	if todayEntry.LinesTotal != 30 {
 		t.Fatalf("today linesTotal = %d, want 30", todayEntry.LinesTotal)
 	}
@@ -1377,8 +1400,8 @@ func TestBuildDailySummary(t *testing.T) {
 		t.Fatalf("today codex lines = %d, want 2", agentMap["codex"])
 	}
 
-	// Yesterday's entry (index 26).
-	yesterdayEntry := result[26]
+	// Yesterday's entry (index 88).
+	yesterdayEntry := result[88]
 	if yesterdayEntry.LinesTotal != 5 {
 		t.Fatalf("yesterday linesTotal = %d, want 5", yesterdayEntry.LinesTotal)
 	}
@@ -1386,8 +1409,8 @@ func TestBuildDailySummary(t *testing.T) {
 		t.Fatalf("yesterday commits = %d, want 1", len(yesterdayEntry.Commits))
 	}
 
-	// Ten days ago entry (index 17).
-	tenDaysAgoEntry := result[17]
+	// Ten days ago entry (index 79).
+	tenDaysAgoEntry := result[79]
 	expectedDate := today.AddDate(0, 0, -10).Format("2006-01-02")
 	if tenDaysAgoEntry.Date != expectedDate {
 		t.Fatalf("ten days ago date = %q, want %q", tenDaysAgoEntry.Date, expectedDate)

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
@@ -22,6 +23,7 @@
 	interface Props {
 		projectId: string;
 		page?: number;
+		pageSize?: number;
 		branch?: string;
 		limit?: number;
 		compact?: boolean;
@@ -34,6 +36,7 @@
 		showDate?: boolean;
 		showBranch?: boolean;
 		showColumnNames?: boolean;
+		syncPaginationWithUrl?: boolean;
 		onPageChange?: PageChangeHandler;
 		onBranchChange?: BranchChangeHandler;
 		autoload?: boolean;
@@ -45,6 +48,7 @@
 	let {
 		projectId,
 		page = undefined,
+		pageSize = 10,
 		branch = undefined,
 		limit = 0,
 		compact = false,
@@ -57,6 +61,7 @@
 		showDate = false,
 		showBranch = false,
 		showColumnNames = false,
+		syncPaginationWithUrl = false,
 		onPageChange,
 		onBranchChange,
 		autoload = true,
@@ -78,10 +83,20 @@
 	let requestToken = 0;
 	let lastLoadKey = '';
 
+	function parsePositivePage(value: string | null | undefined): number {
+		if (!value) return 1;
+		const parsed = Number.parseInt(value, 10);
+		return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+	}
+
 	$effect(() => {
 		if (initialized) return;
 		initialized = true;
-		internalPage = page ?? 1;
+		internalPage =
+			page ??
+			(syncPaginationWithUrl && browser
+				? parsePositivePage(new URLSearchParams(window.location.search).get('page'))
+				: 1);
 		internalBranch = branch ?? '';
 		loading = autoload;
 	});
@@ -136,7 +151,7 @@
 		try {
 			const pageNum = Math.max(1, currentPage);
 			const loaded = await withOptionalQueue(() =>
-				listProjectCommitsPage(projectId, pageNum, selectedBranch)
+				listProjectCommitsPage(projectId, pageNum, selectedBranch, pageSize)
 			);
 			if (myToken !== requestToken) return;
 			data = loaded;
@@ -154,7 +169,7 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${selectedBranch}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();
@@ -165,6 +180,15 @@
 		if (nextPage < 1 || nextPage > data.pagination.totalPages) return;
 		if (page === undefined) {
 			internalPage = nextPage;
+		}
+		if (syncPaginationWithUrl && browser && !onPageChange) {
+			const url = new URL(window.location.href);
+			if (nextPage <= 1) {
+				url.searchParams.delete('page');
+			} else {
+				url.searchParams.set('page', String(nextPage));
+			}
+			window.history.replaceState(window.history.state, '', url);
 		}
 		if (onPageChange) {
 			await onPageChange(nextPage);
@@ -205,7 +229,7 @@
 	<div class="heading">{header}</div>
 {/if}
 
-{#if loading}
+{#if loading && !data}
 	<p class="message loading">Loading commits...</p>
 {:else if error}
 	<p class="message error">{error}</p>
@@ -326,13 +350,17 @@
 
 	{#if showPagination && data.pagination.totalPages > 1}
 		<div class="pager">
-			<button class="btn-sm" disabled={currentPage <= 1} onclick={() => goToPage(currentPage - 1)}>
+			<button
+				class="btn-sm"
+				disabled={loading || currentPage <= 1}
+				onclick={() => goToPage(currentPage - 1)}
+			>
 				Previous
 			</button>
 			<span>Page {data.pagination.page} of {data.pagination.totalPages}</span>
 			<button
 				class="btn-sm"
-				disabled={currentPage >= data.pagination.totalPages}
+				disabled={loading || currentPage >= data.pagination.totalPages}
 				onclick={() => goToPage(currentPage + 1)}
 			>
 				Next
@@ -460,16 +488,35 @@
 		table-layout: fixed;
 	}
 
-	table.data tr {
+	table.data.compact tr {
 		border-bottom: 0px;
+	}
+
+	table.data:not(.compact) tr:nth-child(even) {
+		background: #f9f9f9;
 	}
 
 	table.data tr:hover {
 		background: var(--accent-color-ultralight);
 	}
 
+	table.data:not(.compact) td {
+		padding-bottom: 0.7rem;
+		padding-top: 0.7rem;
+	}
+
 	table.data td {
 		white-space: nowrap;
+	}
+
+	table.data:not(.compact) .title a {
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		display: -webkit-box;
+		line-clamp: 3;
+		line-height: 1.3;
+		overflow: hidden;
+		white-space: normal;
 	}
 
 	.time-col {

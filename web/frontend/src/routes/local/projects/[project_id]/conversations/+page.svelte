@@ -39,7 +39,7 @@
 	<Conversations
 		{projectId}
 		page={currentPage}
-		pageSize={20}
+		pageSize={40}
 		compact={false}
 		showPagination={true}
 		onPageChange={handlePageChange}
