@@ -2,11 +2,23 @@ package agent
 
 import (
 	"context"
+	"log"
+	"os"
+	"strconv"
 	"time"
 )
 
-// DefaultScanWindow is how far back the initial scan looks (1 week).
-const DefaultScanWindow = 7 * 24 * time.Hour
+// DefaultScanWindow is how far back the initial scan looks (default 90 days).
+// Override with ZRATE_SCAN_WINDOW_HOURS environment variable.
+var DefaultScanWindow = func() time.Duration {
+	if v := os.Getenv("ZRATE_SCAN_WINDOW_HOURS"); v != "" {
+		if hours, err := strconv.ParseInt(v, 10, 64); err == nil && hours > 0 {
+			log.Printf("using custom scan window: %d hours", hours)
+			return time.Duration(hours) * time.Hour
+		}
+	}
+	return 90 * 24 * time.Hour
+}()
 
 // Agent is the base interface every coding agent must implement.
 type Agent interface {

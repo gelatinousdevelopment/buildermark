@@ -62,3 +62,56 @@ func TestUpsertCommit_ConflictOnProjectAndHash(t *testing.T) {
 	}
 }
 
+func TestHasStaleCommitCoverage(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, database, "/tmp/zrate-test-repo-stale")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	if err := UpsertCommit(ctx, database, Commit{
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      "hash-fresh",
+		Subject:         "fresh",
+		AuthorName:      "Test User",
+		AuthorEmail:     "test@example.com",
+		AuthoredAt:      1700000000,
+		DiffContent:     "diff --git a/a b/a",
+		CoverageVersion: 1,
+	}); err != nil {
+		t.Fatalf("upsert fresh commit: %v", err)
+	}
+
+	stale, err := HasStaleCommitCoverage(ctx, database, projectID, "main", 1)
+	if err != nil {
+		t.Fatalf("HasStaleCommitCoverage fresh: %v", err)
+	}
+	if stale {
+		t.Fatalf("stale = true, want false")
+	}
+
+	if err := UpsertCommit(ctx, database, Commit{
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      "hash-stale",
+		Subject:         "stale",
+		AuthorName:      "Test User",
+		AuthorEmail:     "test@example.com",
+		AuthoredAt:      1700000001,
+		DiffContent:     "diff --git a/b b/b",
+		CoverageVersion: 0,
+	}); err != nil {
+		t.Fatalf("upsert stale commit: %v", err)
+	}
+
+	stale, err = HasStaleCommitCoverage(ctx, database, projectID, "main", 1)
+	if err != nil {
+		t.Fatalf("HasStaleCommitCoverage stale: %v", err)
+	}
+	if !stale {
+		t.Fatalf("stale = false, want true")
+	}
+}

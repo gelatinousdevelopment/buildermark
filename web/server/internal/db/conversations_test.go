@@ -36,6 +36,9 @@ func TestListConversations(t *testing.T) {
 	if conversations[0].ProjectID != pid {
 		t.Errorf("first conversation ProjectID = %q, want %q", conversations[0].ProjectID, pid)
 	}
+	if conversations[0].StartedAt != 0 || conversations[0].EndedAt != 0 {
+		t.Errorf("expected default startedAt/endedAt to be 0, got %d/%d", conversations[0].StartedAt, conversations[0].EndedAt)
+	}
 }
 
 func TestListConversationsEmpty(t *testing.T) {
@@ -93,6 +96,12 @@ func TestGetConversationDetail(t *testing.T) {
 	}
 	if detail.Agent != "claude" {
 		t.Errorf("Agent = %q, want %q", detail.Agent, "claude")
+	}
+	if detail.StartedAt != 1000 {
+		t.Errorf("StartedAt = %d, want %d", detail.StartedAt, 1000)
+	}
+	if detail.EndedAt != 2000 {
+		t.Errorf("EndedAt = %d, want %d", detail.EndedAt, 2000)
 	}
 	if len(detail.Messages) != 2 {
 		t.Fatalf("got %d messages, want 2", len(detail.Messages))
@@ -289,6 +298,9 @@ func TestGetConversationDetailEmptyMessagesAndRatings(t *testing.T) {
 	}
 	if len(detail.Messages) != 0 {
 		t.Errorf("expected 0 messages, got %d", len(detail.Messages))
+	}
+	if detail.StartedAt != 0 || detail.EndedAt != 0 {
+		t.Errorf("expected StartedAt/EndedAt of empty conversation to be 0/0, got %d/%d", detail.StartedAt, detail.EndedAt)
 	}
 	if detail.Ratings == nil {
 		t.Error("expected non-nil empty Ratings slice")

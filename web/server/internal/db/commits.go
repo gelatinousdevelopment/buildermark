@@ -9,19 +9,20 @@ import (
 
 // Commit represents a row in the commits table.
 type Commit struct {
-	ID             string `json:"id"`
-	ProjectID      string `json:"projectId"`
-	BranchName     string `json:"branchName"`
-	CommitHash     string `json:"commitHash"`
-	Subject        string `json:"subject"`
-	AuthorName     string `json:"authorName"`
-	AuthorEmail    string `json:"authorEmail"`
-	AuthoredAt     int64  `json:"authoredAt"` // unix seconds
-	DiffContent    string `json:"diffContent"`
-	LinesTotal     int    `json:"linesTotal"`
-	CharsTotal     int    `json:"charsTotal"`
-	LinesFromAgent int    `json:"linesFromAgent"`
-	CharsFromAgent int    `json:"charsFromAgent"`
+	ID              string `json:"id"`
+	ProjectID       string `json:"projectId"`
+	BranchName      string `json:"branchName"`
+	CommitHash      string `json:"commitHash"`
+	Subject         string `json:"subject"`
+	AuthorName      string `json:"authorName"`
+	AuthorEmail     string `json:"authorEmail"`
+	AuthoredAt      int64  `json:"authoredAt"` // unix seconds
+	DiffContent     string `json:"diffContent"`
+	LinesTotal      int    `json:"linesTotal"`
+	CharsTotal      int    `json:"charsTotal"`
+	LinesFromAgent  int    `json:"linesFromAgent"`
+	CharsFromAgent  int    `json:"charsFromAgent"`
+	CoverageVersion int    `json:"coverageVersion"`
 }
 
 // UpsertCommit inserts or updates a commit row. On conflict (same project_id + commit_hash),
@@ -31,8 +32,8 @@ func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
 		c.ID = newID()
 	}
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, coverage_version)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(project_id, commit_hash) DO UPDATE SET
 		   branch_name = excluded.branch_name,
 		   subject = excluded.subject,
@@ -42,9 +43,10 @@ func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
 		   lines_total = excluded.lines_total,
 		   chars_total = excluded.chars_total,
 		   lines_from_agent = excluded.lines_from_agent,
-		   chars_from_agent = excluded.chars_from_agent`,
+		   chars_from_agent = excluded.chars_from_agent,
+		   coverage_version = excluded.coverage_version`,
 		c.ID, c.ProjectID, c.BranchName, c.CommitHash, c.Subject, c.AuthorName, c.AuthorEmail, c.AuthoredAt,
-		c.DiffContent, c.LinesTotal, c.CharsTotal, c.LinesFromAgent, c.CharsFromAgent,
+		c.DiffContent, c.LinesTotal, c.CharsTotal, c.LinesFromAgent, c.CharsFromAgent, c.CoverageVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert commit: %w", err)
@@ -65,8 +67,8 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, coverage_version)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(project_id, commit_hash) DO UPDATE SET
 		   branch_name = excluded.branch_name,
 		   subject = excluded.subject,
@@ -76,7 +78,8 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 		   lines_total = excluded.lines_total,
 		   chars_total = excluded.chars_total,
 		   lines_from_agent = excluded.lines_from_agent,
-		   chars_from_agent = excluded.chars_from_agent`,
+		   chars_from_agent = excluded.chars_from_agent,
+		   coverage_version = excluded.coverage_version`,
 	)
 	if err != nil {
 		return fmt.Errorf("prepare upsert commit: %w", err)
@@ -89,7 +92,7 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 		}
 		if _, err := stmt.ExecContext(ctx,
 			c.ID, c.ProjectID, c.BranchName, c.CommitHash, c.Subject, c.AuthorName, c.AuthorEmail, c.AuthoredAt,
-			c.DiffContent, c.LinesTotal, c.CharsTotal, c.LinesFromAgent, c.CharsFromAgent,
+			c.DiffContent, c.LinesTotal, c.CharsTotal, c.LinesFromAgent, c.CharsFromAgent, c.CoverageVersion,
 		); err != nil {
 			return fmt.Errorf("upsert commit %s: %w", c.CommitHash, err)
 		}
@@ -106,7 +109,7 @@ func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID, branchName
 	}
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
-		        lines_total, chars_total, lines_from_agent, chars_from_agent
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, coverage_version
 		 FROM commits
 		 WHERE project_id = ? AND branch_name = ?
 		 ORDER BY authored_at DESC
@@ -122,7 +125,7 @@ func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID, branchName
 	for rows.Next() {
 		var c Commit
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
-			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.CoverageVersion); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
 		}
 		commits = append(commits, c)
@@ -145,11 +148,11 @@ func GetCommitByHash(ctx context.Context, db *sql.DB, projectID, branchName, com
 	var c Commit
 	err := db.QueryRowContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
-		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent
+		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, coverage_version
 		 FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
 		projectID, branchName, commitHash,
 	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
-		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent)
+		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.CoverageVersion)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -164,12 +167,12 @@ func OldestCommitByProject(ctx context.Context, db *sql.DB, projectID, branchNam
 	var c Commit
 	err := db.QueryRowContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
-		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent
+		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, coverage_version
 		 FROM commits WHERE project_id = ? AND branch_name = ?
 		 ORDER BY authored_at ASC LIMIT 1`,
 		projectID, branchName,
 	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
-		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent)
+		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.CoverageVersion)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -200,7 +203,7 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
 	query := fmt.Sprintf(
 		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
-		        lines_total, chars_total, lines_from_agent, chars_from_agent
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, coverage_version
 		 FROM commits
 		 WHERE project_id IN (%s) AND branch_name = ?
 		 ORDER BY authored_at ASC`,
@@ -222,7 +225,7 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	for rows.Next() {
 		var c Commit
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
-			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.CoverageVersion); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
 		}
 		commits = append(commits, c)
@@ -319,4 +322,25 @@ func DeleteCommitAgentCoverageByCommitID(ctx context.Context, database *sql.DB, 
 		return fmt.Errorf("delete commit_agent_coverage: %w", err)
 	}
 	return nil
+}
+
+// HasStaleCommitCoverage reports whether any commit in a project+branch has a
+// coverage_version lower than minVersion.
+func HasStaleCommitCoverage(ctx context.Context, database *sql.DB, projectID, branchName string, minVersion int) (bool, error) {
+	var count int
+	err := database.QueryRowContext(ctx,
+		`SELECT COUNT(*)
+		 FROM commits
+		 WHERE project_id = ?
+		   AND branch_name = ?
+		   AND (
+		     coverage_version < ?
+		     OR (lines_total > 0 AND trim(diff_content) = '')
+		   )`,
+		projectID, branchName, minVersion,
+	).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("count stale commit coverage: %w", err)
+	}
+	return count > 0, nil
 }

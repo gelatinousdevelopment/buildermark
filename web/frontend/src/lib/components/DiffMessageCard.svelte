@@ -226,7 +226,7 @@
 	</div>
 	{#if showFileList}
 		<div class="file-stats-list">
-			{#each fileStats as f (f.path)}
+			{#each fileStats as f, i (`${f.path}:${i}`)}
 				<div class="file-stats-item">
 					<span class="file-stats-path">{f.path}</span>
 					<DiffCount added={f.added} removed={f.removed} />

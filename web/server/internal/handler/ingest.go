@@ -346,18 +346,19 @@ func ingestCommits(
 		}
 
 		dbCommits = append(dbCommits, db.Commit{
-			ProjectID:      repoProject.ID,
-			BranchName:     branch,
-			CommitHash:     gc.Hash,
-			Subject:        gc.Subject,
-			AuthorName:     gc.AuthorName,
-			AuthorEmail:    gc.AuthorEmail,
-			AuthoredAt:     gc.TimestampUnix,
-			DiffContent:    cleanDiff,
-			LinesTotal:     totalLines,
-			CharsTotal:     totalChars,
-			LinesFromAgent: matchedLines,
-			CharsFromAgent: matchedChars,
+			ProjectID:       repoProject.ID,
+			BranchName:      branch,
+			CommitHash:      gc.Hash,
+			Subject:         gc.Subject,
+			AuthorName:      gc.AuthorName,
+			AuthorEmail:     gc.AuthorEmail,
+			AuthoredAt:      gc.TimestampUnix,
+			DiffContent:     cleanDiff,
+			LinesTotal:      totalLines,
+			CharsTotal:      totalChars,
+			LinesFromAgent:  matchedLines,
+			CharsFromAgent:  matchedChars,
+			CoverageVersion: currentCommitCoverageVersion,
 		})
 	}
 
@@ -443,31 +444,50 @@ func recomputeCommitCoverageForProject(
 	perCommitAgent := make(map[string]map[string]agentStats)
 
 	for _, c := range commits {
+		cleanDiff := c.DiffContent
+		rawDiff, rawErr := runGit(
+			ctx,
+			repoProject.Path,
+			"show",
+			"--pretty=format:",
+			"-M",
+			"-w",
+			"--ignore-blank-lines",
+			c.CommitHash,
+		)
+		if rawErr == nil {
+			cleanDiff = stripBinaryDiffs(rawDiff)
+		}
+
 		tokenDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
 		if err != nil {
-			tokenDiff = c.DiffContent
+			tokenDiff = cleanDiff
 		}
 		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
 		totalLines, totalChars := tokenTotals(commitTokens)
 
 		windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
 		windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
-		contribs, matchedLines, matchedChars, _, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		contribs, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		matchedLines += fallbackLines
+		matchedChars += fallbackChars
 
 		updatedCommits = append(updatedCommits, db.Commit{
-			ID:             c.ID,
-			ProjectID:      c.ProjectID,
-			BranchName:     c.BranchName,
-			CommitHash:     c.CommitHash,
-			Subject:        c.Subject,
-			AuthorName:     c.AuthorName,
-			AuthorEmail:    c.AuthorEmail,
-			AuthoredAt:     c.AuthoredAt,
-			DiffContent:    c.DiffContent,
-			LinesTotal:     totalLines,
-			CharsTotal:     totalChars,
-			LinesFromAgent: matchedLines,
-			CharsFromAgent: matchedChars,
+			ID:              c.ID,
+			ProjectID:       c.ProjectID,
+			BranchName:      c.BranchName,
+			CommitHash:      c.CommitHash,
+			Subject:         c.Subject,
+			AuthorName:      c.AuthorName,
+			AuthorEmail:     c.AuthorEmail,
+			AuthoredAt:      c.AuthoredAt,
+			DiffContent:     cleanDiff,
+			LinesTotal:      totalLines,
+			CharsTotal:      totalChars,
+			LinesFromAgent:  matchedLines,
+			CharsFromAgent:  matchedChars,
+			CoverageVersion: currentCommitCoverageVersion,
 		})
 
 		if len(contribs) == 0 {

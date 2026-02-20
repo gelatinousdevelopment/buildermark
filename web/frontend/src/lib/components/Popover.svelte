@@ -6,11 +6,12 @@
 	interface Props {
 		position?: Position;
 		width?: string;
+		padding?: string;
 		children: Snippet;
 		popover: Snippet;
 	}
 
-	let { position = 'leading', width, children, popover }: Props = $props();
+	let { position = 'leading', width, padding = '1rem', children, popover }: Props = $props();
 
 	let visible = $state(false);
 	let wrapperEl: HTMLDivElement | undefined = $state();
@@ -183,6 +184,7 @@
 			style:width
 			style:max-height={maxHeight}
 			style:transform={transformStyle}
+			style:padding
 			bind:this={popoverEl}
 		>
 			{@render popover()}

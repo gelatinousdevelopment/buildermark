@@ -126,6 +126,12 @@ func TestGetConversation(t *testing.T) {
 	if data["id"] != "conv-1" {
 		t.Errorf("id = %v, want %q", data["id"], "conv-1")
 	}
+	if got := int(data["startedAt"].(float64)); got != 1000 {
+		t.Errorf("startedAt = %d, want %d", got, 1000)
+	}
+	if got := int(data["endedAt"].(float64)); got != 2000 {
+		t.Errorf("endedAt = %d, want %d", got, 2000)
+	}
 
 	messagesData, ok := data["messages"].([]any)
 	if !ok {

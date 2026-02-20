@@ -1,0 +1,1 @@
+ALTER TABLE commits ADD COLUMN coverage_version INTEGER NOT NULL DEFAULT 0;

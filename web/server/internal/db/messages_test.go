@@ -172,12 +172,17 @@ func TestEnsureConversation(t *testing.T) {
 
 	// Verify conversation exists.
 	var agent string
-	err = db.QueryRow("SELECT agent FROM conversations WHERE id = ?", "conv-1").Scan(&agent)
+	var startedAt int64
+	var endedAt int64
+	err = db.QueryRow("SELECT agent, started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&agent, &startedAt, &endedAt)
 	if err != nil {
 		t.Fatalf("query conversation: %v", err)
 	}
 	if agent != "claude" {
 		t.Errorf("agent = %q, want %q", agent, "claude")
+	}
+	if startedAt != 0 || endedAt != 0 {
+		t.Errorf("expected started_at/ended_at defaults to 0, got %d/%d", startedAt, endedAt)
 	}
 }
 
@@ -252,6 +257,19 @@ func TestInsertMessages(t *testing.T) {
 	}
 	if content != "hello" {
 		t.Errorf("content = %q, want %q", content, "hello")
+	}
+
+	var startedAt int64
+	var endedAt int64
+	err = db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt)
+	if err != nil {
+		t.Fatalf("query conversation bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	if endedAt != 3000 {
+		t.Errorf("ended_at = %d, want 3000", endedAt)
 	}
 }
 
@@ -461,6 +479,44 @@ func TestInsertMessagesBatchDeduplication(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("expected 1 message after batch dedup, got %d", count)
+	}
+}
+
+func TestInsertMessagesUpdatesConversationBounds(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "middle", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages initial: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "first", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "last", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages second: %v", err)
+	}
+
+	var startedAt int64
+	var endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query conversation bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	if endedAt != 3000 {
+		t.Errorf("ended_at = %d, want 3000", endedAt)
 	}
 }
 

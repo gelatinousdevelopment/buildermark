@@ -8,6 +8,7 @@
 		AgentCoverageSegment
 	} from '$lib/types';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
+	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import { formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
 
 	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
@@ -223,13 +224,22 @@
 	{/if}
 
 	{#if showCoverageBar}
-		<div class="summary-bar">
-			<AgentPercentageBar
-				agentPercent={data.summary.linePercent}
-				segments={toBarSegments(data.summary.agentSegments)}
-				showManual={true}
-			/>
-		</div>
+		{#if data.dailySummary && data.dailySummary.length > 0}
+			<div class="summary-chart">
+				<DailyCommitsChart
+					dailySummary={data.dailySummary}
+					branch={selectedBranch || data.branch || ''}
+				/>
+			</div>
+		{:else}
+			<div class="summary-bar">
+				<AgentPercentageBar
+					agentPercent={data.summary.linePercent}
+					segments={toBarSegments(data.summary.agentSegments)}
+					showManual={true}
+				/>
+			</div>
+		{/if}
 	{/if}
 
 	<table class="data" class:compact>
@@ -429,6 +439,10 @@
 		border-radius: 4px;
 		font-size: 0.9rem;
 		text-align: center;
+	}
+
+	.summary-chart {
+		margin: 0 1rem 1rem 1rem;
 	}
 
 	.summary-bar {

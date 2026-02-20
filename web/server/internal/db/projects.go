@@ -147,14 +147,12 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 		limit = total
 	}
 
-	// Fetch conversations for this project ordered by recency.
+	// Fetch conversations for this project ordered by start time.
 	convRows, err := db.QueryContext(ctx,
-		`SELECT c.id, c.agent, c.title, COALESCE(MAX(m.timestamp), 0) AS last_message_timestamp
-		 FROM conversations c
-		 LEFT JOIN messages m ON m.conversation_id = c.id
-		 WHERE c.project_id = ?
-		 GROUP BY c.id, c.agent, c.title
-		 ORDER BY last_message_timestamp DESC, c.id DESC
+		`SELECT id, agent, title, started_at
+		 FROM conversations
+		 WHERE project_id = ?
+		 ORDER BY started_at DESC, id DESC
 		 LIMIT ? OFFSET ?`,
 		projectID, limit, offset,
 	)

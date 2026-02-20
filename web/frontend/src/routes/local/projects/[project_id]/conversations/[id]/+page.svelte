@@ -32,6 +32,8 @@
 	let expandedMessages = new SvelteSet<string>();
 	let expandedLogGroups = new SvelteSet<string>();
 	let selectedMessage: MessageRead | null = $state(null);
+	let isWideMode = $state(false);
+	let wideModeQuery: MediaQueryList | null = null;
 
 	function selectMessage(message: MessageRead) {
 		selectedMessage = selectedMessage?.id === message.id ? null : message;
@@ -40,6 +42,24 @@
 	function clearSelectionOnLeftBackground(e: MouseEvent) {
 		if (e.target !== e.currentTarget) return;
 		selectedMessage = null;
+	}
+
+	function updateWideMode(query: MediaQueryList | MediaQueryListEvent) {
+		isWideMode = query.matches;
+	}
+
+	function activateMessage(message: MessageRead, expanded: boolean) {
+		if (!isWideMode && !expanded) {
+			toggleExpanded(message.id);
+		}
+		selectMessage(message);
+	}
+
+	function handleMessageActivateKeydown(e: KeyboardEvent, message: MessageRead, expanded: boolean) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			activateMessage(message, expanded);
+		}
 	}
 
 	function toggleExpanded(messageId: string) {
@@ -162,6 +182,9 @@
 
 	onMount(async () => {
 		layoutStore.fixedHeight = true;
+		wideModeQuery = window.matchMedia('(min-width: 1024px)');
+		updateWideMode(wideModeQuery);
+		wideModeQuery.addEventListener('change', updateWideMode);
 		try {
 			const id = page.params.id;
 			if (!id) throw new Error('Missing conversation ID');
@@ -174,6 +197,7 @@
 	});
 
 	onDestroy(() => {
+		wideModeQuery?.removeEventListener('change', updateWideMode);
 		layoutStore.fixedHeight = false;
 	});
 </script>
@@ -209,25 +233,19 @@
 							<UserPromptMessageCard message={item.message} />
 						</div>
 					{:else if item.kind === 'message' && isDiffMessage(item.message)}
-						{@const diffExpanded = expandedMessages.has(item.message.id)}
+						{@const messageSelected = selectedMessage?.id === item.message.id}
+						{@const diffExpanded = isWideMode ? messageSelected : expandedMessages.has(item.message.id)}
+						{@const messageInteractive = isWideMode || !diffExpanded}
 						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 						<div
 							class="message inline-diff-message"
+							class:message-selected={messageSelected}
 							class:message-collapsed={!diffExpanded}
-							role={!diffExpanded ? 'button' : undefined}
-							tabindex={!diffExpanded ? 0 : undefined}
-							onclick={() => {
-								if (!diffExpanded) toggleExpanded(item.message.id);
-								selectMessage(item.message);
-							}}
-							onkeydown={!diffExpanded
-								? (e: KeyboardEvent) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.preventDefault();
-											toggleExpanded(item.message.id);
-											selectMessage(item.message);
-										}
-									}
+							role={messageInteractive ? 'button' : undefined}
+							tabindex={messageInteractive ? 0 : undefined}
+							onclick={() => activateMessage(item.message, diffExpanded)}
+							onkeydown={messageInteractive
+								? (e: KeyboardEvent) => handleMessageActivateKeydown(e, item.message, diffExpanded)
 								: undefined}
 						>
 							<DiffMessageCard
@@ -237,7 +255,7 @@
 								content={item.message.content}
 								expanded={diffExpanded}
 								subtleAgentTag={true}
-								onToggle={diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
+								onToggle={!isWideMode && diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
 							/>
 						</div>
 					{:else if item.kind === 'rating'}
@@ -267,6 +285,8 @@
 								agent={conversation.agent}
 								expanded={groupExpanded}
 								subtleAgentTag={true}
+								wideMode={isWideMode}
+								selectedMessageId={selectedMessage?.id ?? null}
 								{expandedMessages}
 								onToggleMessage={toggleExpanded}
 								onSelectMessage={selectMessage}
@@ -411,6 +431,16 @@
 	.message-collapsed {
 		background: #fafafa;
 		cursor: pointer;
+	}
+
+	.message-selected {
+		border-color: #84b8ff;
+		background: #eff6ff;
+	}
+
+	.message-selected:hover {
+		border-color: #5a9cff;
+		background: #e4f0ff;
 	}
 
 	.message-collapsed:hover {

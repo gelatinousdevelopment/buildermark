@@ -92,8 +92,24 @@ export interface ProjectCommitPageResponse {
 	currentEmail: string;
 	project: Project;
 	summary: ProjectCommitSummary;
+	dailySummary?: DailyCommitSummary[];
 	pagination: ProjectCommitPagination;
 	commits: ProjectCommitCoverage[];
+}
+
+export interface DailyCommitSummary {
+	date: string;
+	linesTotal: number;
+	linesFromAgent: number;
+	linePercent: number;
+	agentSegments?: AgentCoverageSegment[];
+	commits: DailyCommitRef[];
+}
+
+export interface DailyCommitRef {
+	commitHash: string;
+	subject: string;
+	projectId: string;
 }
 
 export interface ProjectCommitPagination {

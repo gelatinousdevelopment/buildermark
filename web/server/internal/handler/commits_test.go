@@ -493,6 +493,264 @@ func TestProjectCommitsPageAlwaysImportsLatestCommits(t *testing.T) {
 	}
 }
 
+func TestProjectCommitsPageAutoHealsStaleCoverage(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	appPath := filepath.Join(repo, "app.txt")
+	mustWriteFile(t, appPath, "start\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-heal", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	agentTs := mustUnixMilli(t, "2026-01-01T00:59:00Z")
+	agentDiff := "```diff\n" +
+		"diff --git a/app.txt b/app.txt\n" +
+		"--- a/app.txt\n" +
+		"+++ b/app.txt\n" +
+		"@@ -1 +1,2 @@\n" +
+		" start\n" +
+		"+hello world\n" +
+		"```"
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{{
+		Timestamp:      agentTs,
+		ProjectID:      projectID,
+		ConversationID: "conv-heal",
+		Role:           "agent",
+		Content:        agentDiff,
+		RawJSON:        `{"source":"derived_diff"}`,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	mustWriteFile(t, appPath, "start\nhello world\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "agent change")
+	agentCommitHash := strings.TrimSpace(gitRun(t, repo, nil, "rev-parse", "HEAD"))
+
+	// Prime ingestion.
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prime status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Force stale persisted coverage for the commit and remove per-agent segments.
+	if _, err := s.DB.ExecContext(ctx,
+		`UPDATE commits
+		 SET lines_from_agent = 0, chars_from_agent = 0, coverage_version = 0
+		 WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
+		projectID, "main", agentCommitHash,
+	); err != nil {
+		t.Fatalf("force stale commit coverage: %v", err)
+	}
+	if _, err := s.DB.ExecContext(ctx,
+		`DELETE FROM commit_agent_coverage
+		 WHERE commit_id = (SELECT id FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?)`,
+		projectID, "main", agentCommitHash,
+	); err != nil {
+		t.Fatalf("delete stale commit agent coverage: %v", err)
+	}
+
+	// Detail remains the source of truth.
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits/"+agentCommitHash+"?branch=main", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detail status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode detail response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("detail ok=false, error=%v", env.Error)
+	}
+	detail := env.Data.(map[string]any)
+	detailCommit := detail["commit"].(map[string]any)
+	expectedLinesFromAgent := int(detailCommit["linesFromAgent"].(float64))
+	if expectedLinesFromAgent <= 0 {
+		t.Fatalf("detail linesFromAgent = %d, want > 0", expectedLinesFromAgent)
+	}
+
+	// List endpoint should auto-heal stale persisted coverage.
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1&branch=main", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	env = jsonEnvelope{}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("list ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	commits := data["commits"].([]any)
+	found := false
+	for _, raw := range commits {
+		row := raw.(map[string]any)
+		if row["commitHash"].(string) != agentCommitHash {
+			continue
+		}
+		found = true
+		if got := int(row["linesFromAgent"].(float64)); got != expectedLinesFromAgent {
+			t.Fatalf("list linesFromAgent = %d, want %d", got, expectedLinesFromAgent)
+		}
+		break
+	}
+	if !found {
+		t.Fatalf("did not find commit %s in list response", agentCommitHash)
+	}
+
+	var coverageVersion int
+	err = s.DB.QueryRowContext(ctx,
+		`SELECT coverage_version FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
+		projectID, "main", agentCommitHash,
+	).Scan(&coverageVersion)
+	if err != nil {
+		t.Fatalf("query coverage_version: %v", err)
+	}
+	if coverageVersion != currentCommitCoverageVersion {
+		t.Fatalf("coverage_version = %d, want %d", coverageVersion, currentCommitCoverageVersion)
+	}
+
+	var agentSegCount int
+	err = s.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*)
+		 FROM commit_agent_coverage
+		 WHERE commit_id = (SELECT id FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?)`,
+		projectID, "main", agentCommitHash,
+	).Scan(&agentSegCount)
+	if err != nil {
+		t.Fatalf("count commit_agent_coverage: %v", err)
+	}
+	if agentSegCount < 1 {
+		t.Fatalf("commit_agent_coverage rows = %d, want >= 1", agentSegCount)
+	}
+}
+
+func TestGetProjectCommit_RecoversWhenStoredDiffMissing(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	appPath := filepath.Join(repo, "app.txt")
+	mustWriteFile(t, appPath, "start\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-recover", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	agentTs := mustUnixMilli(t, "2026-01-01T00:59:00Z")
+	agentDiff := "```diff\n" +
+		"diff --git a/app.txt b/app.txt\n" +
+		"--- a/app.txt\n" +
+		"+++ b/app.txt\n" +
+		"@@ -1 +1,2 @@\n" +
+		" start\n" +
+		"+hello world\n" +
+		"```"
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{{
+		Timestamp:      agentTs,
+		ProjectID:      projectID,
+		ConversationID: "conv-recover",
+		Role:           "agent",
+		Content:        agentDiff,
+		RawJSON:        `{"source":"derived_diff"}`,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	mustWriteFile(t, appPath, "start\nhello world\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "agent change")
+	agentCommitHash := strings.TrimSpace(gitRun(t, repo, nil, "rev-parse", "HEAD"))
+
+	// Prime ingestion into DB.
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prime status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Simulate bad persisted state: coverage exists but stored diff is empty.
+	if _, err := s.DB.ExecContext(ctx,
+		`UPDATE commits
+		 SET diff_content = '', coverage_version = ?
+		 WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
+		currentCommitCoverageVersion, projectID, "main", agentCommitHash,
+	); err != nil {
+		t.Fatalf("clear diff_content: %v", err)
+	}
+
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits/"+agentCommitHash+"?branch=main", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detail status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode detail response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("detail ok=false, error=%v", env.Error)
+	}
+	data := env.Data.(map[string]any)
+	commit := data["commit"].(map[string]any)
+	if got := int(commit["linesTotal"].(float64)); got <= 0 {
+		t.Fatalf("detail linesTotal = %d, want > 0", got)
+	}
+	if got := int(commit["linesFromAgent"].(float64)); got <= 0 {
+		t.Fatalf("detail linesFromAgent = %d, want > 0", got)
+	}
+	if got := len(data["files"].([]any)); got <= 0 {
+		t.Fatalf("detail files = %d, want > 0", got)
+	}
+	if got := len(data["messages"].([]any)); got <= 0 {
+		t.Fatalf("detail messages = %d, want > 0", got)
+	}
+}
+
 func TestListProjectCommitsIgnoresConfiguredDiffPaths(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
@@ -1021,6 +1279,133 @@ func TestParseUnifiedDiffTokens_IgnoresPunctuationOnlyForAttribution(t *testing.
 	}
 	if !tokens[2].Attributable || !tokens[3].Attributable {
 		t.Fatalf("identifier tokens should be attributable")
+	}
+}
+
+func TestBuildDailySummary(t *testing.T) {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Create commits on today, yesterday, and 10 days ago.
+	commits := []projectCommitCoverage{
+		{
+			ProjectID:        "p1",
+			CommitHash:       "aaa",
+			Subject:          "first today",
+			AuthoredAtUnixMs: today.Add(2 * time.Hour).UnixMilli(),
+			LinesTotal:       10,
+			LinesFromAgent:   6,
+			AgentSegments: []agentCoverageSegment{
+				{Agent: "claude", LinesFromAgent: 4},
+				{Agent: "codex", LinesFromAgent: 2},
+			},
+		},
+		{
+			ProjectID:        "p1",
+			CommitHash:       "bbb",
+			Subject:          "second today",
+			AuthoredAtUnixMs: today.Add(5 * time.Hour).UnixMilli(),
+			LinesTotal:       20,
+			LinesFromAgent:   10,
+			AgentSegments: []agentCoverageSegment{
+				{Agent: "claude", LinesFromAgent: 10},
+			},
+		},
+		{
+			ProjectID:        "p1",
+			CommitHash:       "ccc",
+			Subject:          "yesterday",
+			AuthoredAtUnixMs: today.Add(-20 * time.Hour).UnixMilli(),
+			LinesTotal:       5,
+			LinesFromAgent:   3,
+			AgentSegments: []agentCoverageSegment{
+				{Agent: "codex", LinesFromAgent: 3},
+			},
+		},
+		{
+			ProjectID:        "p1",
+			CommitHash:       "ddd",
+			Subject:          "ten days ago",
+			AuthoredAtUnixMs: today.AddDate(0, 0, -10).Add(3 * time.Hour).UnixMilli(),
+			LinesTotal:       8,
+			LinesFromAgent:   0,
+		},
+	}
+
+	result := buildDailySummary(commits, 28)
+
+	// Should return exactly 28 entries.
+	if len(result) != 28 {
+		t.Fatalf("len = %d, want 28", len(result))
+	}
+
+	// Last entry should be today's date.
+	todayStr := today.Format("2006-01-02")
+	if result[27].Date != todayStr {
+		t.Fatalf("last date = %q, want %q", result[27].Date, todayStr)
+	}
+
+	// First entry should be 27 days ago.
+	firstDate := today.AddDate(0, 0, -27).Format("2006-01-02")
+	if result[0].Date != firstDate {
+		t.Fatalf("first date = %q, want %q", result[0].Date, firstDate)
+	}
+
+	// Today's entry (index 27) should aggregate both commits.
+	todayEntry := result[27]
+	if todayEntry.LinesTotal != 30 {
+		t.Fatalf("today linesTotal = %d, want 30", todayEntry.LinesTotal)
+	}
+	if todayEntry.LinesFromAgent != 16 {
+		t.Fatalf("today linesFromAgent = %d, want 16", todayEntry.LinesFromAgent)
+	}
+	if len(todayEntry.Commits) != 2 {
+		t.Fatalf("today commits = %d, want 2", len(todayEntry.Commits))
+	}
+	// Agent segments should be aggregated: claude=14, codex=2.
+	if len(todayEntry.AgentSegments) != 2 {
+		t.Fatalf("today agentSegments = %d, want 2", len(todayEntry.AgentSegments))
+	}
+	agentMap := make(map[string]int)
+	for _, seg := range todayEntry.AgentSegments {
+		agentMap[seg.Agent] = seg.LinesFromAgent
+	}
+	if agentMap["claude"] != 14 {
+		t.Fatalf("today claude lines = %d, want 14", agentMap["claude"])
+	}
+	if agentMap["codex"] != 2 {
+		t.Fatalf("today codex lines = %d, want 2", agentMap["codex"])
+	}
+
+	// Yesterday's entry (index 26).
+	yesterdayEntry := result[26]
+	if yesterdayEntry.LinesTotal != 5 {
+		t.Fatalf("yesterday linesTotal = %d, want 5", yesterdayEntry.LinesTotal)
+	}
+	if len(yesterdayEntry.Commits) != 1 {
+		t.Fatalf("yesterday commits = %d, want 1", len(yesterdayEntry.Commits))
+	}
+
+	// Ten days ago entry (index 17).
+	tenDaysAgoEntry := result[17]
+	expectedDate := today.AddDate(0, 0, -10).Format("2006-01-02")
+	if tenDaysAgoEntry.Date != expectedDate {
+		t.Fatalf("ten days ago date = %q, want %q", tenDaysAgoEntry.Date, expectedDate)
+	}
+	if tenDaysAgoEntry.LinesTotal != 8 {
+		t.Fatalf("ten days ago linesTotal = %d, want 8", tenDaysAgoEntry.LinesTotal)
+	}
+	if tenDaysAgoEntry.LinesFromAgent != 0 {
+		t.Fatalf("ten days ago linesFromAgent = %d, want 0", tenDaysAgoEntry.LinesFromAgent)
+	}
+
+	// Empty days should have zero values and empty commits slice.
+	emptyEntry := result[0]
+	if emptyEntry.LinesTotal != 0 {
+		t.Fatalf("empty day linesTotal = %d, want 0", emptyEntry.LinesTotal)
+	}
+	if len(emptyEntry.Commits) != 0 {
+		t.Fatalf("empty day commits = %d, want 0", len(emptyEntry.Commits))
 	}
 }
 

@@ -22,10 +22,11 @@ import (
 )
 
 const (
-	workingCopyCommitHash   = "working-copy"
-	commitWindowLookaheadMs = int64(5 * 60 * 1000)
-	maxCommitsPerProject    = 200
-	commitsPageSize         = 20
+	workingCopyCommitHash        = "working-copy"
+	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
+	maxCommitsPerProject         = 200
+	commitsPageSize              = 20
+	currentCommitCoverageVersion = 1
 )
 
 var defaultMessageWindowMs = func() int64 {
@@ -100,8 +101,24 @@ type projectCommitPageResponse struct {
 	CurrentEmail string                  `json:"currentEmail"`
 	Project      db.Project              `json:"project"`
 	Summary      projectCommitSummary    `json:"summary"`
+	DailySummary []dailyCommitSummary    `json:"dailySummary"`
 	Pagination   projectCommitPagination `json:"pagination"`
 	Commits      []projectCommitCoverage `json:"commits"`
+}
+
+type dailyCommitSummary struct {
+	Date           string                 `json:"date"`
+	LinesTotal     int                    `json:"linesTotal"`
+	LinesFromAgent int                    `json:"linesFromAgent"`
+	LinePercent    float64                `json:"linePercent"`
+	AgentSegments  []agentCoverageSegment `json:"agentSegments,omitempty"`
+	Commits        []dailyCommitRef       `json:"commits"`
+}
+
+type dailyCommitRef struct {
+	CommitHash string `json:"commitHash"`
+	Subject    string `json:"subject"`
+	ProjectID  string `json:"projectId"`
 }
 
 type projectCommitPagination struct {
@@ -385,8 +402,39 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			TimestampUnix: dbCommit.AuthoredAt,
 		}
 		commitDiff = dbCommit.DiffContent
-		// Use stored diff tokens when commit is already ingested.
+		// Prefer stored unified diff tokens when commit is already ingested.
 		tokenDiff = commitDiff
+		// If stored diff content is missing, recover from git so detail view
+		// and recomputed attribution remain consistent with list coverage.
+		if strings.TrimSpace(commitDiff) == "" {
+			rawDiff, gitErr := runGit(
+				r.Context(),
+				repoProject.Path,
+				"show",
+				"--pretty=format:",
+				"-M",
+				"-w",
+				"--ignore-blank-lines",
+				commit.Hash,
+			)
+			if gitErr == nil {
+				commitDiff = stripBinaryDiffs(rawDiff)
+			}
+			tokenDiff, err = runGit(
+				r.Context(),
+				repoProject.Path,
+				"show",
+				"--pretty=format:",
+				"--unified=0",
+				"-M",
+				"-w",
+				"--ignore-blank-lines",
+				commit.Hash,
+			)
+			if err != nil {
+				tokenDiff = commitDiff
+			}
+		}
 	} else {
 		// Fallback to git for commits not yet ingested.
 		commitIdx := -1
@@ -542,6 +590,19 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
 		log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
 	}
+	staleCoverage, err := db.HasStaleCommitCoverage(r.Context(), s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
+	if err != nil {
+		log.Printf("error checking stale coverage for %s: %v", repoProject.Path, err)
+		writeError(w, http.StatusInternalServerError, "failed to check commit coverage")
+		return
+	}
+	if staleCoverage {
+		if _, err := recomputeCommitCoverageForProject(r.Context(), s.DB, repoProject, group, branch); err != nil {
+			log.Printf("error auto-healing stale coverage for %s: %v", repoProject.Path, err)
+			writeError(w, http.StatusInternalServerError, "failed to recompute commit coverage")
+			return
+		}
+	}
 
 	// Read commits from database.
 	total, err := db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID, branch)
@@ -620,6 +681,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		CurrentEmail: identity.Email,
 		Project:      *project,
 		Summary:      summarizeCommitCoverage(allCoverage),
+		DailySummary: buildDailySummary(allCoverage, 28),
 		Pagination: projectCommitPagination{
 			Page:       page,
 			PageSize:   commitsPageSize,
@@ -1561,6 +1623,73 @@ func summarizeCommitCoverage(commits []projectCommitCoverage) projectCommitSumma
 		}
 	}
 	return s
+}
+
+// buildDailySummary buckets commits by UTC date and produces exactly `days`
+// entries (today - (days-1) through today), newest last.
+func buildDailySummary(allCoverage []projectCommitCoverage, days int) []dailyCommitSummary {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Build date-keyed buckets from commits.
+	type bucket struct {
+		linesTotal     int
+		linesFromAgent int
+		agentTotals    map[string]int // agent -> lines
+		commits        []dailyCommitRef
+	}
+	buckets := make(map[string]*bucket)
+	for _, c := range allCoverage {
+		date := time.UnixMilli(c.AuthoredAtUnixMs).UTC().Format("2006-01-02")
+		b := buckets[date]
+		if b == nil {
+			b = &bucket{agentTotals: make(map[string]int)}
+			buckets[date] = b
+		}
+		b.linesTotal += c.LinesTotal
+		b.linesFromAgent += c.LinesFromAgent
+		for _, seg := range c.AgentSegments {
+			b.agentTotals[seg.Agent] += seg.LinesFromAgent
+		}
+		b.commits = append(b.commits, dailyCommitRef{
+			CommitHash: c.CommitHash,
+			Subject:    c.Subject,
+			ProjectID:  c.ProjectID,
+		})
+	}
+
+	out := make([]dailyCommitSummary, days)
+	for i := 0; i < days; i++ {
+		d := today.AddDate(0, 0, -(days - 1 - i))
+		dateStr := d.Format("2006-01-02")
+		ds := dailyCommitSummary{
+			Date:    dateStr,
+			Commits: []dailyCommitRef{},
+		}
+		if b, ok := buckets[dateStr]; ok {
+			ds.LinesTotal = b.linesTotal
+			ds.LinesFromAgent = b.linesFromAgent
+			ds.LinePercent = percentage(b.linesFromAgent, b.linesTotal)
+			ds.Commits = b.commits
+
+			if len(b.agentTotals) > 0 {
+				agents := make([]string, 0, len(b.agentTotals))
+				for a := range b.agentTotals {
+					agents = append(agents, a)
+				}
+				sort.Strings(agents)
+				for _, a := range agents {
+					ds.AgentSegments = append(ds.AgentSegments, agentCoverageSegment{
+						Agent:          a,
+						LinesFromAgent: b.agentTotals[a],
+						LinePercent:    percentage(b.agentTotals[a], b.linesTotal),
+					})
+				}
+			}
+		}
+		out[i] = ds
+	}
+	return out
 }
 
 // agentSegmentsFromContribs builds per-agent segments from contribution messages.

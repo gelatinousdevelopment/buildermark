@@ -16,6 +16,8 @@
 		messages: MessageRead[];
 		agent?: string;
 		expanded: boolean;
+		wideMode?: boolean;
+		selectedMessageId?: string | null;
 		expandedMessages: SvelteSet<string>;
 		onToggleMessage: (id: string) => void;
 		onSelectMessage?: (message: MessageRead) => void;
@@ -29,6 +31,8 @@
 		messages,
 		agent = 'agent',
 		expanded,
+		wideMode = false,
+		selectedMessageId = null,
 		expandedMessages,
 		onToggleMessage,
 		onSelectMessage,
@@ -43,16 +47,15 @@
 		onSelectMessage?.(message);
 	}
 
-	function handleKeydown(e: KeyboardEvent, message: MessageRead) {
+	function handleKeydown(e: KeyboardEvent, message: MessageRead, expanded: boolean) {
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
-			onToggleMessage(message.id);
-			selectMessage(message);
+			handleLogItemClick(message, expanded);
 		}
 	}
 
 	function handleLogItemClick(message: MessageRead, expanded: boolean) {
-		if (!expanded) onToggleMessage(message.id);
+		if (!wideMode && !expanded) onToggleMessage(message.id);
 		selectMessage(message);
 	}
 </script>
@@ -98,17 +101,20 @@
 		onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
 	>
 		{#each messages as logMessage (logMessage.id)}
-			{@const logExpanded = expandedMessages.has(logMessage.id)}
+			{@const logSelected = selectedMessageId === logMessage.id}
+			{@const logExpanded = wideMode ? logSelected : expandedMessages.has(logMessage.id)}
+			{@const logInteractive = wideMode || !logExpanded}
 			{#if isDiffMessage(logMessage)}
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
 					class="log-item"
+					class:log-item-selected={logSelected}
 					class:log-item-collapsed={!logExpanded}
-					role={!logExpanded ? 'button' : undefined}
-					tabindex={!logExpanded ? 0 : undefined}
+					role={logInteractive ? 'button' : undefined}
+					tabindex={logInteractive ? 0 : undefined}
 					onclick={() => handleLogItemClick(logMessage, logExpanded)}
-					onkeydown={!logExpanded
-						? (e: KeyboardEvent) => handleKeydown(e, logMessage)
+					onkeydown={logInteractive
+						? (e: KeyboardEvent) => handleKeydown(e, logMessage, logExpanded)
 						: undefined}
 				>
 					<DiffMessageCard
@@ -118,25 +124,26 @@
 						content={logMessage.content}
 						expanded={logExpanded}
 						{subtleAgentTag}
-						onToggle={logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
+						onToggle={!wideMode && logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
 					/>
 				</div>
 			{:else}
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
 					class="log-item"
+					class:log-item-selected={logSelected}
 					class:log-item-collapsed={!logExpanded}
-					role={!logExpanded ? 'button' : undefined}
-					tabindex={!logExpanded ? 0 : undefined}
+					role={logInteractive ? 'button' : undefined}
+					tabindex={logInteractive ? 0 : undefined}
 					onclick={() => handleLogItemClick(logMessage, logExpanded)}
-					onkeydown={!logExpanded
-						? (e: KeyboardEvent) => handleKeydown(e, logMessage)
+					onkeydown={logInteractive
+						? (e: KeyboardEvent) => handleKeydown(e, logMessage, logExpanded)
 						: undefined}
 				>
 					<LogMessageCard
 						message={logMessage}
 						expanded={logExpanded}
-						onToggle={logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
+						onToggle={!wideMode && logExpanded ? () => onToggleMessage(logMessage.id) : undefined}
 					/>
 				</div>
 			{/if}
@@ -194,6 +201,16 @@
 		padding: 0.5rem 0.75rem;
 		background: #fafafa;
 		cursor: pointer;
+	}
+
+	.log-item-selected {
+		border-color: #84b8ff;
+		background: #eff6ff;
+	}
+
+	.log-item-selected:hover {
+		border-color: #5a9cff;
+		background: #e4f0ff;
 	}
 
 	.log-item-collapsed:hover {

@@ -116,7 +116,9 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	}
 	defer updateModelStmt.Close()
 
+	conversationIDs := make(map[string]struct{}, len(messages))
 	for _, m := range messages {
+		conversationIDs[m.ConversationID] = struct{}{}
 		if _, err := stmt.ExecContext(ctx,
 			newID(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.Model, m.Content, m.RawJSON,
 			m.ConversationID, m.Role, m.Model, m.Content, m.Timestamp, dupWindowMs,
@@ -127,6 +129,24 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 			if _, err := updateModelStmt.ExecContext(ctx, m.Model, m.ConversationID, m.Timestamp); err != nil {
 				return fmt.Errorf("update message model: %w", err)
 			}
+		}
+	}
+
+	updateConversationBoundsStmt, err := tx.PrepareContext(ctx,
+		`UPDATE conversations
+		 SET
+		     started_at = COALESCE((SELECT MIN(timestamp) FROM messages WHERE conversation_id = ?), 0),
+		     ended_at = COALESCE((SELECT MAX(timestamp) FROM messages WHERE conversation_id = ?), 0)
+		 WHERE id = ?`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare update conversation bounds: %w", err)
+	}
+	defer updateConversationBoundsStmt.Close()
+
+	for conversationID := range conversationIDs {
+		if _, err := updateConversationBoundsStmt.ExecContext(ctx, conversationID, conversationID, conversationID); err != nil {
+			return fmt.Errorf("update conversation bounds: %w", err)
 		}
 	}
 

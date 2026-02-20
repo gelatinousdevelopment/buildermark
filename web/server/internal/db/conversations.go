@@ -25,6 +25,8 @@ type Conversation struct {
 	ProjectID string `json:"projectId"`
 	Agent     string `json:"agent"`
 	Title     string `json:"title"`
+	StartedAt int64  `json:"startedAt"`
+	EndedAt   int64  `json:"endedAt"`
 }
 
 // MessageRead is a message as returned by read queries.
@@ -44,6 +46,8 @@ type ConversationDetail struct {
 	ProjectID string        `json:"projectId"`
 	Agent     string        `json:"agent"`
 	Title     string        `json:"title"`
+	StartedAt int64         `json:"startedAt"`
+	EndedAt   int64         `json:"endedAt"`
 	Messages  []MessageRead `json:"messages"`
 	Ratings   []Rating      `json:"ratings"`
 }
@@ -54,7 +58,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 		limit = 100
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title FROM conversations ORDER BY id LIMIT ?", limit)
+	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title, started_at, ended_at FROM conversations ORDER BY id LIMIT ?", limit)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -63,7 +67,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 	conversations := []Conversation{}
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title); err != nil {
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		conversations = append(conversations, c)
@@ -76,8 +80,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	resolvedID := conversationID
 	var c ConversationDetail
 	err := db.QueryRowContext(ctx,
-		"SELECT id, project_id, agent, title FROM conversations WHERE id = ?", resolvedID,
-	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title)
+		"SELECT id, project_id, agent, title, started_at, ended_at FROM conversations WHERE id = ?", resolvedID,
+	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt)
 	if err == sql.ErrNoRows {
 		aliasConversationID, found, resolveErr := ResolveConversationIDByTempID(ctx, db, conversationID)
 		if resolveErr != nil {
@@ -88,8 +92,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		}
 		resolvedID = aliasConversationID
 		err = db.QueryRowContext(ctx,
-			"SELECT id, project_id, agent, title FROM conversations WHERE id = ?", resolvedID,
-		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title)
+			"SELECT id, project_id, agent, title, started_at, ended_at FROM conversations WHERE id = ?", resolvedID,
+		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt)
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
