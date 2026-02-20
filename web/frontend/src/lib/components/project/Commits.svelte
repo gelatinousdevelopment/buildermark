@@ -30,6 +30,7 @@
 		showCoverageBar?: boolean;
 		showPagination?: boolean;
 		showLoadMore?: boolean;
+		showBranch?: boolean;
 		showColumnNames?: boolean;
 		onPageChange?: PageChangeHandler;
 		onBranchChange?: BranchChangeHandler;
@@ -51,6 +52,7 @@
 		showCoverageBar = false,
 		showPagination = false,
 		showLoadMore = false,
+		showBranch = false,
 		showColumnNames = false,
 		onPageChange,
 		onBranchChange,
@@ -234,6 +236,9 @@
 				<col class="time-col" />
 			{/if}
 			<col class="title-col" />
+			{#if showBranch}
+				<col class="branch-col" />
+			{/if}
 			{#if !compact}
 				<col class="stats-col" />
 				<col class="stats-col" />
@@ -247,6 +252,9 @@
 						<th class="time-col">Time</th>
 					{/if}
 					<th>Commit</th>
+					{#if showBranch}
+						<th class="branch-col">Branch</th>
+					{/if}
 					{#if !compact}
 						<th class="stats-col">Lines</th>
 						<th class="stats-col">Chars</th>
@@ -263,23 +271,28 @@
 							>{formatRelativeOrShortDate(c.authoredAtUnixMs)}</td
 						>
 					{/if}
-						<td class="title">
-							<div>
-								<a
-									href={resolve(
-										(selectedBranch || data?.branch || '')
-											? `/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
-											: `/local/projects/${encodeURIComponent(c.projectId)}/commits`
-									)}
-									class="link-button"
-								>
-									{c.subject || c.commitHash.slice(0, 8)}
+					<td class="title">
+						<div>
+							<a
+								href={resolve(
+									selectedBranch || data?.branch || ''
+										? `/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
+										: `/local/projects/${encodeURIComponent(c.projectId)}/commits`
+								)}
+								class="link-button"
+							>
+								{c.subject || c.commitHash.slice(0, 8)}
 							</a>
 						</div>
 						<!-- {#if !c.workingCopy}
 							<div class="commit-meta">{c.commitHash.slice(0, 12)}</div>
 						{/if} -->
 					</td>
+					{#if showBranch}
+						<td class="branch" title={selectedBranch || data?.branch || ''}
+							>{selectedBranch || data?.branch || ''}</td
+						>
+					{/if}
 					{#if !compact}
 						<td class="stats">{c.linesFromAgent} / {c.linesTotal} ({percent(c.linePercent)})</td>
 						<td class="stats"
@@ -450,6 +463,10 @@
 		width: 170px;
 	}
 
+	.branch-col {
+		width: 80px;
+	}
+
 	.bar-col {
 		width: 140px;
 	}
@@ -460,6 +477,15 @@
 
 	.compact .stats-col {
 		width: 150px;
+	}
+
+	.branch {
+		font-size: 0.85rem;
+		opacity: 0.7;
+		overflow: hidden;
+		text-align: center;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.time {
