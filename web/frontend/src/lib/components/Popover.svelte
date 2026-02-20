@@ -19,7 +19,8 @@
 	let offsetX = $state(0);
 	let offsetY = $state(0);
 	let resolvedPosition: Position = $state('leading');
-	let maxHeight = $state('none');
+	let maxHeight = $state('0px');
+	let positioned = $state(false);
 
 	/** Safe area inset (px) from viewport edges. */
 	const MARGIN = 8; // 0.5rem
@@ -106,12 +107,18 @@
 
 	$effect(() => {
 		if (!visible || !popoverEl || !wrapperEl) {
-			maxHeight = 'none';
+			maxHeight = '0px';
+			positioned = false;
 			return;
 		}
 
 		const el = popoverEl;
 		const wrapRect = wrapperEl.getBoundingClientRect();
+
+		// Lock document scroll during measurement to prevent jitter when
+		// the unconstrained popover would extend beyond the viewport.
+		const prevOverflow = document.documentElement.style.overflow;
+		document.documentElement.style.overflow = 'hidden';
 
 		// Measure natural size by temporarily removing constraints via direct DOM manipulation.
 		// This bypasses Svelte's batched updates so we get an accurate measurement.
@@ -119,6 +126,9 @@
 		void el.offsetHeight;
 		const natW = el.offsetWidth;
 		const natH = el.offsetHeight;
+
+		// Restore scroll behavior
+		document.documentElement.style.overflow = prevOverflow;
 
 		// Now compute everything mathematically — no more DOM measurement needed.
 		const opposite: Position =
@@ -137,8 +147,10 @@
 		if (result.fits) {
 			resolvedPosition = position;
 			maxHeight = `${result.mh}px`;
+			el.style.maxHeight = maxHeight;
 			offsetX = result.shift.dx;
 			offsetY = result.shift.dy;
+			positioned = true;
 			return;
 		}
 
@@ -148,8 +160,10 @@
 			if (result.fits) {
 				resolvedPosition = candidate;
 				maxHeight = `${result.mh}px`;
+				el.style.maxHeight = maxHeight;
 				offsetX = result.shift.dx;
 				offsetY = result.shift.dy;
+				positioned = true;
 				return;
 			}
 		}
@@ -160,8 +174,10 @@
 		const shift = secondaryShift(rect, position);
 		resolvedPosition = position;
 		maxHeight = `${mh}px`;
+		el.style.maxHeight = maxHeight;
 		offsetX = shift.dx;
 		offsetY = shift.dy;
+		positioned = true;
 	});
 
 	let transformStyle = $derived(
@@ -185,6 +201,7 @@
 			style:max-height={maxHeight}
 			style:transform={transformStyle}
 			style:padding
+			style:visibility={positioned ? null : 'hidden'}
 			bind:this={popoverEl}
 		>
 			{@render popover()}
