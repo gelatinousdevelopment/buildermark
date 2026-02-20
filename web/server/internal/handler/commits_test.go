@@ -653,7 +653,7 @@ func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *t
 		"c10": 1,
 	}
 
-	files := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, _, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 2 {
 		t.Fatalf("files len = %d, want 2", len(files))
 	}
@@ -764,7 +764,7 @@ func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
 	}, "\n")
 
 	_, _, _, fileAgent, normCounts := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, normCounts)
+	files, _, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, normCounts)
 
 	byPath := make(map[string]commitFileCoverage, len(files))
 	for _, f := range files {
@@ -857,7 +857,7 @@ func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 	}, "\n")
 
 	_, _, _, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, _, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -913,6 +913,89 @@ func TestAttributeCommitToMessages_DeletionMatchesDeletingAgent(t *testing.T) {
 	}
 	if contrib[0].Agent != "codex" {
 		t.Fatalf("matched agent = %q, want %q", contrib[0].Agent, "codex")
+	}
+}
+
+func TestAttributeCommitToMessages_PrefersNewerMessage(t *testing.T) {
+	// When two messages from different agents contain the same token,
+	// the newer message should be preferred for attribution.
+	commitTokens := []diffToken{
+		testToken("src/app.ts", '+', "sharedline", 10),
+	}
+	messages := []messageDiff{
+		{
+			ID:             "m-old",
+			Timestamp:      1000,
+			ConversationID: "conv-old",
+			Agent:          "codex",
+			Tokens: []diffToken{
+				testToken("src/app.ts", '+', "sharedline", 10),
+			},
+		},
+		{
+			ID:             "m-new",
+			Timestamp:      5000,
+			ConversationID: "conv-new",
+			Agent:          "claude",
+			Tokens: []diffToken{
+				testToken("src/app.ts", '+', "sharedline", 10),
+			},
+		},
+	}
+
+	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
+	if lines != 1 {
+		t.Fatalf("matched lines = %d, want 1", lines)
+	}
+	if len(contrib) != 1 {
+		t.Fatalf("contrib len = %d, want 1", len(contrib))
+	}
+	if contrib[0].ID != "m-new" {
+		t.Fatalf("matched message = %q, want %q (newer message)", contrib[0].ID, "m-new")
+	}
+	if contrib[0].Agent != "claude" {
+		t.Fatalf("matched agent = %q, want %q", contrib[0].Agent, "claude")
+	}
+}
+
+func TestAttributeCommitToMessages_FormattingPassPrefersNewerMessage(t *testing.T) {
+	// When a formatting-only match could match multiple messages,
+	// the newer one should win.
+	commitTokens := []diffToken{
+		testToken("src/app.js", '+', "constx=foo(bar,baz);", 20),
+	}
+	messages := []messageDiff{
+		{
+			ID:             "m-old",
+			Timestamp:      1000,
+			ConversationID: "conv-old",
+			Agent:          "codex",
+			Tokens: []diffToken{
+				testToken("src/app.js", '+', "constx=foo(", 11),
+				testToken("src/app.js", '+', "bar,baz);", 9),
+			},
+		},
+		{
+			ID:             "m-new",
+			Timestamp:      5000,
+			ConversationID: "conv-new",
+			Agent:          "claude",
+			Tokens: []diffToken{
+				testToken("src/app.js", '+', "constx=foo(", 11),
+				testToken("src/app.js", '+', "bar,baz);", 9),
+			},
+		},
+	}
+
+	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
+	if lines != 1 {
+		t.Fatalf("matched lines = %d, want 1", lines)
+	}
+	if len(contrib) != 1 {
+		t.Fatalf("contrib len = %d, want 1", len(contrib))
+	}
+	if contrib[0].ID != "m-new" {
+		t.Fatalf("formatting pass matched message = %q, want %q (newer message)", contrib[0].ID, "m-new")
 	}
 }
 
@@ -1044,5 +1127,141 @@ func TestListProjectCommitsForProject_ByBranch(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("feature branch response missing feature commit")
+	}
+}
+
+func TestSummarizeDiffFiles_SmallDiffFullMatchAttributed(t *testing.T) {
+	// A 5-line diff where all 5 norms match agent output should be attributed.
+	diffText := strings.Join([]string{
+		"diff --git a/small.txt b/small.txt",
+		"--- a/small.txt",
+		"+++ b/small.txt",
+		"@@ -0,0 +1,5 @@",
+		"+alpha",
+		"+beta",
+		"+gamma",
+		"+delta",
+		"+epsilon",
+		"",
+	}, "\n")
+
+	commitTokens := []diffToken{
+		testToken("small.txt", '+', "alpha", 5),
+		testToken("small.txt", '+', "beta", 4),
+		testToken("small.txt", '+', "gamma", 5),
+		testToken("small.txt", '+', "delta", 5),
+		testToken("small.txt", '+', "epsilon", 7),
+	}
+
+	// No exact file match — fileAgent is empty.
+	fileAgent := map[string]commitFileCoverage{}
+
+	// All norms available in the pool (agent produced them).
+	remainingNorms := map[string]int{
+		"alpha":   1,
+		"beta":    1,
+		"gamma":   1,
+		"delta":   1,
+		"epsilon": 1,
+	}
+
+	files, fbLines, fbChars := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	if len(files) != 1 {
+		t.Fatalf("files len = %d, want 1", len(files))
+	}
+	f := files[0]
+	if !f.CopiedFromAgent {
+		t.Fatalf("CopiedFromAgent = false, want true")
+	}
+	if f.LinesFromAgent != 5 {
+		t.Fatalf("LinesFromAgent = %d, want 5", f.LinesFromAgent)
+	}
+	if f.LinePercent != 100 {
+		t.Fatalf("LinePercent = %.1f, want 100", f.LinePercent)
+	}
+	if fbLines != 5 {
+		t.Fatalf("fallback lines = %d, want 5", fbLines)
+	}
+	if fbChars != 26 {
+		t.Fatalf("fallback chars = %d, want 26", fbChars)
+	}
+}
+
+func TestSummarizeDiffFiles_SingleLineDiffNotAttributed(t *testing.T) {
+	// A single-line diff should NOT be attributed even if the norm matches,
+	// because the minimum is 2 attributable lines.
+	diffText := strings.Join([]string{
+		"diff --git a/tiny.txt b/tiny.txt",
+		"--- a/tiny.txt",
+		"+++ b/tiny.txt",
+		"@@ -0,0 +1 @@",
+		"+onlyone",
+		"",
+	}, "\n")
+
+	commitTokens := []diffToken{
+		testToken("tiny.txt", '+', "onlyone", 7),
+	}
+
+	fileAgent := map[string]commitFileCoverage{}
+	remainingNorms := map[string]int{"onlyone": 1}
+
+	files, fbLines, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	if len(files) != 1 {
+		t.Fatalf("files len = %d, want 1", len(files))
+	}
+	f := files[0]
+	if f.CopiedFromAgent {
+		t.Fatalf("CopiedFromAgent = true, want false for single-line diff")
+	}
+	if f.LinesFromAgent != 0 {
+		t.Fatalf("LinesFromAgent = %d, want 0", f.LinesFromAgent)
+	}
+	if fbLines != 0 {
+		t.Fatalf("fallback lines = %d, want 0", fbLines)
+	}
+}
+
+func TestSummarizeDiffFiles_FallbackTotalsReturnedForLargeDiff(t *testing.T) {
+	// Verify fallback totals are returned for a standard >=10 line fallback match.
+	lines := []string{
+		"diff --git a/big.txt b/big.txt",
+		"--- a/big.txt",
+		"+++ b/big.txt",
+		"@@ -0,0 +1,10 @@",
+	}
+	norms := []string{"a1", "b2", "c3", "d4", "e5", "f6", "g7", "h8", "i9", "j10"}
+	for _, n := range norms {
+		lines = append(lines, "+"+n)
+	}
+	lines = append(lines, "")
+	diffText := strings.Join(lines, "\n")
+
+	var commitTokens []diffToken
+	remainingNorms := map[string]int{}
+	for _, n := range norms {
+		commitTokens = append(commitTokens, testToken("big.txt", '+', n, len(n)))
+		remainingNorms[n] = 1
+	}
+
+	fileAgent := map[string]commitFileCoverage{}
+	files, fbLines, fbChars := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+
+	if len(files) != 1 {
+		t.Fatalf("files len = %d, want 1", len(files))
+	}
+	f := files[0]
+	if !f.CopiedFromAgent {
+		t.Fatalf("CopiedFromAgent = false, want true")
+	}
+	if fbLines != 10 {
+		t.Fatalf("fallback lines = %d, want 10", fbLines)
+	}
+	expectedChars := 0
+	for _, n := range norms {
+		expectedChars += len(n)
+	}
+	if fbChars != expectedChars {
+		t.Fatalf("fallback chars = %d, want %d", fbChars, expectedChars)
 	}
 }

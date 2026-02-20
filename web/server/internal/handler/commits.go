@@ -452,7 +452,9 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 
 	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	totalLines, totalChars := tokenTotals(commitTokens)
-	files := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+	files, fallbackLines, fallbackChars := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+	matchedLines += fallbackLines
+	matchedChars += fallbackChars
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 		Branch:    branch,
@@ -867,7 +869,10 @@ func computeCoverageForRepo(
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
 		totalLines, totalChars := tokenTotals(commitTokens)
-		_, matchedLines, matchedChars, _, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, fallbackLines, fallbackChars := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		matchedLines += fallbackLines
+		matchedChars += fallbackChars
 
 		coverage = append(coverage, projectCommitCoverage{
 			ProjectID:        repoProject.ID,
@@ -964,6 +969,15 @@ func attributeCommitToMessages(
 	messages []messageDiff,
 	windowStart, windowEnd int64,
 ) ([]commitContributionMessage, int, int, map[string]commitFileCoverage, map[string]int) {
+	// Sort messages newest-first so that when multiple messages contain the
+	// same token, the most recent message wins attribution.
+	sort.SliceStable(messages, func(i, j int) bool {
+		if messages[i].Timestamp != messages[j].Timestamp {
+			return messages[i].Timestamp > messages[j].Timestamp
+		}
+		return messages[i].ID > messages[j].ID
+	})
+
 	matchedLines := 0
 	matchedChars := 0
 	tokenSources := make(map[string][]tokenSource)
@@ -1167,16 +1181,17 @@ func attributeCommitToMessages(
 		}
 	}
 
-	indices := make([]int, 0, len(contribByIndex))
-	for idx := range contribByIndex {
-		indices = append(indices, idx)
+	out := make([]commitContributionMessage, 0, len(contribByIndex))
+	for _, contrib := range contribByIndex {
+		out = append(out, *contrib)
 	}
-	sort.Ints(indices)
-
-	out := make([]commitContributionMessage, 0, len(indices))
-	for _, idx := range indices {
-		out = append(out, *contribByIndex[idx])
-	}
+	// Sort output by ascending timestamp for consistent chronological display.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Timestamp != out[j].Timestamp {
+			return out[i].Timestamp < out[j].Timestamp
+		}
+		return out[i].ID < out[j].ID
+	})
 	for filePath, byAgent := range fileAgentByPath {
 		fileCov := fileCoverageByPath[filePath]
 		agents := make([]string, 0, len(byAgent))
@@ -1676,7 +1691,9 @@ func computeWorkingCopyDetail(
 
 	totalLines, totalChars := tokenTotals(commitTokens)
 	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-	files := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+	files, fallbackLines, fallbackChars := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+	matchedLines += fallbackLines
+	matchedChars += fallbackChars
 
 	return projectCommitCoverage{
 		WorkingCopy:      true,
@@ -1703,7 +1720,7 @@ func summarizeDiffFiles(
 	commitTokens []diffToken,
 	fileAgent map[string]commitFileCoverage,
 	remainingNorms map[string]int,
-) []commitFileCoverage {
+) ([]commitFileCoverage, int, int) {
 	diffText = strings.ReplaceAll(diffText, "\r\n", "\n")
 	lines := strings.Split(diffText, "\n")
 
@@ -1801,6 +1818,7 @@ func summarizeDiffFiles(
 		fileNorms[path] = append(fileNorms[path], tok.Norm)
 	}
 
+	var extraLines, extraChars int
 	out := make([]commitFileCoverage, 0, len(filePaths))
 	for _, filePath := range filePaths {
 		c := coverageByPath[filePath]
@@ -1824,30 +1842,39 @@ func summarizeDiffFiles(
 				}
 			}
 			// Fallback: detect relocated/copied agent code by matching normalized
-			// lines independent of file path. Require at least 10 lines to reduce
-			// small accidental matches.
-			if !c.Moved && c.LinesFromAgent == 0 && c.LinesTotal >= 10 {
+			// lines independent of file path. For large diffs (>=10 lines) require
+			// at least 10 matched lines; for small diffs (<10 lines) require ALL
+			// attributable lines to match with a minimum of 2.
+			if !c.Moved && c.LinesFromAgent == 0 {
 				norms := fileNorms[filePath]
-				if len(norms) >= 10 {
+				minMatch := 10
+				if c.LinesTotal < 10 && len(norms) >= 2 && len(norms) < 10 {
+					minMatch = len(norms)
+				}
+				if len(norms) >= minMatch {
 					fallbackMatched := 0
+					fallbackMatchedChars := 0
 					for _, norm := range norms {
 						if remainingNorms[norm] <= 0 {
 							continue
 						}
 						remainingNorms[norm]--
 						fallbackMatched++
+						fallbackMatchedChars += utf8.RuneCountInString(norm)
 					}
-					if fallbackMatched >= 10 {
+					if fallbackMatched >= minMatch {
 						c.LinesFromAgent = fallbackMatched
 						c.LinePercent = percentage(c.LinesFromAgent, len(norms))
 						c.CopiedFromAgent = true
+						extraLines += fallbackMatched
+						extraChars += fallbackMatchedChars
 					}
 				}
 			}
 		}
 		out = append(out, c)
 	}
-	return out
+	return out, extraLines, extraChars
 }
 
 func runGit(ctx context.Context, repoPath string, args ...string) (string, error) {

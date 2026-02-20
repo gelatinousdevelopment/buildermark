@@ -320,9 +320,10 @@ func ingestCommits(
 		if len(commitTokens) > 0 && len(messages) > 0 {
 			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
-			contribs, ml, mc, _, _ := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-			matchedLines = ml
-			matchedChars = mc
+			contribs, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			_, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+			matchedLines = ml + fallbackLines
+			matchedChars = mc + fallbackChars
 
 			// Aggregate contribution messages by agent.
 			if len(contribs) > 0 {
