@@ -73,12 +73,29 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 
 // GetConversationDetail returns a conversation with all its turns and ratings.
 func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID string) (*ConversationDetail, error) {
+	resolvedID := conversationID
 	var c ConversationDetail
 	err := db.QueryRowContext(ctx,
-		"SELECT id, project_id, agent, title FROM conversations WHERE id = ?", conversationID,
+		"SELECT id, project_id, agent, title FROM conversations WHERE id = ?", resolvedID,
 	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		aliasConversationID, found, resolveErr := ResolveConversationIDByTempID(ctx, db, conversationID)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("resolve conversation alias: %w", resolveErr)
+		}
+		if !found || aliasConversationID == "" || aliasConversationID == conversationID {
+			return nil, nil
+		}
+		resolvedID = aliasConversationID
+		err = db.QueryRowContext(ctx,
+			"SELECT id, project_id, agent, title FROM conversations WHERE id = ?", resolvedID,
+		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("query conversation by alias: %w", err)
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query conversation: %w", err)
@@ -87,7 +104,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	// Fetch messages ordered by most recent first.
 	messageRows, err := db.QueryContext(ctx,
 		"SELECT id, timestamp, conversation_id, role, model, content, raw_json FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
-		conversationID,
+		resolvedID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query messages: %w", err)
@@ -108,8 +125,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 
 	// Fetch ratings.
 	ratRows, err := db.QueryContext(ctx,
-		"SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id = ? ORDER BY created_at DESC",
-		conversationID,
+		"SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id = ? ORDER BY created_at DESC",
+		resolvedID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query ratings: %w", err)
@@ -120,7 +137,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	for ratRows.Next() {
 		var r Rating
 		var createdAt string
-		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan rating: %w", err)
 		}
 		r.CreatedAt, err = parseTime(createdAt)

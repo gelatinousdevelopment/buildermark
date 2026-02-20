@@ -68,6 +68,7 @@ export interface MessageRead {
 export interface Rating {
 	id: string;
 	conversationId: string;
+	tempConversationId: string;
 	rating: number;
 	note: string;
 	analysis: string;

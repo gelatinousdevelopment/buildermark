@@ -194,7 +194,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 			args = append(args, id)
 		}
 		ratRows, err := db.QueryContext(ctx,
-			fmt.Sprintf("SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (%s) ORDER BY created_at DESC", placeholders),
+			fmt.Sprintf("SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (%s) ORDER BY created_at DESC", placeholders),
 			args...,
 		)
 		if err != nil {
@@ -205,7 +205,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 		for ratRows.Next() {
 			var r Rating
 			var createdAt string
-			if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+			if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 				return nil, fmt.Errorf("scan rating: %w", err)
 			}
 			r.CreatedAt, err = parseTime(createdAt)

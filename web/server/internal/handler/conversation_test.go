@@ -164,3 +164,48 @@ func TestGetConversationNotFound(t *testing.T) {
 		t.Error("ok = true, want false")
 	}
 }
+
+func TestGetConversationByTempConversationID(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-1", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-1", Role: "user", Content: "hello"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+	if _, err := db.InsertRatingWithTemp(ctx, s.DB, "conv-1", "temp-1", 4, "nice", ""); err != nil {
+		t.Fatalf("InsertRatingWithTemp: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/conversations/temp-1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatal("ok = false, want true")
+	}
+	data, ok := env.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("data is not an object: %T", env.Data)
+	}
+	if data["id"] != "conv-1" {
+		t.Errorf("id = %v, want %q", data["id"], "conv-1")
+	}
+}

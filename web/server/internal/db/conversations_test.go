@@ -230,6 +230,41 @@ func TestGetConversationDetailNotFound(t *testing.T) {
 	}
 }
 
+func TestGetConversationDetailByTempConversationID(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-actual", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-actual", Role: "user", Content: "hello"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+	if _, err := InsertRatingWithTemp(ctx, db, "conv-actual", "temp-123", 5, "great", ""); err != nil {
+		t.Fatalf("InsertRatingWithTemp: %v", err)
+	}
+
+	detail, err := GetConversationDetail(ctx, db, "temp-123")
+	if err != nil {
+		t.Fatalf("GetConversationDetail by temp ID: %v", err)
+	}
+	if detail == nil {
+		t.Fatal("expected non-nil conversation detail")
+	}
+	if detail.ID != "conv-actual" {
+		t.Errorf("detail.ID = %q, want %q", detail.ID, "conv-actual")
+	}
+	if len(detail.Messages) != 1 {
+		t.Fatalf("got %d messages, want 1", len(detail.Messages))
+	}
+}
+
 func TestGetConversationDetailEmptyMessagesAndRatings(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

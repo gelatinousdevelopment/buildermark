@@ -12,11 +12,12 @@ import (
 )
 
 type createRatingRequest struct {
-	ConversationID string `json:"conversationId"`
-	Rating         int    `json:"rating"`
-	Note           string `json:"note"`
-	Analysis       string `json:"analysis"`
-	Agent          string `json:"agent"`
+	ConversationID     string `json:"conversationId"`
+	TempConversationID string `json:"tempConversationId"`
+	Rating             int    `json:"rating"`
+	Note               string `json:"note"`
+	Analysis           string `json:"analysis"`
+	Agent              string `json:"agent"`
 }
 
 const asyncSessionDBTimeout = 15 * time.Second
@@ -34,8 +35,8 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ConversationID == "" {
-		writeError(w, http.StatusBadRequest, "conversationId is required")
+	if req.ConversationID == "" && req.TempConversationID == "" {
+		writeError(w, http.StatusBadRequest, "conversationId or tempConversationId is required")
 		return
 	}
 
@@ -44,12 +45,21 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tempConversationID := req.TempConversationID
+	if tempConversationID == "" {
+		tempConversationID = req.ConversationID
+	}
+	conversationID := req.ConversationID
+	if conversationID == "" {
+		conversationID = tempConversationID
+	}
+
 	agentName := req.Agent
 	if agentName == "" {
 		agentName = "claude"
 	}
 
-	rating, err := db.InsertRating(r.Context(), s.DB, req.ConversationID, req.Rating, req.Note, req.Analysis)
+	rating, err := db.InsertRatingWithTemp(r.Context(), s.DB, conversationID, tempConversationID, req.Rating, req.Note, req.Analysis)
 	if err != nil {
 		log.Printf("error inserting rating: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to create rating")
@@ -123,7 +133,7 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 		if err := db.InsertMessages(ctx, s.DB, messages); err != nil {
 			log.Printf("error inserting messages: %v", err)
 		}
-	}(rating.ID, req.ConversationID, req.Rating, req.Note, agentName)
+	}(rating.ID, conversationID, req.Rating, req.Note, agentName)
 
 	writeSuccess(w, http.StatusCreated, rating)
 }

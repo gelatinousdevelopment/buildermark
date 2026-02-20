@@ -20,6 +20,9 @@ func TestInsertRating(t *testing.T) {
 	if r.ConversationID != "conv-1" {
 		t.Errorf("ConversationID = %q, want %q", r.ConversationID, "conv-1")
 	}
+	if r.TempConversationID != "conv-1" {
+		t.Errorf("TempConversationID = %q, want %q", r.TempConversationID, "conv-1")
+	}
 	if r.Rating != 4 {
 		t.Errorf("Rating = %d, want 4", r.Rating)
 	}
@@ -28,6 +31,30 @@ func TestInsertRating(t *testing.T) {
 	}
 	if r.CreatedAt.IsZero() {
 		t.Error("expected non-zero CreatedAt")
+	}
+}
+
+func TestInsertRatingWithTemp(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	r, err := InsertRatingWithTemp(ctx, db, "conv-1", "temp-1", 4, "good work", "")
+	if err != nil {
+		t.Fatalf("InsertRatingWithTemp: %v", err)
+	}
+	if r.TempConversationID != "temp-1" {
+		t.Errorf("TempConversationID = %q, want %q", r.TempConversationID, "temp-1")
+	}
+
+	resolved, found, err := ResolveConversationIDByTempID(ctx, db, "temp-1")
+	if err != nil {
+		t.Fatalf("ResolveConversationIDByTempID: %v", err)
+	}
+	if !found {
+		t.Fatal("expected temp ID to resolve")
+	}
+	if resolved != "conv-1" {
+		t.Errorf("resolved conversation ID = %q, want %q", resolved, "conv-1")
 	}
 }
 

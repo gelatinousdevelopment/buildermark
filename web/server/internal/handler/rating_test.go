@@ -52,6 +52,13 @@ func TestCreateRating(t *testing.T) {
 			wantOK:      true,
 		},
 		{
+			name:        "valid request with temp conversation id only",
+			contentType: "application/json",
+			body:        map[string]any{"tempConversationId": "temp-1", "rating": 4},
+			wantStatus:  http.StatusCreated,
+			wantOK:      true,
+		},
+		{
 			name:        "missing conversationId",
 			contentType: "application/json",
 			body:        map[string]any{"rating": 3},

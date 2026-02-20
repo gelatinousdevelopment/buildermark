@@ -30,16 +30,18 @@ if ! [[ "$rating" =~ ^[0-5]$ ]]; then
   exit 1
 fi
 
-if [[ -n "${GEMINI_SESSION_ID:-}" ]]; then
-  cid="$GEMINI_SESSION_ID"
-else
-  cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
-fi
+temp_cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
+canonical_cid="${GEMINI_SESSION_ID:-}"
 
 analysis="${ANALYSIS:-}"
 note_esc=$(json_escape "$note")
 analysis_esc=$(json_escape "$analysis")
-payload="{\"conversationId\":\"${cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\",\"agent\":\"gemini\"}"
+payload="{\"tempConversationId\":\"${temp_cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\",\"agent\":\"gemini\""
+if [[ -n "$canonical_cid" ]]; then
+  canonical_esc=$(json_escape "$canonical_cid")
+  payload="${payload},\"conversationId\":\"${canonical_esc}\""
+fi
+payload="${payload}}"
 
 response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
   -H 'Content-Type: application/json' \
@@ -50,11 +52,11 @@ response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
 }
 
 if printf '%s' "$response" | grep -q '"ok":true'; then
-  conversation_url="${DASHBOARD%/}/local/conv/${cid}"
+  conversation_url="${DASHBOARD%/}/local/conv/${temp_cid}"
   printf 'ok\n'
   printf 'rating: %s/5\n' "$rating"
   [[ -n "$note" ]] && printf 'note: %s\n' "$note"
-  printf 'conversation: %s\n' "$cid"
+  printf 'conversation: %s\n' "$temp_cid"
   printf 'conversation_url: %s\n' "$conversation_url"
 else
   echo "error: server rejected the rating"

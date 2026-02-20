@@ -32,21 +32,22 @@ if ! [[ "$rating" =~ ^[0-5]$ ]]; then
   exit 1
 fi
 
-# --- conversation id ---
-# Use CODEX_THREAD_ID if available (set by Codex CLI for spawned processes),
-# otherwise generate a throwaway ID. The server resolves the real session
-# from the watcher when possible.
-if [[ -n "${CODEX_THREAD_ID:-}" ]]; then
-  cid="$CODEX_THREAD_ID"
-else
-  cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
-fi
+# --- conversation ids ---
+# temp_cid is always per-rating and is used in the callback URL.
+temp_cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
+# conversationId is optional canonical/agent ID when available.
+canonical_cid="${CODEX_THREAD_ID:-}"
 
 # --- build JSON payload ---
 analysis="${ANALYSIS:-}"
 note_esc=$(json_escape "$note")
 analysis_esc=$(json_escape "$analysis")
-payload="{\"conversationId\":\"${cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\",\"agent\":\"codex\"}"
+payload="{\"tempConversationId\":\"${temp_cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\",\"agent\":\"codex\""
+if [[ -n "$canonical_cid" ]]; then
+  canonical_esc=$(json_escape "$canonical_cid")
+  payload="${payload},\"conversationId\":\"${canonical_esc}\""
+fi
+payload="${payload}}"
 
 # --- submit ---
 response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
@@ -59,11 +60,11 @@ response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
 
 # --- check response ---
 if printf '%s' "$response" | grep -q '"ok":true'; then
-  conversation_url="${DASHBOARD%/}/local/conv/${cid}"
+  conversation_url="${DASHBOARD%/}/local/conv/${temp_cid}"
   printf 'ok\n'
   printf 'rating: %s/5\n' "$rating"
   [[ -n "$note" ]] && printf 'note: %s\n' "$note"
-  printf 'conversation: %s\n' "$cid"
+  printf 'conversation: %s\n' "$temp_cid"
   printf 'conversation_url: %s\n' "$conversation_url"
 else
   echo "error: server rejected the rating"

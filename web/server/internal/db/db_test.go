@@ -44,7 +44,7 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	}
 
 	// Verify ratings table exists with expected columns.
-	_, err = db.Exec("SELECT id, conversation_id, rating, note, created_at FROM ratings LIMIT 0")
+	_, err = db.Exec("SELECT id, conversation_id, temp_conversation_id, rating, note, created_at FROM ratings LIMIT 0")
 	if err != nil {
 		t.Fatalf("ratings table missing or wrong schema: %v", err)
 	}

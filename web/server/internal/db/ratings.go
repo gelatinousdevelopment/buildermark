@@ -9,12 +9,15 @@ import (
 
 // Rating represents a single conversation rating.
 type Rating struct {
-	ID             string    `json:"id"`
-	ConversationID string    `json:"conversationId"`
-	Rating         int       `json:"rating"`
-	Note           string    `json:"note"`
-	Analysis       string    `json:"analysis"`
-	CreatedAt      time.Time `json:"createdAt"`
+	ID             string `json:"id"`
+	ConversationID string `json:"conversationId"`
+	// TempConversationID is the per-rating temporary ID returned to plugins.
+	// It can be used as an alias that resolves to ConversationID.
+	TempConversationID string    `json:"tempConversationId"`
+	Rating             int       `json:"rating"`
+	Note               string    `json:"note"`
+	Analysis           string    `json:"analysis"`
+	CreatedAt          time.Time `json:"createdAt"`
 	// MatchedTimestamp is the message timestamp of the /zrate user message
 	// that was matched to this rating (within 120s). Nil if unmatched.
 	MatchedTimestamp *int64 `json:"matchedTimestamp,omitempty"`
@@ -22,24 +25,34 @@ type Rating struct {
 
 // InsertRating creates a new rating and returns the persisted record.
 func InsertRating(ctx context.Context, db *sql.DB, conversationID string, rating int, note, analysis string) (*Rating, error) {
+	return InsertRatingWithTemp(ctx, db, conversationID, conversationID, rating, note, analysis)
+}
+
+// InsertRatingWithTemp creates a new rating with explicit canonical and temp conversation IDs.
+func InsertRatingWithTemp(ctx context.Context, db *sql.DB, conversationID, tempConversationID string, rating int, note, analysis string) (*Rating, error) {
+	if tempConversationID == "" {
+		tempConversationID = conversationID
+	}
+
 	id := newID()
 	now := time.Now().UTC()
 
 	_, err := db.ExecContext(ctx,
-		"INSERT INTO ratings (id, conversation_id, rating, note, analysis, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-		id, conversationID, rating, note, analysis, now,
+		"INSERT INTO ratings (id, conversation_id, temp_conversation_id, rating, note, analysis, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		id, conversationID, tempConversationID, rating, note, analysis, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert rating: %w", err)
 	}
 
 	return &Rating{
-		ID:             id,
-		ConversationID: conversationID,
-		Rating:         rating,
-		Note:           note,
-		Analysis:       analysis,
-		CreatedAt:      now,
+		ID:                 id,
+		ConversationID:     conversationID,
+		TempConversationID: tempConversationID,
+		Rating:             rating,
+		Note:               note,
+		Analysis:           analysis,
+		CreatedAt:          now,
 	}, nil
 }
 
@@ -66,7 +79,7 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 	}
 
 	rows, err := db.QueryContext(ctx,
-		"SELECT id, conversation_id, rating, note, analysis, created_at FROM ratings ORDER BY created_at DESC LIMIT ?",
+		"SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings ORDER BY created_at DESC LIMIT ?",
 		limit,
 	)
 	if err != nil {
@@ -78,7 +91,7 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 	for rows.Next() {
 		var r Rating
 		var createdAt string
-		if err := rows.Scan(&r.ID, &r.ConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan rating: %w", err)
 		}
 
@@ -91,6 +104,27 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 	}
 
 	return ratings, rows.Err()
+}
+
+// ResolveConversationIDByTempID resolves a temporary conversation alias ID to
+// its canonical conversation ID using the latest matching rating row.
+func ResolveConversationIDByTempID(ctx context.Context, db *sql.DB, tempConversationID string) (string, bool, error) {
+	var conversationID string
+	err := db.QueryRowContext(ctx,
+		`SELECT conversation_id
+		 FROM ratings
+		 WHERE temp_conversation_id = ?
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		tempConversationID,
+	).Scan(&conversationID)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("resolve conversation by temp id: %w", err)
+	}
+	return conversationID, true, nil
 }
 
 // ReconcileOrphanedRating finds an orphaned rating (whose conversation_id has no
