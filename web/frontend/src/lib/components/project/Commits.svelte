@@ -1,4 +1,5 @@
 <script lang="ts">
+	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { browser } from '$app/environment';
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
@@ -11,7 +12,8 @@
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
-	import { formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
+	import Icon from '$lib/Icon.svelte';
+	import { formatRelativeOrShortDate, formatFullDateTitle, commitUrl } from '$lib/utils';
 
 	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
 		if (!segs || segs.length === 0) return [];
@@ -120,10 +122,6 @@
 		return all;
 	});
 
-	function percent(value: number): string {
-		return `${value.toFixed(1)}%`;
-	}
-
 	function withOptionalQueue<T>(task: () => Promise<T>): Promise<T> {
 		if (useLoadQueue) return enqueueLoad(task, loadPriority);
 		return task();
@@ -226,6 +224,10 @@
 			loadingMore = false;
 		}
 	}
+
+	function commitLink(hash: string): string {
+		return commitUrl(data?.project.remote ?? '', hash);
+	}
 </script>
 
 {#if showHeader}
@@ -271,7 +273,10 @@
 
 	<table class="data" class:compact>
 		<colgroup>
-			{#if !compact || showDate}
+			{#if !compact}
+				<col class="timeline-col" />
+			{/if}
+			{#if !compact && (showDate || !showDate)}
 				<col class="time-col" />
 			{/if}
 			<col class="title-col" />
@@ -281,12 +286,18 @@
 			{#if showDiffCount}
 				<col class="diff-col" />
 			{/if}
+			{#if !compact}
+				<col class="hash-col" />
+			{/if}
 			<col class="bar-col" />
 		</colgroup>
 		{#if showColumnNames}
 			<thead>
 				<tr>
-					{#if !compact || showDate}
+					{#if !compact}
+						<th class="timeline-col"></th>
+					{/if}
+					{#if !compact && (showDate || !showDate)}
 						<th class="time-col">Time</th>
 					{/if}
 					<th>Commit</th>
@@ -296,6 +307,9 @@
 					{#if showDiffCount}
 						<th class="diff-col">Diff</th>
 					{/if}
+					{#if !compact}
+						<th class="hash-col">Hash</th>
+					{/if}
 					<th class="bar-col">Agent %</th>
 				</tr>
 			</thead>
@@ -303,7 +317,13 @@
 		<tbody>
 			{#each visibleCommits as c (c.commitHash)}
 				<tr>
-					{#if !compact || showDate}
+					{#if !compact}
+						<td class="timeline">
+							<span class="timeline-line"></span>
+							<span class="timeline-dot"></span>
+						</td>
+					{/if}
+					{#if !compact && (showDate || !showDate)}
 						<td class="time" title={formatFullDateTitle(c.authoredAtUnixMs)}
 							>{formatRelativeOrShortDate(c.authoredAtUnixMs)}</td
 						>
@@ -326,9 +346,12 @@
 						{/if} -->
 					</td>
 					{#if showBranch}
-						<td class="branch" title={selectedBranch || data?.branch || ''}
-							>{selectedBranch || data?.branch || ''}</td
-						>
+						<td class="branch" title={selectedBranch || data?.branch || ''}>
+							<div class="branch-content">
+								<Icon name="branch" width="12px" />
+								<span>{selectedBranch || data?.branch || ''}</span>
+							</div>
+						</td>
 					{/if}
 					{#if showDiffCount}
 						<td class="diff"
@@ -338,6 +361,25 @@
 									compact={true}
 								/>{/if}</td
 						>
+					{/if}
+					{#if !compact}
+						<td class="hash">
+							{#if !c.workingCopy}
+								<span>{c.commitHash.slice(0, 7)}</span>
+								{@const url = commitLink(c.commitHash)}
+								{#if url}
+									<a
+										href={url}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="hash-link"
+										aria-label={`Open commit ${c.commitHash} on remote`}
+									>
+										<Icon name="externalLink" width="14px" />
+									</a>
+								{/if}
+							{/if}
+						</td>
 					{/if}
 					<td class="bar"
 						>{#if !c.workingCopy}<AgentPercentageBar
@@ -492,6 +534,10 @@
 		table-layout: fixed;
 	}
 
+	.timeline-col {
+		width: 50px;
+	}
+
 	table.data.compact tr {
 		border-bottom: 0px;
 	}
@@ -531,6 +577,10 @@
 		width: 140px;
 	}
 
+	.hash-col {
+		width: 96px;
+	}
+
 	.branch-col {
 		width: 80px;
 	}
@@ -547,13 +597,51 @@
 		font-size: 0.85rem;
 		opacity: 0.7;
 		overflow: hidden;
-		text-align: center;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
+	.branch-content {
+		align-items: center;
+		display: inline-flex;
+		gap: 0.25rem;
+		max-width: 100%;
+	}
+
+	.branch-content span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
 	.time {
 		padding-left: 1rem;
+	}
+
+	.timeline {
+		padding: 0;
+		position: relative;
+	}
+
+	.timeline-line {
+		background: color-mix(in srgb, var(--color-border, #999) 75%, transparent);
+		bottom: 0;
+		left: 60%;
+		position: absolute;
+		top: 0;
+		transform: translateX(-50%);
+		width: 1px;
+	}
+
+	.timeline-dot {
+		background: var(--surface-bg, #fff);
+		border: 1px solid var(--color-border, #999);
+		border-radius: 50%;
+		height: 10px;
+		left: 60%;
+		position: absolute;
+		top: 50%;
+		transform: translate(-50%, -50%);
+		width: 10px;
 	}
 
 	.title {
@@ -583,6 +671,23 @@
 	.diff {
 		padding-right: 1.5rem;
 		text-align: right;
+	}
+
+	.hash {
+		font-family: monospace;
+		font-size: 0.9em;
+		gap: 0.25rem;
+		justify-content: center;
+	}
+
+	.hash-link {
+		color: inherit;
+		display: inline-flex;
+		opacity: 0.7;
+	}
+
+	.hash-link:hover {
+		opacity: 1;
 	}
 
 	.bar {

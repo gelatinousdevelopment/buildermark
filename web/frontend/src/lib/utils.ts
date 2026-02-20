@@ -98,3 +98,73 @@ export function formatFullDateTitle(unixMs: number): string {
 		timeStyle: 'long'
 	});
 }
+
+type ParsedRemote = {
+	domain: string;
+	owner: string;
+	repo: string;
+};
+
+function parseRemoteUrl(raw: string): ParsedRemote | null {
+	const remote = raw.trim();
+	if (!remote) return null;
+
+	let domain = '';
+	let path = '';
+
+	if (remote.startsWith('ssh://')) {
+		try {
+			const parsed = new URL(remote);
+			domain = parsed.hostname;
+			path = parsed.pathname.replace(/^\/+/, '');
+		} catch {
+			return null;
+		}
+	} else if (remote.includes('://')) {
+		try {
+			const parsed = new URL(remote);
+			domain = parsed.hostname;
+			path = parsed.pathname.replace(/^\/+/, '');
+		} catch {
+			return null;
+		}
+	} else {
+		const at = remote.indexOf('@');
+		const colon = remote.indexOf(':');
+		if (at < 0 || colon < 0 || colon <= at) return null;
+		domain = remote.slice(at + 1, colon);
+		path = remote.slice(colon + 1);
+	}
+
+	path = path.replace(/\.git$/, '').replace(/\/+$/, '');
+	const parts = path.split('/');
+	if (parts.length < 2) return null;
+
+	const repo = parts[parts.length - 1];
+	const owner = parts.slice(0, -1).join('/');
+	if (!owner || !repo) return null;
+
+	return {
+		domain: domain.toLowerCase(),
+		owner,
+		repo
+	};
+}
+
+export function commitUrl(remoteRaw: string, hash: string): string {
+	const parsed = parseRemoteUrl(remoteRaw);
+	if (!parsed || !hash) return '';
+
+	switch (parsed.domain) {
+		case 'github.com':
+			return `https://github.com/${parsed.owner}/${parsed.repo}/commit/${hash}`;
+		case 'gitlab.com':
+			return `https://gitlab.com/${parsed.owner}/${parsed.repo}/-/commit/${hash}`;
+		case 'codeberg.org':
+			return `https://codeberg.org/${parsed.owner}/${parsed.repo}/commit/${hash}`;
+		case 'bitbucket.org':
+			return `https://bitbucket.org/${parsed.owner}/${parsed.repo}/commits/${hash}`;
+		default:
+			return `https://${parsed.domain}/${parsed.owner}/${parsed.repo}/commit/${hash}`;
+	}
+}

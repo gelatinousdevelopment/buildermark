@@ -4,6 +4,8 @@
 	import chevronRightSvg from '$lib/icons/chevronRight.svg?raw';
 	import wrenchSvg from '$lib/icons/wrench.svg?raw';
 	import gearSvg from '$lib/icons/gear.svg?raw';
+	import branchSvg from '$lib/icons/branch.svg?raw';
+	import externalLinkSvg from '$lib/icons/externalLink.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -15,7 +17,9 @@
 		github: githubSvg,
 		chevronRight: chevronRightSvg,
 		wrench: wrenchSvg,
-		gear: gearSvg
+		gear: gearSvg,
+		branch: branchSvg,
+		externalLink: externalLinkSvg
 	};
 </script>
 
