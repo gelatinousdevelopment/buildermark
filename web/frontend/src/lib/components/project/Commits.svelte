@@ -32,6 +32,7 @@
 		compact?: boolean;
 		showHeader?: boolean;
 		header?: string;
+		headerLink?: string;
 		showBranchPicker?: boolean;
 		showUserPicker?: boolean;
 		showCoverageBar?: boolean;
@@ -59,6 +60,7 @@
 		compact = false,
 		showHeader = false,
 		header = 'Git Commits',
+		headerLink = undefined,
 		showBranchPicker = false,
 		showUserPicker = false,
 		showCoverageBar = false,
@@ -260,7 +262,12 @@
 </script>
 
 {#if showHeader}
-	<div class="heading">{header}</div>
+	<div class="heading">
+		{#if headerLink}<a href={headerLink}>{header}</a
+			>{:else}{header}{/if}{#if selectedBranch || data?.branch}<span class="heading-branch"
+				><Icon name="branch" width="13px" />{selectedBranch || data?.branch}</span
+			>{/if}
+	</div>
 {/if}
 
 {#if loading && !data}
@@ -493,11 +500,32 @@
 
 <style>
 	.heading {
+		align-items: center;
+		display: flex;
 		font-size: 0.9rem;
 		font-weight: 600;
+		justify-content: space-between;
 		margin-bottom: 0.75rem;
 		opacity: 0.5;
+		padding: 0 1rem;
 		text-transform: uppercase;
+	}
+
+	.heading a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.heading a:hover {
+		text-decoration: underline;
+	}
+
+	.heading-branch {
+		align-items: center;
+		display: inline-flex;
+		font-weight: 400;
+		gap: 0.2rem;
+		text-transform: none;
 	}
 
 	.top-row {
@@ -780,6 +808,6 @@
 	.branch-picker label,
 	.user-picker label {
 		text-align: right;
-		width: 80px;
+		width: 60px;
 	}
 </style>

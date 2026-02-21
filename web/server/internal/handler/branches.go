@@ -9,6 +9,18 @@ import (
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
 
+func detectCurrentBranch(ctx context.Context, repoPath string) string {
+	out, err := runGit(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return ""
+	}
+	name := strings.TrimSpace(out)
+	if name == "HEAD" {
+		return ""
+	}
+	return name
+}
+
 func detectDefaultBranch(ctx context.Context, repoPath string) (string, error) {
 	if out, err := runGit(ctx, repoPath, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil {
 		name := strings.TrimSpace(out)

@@ -33,17 +33,14 @@
 	</div>
 
 	<div class="column commits">
-		<div class="heading">
-			<a href={resolve('/local/projects/[project_id]/commits', { project_id: projectId })}
-				>Git Commits</a
-			>
-		</div>
 		<Commits
 			{projectId}
 			page={1}
 			pageSize={30}
 			limit={30}
 			compact={true}
+			showHeader={true}
+			headerLink={resolve('/local/projects/[project_id]/commits', { project_id: projectId })}
 			showBranch={false}
 			showDate={true}
 		/>

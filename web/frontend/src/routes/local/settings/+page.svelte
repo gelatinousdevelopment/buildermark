@@ -17,7 +17,6 @@
 	let localSettingsLoading = $state(true);
 	let localSettingsError: string | null = $state(null);
 	let localSettings: LocalSettings | null = $state(null);
-	let showSearchPaths = $state(false);
 
 	function projectName(project: Project): string {
 		return project.label || project.path;
@@ -202,16 +201,6 @@
 			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
 			monospace;
 		word-break: break-all;
-	}
-
-	.toggle {
-		margin-top: 0.25rem;
-		border: 1px solid #ccc;
-		background: #f7f7f7;
-		border-radius: 6px;
-		padding: 0.35rem 0.6rem;
-		font-size: 0.85rem;
-		cursor: pointer;
 	}
 
 	.muted {

@@ -273,7 +273,8 @@ func diffAddedPaths(prev, next string) []string {
 
 type projectDetailResponse struct {
 	*db.ProjectDetail
-	RemoteURL string `json:"remoteUrl"`
+	RemoteURL     string `json:"remoteUrl"`
+	CurrentBranch string `json:"currentBranch"`
 }
 
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
@@ -305,9 +306,12 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 
 	ensureProjectLocalUser(r.Context(), s.DB, project)
 
+	currentBranch := detectCurrentBranch(r.Context(), project.Path)
+
 	writeSuccess(w, http.StatusOK, projectDetailResponse{
 		ProjectDetail: project,
 		RemoteURL:     remoteURL(project.Remote),
+		CurrentBranch: currentBranch,
 	})
 }
 

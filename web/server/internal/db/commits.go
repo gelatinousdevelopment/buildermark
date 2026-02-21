@@ -430,3 +430,365 @@ func HasStaleCommitCoverage(ctx context.Context, database *sql.DB, projectID, br
 	}
 	return count > 0, nil
 }
+
+// sqliteBatchSize is the maximum number of placeholders in a single IN clause
+// to stay within SQLite's limit of 999 bound parameters.
+const sqliteBatchSize = 999
+
+// GetCommitByProjectAndHash returns a single commit by project ID and commit hash,
+// without filtering by branch.
+func GetCommitByProjectAndHash(ctx context.Context, db *sql.DB, projectID, commitHash string) (*Commit, error) {
+	var c Commit
+	err := db.QueryRowContext(ctx,
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
+		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		 FROM commits WHERE project_id = ? AND commit_hash = ?`,
+		projectID, commitHash,
+	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
+		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get commit by project and hash: %w", err)
+	}
+	return &c, nil
+}
+
+// ListCommitsByHashes returns commits matching the given hashes for a project,
+// ordered by authored_at DESC. DiffContent is omitted.
+func ListCommitsByHashes(ctx context.Context, db *sql.DB, projectID string, hashes []string, limit, offset int) ([]Commit, error) {
+	if len(hashes) == 0 {
+		return []Commit{}, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	// For small hash lists, use a single query.
+	if len(hashes) <= sqliteBatchSize {
+		return listCommitsByHashesSingle(ctx, db, projectID, hashes, "", limit, offset)
+	}
+
+	// For large hash lists, batch and merge in Go.
+	return listCommitsByHashesBatched(ctx, db, projectID, hashes, "", limit, offset)
+}
+
+// ListCommitsByHashesAndUser returns commits matching hashes filtered by user email.
+func ListCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string, limit, offset int) ([]Commit, error) {
+	if userEmail == "" {
+		return ListCommitsByHashes(ctx, db, projectID, hashes, limit, offset)
+	}
+	if len(hashes) == 0 {
+		return []Commit{}, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	if len(hashes) <= sqliteBatchSize {
+		return listCommitsByHashesSingle(ctx, db, projectID, hashes, userEmail, limit, offset)
+	}
+	return listCommitsByHashesBatched(ctx, db, projectID, hashes, userEmail, limit, offset)
+}
+
+func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string, limit, offset int) ([]Commit, error) {
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(hashes)), ",")
+	userClause := ""
+	if userEmail != "" {
+		userClause = " AND user_email = ?"
+	}
+	query := fmt.Sprintf(
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		 FROM commits
+		 WHERE project_id = ? AND commit_hash IN (%s)%s
+		 ORDER BY authored_at DESC
+		 LIMIT ? OFFSET ?`,
+		placeholders, userClause,
+	)
+	args := make([]any, 0, 1+len(hashes)+2)
+	args = append(args, projectID)
+	for _, h := range hashes {
+		args = append(args, h)
+	}
+	if userEmail != "" {
+		args = append(args, userEmail)
+	}
+	args = append(args, limit, offset)
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query commits by hashes: %w", err)
+	}
+	defer rows.Close()
+
+	commits := []Commit{}
+	for rows.Next() {
+		var c Commit
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		commits = append(commits, c)
+	}
+	return commits, rows.Err()
+}
+
+func listCommitsByHashesBatched(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string, limit, offset int) ([]Commit, error) {
+	// Collect all matching commits across batches, then sort and paginate in Go.
+	var all []Commit
+	for i := 0; i < len(hashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+		batch, err := listCommitsByHashesSingle(ctx, db, projectID, hashes[i:end], userEmail, end-i, 0)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, batch...)
+	}
+
+	// Sort by authored_at DESC.
+	sortCommitsDesc(all)
+
+	// Apply offset and limit.
+	if offset >= len(all) {
+		return []Commit{}, nil
+	}
+	end := offset + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[offset:end], nil
+}
+
+func sortCommitsDesc(commits []Commit) {
+	for i := 1; i < len(commits); i++ {
+		for j := i; j > 0 && commits[j].AuthoredAt > commits[j-1].AuthoredAt; j-- {
+			commits[j], commits[j-1] = commits[j-1], commits[j]
+		}
+	}
+}
+
+// CountCommitsByHashes returns the count of commits matching hashes for a project.
+func CountCommitsByHashes(ctx context.Context, db *sql.DB, projectID string, hashes []string) (int, error) {
+	if len(hashes) == 0 {
+		return 0, nil
+	}
+	total := 0
+	for i := 0; i < len(hashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+		batch := hashes[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf("SELECT COUNT(*) FROM commits WHERE project_id = ? AND commit_hash IN (%s)", placeholders)
+		args := make([]any, 0, 1+len(batch))
+		args = append(args, projectID)
+		for _, h := range batch {
+			args = append(args, h)
+		}
+		var count int
+		if err := db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+			return 0, fmt.Errorf("count commits by hashes: %w", err)
+		}
+		total += count
+	}
+	return total, nil
+}
+
+// CountCommitsByHashesAndUser returns the count of commits matching hashes and user email.
+func CountCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string) (int, error) {
+	if userEmail == "" {
+		return CountCommitsByHashes(ctx, db, projectID, hashes)
+	}
+	if len(hashes) == 0 {
+		return 0, nil
+	}
+	total := 0
+	for i := 0; i < len(hashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+		batch := hashes[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf("SELECT COUNT(*) FROM commits WHERE project_id = ? AND commit_hash IN (%s) AND user_email = ?", placeholders)
+		args := make([]any, 0, 2+len(batch))
+		args = append(args, projectID)
+		for _, h := range batch {
+			args = append(args, h)
+		}
+		args = append(args, userEmail)
+		var count int
+		if err := db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+			return 0, fmt.Errorf("count commits by hashes and user: %w", err)
+		}
+		total += count
+	}
+	return total, nil
+}
+
+// ExistingCommitHashes returns a set of commit hashes that already exist in the DB for a project.
+func ExistingCommitHashes(ctx context.Context, db *sql.DB, projectID string, hashes []string) (map[string]bool, error) {
+	if len(hashes) == 0 {
+		return map[string]bool{}, nil
+	}
+	result := make(map[string]bool, len(hashes))
+	for i := 0; i < len(hashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+		batch := hashes[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf("SELECT commit_hash FROM commits WHERE project_id = ? AND commit_hash IN (%s)", placeholders)
+		args := make([]any, 0, 1+len(batch))
+		args = append(args, projectID)
+		for _, h := range batch {
+			args = append(args, h)
+		}
+		rows, err := db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("existing commit hashes: %w", err)
+		}
+		for rows.Next() {
+			var hash string
+			if err := rows.Scan(&hash); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan commit hash: %w", err)
+			}
+			result[hash] = true
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+// ListDistinctUsersByHashes returns distinct user name/email pairs for commits matching hashes.
+func ListDistinctUsersByHashes(ctx context.Context, db *sql.DB, projectID string, hashes []string) ([]UserInfo, error) {
+	if len(hashes) == 0 {
+		return []UserInfo{}, nil
+	}
+	seen := make(map[string]bool)
+	var users []UserInfo
+	for i := 0; i < len(hashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+		batch := hashes[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf(
+			`SELECT user_name, user_email FROM commits
+			 WHERE project_id = ? AND commit_hash IN (%s)
+			 GROUP BY user_email
+			 ORDER BY user_name`,
+			placeholders,
+		)
+		args := make([]any, 0, 1+len(batch))
+		args = append(args, projectID)
+		for _, h := range batch {
+			args = append(args, h)
+		}
+		rows, err := db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("list distinct users by hashes: %w", err)
+		}
+		for rows.Next() {
+			var u UserInfo
+			if err := rows.Scan(&u.Name, &u.Email); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan user: %w", err)
+			}
+			if !seen[u.Email] {
+				seen[u.Email] = true
+				users = append(users, u)
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return users, nil
+}
+
+// HasStaleCommitCoverageByHashes reports whether any commit matching the given
+// hashes has a coverage_version lower than minVersion.
+func HasStaleCommitCoverageByHashes(ctx context.Context, database *sql.DB, projectID string, hashes []string, minVersion int) (bool, error) {
+	if len(hashes) == 0 {
+		return false, nil
+	}
+	for i := 0; i < len(hashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+		batch := hashes[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf(
+			`SELECT COUNT(*)
+			 FROM commits
+			 WHERE project_id = ?
+			   AND commit_hash IN (%s)
+			   AND (
+			     coverage_version < ?
+			     OR (lines_total > 0 AND trim(diff_content) = '')
+			   )`,
+			placeholders,
+		)
+		args := make([]any, 0, 2+len(batch))
+		args = append(args, projectID)
+		for _, h := range batch {
+			args = append(args, h)
+		}
+		args = append(args, minVersion)
+		var count int
+		if err := database.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+			return false, fmt.Errorf("count stale commit coverage by hashes: %w", err)
+		}
+		if count > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ListAllCommitsByProject returns ALL commits for a project (no branch filter),
+// ordered by authored_at DESC. DiffContent is omitted.
+func ListAllCommitsByProject(ctx context.Context, db *sql.DB, projectID string, limit, offset int) ([]Commit, error) {
+	if limit <= 0 {
+		limit = 10000
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		 FROM commits
+		 WHERE project_id = ?
+		 ORDER BY authored_at DESC
+		 LIMIT ? OFFSET ?`,
+		projectID, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query all commits by project: %w", err)
+	}
+	defer rows.Close()
+
+	commits := []Commit{}
+	for rows.Next() {
+		var c Commit
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		commits = append(commits, c)
+	}
+	return commits, rows.Err()
+}
