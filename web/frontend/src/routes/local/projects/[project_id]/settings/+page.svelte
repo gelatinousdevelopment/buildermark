@@ -30,7 +30,6 @@
 		'Pipfile.lock',
 		'pnpm-lock.yaml',
 		'poetry.lock',
-		'poetry.lock',
 		'yarn.lock'
 	];
 
