@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { listProjects, getProject } from '$lib/api';
+	import { listProjects, getProject, setProjectIgnored } from '$lib/api';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
+	import ProjectOnboarding from '$lib/components/project/ProjectOnboarding.svelte';
 	import type { Project, ProjectDetail } from '$lib/types';
 
 	type ProjectRow = {
@@ -16,6 +17,12 @@
 	let rows: ProjectRow[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
+	let detectedProjects: Project[] = $state([]);
+	let detectedLoading = $state(false);
+	let detectedError: string | null = $state(null);
+	let selectedProjectIds: string[] = $state([]);
+	let savingSelection = $state(false);
+	let saveSelectionError: string | null = $state(null);
 
 	function projectName(project: Project): string {
 		return project.label || project.path;
@@ -28,7 +35,48 @@
 		return projectName(a.project).localeCompare(projectName(b.project));
 	}
 
-	onMount(async () => {
+	function toggleSelection(projectId: string, checked: boolean) {
+		if (checked) {
+			selectedProjectIds = selectedProjectIds.includes(projectId)
+				? selectedProjectIds
+				: [...selectedProjectIds, projectId];
+		} else {
+			selectedProjectIds = selectedProjectIds.filter((id) => id !== projectId);
+		}
+	}
+
+	async function loadDetectedProjects() {
+		detectedLoading = true;
+		detectedError = null;
+		try {
+			detectedProjects = (await listProjects(true)).sort((a, b) =>
+				projectName(a).localeCompare(projectName(b))
+			);
+		} catch (e) {
+			detectedError = e instanceof Error ? e.message : 'Failed to load detected projects';
+		} finally {
+			detectedLoading = false;
+		}
+	}
+
+	async function startTrackingSelected() {
+		if (selectedProjectIds.length === 0) return;
+		savingSelection = true;
+		saveSelectionError = null;
+		try {
+			await Promise.all(selectedProjectIds.map((projectId) => setProjectIgnored(projectId, false)));
+			selectedProjectIds = [];
+			await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
+		} catch (e) {
+			saveSelectionError = e instanceof Error ? e.message : 'Failed to update project tracking';
+		} finally {
+			savingSelection = false;
+		}
+	}
+
+	async function loadTrackedRows() {
+		loading = true;
+		error = null;
 		try {
 			const projects = (await listProjects(false)).filter((project) => project.gitId);
 			const loadedRows = await Promise.all(
@@ -60,6 +108,10 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(async () => {
+		await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
 	});
 </script>
 
@@ -69,7 +121,16 @@
 	{:else if error}
 		<p class="error">{error}</p>
 	{:else if rows.length === 0}
-		<p>No tracked projects with git IDs found.</p>
+		<ProjectOnboarding
+			{detectedProjects}
+			{detectedLoading}
+			{detectedError}
+			{selectedProjectIds}
+			{savingSelection}
+			{saveSelectionError}
+			onToggleSelection={toggleSelection}
+			onStartTrackingSelected={startTrackingSelected}
+		/>
 	{:else}
 		<div class="projects">
 			{#each rows as row, index (row.project.id)}
