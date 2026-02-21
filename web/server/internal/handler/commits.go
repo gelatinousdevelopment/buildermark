@@ -26,7 +26,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 2
+	currentCommitCoverageVersion = 4
 )
 
 var defaultMessageWindowMs = func() int64 {
@@ -517,6 +517,11 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	matchedChars += fallbackChars
 	detailAdded, detailRemoved := countDiffAddedRemoved(commitDiff)
 
+	agentSegments := agentSegmentsFromContribs(contribMessages, totalLines)
+	if len(agentSegments) == 0 && matchedLines > 0 {
+		agentSegments = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+	}
+
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 		Branch:    branch,
 		Branches:  branches,
@@ -537,7 +542,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			CharacterPercent: percentage(matchedChars, totalChars),
 			LinesAdded:       detailAdded,
 			LinesRemoved:     detailRemoved,
-			AgentSegments:    agentSegmentsFromContribs(contribMessages, totalLines),
+			AgentSegments:    agentSegments,
 		},
 		Diff:     commitDiff,
 		Files:    files,
@@ -555,6 +560,16 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 
 	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 	pageSize := parsePositiveInt(r.URL.Query().Get("pageSize"), commitsPageSize)
+
+	// Client timezone offset in minutes (JS getTimezoneOffset convention).
+	// UTC+7 sends -420, UTC-8 sends 480. Default to 0 (UTC).
+	tzOffsetMin := 0
+	if raw := r.URL.Query().Get("tzOffset"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			tzOffsetMin = v
+		}
+	}
+	clientLoc := time.FixedZone("client", -tzOffsetMin*60)
 
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
@@ -688,6 +703,11 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		cov := dbCommitToCoverage(c, repoProject)
 		if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
 			cov.AgentSegments = segs
+		} else if c.LinesFromAgent > 0 {
+			cov.AgentSegments = []agentCoverageSegment{{
+				Agent: "unknown", LinesFromAgent: c.LinesFromAgent,
+				LinePercent: percentage(c.LinesFromAgent, c.LinesTotal),
+			}}
 		}
 		paged = append(paged, cov)
 	}
@@ -698,6 +718,11 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		cov := dbCommitToCoverage(c, repoProject)
 		if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
 			cov.AgentSegments = segs
+		} else if c.LinesFromAgent > 0 {
+			cov.AgentSegments = []agentCoverageSegment{{
+				Agent: "unknown", LinesFromAgent: c.LinesFromAgent,
+				LinePercent: percentage(c.LinesFromAgent, c.LinesTotal),
+			}}
 		}
 		allCoverage = append(allCoverage, cov)
 	}
@@ -729,7 +754,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		Project:      *project,
 		Refresh:      makeCommitRefreshState(syncState, staleCoverage),
 		Summary:      summarizeCommitCoverage(allCoverage),
-		DailySummary: buildDailySummary(allCoverage, 90),
+		DailySummary: buildDailySummary(allCoverage, 90, clientLoc),
 		Pagination: projectCommitPagination{
 			Page:       page,
 			PageSize:   pageSize,
@@ -1754,11 +1779,11 @@ func summarizeCommitCoverage(commits []projectCommitCoverage) projectCommitSumma
 	return s
 }
 
-// buildDailySummary buckets commits by UTC date and produces exactly `days`
-// entries (today - (days-1) through today), newest last.
-func buildDailySummary(allCoverage []projectCommitCoverage, days int) []dailyCommitSummary {
-	now := time.Now().UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+// buildDailySummary buckets commits by date in the given location and produces
+// exactly `days` entries (today - (days-1) through today), newest last.
+func buildDailySummary(allCoverage []projectCommitCoverage, days int, loc *time.Location) []dailyCommitSummary {
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
 	// Build date-keyed buckets from commits.
 	type bucket struct {
@@ -1769,7 +1794,7 @@ func buildDailySummary(allCoverage []projectCommitCoverage, days int) []dailyCom
 	}
 	buckets := make(map[string]*bucket)
 	for _, c := range allCoverage {
-		date := time.UnixMilli(c.AuthoredAtUnixMs).UTC().Format("2006-01-02")
+		date := time.UnixMilli(c.AuthoredAtUnixMs).In(loc).Format("2006-01-02")
 		b := buckets[date]
 		if b == nil {
 			b = &bucket{agentTotals: make(map[string]int)}
@@ -1857,6 +1882,127 @@ func agentSegmentsFromContribs(contribs []commitContributionMessage, linesTotal 
 			LinesFromAgent: s.lines,
 			CharsFromAgent: s.chars,
 			LinePercent:    percentage(s.lines, linesTotal),
+		})
+	}
+	return out
+}
+
+// attributeCopiedFromAgentFiles assigns per-agent segments to files marked as
+// copiedFromAgent by cross-referencing the file's normalized tokens against a
+// norm→agent map built from messages in the commit's time window.
+// It also returns the aggregate agent segments across all such files.
+func attributeCopiedFromAgentFiles(
+	files []commitFileCoverage,
+	commitTokens []diffToken,
+	messages []messageDiff,
+	windowStart, windowEnd int64,
+	linesTotal int,
+) []agentCoverageSegment {
+	// Build norm→agent map: for each normalized line, track the dominant agent.
+	type agentCount struct{ counts map[string]int }
+	normAgents := make(map[string]*agentCount)
+	for _, msg := range messages {
+		if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
+			continue
+		}
+		agent := strings.TrimSpace(msg.Agent)
+		if agent == "" {
+			agent = "unknown"
+		}
+		for _, tok := range msg.Tokens {
+			if !tok.Attributable || tok.Norm == "" {
+				continue
+			}
+			ac := normAgents[tok.Norm]
+			if ac == nil {
+				ac = &agentCount{counts: make(map[string]int)}
+				normAgents[tok.Norm] = ac
+			}
+			ac.counts[agent]++
+		}
+	}
+	dominantAgent := func(norm string) string {
+		ac := normAgents[norm]
+		if ac == nil {
+			return ""
+		}
+		best, bestN := "", 0
+		for a, n := range ac.counts {
+			if n > bestN {
+				best, bestN = a, n
+			}
+		}
+		return best
+	}
+
+	// Build per-file norm lists from commit tokens.
+	fileNorms := make(map[string][]string)
+	for _, tok := range commitTokens {
+		if tok.Path == "" || tok.Norm == "" || !tok.Attributable {
+			continue
+		}
+		fileNorms[tok.Path] = append(fileNorms[tok.Path], tok.Norm)
+	}
+
+	overallAgentLines := make(map[string]int)
+	for i, f := range files {
+		if !f.CopiedFromAgent || f.LinesFromAgent == 0 || len(f.AgentSegments) > 0 {
+			continue
+		}
+		norms := fileNorms[f.Path]
+		if len(norms) == 0 {
+			continue
+		}
+		agentLines := make(map[string]int)
+		for _, norm := range norms {
+			if a := dominantAgent(norm); a != "" {
+				agentLines[a]++
+			}
+		}
+		if len(agentLines) == 0 {
+			continue
+		}
+		agents := make([]string, 0, len(agentLines))
+		for a := range agentLines {
+			agents = append(agents, a)
+		}
+		sort.Strings(agents)
+		segments := make([]agentCoverageSegment, 0, len(agents))
+		for _, a := range agents {
+			segments = append(segments, agentCoverageSegment{
+				Agent:          a,
+				LinesFromAgent: agentLines[a],
+				LinePercent:    percentage(agentLines[a], len(norms)),
+			})
+			overallAgentLines[a] += agentLines[a]
+		}
+		files[i].AgentSegments = segments
+	}
+
+	// Also aggregate from non-copied files that already have segments.
+	for _, f := range files {
+		if f.CopiedFromAgent || f.Ignored || f.Moved {
+			continue
+		}
+		for _, seg := range f.AgentSegments {
+			overallAgentLines[seg.Agent] += seg.LinesFromAgent
+		}
+	}
+
+	if len(overallAgentLines) == 0 {
+		return nil
+	}
+	agents := make([]string, 0, len(overallAgentLines))
+	for a := range overallAgentLines {
+		agents = append(agents, a)
+	}
+	sort.Strings(agents)
+	out := make([]agentCoverageSegment, 0, len(agents))
+	for _, a := range agents {
+		out = append(out, agentCoverageSegment{
+			Agent:          a,
+			LinesFromAgent: overallAgentLines[a],
+			LinePercent:    percentage(overallAgentLines[a], linesTotal),
 		})
 	}
 	return out
@@ -1958,6 +2104,11 @@ func computeWorkingCopyDetail(
 	matchedChars += fallbackChars
 	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 
+	agentSegments := agentSegmentsFromContribs(contribMessages, totalLines)
+	if len(agentSegments) == 0 && matchedLines > 0 {
+		agentSegments = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+	}
+
 	return projectCommitCoverage{
 		WorkingCopy:      true,
 		ProjectID:        repoProject.ID,
@@ -1975,7 +2126,7 @@ func computeWorkingCopyDetail(
 		CharacterPercent: percentage(matchedChars, totalChars),
 		LinesAdded:       wcAdded,
 		LinesRemoved:     wcRemoved,
-		AgentSegments:    agentSegmentsFromContribs(contribMessages, totalLines),
+		AgentSegments:    agentSegments,
 	}, contribMessages, diffText, files, true
 }
 

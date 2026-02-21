@@ -321,7 +321,7 @@ func ingestCommits(
 			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
 			contribs, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-			_, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+			files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 			matchedLines = ml + fallbackLines
 			matchedChars = mc + fallbackChars
 
@@ -342,6 +342,15 @@ func ingestCommits(
 					s.chars += cm.CharsMatched
 				}
 				perCommitAgent[gc.Hash] = byAgent
+			} else if fallbackLines > 0 {
+				segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+				if len(segs) > 0 {
+					byAgent := make(map[string]*agentStats)
+					for _, seg := range segs {
+						byAgent[seg.Agent] = &agentStats{lines: seg.LinesFromAgent}
+					}
+					perCommitAgent[gc.Hash] = byAgent
+				}
 			}
 		}
 
@@ -472,7 +481,7 @@ func recomputeCommitCoverageForProject(
 		windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
 		windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
 		contribs, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		_, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
 		matchedChars += fallbackChars
 
@@ -496,21 +505,30 @@ func recomputeCommitCoverageForProject(
 			CoverageVersion: currentCommitCoverageVersion,
 		})
 
-		if len(contribs) == 0 {
-			continue
-		}
-		byAgent := make(map[string]agentStats)
-		for _, cm := range contribs {
-			agentName := cm.Agent
-			if strings.TrimSpace(agentName) == "" {
-				agentName = "unknown"
+		if len(contribs) > 0 {
+			byAgent := make(map[string]agentStats)
+			for _, cm := range contribs {
+				agentName := cm.Agent
+				if strings.TrimSpace(agentName) == "" {
+					agentName = "unknown"
+				}
+				stats := byAgent[agentName]
+				stats.lines += cm.LinesMatched
+				stats.chars += cm.CharsMatched
+				byAgent[agentName] = stats
 			}
-			stats := byAgent[agentName]
-			stats.lines += cm.LinesMatched
-			stats.chars += cm.CharsMatched
-			byAgent[agentName] = stats
+			perCommitAgent[c.ID] = byAgent
+		} else if fallbackLines > 0 {
+			// Fallback: derive agent from copied-from-agent file attribution.
+			segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+			if len(segs) > 0 {
+				byAgent := make(map[string]agentStats)
+				for _, seg := range segs {
+					byAgent[seg.Agent] = agentStats{lines: seg.LinesFromAgent}
+				}
+				perCommitAgent[c.ID] = byAgent
+			}
 		}
-		perCommitAgent[c.ID] = byAgent
 	}
 
 	if err := db.UpsertCommits(ctx, database, updatedCommits); err != nil {
