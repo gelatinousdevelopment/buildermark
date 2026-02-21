@@ -31,6 +31,6 @@
 	showPagination={true}
 	showLoadMore={true}
 	syncPaginationWithUrl={true}
-	showBranch={false}
+	showBranch={true}
 	onBranchChange={handleBranchChange}
 />

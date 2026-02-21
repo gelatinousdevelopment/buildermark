@@ -328,11 +328,11 @@
 				<col class="time-col" />
 			{/if}
 			<col class="title-col" />
-			{#if showBranch}
-				<col class="branch-col" />
-			{/if}
 			{#if showDiffCount}
 				<col class="diff-col" />
+			{/if}
+			{#if showBranch}
+				<col class="branch-col" />
 			{/if}
 			{#if !compact}
 				<col class="hash-col" />
@@ -349,11 +349,11 @@
 						<th class="time-col">Time</th>
 					{/if}
 					<th>Commit</th>
-					{#if showBranch}
-						<th class="branch-col">Branch</th>
-					{/if}
 					{#if showDiffCount}
 						<th class="diff-col">Diff</th>
+					{/if}
+					{#if showBranch}
+						<th class="branch-col">Branch</th>
 					{/if}
 					{#if !compact}
 						<th class="hash-col">Hash</th>
@@ -377,7 +377,7 @@
 						>
 					{/if}
 					<td class="title">
-						<div>
+						<div class="title-content">
 							<a
 								href={resolve(
 									selectedBranch || data?.branch || ''
@@ -393,14 +393,6 @@
 							<div class="commit-meta">{c.commitHash.slice(0, 12)}</div>
 						{/if} -->
 					</td>
-					{#if showBranch}
-						<td class="branch" title={selectedBranch || data?.branch || ''}>
-							<div class="branch-content">
-								<Icon name="branch" width="11px" />
-								<span>{selectedBranch || data?.branch || ''}</span>
-							</div>
-						</td>
-					{/if}
 					{#if showDiffCount}
 						<td class="diff"
 							>{#if !c.workingCopy && (c.linesAdded > 0 || c.linesRemoved > 0)}<DiffCount
@@ -409,6 +401,14 @@
 									compact={true}
 								/>{/if}</td
 						>
+					{/if}
+					{#if showBranch}
+						<td class="branch" title={selectedBranch || data?.branch || ''}>
+							<div class="branch-content">
+								<Icon name="branch" width="13px" />
+								<span>{selectedBranch || data?.branch || ''}</span>
+							</div>
+						</td>
 					{/if}
 					{#if !compact}
 						<td class="hash">
@@ -659,8 +659,7 @@
 	}
 
 	.branch {
-		font-size: 0.85rem;
-		opacity: 0.7;
+		font-size: 1rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -671,6 +670,7 @@
 		display: inline-flex;
 		gap: 0.25rem;
 		max-width: 100%;
+		padding-right: 1rem;
 	}
 
 	.branch-content span {

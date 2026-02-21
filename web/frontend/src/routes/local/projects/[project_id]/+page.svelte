@@ -44,7 +44,7 @@
 			pageSize={30}
 			limit={30}
 			compact={true}
-			showBranch={true}
+			showBranch={false}
 			showDate={true}
 		/>
 		<div class="more">

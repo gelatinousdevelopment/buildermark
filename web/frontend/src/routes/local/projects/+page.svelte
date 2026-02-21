@@ -125,7 +125,7 @@
 								branch={row.project.defaultBranch}
 								limit={10}
 								compact={true}
-								showBranch={true}
+								showBranch={false}
 								useLoadQueue={true}
 								loadPriority={index}
 							/>
