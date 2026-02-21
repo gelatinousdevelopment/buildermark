@@ -42,15 +42,22 @@ func (a *Agent) Run(ctx context.Context) {
 // ScanSince reads the entire file and imports entries with timestamps after
 // the given cutoff. This is used by the API to trigger a historical scan.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
-	n := a.doScan(ctx, since, false)
+	n := a.doScan(ctx, since, false, nil)
 	log.Printf("claude watcher: manual scan processed %d entries (since %s)", n, since.Format(time.RFC3339))
+	return n
+}
+
+// ScanPathsSince scans only entries for matching project paths.
+func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
+	n := a.doScan(ctx, since, false, newPathFilter(paths))
+	log.Printf("claude watcher: manual path scan processed %d entries (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
 
 // scanSince reads the entire file and processes only entries newer than the cutoff,
 // then updates the file offset so subsequent polls start from the end.
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	n := a.doScan(ctx, since, true)
+	n := a.doScan(ctx, since, true, nil)
 	if n > 0 {
 		log.Printf("claude watcher: initial scan processed %d entries", n)
 	}
@@ -59,12 +66,15 @@ func (a *Agent) scanSince(ctx context.Context, since time.Time) {
 // doScan reads the entire file and processes entries newer than the cutoff.
 // If updateOffset is true, it advances the file offset so subsequent polls
 // start from the end of the file.
-func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter) int {
 	entries, newOffset := a.readFrom(0)
 	cutoffMs := since.UnixMilli()
 	var filtered []historyEntry
 	for _, e := range entries {
 		if e.Timestamp >= cutoffMs {
+			if filter != nil && !filter.match(e.Project) {
+				continue
+			}
 			filtered = append(filtered, e)
 		}
 	}
@@ -75,6 +85,42 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool) 
 		a.offset = newOffset
 	}
 	return len(filtered)
+}
+
+type pathFilter map[string]struct{}
+
+func newPathFilter(paths []string) pathFilter {
+	out := make(pathFilter)
+	for _, p := range paths {
+		p = strings.TrimSpace(filepath.Clean(p))
+		if p == "" {
+			continue
+		}
+		out[p] = struct{}{}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (f pathFilter) match(projectPath string) bool {
+	if len(f) == 0 {
+		return true
+	}
+	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
+	if projectPath == "" {
+		return false
+	}
+	for p := range f {
+		if projectPath == p {
+			return true
+		}
+		if strings.HasPrefix(projectPath, p+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // poll reads new data appended since the last read. If the file shrank

@@ -43,20 +43,34 @@ func (a *Agent) resolveHashFromKnownProjects(hash string) string {
 			continue
 		}
 		for _, p := range projects {
-			path := strings.TrimSpace(p.Path)
-			if path == "" || !filepath.IsAbs(path) {
-				continue
-			}
-			if _, ok := seen[path]; ok {
-				continue
-			}
-			seen[path] = struct{}{}
-			if hashProjectPath(path) == hash {
-				return path
+			for _, path := range projectPathsForHashLookup(p) {
+				if _, ok := seen[path]; ok {
+					continue
+				}
+				seen[path] = struct{}{}
+				if hashProjectPath(path) == hash {
+					return path
+				}
 			}
 		}
 	}
 	return ""
+}
+
+func projectPathsForHashLookup(p db.Project) []string {
+	paths := []string{strings.TrimSpace(p.Path)}
+	for _, oldPath := range strings.Split(p.OldPaths, "\n") {
+		paths = append(paths, strings.TrimSpace(oldPath))
+	}
+
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if path == "" || !filepath.IsAbs(path) {
+			continue
+		}
+		out = append(out, path)
+	}
+	return out
 }
 
 func resolveHashFromCWD(hash string) string {

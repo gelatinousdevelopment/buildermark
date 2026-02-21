@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN old_paths TEXT NOT NULL DEFAULT '';

@@ -312,6 +312,9 @@ func TestListProjectsReturnsLabel(t *testing.T) {
 	if projects[0].Label != "myproject" {
 		t.Errorf("label = %q, want %q", projects[0].Label, "myproject")
 	}
+	if projects[0].OldPaths != "" {
+		t.Errorf("oldPaths = %q, want empty", projects[0].OldPaths)
+	}
 	if projects[0].IgnoreDiffPaths != "" {
 		t.Errorf("ignoreDiffPaths = %q, want empty", projects[0].IgnoreDiffPaths)
 	}
@@ -349,6 +352,88 @@ func TestSetProjectLabelNotFound(t *testing.T) {
 	}
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestSetProjectOldPaths(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	oldPaths := "/old/path/one\n/old/path/two"
+	if err := SetProjectOldPaths(ctx, db, pid, oldPaths); err != nil {
+		t.Fatalf("SetProjectOldPaths: %v", err)
+	}
+
+	detail, err := GetProjectDetail(ctx, db, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.OldPaths != oldPaths {
+		t.Errorf("oldPaths = %q, want %q", detail.OldPaths, oldPaths)
+	}
+}
+
+func TestSetProjectOldPathsNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	err := SetProjectOldPaths(ctx, db, "nonexistent", "/old/path")
+	if err == nil {
+		t.Fatal("expected error for nonexistent project")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestReassignProjectDataByPath(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	targetID, err := EnsureProject(ctx, db, "/new/path")
+	if err != nil {
+		t.Fatalf("EnsureProject target: %v", err)
+	}
+	sourceID, err := EnsureProject(ctx, db, "/old/path")
+	if err != nil {
+		t.Fatalf("EnsureProject source: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", sourceID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: sourceID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	moved, err := ReassignProjectDataByPath(ctx, db, targetID, "/old/path")
+	if err != nil {
+		t.Fatalf("ReassignProjectDataByPath: %v", err)
+	}
+	if moved != 1 {
+		t.Fatalf("moved conversations = %d, want 1", moved)
+	}
+
+	detail, err := GetConversationDetail(ctx, db, "conv-1")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.ProjectID != targetID {
+		t.Fatalf("conversation project_id = %q, want %q", detail.ProjectID, targetID)
+	}
+
+	var msgProjectID string
+	if err := db.QueryRow("SELECT project_id FROM messages WHERE conversation_id = ? LIMIT 1", "conv-1").Scan(&msgProjectID); err != nil {
+		t.Fatalf("query message project_id: %v", err)
+	}
+	if msgProjectID != targetID {
+		t.Fatalf("message project_id = %q, want %q", msgProjectID, targetID)
 	}
 }
 

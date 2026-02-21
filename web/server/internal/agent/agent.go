@@ -32,6 +32,12 @@ type Watcher interface {
 	ScanSince(ctx context.Context, since time.Time) int
 }
 
+// PathFilteredWatcher can scan only entries/files that belong to specific project paths.
+type PathFilteredWatcher interface {
+	Watcher
+	ScanPathsSince(ctx context.Context, since time.Time, paths []string) int
+}
+
 // SessionResolver resolves a rating to a real session with conversation entries.
 type SessionResolver interface {
 	Agent

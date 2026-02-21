@@ -73,26 +73,41 @@ func (a *Agent) Run(ctx context.Context) {
 
 // ScanSince walks the sessions directory and imports entries from files modified after since.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
-	n := a.doScan(ctx, since)
+	n := a.doScan(ctx, since, nil)
 	log.Printf("codex watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
+	return n
+}
+
+// ScanPathsSince scans only session files associated with matching working directories.
+func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
+	n := a.doScan(ctx, since, newPathFilter(paths))
+	log.Printf("codex watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
 
 // scanSince is the internal initial scan.
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	n := a.doScan(ctx, since)
+	n := a.doScan(ctx, since, nil)
 	if n > 0 {
 		log.Printf("codex watcher: initial scan processed %d files", n)
 	}
 }
 
 // doScan walks the sessions directory and processes files modified after since.
-func (a *Agent) doScan(ctx context.Context, since time.Time) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter) int {
 	files := a.listSessionFiles(since)
+	processed := 0
 	for _, path := range files {
+		if filter != nil {
+			workingDir := readWorkingDir(path)
+			if !filter.match(workingDir) {
+				continue
+			}
+		}
 		a.processSessionFile(ctx, path)
+		processed++
 	}
-	return len(files)
+	return processed
 }
 
 // poll checks for new or modified session files since the last poll.
@@ -134,6 +149,79 @@ func (a *Agent) listSessionFiles(since time.Time) []string {
 		return nil
 	})
 	return files
+}
+
+func readWorkingDir(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var event codexSessionLine
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			continue
+		}
+		switch event.Type {
+		case "session_meta":
+			var meta codexSessionMetaPayload
+			if err := json.Unmarshal(event.Payload, &meta); err == nil && strings.TrimSpace(meta.Cwd) != "" {
+				return strings.TrimSpace(meta.Cwd)
+			}
+		case "turn_context":
+			var turnCtx codexTurnContextPayload
+			if err := json.Unmarshal(event.Payload, &turnCtx); err == nil && strings.TrimSpace(turnCtx.Cwd) != "" {
+				return strings.TrimSpace(turnCtx.Cwd)
+			}
+		}
+		if wd := strings.TrimSpace(event.WorkingDir); wd != "" {
+			return wd
+		}
+	}
+	return ""
+}
+
+type pathFilter map[string]struct{}
+
+func newPathFilter(paths []string) pathFilter {
+	out := make(pathFilter)
+	for _, p := range paths {
+		p = strings.TrimSpace(filepath.Clean(p))
+		if p == "" {
+			continue
+		}
+		out[p] = struct{}{}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (f pathFilter) match(projectPath string) bool {
+	if len(f) == 0 {
+		return true
+	}
+	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
+	if projectPath == "" {
+		return false
+	}
+	for p := range f {
+		if projectPath == p {
+			return true
+		}
+		if strings.HasPrefix(projectPath, p+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // processSessionFile parses a single rollout JSONL file and imports its data.

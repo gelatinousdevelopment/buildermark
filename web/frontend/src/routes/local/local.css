@@ -17,7 +17,7 @@
 	/* Agent colors (known coding agents) */
 	--agent-color-generic: #a7439b;
 	--agent-foreground-color-generic: rgb(255, 255, 255, 0.9);
-	--agent-color-manual: #dbe4a1;
+	--agent-color-manual: #ccc; /* #dbe4a1 */
 	--agent-foreground-color-manual: #fff;
 	--agent-color-claude: #cf6f30;
 	--agent-foreground-color-claude: rgb(255, 255, 255, 0.9);

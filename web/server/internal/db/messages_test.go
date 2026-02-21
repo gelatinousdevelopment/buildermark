@@ -138,6 +138,60 @@ func TestEnsureProjectIdempotent(t *testing.T) {
 	}
 }
 
+func TestEnsureProjectMatchesOldPaths(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	id, err := EnsureProject(ctx, db, "/home/user/newproject")
+	if err != nil {
+		t.Fatalf("EnsureProject new path: %v", err)
+	}
+	if err := SetProjectOldPaths(ctx, db, id, "/home/user/oldproject\n/home/user/even-older"); err != nil {
+		t.Fatalf("SetProjectOldPaths: %v", err)
+	}
+
+	oldID, err := EnsureProject(ctx, db, "/home/user/oldproject")
+	if err != nil {
+		t.Fatalf("EnsureProject old path: %v", err)
+	}
+	if oldID != id {
+		t.Fatalf("EnsureProject old path returned %q, want %q", oldID, id)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM projects").Scan(&count); err != nil {
+		t.Fatalf("count projects: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("project row count = %d, want 1", count)
+	}
+}
+
+func TestEnsureProjectPrefersOldPathAliasOverLegacyExactPathProject(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	legacyID, err := EnsureProject(ctx, db, "/home/user/oldproject")
+	if err != nil {
+		t.Fatalf("EnsureProject legacy: %v", err)
+	}
+	canonicalID, err := EnsureProject(ctx, db, "/home/user/newproject")
+	if err != nil {
+		t.Fatalf("EnsureProject canonical: %v", err)
+	}
+	if err := SetProjectOldPaths(ctx, db, canonicalID, "/home/user/oldproject"); err != nil {
+		t.Fatalf("SetProjectOldPaths: %v", err)
+	}
+
+	gotID, err := EnsureProject(ctx, db, "/home/user/oldproject")
+	if err != nil {
+		t.Fatalf("EnsureProject old path: %v", err)
+	}
+	if gotID != canonicalID {
+		t.Fatalf("EnsureProject returned %q, want canonical %q (legacy %q)", gotID, canonicalID, legacyID)
+	}
+}
+
 func TestEnsureProjectDifferentPaths(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

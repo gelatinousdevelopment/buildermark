@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -18,6 +19,35 @@ type historyScanRequest struct {
 type historyScanResponse struct {
 	EntriesProcessed int    `json:"entriesProcessed"`
 	Since            string `json:"since"`
+}
+
+func (s *Server) scanWatchersSince(ctx context.Context, since time.Time, agentName string) int {
+	return s.scanWatchersSincePaths(ctx, since, agentName, nil)
+}
+
+func (s *Server) scanWatchersSincePaths(ctx context.Context, since time.Time, agentName string, paths []string) int {
+	var count int
+	if agentName != "" {
+		for _, w := range s.Agents.Watchers() {
+			if w.Name() == agentName {
+				if pw, ok := w.(agent.PathFilteredWatcher); ok && len(paths) > 0 {
+					count = pw.ScanPathsSince(ctx, since, paths)
+				} else {
+					count = w.ScanSince(ctx, since)
+				}
+				break
+			}
+		}
+		return count
+	}
+	for _, w := range s.Agents.Watchers() {
+		if pw, ok := w.(agent.PathFilteredWatcher); ok && len(paths) > 0 {
+			count += pw.ScanPathsSince(ctx, since, paths)
+		} else {
+			count += w.ScanSince(ctx, since)
+		}
+	}
+	return count
 }
 
 func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
@@ -49,22 +79,7 @@ func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	since := time.Now().Add(-dur)
-
-	var count int
-	if req.Agent != "" {
-		// Scan only the specified agent's watcher.
-		for _, w := range s.Agents.Watchers() {
-			if w.Name() == req.Agent {
-				count = w.ScanSince(r.Context(), since)
-				break
-			}
-		}
-	} else {
-		// Scan all watchers.
-		for _, w := range s.Agents.Watchers() {
-			count += w.ScanSince(r.Context(), since)
-		}
-	}
+	count := s.scanWatchersSince(r.Context(), since, req.Agent)
 
 	writeSuccess(w, http.StatusOK, historyScanResponse{
 		EntriesProcessed: count,

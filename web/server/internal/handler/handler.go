@@ -32,6 +32,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commits/{commitHash}", s.handleGetProjectCommit)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignored", s.handleSetProjectIgnored)
 	mux.HandleFunc("POST /api/v1/projects/{id}/label", s.handleSetProjectLabel)
+	mux.HandleFunc("POST /api/v1/projects/{id}/old-paths", s.handleSetProjectOldPaths)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignore-diff-paths", s.handleSetProjectIgnoreDiffPaths)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignore-default-diff-paths", s.handleSetProjectIgnoreDefaultDiffPaths)
 	mux.HandleFunc("GET /api/v1/conversations", s.handleListConversations)

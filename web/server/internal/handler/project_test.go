@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
@@ -117,6 +118,9 @@ func TestGetProject(t *testing.T) {
 	}
 	if data["path"] != "/test/project" {
 		t.Errorf("path = %v, want %q", data["path"], "/test/project")
+	}
+	if data["oldPaths"] != "" {
+		t.Errorf("oldPaths = %v, want empty", data["oldPaths"])
 	}
 
 	conversations, ok := data["conversations"].([]any)
@@ -537,6 +541,157 @@ func TestSetProjectIgnoreDiffPaths(t *testing.T) {
 	}
 	if detail.IgnoreDiffPaths != paths {
 		t.Errorf("ignoreDiffPaths = %q, want %q", detail.IgnoreDiffPaths, paths)
+	}
+}
+
+func TestSetProjectOldPaths(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	oldPaths := "/old/path/one\n/old/path/two"
+	body, _ := json.Marshal(map[string]string{"oldPaths": oldPaths})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+pid+"/old-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	detail, err := db.GetProjectDetail(ctx, s.DB, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail: %v", err)
+	}
+	if detail.OldPaths != oldPaths {
+		t.Errorf("oldPaths = %q, want %q", detail.OldPaths, oldPaths)
+	}
+}
+
+func TestSetProjectOldPathsTriggersAutomaticHistoryScanWhenChanged(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"oldPaths": "/old/path"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+pid+"/old-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_, scanPathsCount, _, _ := w.snapshot()
+		if scanPathsCount > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_, scanPathsCount, lastSince, lastPaths := w.snapshot()
+	if scanPathsCount != 1 {
+		t.Fatalf("scanPathsCount = %d, want 1", scanPathsCount)
+	}
+	if lastSince.Unix() != 0 {
+		t.Fatalf("lastSince = %s, want Unix epoch", lastSince.Format(time.RFC3339))
+	}
+	if len(lastPaths) != 1 || lastPaths[0] != "/old/path" {
+		t.Fatalf("lastPaths = %#v, want [/old/path]", lastPaths)
+	}
+}
+
+func TestSetProjectOldPathsDoesNotScanWhenUnchanged(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.SetProjectOldPaths(ctx, s.DB, pid, "/old/path"); err != nil {
+		t.Fatalf("SetProjectOldPaths: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"oldPaths": "/old/path"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+pid+"/old-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	time.Sleep(50 * time.Millisecond)
+	_, scanPathsCount, _, _ := w.snapshot()
+	if scanPathsCount != 0 {
+		t.Fatalf("scanPathsCount = %d, want 0", scanPathsCount)
+	}
+}
+
+func TestSetProjectOldPathsReassignsExistingConversationsFromOldPathProject(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	currentProjectID, err := db.EnsureProject(ctx, s.DB, "/Users/davidcann/github/card-generator")
+	if err != nil {
+		t.Fatalf("EnsureProject current: %v", err)
+	}
+	oldProjectID, err := db.EnsureProject(ctx, s.DB, "/Users/davidcann/Downloads/card-generator")
+	if err != nil {
+		t.Fatalf("EnsureProject old: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-old", oldProjectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation old: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"oldPaths": "/Users/davidcann/Downloads/card-generator"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+currentProjectID+"/old-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	detail, err := db.GetConversationDetail(ctx, s.DB, "conv-old")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.ProjectID != currentProjectID {
+		t.Fatalf("conversation project_id = %q, want %q", detail.ProjectID, currentProjectID)
+	}
+}
+
+func TestSetProjectOldPathsNotFound(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	body, _ := json.Marshal(map[string]string{"oldPaths": "/old/path"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/nonexistent/old-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 

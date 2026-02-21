@@ -241,37 +241,39 @@
 {:else if !data || visibleCommits.length === 0}
 	<p class="message">No commits found for this project and current git user.</p>
 {:else}
-	<div class="top-row">
-		{#if showBranchPicker}
-			<div class="branch-picker">
-				<label for="branch-{projectId}">Branch:</label>
-				<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
-					{#each data.branches as b (b)}
-						<option value={b}>{b}</option>
-					{/each}
-				</select>
-			</div>
-		{/if}
-
-		{#if showCoverageBar}
-			{#if data.dailySummary && data.dailySummary.length > 0}
-				<div class="summary-chart">
-					<DailyCommitsChart
-						dailySummary={data.dailySummary}
-						branch={selectedBranch || data.branch || ''}
-					/>
-				</div>
-			{:else}
-				<div class="summary-bar">
-					<AgentPercentageBar
-						agentPercent={data.summary.linePercent}
-						segments={toBarSegments(data.summary.agentSegments)}
-						showManual={true}
-					/>
+	{#if showBranchPicker || showCoverageBar}
+		<div class="top-row">
+			{#if showBranchPicker}
+				<div class="branch-picker">
+					<label for="branch-{projectId}">Branch:</label>
+					<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
+						{#each data.branches as b (b)}
+							<option value={b}>{b}</option>
+						{/each}
+					</select>
 				</div>
 			{/if}
-		{/if}
-	</div>
+
+			{#if showCoverageBar}
+				{#if data.dailySummary && data.dailySummary.length > 0}
+					<div class="summary-chart">
+						<DailyCommitsChart
+							dailySummary={data.dailySummary}
+							branch={selectedBranch || data.branch || ''}
+						/>
+					</div>
+				{:else}
+					<div class="summary-bar">
+						<AgentPercentageBar
+							agentPercent={data.summary.linePercent}
+							segments={toBarSegments(data.summary.agentSegments)}
+							showManual={true}
+						/>
+					</div>
+				{/if}
+			{/if}
+		</div>
+	{/if}
 
 	<table class="data" class:compact>
 		<colgroup>
@@ -721,5 +723,6 @@
 
 	.branch-picker select {
 		max-width: 200px;
+		width: 200px;
 	}
 </style>

@@ -15,6 +15,7 @@ var ErrNotFound = errors.New("not found")
 type Project struct {
 	ID                     string `json:"id"`
 	Path                   string `json:"path"`
+	OldPaths               string `json:"oldPaths"`
 	Label                  string `json:"label"`
 	GitID                  string `json:"gitId"`
 	DefaultBranch          string `json:"defaultBranch"`
@@ -30,6 +31,7 @@ type Project struct {
 type ProjectDetail struct {
 	ID                     string                    `json:"id"`
 	Path                   string                    `json:"path"`
+	OldPaths               string                    `json:"oldPaths"`
 	Label                  string                    `json:"label"`
 	GitID                  string                    `json:"gitId"`
 	DefaultBranch          string                    `json:"defaultBranch"`
@@ -61,7 +63,7 @@ type ConversationPagination struct {
 
 // ListProjects returns projects filtered by ignored status.
 func ListProjects(ctx context.Context, db *sql.DB, ignored bool) ([]Project, error) {
-	rows, err := db.QueryContext(ctx, "SELECT id, path, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE ignored = ? ORDER BY path", ignored)
+	rows, err := db.QueryContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE ignored = ? ORDER BY path", ignored)
 	if err != nil {
 		return nil, fmt.Errorf("query projects: %w", err)
 	}
@@ -70,7 +72,7 @@ func ListProjects(ctx context.Context, db *sql.DB, ignored bool) ([]Project, err
 	projects := []Project{}
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Path, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths); err != nil {
+		if err := rows.Scan(&p.ID, &p.Path, &p.OldPaths, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		projects = append(projects, p)
@@ -104,7 +106,7 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 // recent message first. If pageSize <= 0, all conversations are returned.
 func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, page, pageSize int) (*ProjectDetail, error) {
 	var p ProjectDetail
-	err := db.QueryRowContext(ctx, "SELECT id, path, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths)
+	err := db.QueryRowContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path, &p.OldPaths, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -242,6 +244,77 @@ func SetProjectLabel(ctx context.Context, db *sql.DB, projectID, label string) e
 	return nil
 }
 
+// GetProjectOldPaths returns old_paths for a project ID.
+func GetProjectOldPaths(ctx context.Context, db *sql.DB, projectID string) (string, error) {
+	var oldPaths string
+	err := db.QueryRowContext(ctx, "SELECT old_paths FROM projects WHERE id = ?", projectID).Scan(&oldPaths)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("project %s: %w", projectID, ErrNotFound)
+	}
+	if err != nil {
+		return "", fmt.Errorf("query project old_paths: %w", err)
+	}
+	return oldPaths, nil
+}
+
+// SetProjectOldPaths sets old_paths on a project.
+func SetProjectOldPaths(ctx context.Context, db *sql.DB, projectID, oldPaths string) error {
+	res, err := db.ExecContext(ctx, "UPDATE projects SET old_paths = ? WHERE id = ?", oldPaths, projectID)
+	if err != nil {
+		return fmt.Errorf("update project old_paths: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
+	}
+	return nil
+}
+
+// ReassignProjectDataByPath moves conversation/message rows from a project that
+// currently uses `path` to `targetProjectID`. Returns number of conversations moved.
+func ReassignProjectDataByPath(ctx context.Context, db *sql.DB, targetProjectID, path string) (int64, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return 0, nil
+	}
+
+	var sourceProjectID string
+	err := db.QueryRowContext(ctx, "SELECT id FROM projects WHERE path = ? AND id <> ?", path, targetProjectID).Scan(&sourceProjectID)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("query source project by path: %w", err)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, "UPDATE conversations SET project_id = ? WHERE project_id = ?", targetProjectID, sourceProjectID)
+	if err != nil {
+		return 0, fmt.Errorf("reassign conversations: %w", err)
+	}
+	movedConversations, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reassign conversations rows affected: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, "UPDATE messages SET project_id = ? WHERE project_id = ?", targetProjectID, sourceProjectID); err != nil {
+		return 0, fmt.Errorf("reassign messages: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit reassignment: %w", err)
+	}
+	return movedConversations, nil
+}
+
 // UpdateProjectGitID sets the git_id on a project.
 func UpdateProjectGitID(ctx context.Context, db *sql.DB, projectID, gitID string) error {
 	res, err := db.ExecContext(ctx, "UPDATE projects SET git_id = ? WHERE id = ?", gitID, projectID)
@@ -308,7 +381,7 @@ func SetProjectIgnoreDefaultDiffPaths(ctx context.Context, db *sql.DB, projectID
 
 // ListProjectsWithoutGitID returns all projects that have no git_id set.
 func ListProjectsWithoutGitID(ctx context.Context, db *sql.DB) ([]Project, error) {
-	rows, err := db.QueryContext(ctx, "SELECT id, path, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE git_id = ''")
+	rows, err := db.QueryContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE git_id = ''")
 	if err != nil {
 		return nil, fmt.Errorf("query projects without git_id: %w", err)
 	}
@@ -317,7 +390,7 @@ func ListProjectsWithoutGitID(ctx context.Context, db *sql.DB) ([]Project, error
 	var projects []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Path, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths); err != nil {
+		if err := rows.Scan(&p.ID, &p.Path, &p.OldPaths, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		projects = append(projects, p)
@@ -327,7 +400,7 @@ func ListProjectsWithoutGitID(ctx context.Context, db *sql.DB) ([]Project, error
 
 // ListAllProjects returns all projects (used for label backfill).
 func ListAllProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
-	rows, err := db.QueryContext(ctx, "SELECT id, path, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects")
+	rows, err := db.QueryContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects")
 	if err != nil {
 		return nil, fmt.Errorf("query all projects: %w", err)
 	}
@@ -336,7 +409,7 @@ func ListAllProjects(ctx context.Context, db *sql.DB) ([]Project, error) {
 	var projects []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Path, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths); err != nil {
+		if err := rows.Scan(&p.ID, &p.Path, &p.OldPaths, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		projects = append(projects, p)

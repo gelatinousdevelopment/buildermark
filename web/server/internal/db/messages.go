@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Message holds the data for a single conversation message to be inserted.
@@ -42,6 +43,14 @@ func RepoLabel(path string) string {
 // EnsureProject inserts a project if it doesn't already exist and returns its ID.
 func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error) {
 	var id string
+	// Check aliases first so renamed/moved projects continue to map to the
+	// canonical project even if a legacy exact-path project row still exists.
+	if existingID, err := findProjectIDByOldPath(ctx, db, path); err != nil {
+		return "", fmt.Errorf("query project by old path: %w", err)
+	} else if existingID != "" {
+		return existingID, nil
+	}
+
 	err := db.QueryRowContext(ctx, "SELECT id FROM projects WHERE path = ?", path).Scan(&id)
 	if err == nil {
 		return id, nil
@@ -62,6 +71,31 @@ func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error)
 		return "", fmt.Errorf("re-query project: %w", err)
 	}
 	return id, nil
+}
+
+func findProjectIDByOldPath(ctx context.Context, db *sql.DB, path string) (string, error) {
+	rows, err := db.QueryContext(ctx, "SELECT id, old_paths FROM projects WHERE old_paths <> ''")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		var oldPaths string
+		if err := rows.Scan(&id, &oldPaths); err != nil {
+			return "", err
+		}
+		for _, oldPath := range strings.Split(oldPaths, "\n") {
+			if strings.TrimSpace(oldPath) == path {
+				return id, nil
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return "", nil
 }
 
 // EnsureConversation inserts a conversation if it doesn't already exist.

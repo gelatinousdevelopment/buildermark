@@ -50,7 +50,7 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	}
 
 	// Verify new tables exist with expected columns.
-	_, err = db.Exec("SELECT id, path, label, git_id, ignore_diff_paths FROM projects LIMIT 0")
+	_, err = db.Exec("SELECT id, path, old_paths, label, git_id, ignore_diff_paths FROM projects LIMIT 0")
 	if err != nil {
 		t.Fatalf("projects table missing or wrong schema: %v", err)
 	}

@@ -38,7 +38,15 @@
 				>Git Commits</a
 			>
 		</div>
-		<Commits {projectId} page={1} limit={30} compact={true} showBranch={true} showDate={true} />
+		<Commits
+			{projectId}
+			page={1}
+			pageSize={30}
+			limit={30}
+			compact={true}
+			showBranch={true}
+			showDate={true}
+		/>
 		<div class="more">
 			<a
 				class="btn-sm"

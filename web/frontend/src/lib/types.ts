@@ -1,6 +1,7 @@
 export interface Project {
 	id: string;
 	path: string;
+	oldPaths: string;
 	label: string;
 	gitId: string;
 	defaultBranch: string;
@@ -13,6 +14,7 @@ export interface Project {
 export interface ProjectDetail {
 	id: string;
 	path: string;
+	oldPaths: string;
 	label: string;
 	gitId: string;
 	defaultBranch: string;

@@ -42,24 +42,43 @@ func (a *Agent) Run(ctx context.Context) {
 }
 
 func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
-	n := a.doScan(ctx, since)
+	n := a.doScan(ctx, since, nil)
 	log.Printf("gemini watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
 
+// ScanPathsSince scans only session files that resolve to matching project paths.
+func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
+	n := a.doScan(ctx, since, newPathFilter(paths))
+	log.Printf("gemini watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
+	return n
+}
+
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	n := a.doScan(ctx, since)
+	n := a.doScan(ctx, since, nil)
 	if n > 0 {
 		log.Printf("gemini watcher: initial scan processed %d files", n)
 	}
 }
 
-func (a *Agent) doScan(ctx context.Context, since time.Time) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter) int {
 	files := a.listSessionFiles(since)
+	processed := 0
 	for _, path := range files {
+		if filter != nil {
+			conv, err := readConversation(path)
+			if err != nil {
+				continue
+			}
+			projectPath := a.resolveProjectPath(conv)
+			if !filter.match(projectPath) {
+				continue
+			}
+		}
 		a.processSessionFile(ctx, path)
+		processed++
 	}
-	return len(files)
+	return processed
 }
 
 func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
@@ -262,6 +281,42 @@ func readGeminiLogEntries(path, sessionID string) []geminiLogEntry {
 		result = append(result, entry)
 	}
 	return result
+}
+
+type pathFilter map[string]struct{}
+
+func newPathFilter(paths []string) pathFilter {
+	out := make(pathFilter)
+	for _, p := range paths {
+		p = strings.TrimSpace(filepath.Clean(p))
+		if p == "" {
+			continue
+		}
+		out[p] = struct{}{}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (f pathFilter) match(projectPath string) bool {
+	if len(f) == 0 {
+		return true
+	}
+	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
+	if projectPath == "" {
+		return false
+	}
+	for p := range f {
+		if projectPath == p {
+			return true
+		}
+		if strings.HasPrefix(projectPath, p+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // backfillLabels updates project labels from the last path component to the

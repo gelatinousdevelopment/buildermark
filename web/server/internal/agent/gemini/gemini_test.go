@@ -366,6 +366,29 @@ func TestResolveProjectPathFromHashKnownProjects(t *testing.T) {
 	}
 }
 
+func TestResolveProjectPathFromHashOldProjectPaths(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, database, "/Users/davidcann/github/zrate")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.SetProjectOldPaths(ctx, database, projectID, "/Users/davidcann/dev/zrate-old"); err != nil {
+		t.Fatalf("SetProjectOldPaths: %v", err)
+	}
+
+	a := newAgent(database, t.TempDir(), t.TempDir())
+	conv := &geminiConversation{
+		ProjectHash: hashProjectPath("/Users/davidcann/dev/zrate-old"),
+	}
+
+	got := a.resolveProjectPath(conv)
+	if got != "/Users/davidcann/dev/zrate-old" {
+		t.Errorf("resolveProjectPath = %q, want %q", got, "/Users/davidcann/dev/zrate-old")
+	}
+}
+
 func TestWatcherRepairsWrongHashedProject(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

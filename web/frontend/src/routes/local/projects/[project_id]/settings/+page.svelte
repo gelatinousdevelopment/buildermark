@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import {
 		getProject,
+		setProjectOldPaths,
 		setProjectIgnoreDiffPaths,
 		setProjectIgnoreDefaultDiffPaths
 	} from '$lib/api';
@@ -34,6 +35,7 @@
 	];
 
 	let project: ProjectDetail | null = $state(null);
+	let oldPaths = $state('');
 	let ignoreDiffPaths = $state('');
 	let ignoreDefaultDiffPaths = $state(true);
 	let showDefaultPaths = $state(false);
@@ -46,6 +48,7 @@
 		const id = page.params.project_id;
 		if (!id) throw new Error('Missing project ID');
 		project = await getProject(id);
+		oldPaths = project.oldPaths ?? '';
 		ignoreDiffPaths = project.ignoreDiffPaths ?? '';
 		ignoreDefaultDiffPaths = project.ignoreDefaultDiffPaths ?? true;
 	}
@@ -56,6 +59,7 @@
 		error = null;
 		notice = null;
 		try {
+			await setProjectOldPaths(project.id, oldPaths);
 			await setProjectIgnoreDiffPaths(project.id, ignoreDiffPaths);
 			await setProjectIgnoreDefaultDiffPaths(project.id, ignoreDefaultDiffPaths);
 			notice = 'Saved';
@@ -118,6 +122,16 @@
 			placeholder="Glob patterns, one per line"
 		></textarea>
 		<p class="hint">One glob path per line.</p>
+
+		<label class="field-label" for="old-paths">Old Paths</label>
+		<textarea
+			id="old-paths"
+			bind:value={oldPaths}
+			rows="6"
+			spellcheck="false"
+			placeholder="/old/path/to/repo"
+		></textarea>
+		<p class="hint">One absolute path per line for previous project locations.</p>
 
 		<div class="actions">
 			<button class="btn-sm" disabled={saving} onclick={save}

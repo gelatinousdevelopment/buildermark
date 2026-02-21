@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,17 +15,36 @@ import (
 
 // mockWatcher implements agent.Watcher for testing.
 type mockWatcher struct {
-	name      string
-	scanCount int
-	lastSince time.Time
+	mu             sync.Mutex
+	name           string
+	scanCount      int
+	scanPathsCount int
+	lastSince      time.Time
+	lastPaths      []string
 }
 
-func (m *mockWatcher) Name() string              { return m.name }
-func (m *mockWatcher) Run(ctx context.Context)    {}
+func (m *mockWatcher) Name() string            { return m.name }
+func (m *mockWatcher) Run(ctx context.Context) {}
 func (m *mockWatcher) ScanSince(ctx context.Context, since time.Time) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.scanCount++
 	m.lastSince = since
 	return 10
+}
+func (m *mockWatcher) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.scanPathsCount++
+	m.lastSince = since
+	m.lastPaths = append([]string(nil), paths...)
+	return 10
+}
+
+func (m *mockWatcher) snapshot() (scanCount, scanPathsCount int, lastSince time.Time, lastPaths []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.scanCount, m.scanPathsCount, m.lastSince, append([]string(nil), m.lastPaths...)
 }
 
 func setupTestServerWithWatcher(t *testing.T, watchers ...*mockWatcher) *Server {
