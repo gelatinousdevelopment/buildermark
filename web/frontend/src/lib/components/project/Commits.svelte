@@ -348,7 +348,7 @@
 					{#if showBranch}
 						<td class="branch" title={selectedBranch || data?.branch || ''}>
 							<div class="branch-content">
-								<Icon name="branch" width="12px" />
+								<Icon name="branch" width="11px" />
 								<span>{selectedBranch || data?.branch || ''}</span>
 							</div>
 						</td>
@@ -543,10 +543,11 @@
 	}
 
 	table.data:not(.compact) tr:nth-child(even) {
-		background: #f9f9f9;
+		background: var(--color-alternate-table-row-background);
 	}
 
-	table.data tr:hover {
+	table.data tr:hover,
+	table.data:not(.compact) tr:nth-child(even):hover {
 		background: var(--accent-color-ultralight);
 	}
 

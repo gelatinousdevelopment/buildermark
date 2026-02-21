@@ -21,6 +21,11 @@
 			label: 'Commits',
 			segment: 'commits',
 			route: '/local/projects/[project_id]/commits' as const
+		},
+		{
+			label: 'Settings',
+			segment: 'settings',
+			route: '/local/projects/[project_id]/settings' as const
 		}
 	];
 
@@ -52,11 +57,18 @@
 				> -->
 				{#if projectId}
 					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
+					<!-- <a
+						href={resolve('/local/projects/[project_id]', { project_id: projectId })}
+						class="item project"
+						style:font-weight="400">gelatinousdevelopment</a
+					> -->
+					<!-- <div class="chevron-right" style:margin="0 0.5rem">/</div> -->
+					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<a
 						href={resolve('/local/projects/[project_id]', { project_id: projectId })}
 						class="item project"
 						class:selected={page.route.id === '/local/projects/[project_id]'}
-						>{navStore.projectName || projectId}</a
+						style:font-weight="bold">{navStore.projectName || projectId}</a
 					>
 					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
 					{#each projectTabs as tab (tab.segment)}
@@ -136,14 +148,14 @@
 		align-content: center;
 		box-sizing: border-box;
 		font-size: 1.1rem;
-		font-weight: 500;
+		font-weight: 400;
 		height: 40px;
 		padding: 0 1.3rem;
 		white-space: nowrap;
 	}
 
 	header section .item.project {
-		font-size: 1.3rem;
+		font-size: 1.1rem;
 		font-weight: 600;
 	}
 

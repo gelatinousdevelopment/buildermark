@@ -50,13 +50,25 @@
 
 <style>
 	.project-content {
-		background: var(--color-background-content);
 		align-items: stretch;
-		border-bottom: 0.5px solid var(--color-divider);
+		/*background: var(--color-background-content);*/
+		/*border-radius: 10px;*/
+		/*border: 0.5px solid var(--color-divider);*/
+		/*box-sizing: border-box;*/
 		display: flex;
 		flex-direction: row;
 		justify-content: space-between;
+		/*margin: 2rem auto;*/
+		/*transition: all 200ms;*/
 	}
+
+	/*@media (max-width: 1600px) {
+		.project-content {
+			border-width: 0 0 0.5px 0;
+			margin: 0 auto;
+			border-radius: 0;
+		}
+	}*/
 
 	.column {
 		flex: 1;

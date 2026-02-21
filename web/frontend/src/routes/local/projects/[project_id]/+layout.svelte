@@ -32,7 +32,10 @@
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
 
-<div class="project-header">
+<div
+	class="project-header"
+	style:display={page.url.pathname.endsWith(page.params.project_id || '') ? 'flex' : 'none'}
+>
 	{#if loading}
 		<p class="loading">Loading project...</p>
 	{:else if error}
@@ -55,47 +58,71 @@
 			<p class="project-path">{project.path}</p>
 		{/if} -->
 		<!-- <h2>{project.label || project.path}</h2> -->
-		<p class="project-path">{project.path}</p>
+		<div class="project-path">
+			<div class="label">Local:</div>
+			<div class="value">{project.path}</div>
+		</div>
+		<div class="project-path">
+			<div class="label">Remote:</div>
+			<div class="value">{project.remote}</div>
+		</div>
 	{/if}
 </div>
 
-<div class="content" class:fixed-height={layoutStore.fixedHeight}>
+<div
+	class="content limited-content-width inset-when-limited-content-width"
+	class:fixed-height={layoutStore.fixedHeight}
+>
 	{@render children()}
 </div>
 
 <style>
 	.project-header {
+		background: var(--color-background-project-header);
 		border-bottom: 0.5px solid var(--color-divider);
-		/*margin: 0 -1rem 1rem -1rem;*/
-		/*padding: 0 1rem 1rem 1rem;*/
+		display: flex;
+		flex-direction: column;
+		gap: 0rem;
 		padding: 1rem;
-		/*min-height: 4rem;*/
 	}
 
-	/*.project-header h2 {
-		font-size: 1.8rem;
-		font-weight: 300;
-		letter-spacing: 0.03rem;
-		opacity: 0.7;
-		margin: 0 0.5rem 0 0;
-	}*/
-
 	.project-path {
+		display: flex;
+		gap: 0.3rem;
 		font-size: 0.9rem;
-		color: #999;
 		margin: 0.3rem 0 0 0;
+	}
+
+	.project-path .label {
+		font-weight: bold;
 	}
 
 	.content {
 		background: var(--color-background-content);
-		flex: 1;
 		/*padding: 1rem;*/
+
+		/*background: var(--color-background-content);
+		border-radius: 10px;
+		border: 0.5px solid var(--color-divider);
+		box-sizing: border-box;
+		margin: 2rem auto;
+		transition: all 200ms;
+		width: 100%;*/
 	}
 
 	.content.fixed-height {
 		display: flex;
+		flex: 1;
 		flex-direction: column;
 		min-height: 0;
 		overflow: hidden;
 	}
+
+	/*@media (max-width: 1600px) {
+		.content {
+			border-width: 0 0 0.5px 0;
+			margin: 0 auto;
+			border-radius: 0;
+		}
+	}*/
 </style>

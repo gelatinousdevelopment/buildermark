@@ -245,10 +245,11 @@
 	}
 
 	table.data:not(.compact) tr:nth-child(even) {
-		background: #f9f9f9;
+		background: var(--color-alternate-table-row-background);
 	}
 
-	table.data tr:hover {
+	table.data tr:hover,
+	table.data:not(.compact) tr:nth-child(even):hover {
 		background: var(--accent-color-ultralight);
 	}
 

@@ -5,9 +5,14 @@
 	--color-text: #444;
 	--color-divider: #bbb;
 	--color-status-green: #55bb33;
+
 	--color-background-content: #fff;
 	--color-background-page: #fcfcfc;
 	--color-background-empty: #f0f0f0;
+	--color-background-project-header: #f5f5f5;
+	--color-alternate-table-row-background: #fcfcfc;
+
+	--content-width: 1600px;
 
 	/* Agent colors (known coding agents) */
 	--agent-color-generic: #a7439b;
@@ -41,6 +46,29 @@ body {
 	font-size: 13px;
 	margin: 0;
 	padding: 0;
+}
+
+.limited-content-width {
+	max-width: var(--content-width);
+	margin: 0 auto;
+}
+
+.inset-when-limited-content-width {
+	background: var(--color-background-content);
+	border-radius: 10px;
+	border: 0.5px solid var(--color-divider);
+	box-sizing: border-box;
+	margin: 2rem auto;
+	transition: all 200ms;
+	width: 100%;
+}
+
+@media (max-width: 1600px) {
+	.inset-when-limited-content-width {
+		border-width: 0 0 0.5px 0;
+		margin: 0 auto;
+		border-radius: 0;
+	}
 }
 
 /* Reusable button */

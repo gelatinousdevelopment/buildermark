@@ -63,69 +63,71 @@
 	});
 </script>
 
-{#if loading}
-	<p class="loading">Loading projects...</p>
-{:else if error}
-	<p class="error">{error}</p>
-{:else if rows.length === 0}
-	<p>No tracked projects with git IDs found.</p>
-{:else}
-	<div class="projects">
-		{#each rows as row, index (row.project.id)}
-			<div class="project">
-				<div class="meta">
-					<div class="label">
-						<a href={resolve('/local/projects/[project_id]', { project_id: row.project.id })}
-							>{projectName(row.project)}</a
-						>
-					</div>
-					<div class="path">{row.project.path}</div>
-				</div>
-				<div class="content">
-					<div class="column conversations">
-						<div class="heading">
-							<a
-								href={resolve('/local/projects/[project_id]/conversations', {
-									project_id: row.project.id
-								})}>Agent Conversations</a
+<div class="limited-content-width">
+	{#if loading}
+		<p class="loading">Loading projects...</p>
+	{:else if error}
+		<p class="error">{error}</p>
+	{:else if rows.length === 0}
+		<p>No tracked projects with git IDs found.</p>
+	{:else}
+		<div class="projects">
+			{#each rows as row, index (row.project.id)}
+				<div class="project">
+					<div class="meta">
+						<div class="label">
+							<a href={resolve('/local/projects/[project_id]', { project_id: row.project.id })}
+								>{projectName(row.project)}</a
 							>
 						</div>
-						<Conversations
-							projectId={row.project.id}
-							limit={10}
-							compact={true}
-							autoload={false}
-							initialData={row.conversationData}
-							initialError={row.conversationError}
-							showAgentColumn={true}
-							showRatingsColumn={true}
-						/>
+						<div class="path">{row.project.path}</div>
 					</div>
-					<div class="column commits">
-						<div class="heading">
-							<a
-								href={resolve(
-									row.project.defaultBranch
-										? `/local/projects/${encodeURIComponent(row.project.id)}/commits/${encodeURIComponent(row.project.defaultBranch)}`
-										: `/local/projects/${encodeURIComponent(row.project.id)}/commits`
-								)}>Git Commits</a
-							>
+					<div class="content">
+						<div class="column conversations">
+							<div class="heading">
+								<a
+									href={resolve('/local/projects/[project_id]/conversations', {
+										project_id: row.project.id
+									})}>Agent Conversations</a
+								>
+							</div>
+							<Conversations
+								projectId={row.project.id}
+								limit={10}
+								compact={true}
+								autoload={false}
+								initialData={row.conversationData}
+								initialError={row.conversationError}
+								showAgentColumn={true}
+								showRatingsColumn={true}
+							/>
 						</div>
-						<Commits
-							projectId={row.project.id}
-							branch={row.project.defaultBranch}
-							limit={10}
-							compact={true}
-							showBranch={true}
-							useLoadQueue={true}
-							loadPriority={index}
-						/>
+						<div class="column commits">
+							<div class="heading">
+								<a
+									href={resolve(
+										row.project.defaultBranch
+											? `/local/projects/${encodeURIComponent(row.project.id)}/commits/${encodeURIComponent(row.project.defaultBranch)}`
+											: `/local/projects/${encodeURIComponent(row.project.id)}/commits`
+									)}>Git Commits</a
+								>
+							</div>
+							<Commits
+								projectId={row.project.id}
+								branch={row.project.defaultBranch}
+								limit={10}
+								compact={true}
+								showBranch={true}
+								useLoadQueue={true}
+								loadPriority={index}
+							/>
+						</div>
 					</div>
 				</div>
-			</div>
-		{/each}
-	</div>
-{/if}
+			{/each}
+		</div>
+	{/if}
+</div>
 
 <style>
 	.projects {

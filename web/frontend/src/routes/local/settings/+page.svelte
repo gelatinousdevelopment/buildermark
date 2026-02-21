@@ -73,8 +73,8 @@
 	}
 </script>
 
-<div class="settings">
-	<h1>Settings</h1>
+<div class="settings limited-content-width inset-when-limited-content-width">
+	<h1>Global Settings</h1>
 	<h2>Project Tracking</h2>
 
 	{#if loading}
