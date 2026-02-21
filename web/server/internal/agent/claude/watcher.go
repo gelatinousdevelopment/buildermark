@@ -15,11 +15,15 @@ import (
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
 
+const claudeWatcherSourceKindHistoryFile = "history_file"
+
 // Run performs an initial scan (last 1 week) then polls for new data until ctx is cancelled.
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("claude watcher: starting, monitoring %s", a.path)
 
+	start := time.Now()
 	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
+	log.Printf("claude watcher: startup scan duration %s", time.Since(start))
 	a.backfillTitles(ctx)
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
@@ -67,7 +71,12 @@ func (a *Agent) scanSince(ctx context.Context, since time.Time) {
 // If updateOffset is true, it advances the file offset so subsequent polls
 // start from the end of the file.
 func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter) int {
-	entries, newOffset := a.readFrom(0)
+	startOffset := int64(0)
+	if updateOffset && filter == nil {
+		startOffset = a.restoreHistoryOffset(ctx)
+	}
+
+	entries, newOffset := a.readFrom(startOffset)
 	cutoffMs := since.UnixMilli()
 	var filtered []historyEntry
 	for _, e := range entries {
@@ -83,6 +92,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, 
 	}
 	if updateOffset {
 		a.offset = newOffset
+		a.persistHistoryOffset(ctx, newOffset)
 	}
 	return len(filtered)
 }
@@ -145,6 +155,7 @@ func (a *Agent) poll(ctx context.Context) {
 		a.processEntries(ctx, entries)
 	}
 	a.offset = newOffset
+	a.persistHistoryOffset(ctx, newOffset)
 }
 
 // readFrom reads the file starting at the given byte offset and returns parsed
@@ -192,6 +203,44 @@ func (a *Agent) readFrom(offset int64) ([]historyEntry, int64) {
 	}
 
 	return entries, offset + int64(n)
+}
+
+func (a *Agent) restoreHistoryOffset(ctx context.Context) int64 {
+	st, err := db.GetWatcherScanState(ctx, a.db, a.Name(), claudeWatcherSourceKindHistoryFile, a.path)
+	if err != nil || st == nil {
+		return 0
+	}
+
+	info, err := os.Stat(a.path)
+	if err != nil {
+		return 0
+	}
+
+	size := info.Size()
+	mtimeMs := info.ModTime().UnixMilli()
+	if st.FileSize == size && st.FileMtimeMs == mtimeMs {
+		return size
+	}
+	if st.FileOffset > 0 && st.FileOffset <= size {
+		return st.FileOffset
+	}
+	return 0
+}
+
+func (a *Agent) persistHistoryOffset(ctx context.Context, offset int64) {
+	info, err := os.Stat(a.path)
+	if err != nil {
+		return
+	}
+
+	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		Agent:       a.Name(),
+		SourceKind:  claudeWatcherSourceKindHistoryFile,
+		SourceKey:   a.path,
+		FileSize:    info.Size(),
+		FileMtimeMs: info.ModTime().UnixMilli(),
+		FileOffset:  offset,
+	})
 }
 
 // backfillTitles finds all conversations with empty titles and attempts to
@@ -290,16 +339,25 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		g.entries = append(g.entries, e)
 	}
 
+	projectIDCache := make(map[string]string)
+	sessionTitleCache := make(map[string]string)
+	conversationLogCache := make(map[string][]conversationLogEntry)
+
 	for _, sid := range order {
 		g := sessions[sid]
 		if g.project == "" {
 			continue
 		}
 
-		projectID, err := db.EnsureProject(ctx, a.db, g.project)
-		if err != nil {
-			log.Printf("claude watcher: ensure project %q: %v", g.project, err)
-			continue
+		projectID := projectIDCache[g.project]
+		if projectID == "" {
+			var err error
+			projectID, err = db.EnsureProject(ctx, a.db, g.project)
+			if err != nil {
+				log.Printf("claude watcher: ensure project %q: %v", g.project, err)
+				continue
+			}
+			projectIDCache[g.project] = projectID
 		}
 
 		if err := db.EnsureConversation(ctx, a.db, sid, projectID, a.Name()); err != nil {
@@ -307,7 +365,19 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			continue
 		}
 
-		if title := readSessionTitle(a.home, g.project, sid); title != "" {
+		cacheKey := g.project + "\n" + sid
+		if _, ok := conversationLogCache[cacheKey]; !ok {
+			conversationLogCache[cacheKey] = readConversationLogEntries(a.home, g.project, sid)
+		}
+		if _, ok := sessionTitleCache[cacheKey]; !ok {
+			title := readSessionSummaryFromIndex(a.home, g.project, sid)
+			if title == "" {
+				title = titleFromConversationLogs(conversationLogCache[cacheKey])
+			}
+			sessionTitleCache[cacheKey] = title
+		}
+
+		if title := sessionTitleCache[cacheKey]; title != "" {
 			if err := db.UpdateConversationTitle(ctx, a.db, sid, title); err != nil {
 				log.Printf("claude watcher: update title for %s: %v", sid, err)
 			}
@@ -317,7 +387,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 
 		// Check conversation file for a first prompt that history.jsonl may have missed
 		// (e.g. plan-mode auto-submissions).
-		if firstText, firstTs := readFirstPrompt(a.home, g.project, sid); firstText != "" {
+		if firstText, firstTs := firstPromptFromConversationLogs(conversationLogCache[cacheKey]); firstText != "" {
 			alreadyPresent := false
 			for _, e := range g.entries {
 				if e.Display == firstText {
@@ -369,7 +439,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		}
 
 		historyCount := len(messages)
-		for _, e := range readConversationLogEntries(a.home, g.project, sid) {
+		for _, e := range conversationLogCache[cacheKey] {
 			alreadyPresent := false
 			for _, m := range messages[:historyCount] {
 				if m.Role == e.Role && m.Content == e.Content {
@@ -423,6 +493,28 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			}
 		}
 	}
+}
+
+func firstPromptFromConversationLogs(entries []conversationLogEntry) (string, int64) {
+	for _, e := range entries {
+		if e.Role != "user" {
+			continue
+		}
+		text := strings.TrimSpace(e.Content)
+		if text == "" || isSystemMessage(text) {
+			continue
+		}
+		return text, e.Timestamp
+	}
+	return "", 0
+}
+
+func titleFromConversationLogs(entries []conversationLogEntry) string {
+	text, _ := firstPromptFromConversationLogs(entries)
+	if text == "" {
+		return ""
+	}
+	return titleFromPrompt(text)
 }
 
 func mapRoleModel(role, model string) string {

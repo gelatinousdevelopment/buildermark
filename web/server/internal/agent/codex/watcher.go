@@ -46,11 +46,21 @@ type processedFile struct {
 	modTime time.Time
 }
 
+const codexWatcherSourceKindSessionFile = "session_file"
+
+type sessionFileInfo struct {
+	path    string
+	size    int64
+	modTime time.Time
+}
+
 // Run performs an initial scan (last 1 week) then polls for new/modified files until ctx is cancelled.
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("codex watcher: starting, monitoring %s", a.sessionsDir)
 
+	start := time.Now()
 	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
+	log.Printf("codex watcher: startup scan duration %s", time.Since(start))
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
 
@@ -73,38 +83,57 @@ func (a *Agent) Run(ctx context.Context) {
 
 // ScanSince walks the sessions directory and imports entries from files modified after since.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
-	n := a.doScan(ctx, since, nil)
+	n := a.doScan(ctx, since, nil, false)
 	log.Printf("codex watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
 
 // ScanPathsSince scans only session files associated with matching working directories.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
-	n := a.doScan(ctx, since, newPathFilter(paths))
+	n := a.doScan(ctx, since, newPathFilter(paths), false)
 	log.Printf("codex watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
 
 // scanSince is the internal initial scan.
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	n := a.doScan(ctx, since, nil)
+	n := a.doScan(ctx, since, nil, true)
 	if n > 0 {
 		log.Printf("codex watcher: initial scan processed %d files", n)
 	}
 }
 
 // doScan walks the sessions directory and processes files modified after since.
-func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, useCheckpoint bool) int {
 	files := a.listSessionFiles(since)
 	processed := 0
-	for _, path := range files {
+	projectCache := make(map[string]string)
+	for _, fi := range files {
 		if filter != nil {
-			workingDir := readWorkingDir(path)
+			workingDir := readWorkingDir(fi.path)
 			if !filter.match(workingDir) {
 				continue
 			}
 		}
-		a.processSessionFile(ctx, path)
+
+		if useCheckpoint {
+			st, err := db.GetWatcherScanState(ctx, a.db, a.Name(), codexWatcherSourceKindSessionFile, fi.path)
+			if err == nil && st != nil && st.FileSize == fi.size && st.FileMtimeMs == fi.modTime.UnixMilli() {
+				continue
+			}
+		}
+
+		a.processSessionFile(ctx, fi.path, projectCache)
+		if useCheckpoint {
+			_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+				Agent:       a.Name(),
+				SourceKind:  codexWatcherSourceKindSessionFile,
+				SourceKey:   fi.path,
+				FileSize:    fi.size,
+				FileMtimeMs: fi.modTime.UnixMilli(),
+				FileOffset:  fi.size,
+			})
+		}
 		processed++
 	}
 	return processed
@@ -125,16 +154,24 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
 			return nil
 		}
 
-		a.processSessionFile(ctx, path)
+		a.processSessionFile(ctx, path, nil)
 		seen[path] = processedFile{modTime: modTime}
+		_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+			Agent:       a.Name(),
+			SourceKind:  codexWatcherSourceKindSessionFile,
+			SourceKey:   path,
+			FileSize:    info.Size(),
+			FileMtimeMs: modTime.UnixMilli(),
+			FileOffset:  info.Size(),
+		})
 		return nil
 	})
 }
 
 // listSessionFiles returns paths to all .jsonl files in the sessions directory
 // that were modified after the given time.
-func (a *Agent) listSessionFiles(since time.Time) []string {
-	var files []string
+func (a *Agent) listSessionFiles(since time.Time) []sessionFileInfo {
+	var files []sessionFileInfo
 	filepath.Walk(a.sessionsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
@@ -145,7 +182,11 @@ func (a *Agent) listSessionFiles(since time.Time) []string {
 		if info.ModTime().Before(since) {
 			return nil
 		}
-		files = append(files, path)
+		files = append(files, sessionFileInfo{
+			path:    path,
+			size:    info.Size(),
+			modTime: info.ModTime(),
+		})
 		return nil
 	})
 	return files
@@ -225,7 +266,7 @@ func (f pathFilter) match(projectPath string) bool {
 }
 
 // processSessionFile parses a single rollout JSONL file and imports its data.
-func (a *Agent) processSessionFile(ctx context.Context, path string) {
+func (a *Agent) processSessionFile(ctx context.Context, path string, projectCache map[string]string) {
 	f, err := os.Open(path)
 	if err != nil {
 		return
@@ -241,6 +282,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 	var messages []db.Message
 	var responseItemUserIdx []int
 	hasEventMsgUser := false
+	var firstEventMsgUser string
+	var firstResponseItemUser string
+	var firstLegacyUser string
 	var zrateEntries []struct {
 		rating    int
 		note      string
@@ -341,6 +385,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			})
 			if isResponseItemUser {
 				responseItemUserIdx = append(responseItemUserIdx, len(messages)-1)
+				if firstResponseItemUser == "" && strings.TrimSpace(content) != "" {
+					firstResponseItemUser = strings.TrimSpace(content)
+				}
 			}
 
 			if role == "user" {
@@ -362,6 +409,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			if msg.Type == "user_message" {
 				role = "user"
 				hasEventMsgUser = true
+				if firstEventMsgUser == "" && strings.TrimSpace(msg.Message) != "" {
+					firstEventMsgUser = strings.TrimSpace(msg.Message)
+				}
 			}
 			content := strings.TrimSpace(msg.Message)
 			if content == "" {
@@ -414,6 +464,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 					}{rating, note, ts})
 				}
 			}
+			if firstLegacyUser == "" && strings.TrimSpace(content) != "" {
+				firstLegacyUser = strings.TrimSpace(content)
+			}
 
 		case "item.completed":
 			// Legacy schema.
@@ -462,6 +515,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 					}{rating, note, ts})
 				}
 			}
+			if role == "user" && firstLegacyUser == "" && strings.TrimSpace(content) != "" {
+				firstLegacyUser = strings.TrimSpace(content)
+			}
 
 		default:
 			messages = append(messages, db.Message{
@@ -492,10 +548,20 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		return
 	}
 
-	projectID, err := db.EnsureProject(ctx, a.db, workingDir)
-	if err != nil {
-		log.Printf("codex watcher: ensure project %q: %v", workingDir, err)
-		return
+	projectID := ""
+	if projectCache != nil {
+		projectID = projectCache[workingDir]
+	}
+	if projectID == "" {
+		var err error
+		projectID, err = db.EnsureProject(ctx, a.db, workingDir)
+		if err != nil {
+			log.Printf("codex watcher: ensure project %q: %v", workingDir, err)
+			return
+		}
+		if projectCache != nil {
+			projectCache[workingDir] = projectID
+		}
 	}
 
 	if err := db.EnsureConversation(ctx, a.db, threadID, projectID, a.Name()); err != nil {
@@ -503,7 +569,14 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		return
 	}
 
-	if title := readSessionTitle(a.sessionsDir, threadID); title != "" {
+	titlePrompt := firstEventMsgUser
+	if titlePrompt == "" {
+		titlePrompt = firstResponseItemUser
+	}
+	if titlePrompt == "" {
+		titlePrompt = firstLegacyUser
+	}
+	if title := titleFromPrompt(titlePrompt); title != "" {
 		if err := db.UpdateConversationTitle(ctx, a.db, threadID, title); err != nil {
 			log.Printf("codex watcher: update title for %s: %v", threadID, err)
 		}

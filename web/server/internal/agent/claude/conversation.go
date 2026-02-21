@@ -198,6 +198,22 @@ const maxTitleLen = 100
 // it falls back to extracting the first user prompt from the conversation
 // .jsonl file and truncating it.
 func readSessionTitle(home, projectPath, sessionID string) string {
+	if s := readSessionSummaryFromIndex(home, projectPath, sessionID); s != "" {
+		return s
+	}
+
+	// Fallback: use the first user prompt from the conversation file.
+	text, _ := readFirstPrompt(home, projectPath, sessionID)
+	if text == "" {
+		return ""
+	}
+
+	return titleFromPrompt(text)
+}
+
+// readSessionSummaryFromIndex reads Claude's sessions-index.json and returns
+// the summary for a session if available.
+func readSessionSummaryFromIndex(home, projectPath, sessionID string) string {
 	dirName := strings.ReplaceAll(projectPath, "/", "-")
 
 	// Try sessions-index.json first.
@@ -214,14 +230,7 @@ func readSessionTitle(home, projectPath, sessionID string) string {
 			}
 		}
 	}
-
-	// Fallback: use the first user prompt from the conversation file.
-	text, _ := readFirstPrompt(home, projectPath, sessionID)
-	if text == "" {
-		return ""
-	}
-
-	return titleFromPrompt(text)
+	return ""
 }
 
 // maxHeadingScanLines is how many lines into the prompt we look for a markdown heading.

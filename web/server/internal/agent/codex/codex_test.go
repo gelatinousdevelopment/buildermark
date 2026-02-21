@@ -118,7 +118,7 @@ func TestWatcherProcessSessionFile(t *testing.T) {
 
 	a := newAgent(database, sessionsDir, tmpDir)
 	ctx := context.Background()
-	a.processSessionFile(ctx, rolloutPath)
+	a.processSessionFile(ctx, rolloutPath, nil)
 
 	if n := countRows(t, database, "projects"); n != 1 {
 		t.Errorf("projects: got %d, want 1", n)
@@ -198,7 +198,7 @@ func TestWatcherSkipsFilesWithoutThreadID(t *testing.T) {
 
 	a := newAgent(database, sessionsDir, tmpDir)
 	ctx := context.Background()
-	a.processSessionFile(ctx, rolloutPath)
+	a.processSessionFile(ctx, rolloutPath, nil)
 
 	if n := countRows(t, database, "messages"); n != 0 {
 		t.Errorf("messages: got %d, want 0 (no thread_id or working_dir)", n)
@@ -282,7 +282,7 @@ func TestWatcherReconcileOrphanedRating(t *testing.T) {
 
 	a := newAgent(database, sessionsDir, tmpDir)
 	ctx := context.Background()
-	a.processSessionFile(ctx, rolloutPath)
+	a.processSessionFile(ctx, rolloutPath, nil)
 
 	// Check that the rating was reconciled.
 	var conversationID string
@@ -346,7 +346,7 @@ func TestWatcherProcessCurrentSchemaSessionFile(t *testing.T) {
 
 	a := newAgent(database, sessionsDir, tmpDir)
 	ctx := context.Background()
-	a.processSessionFile(ctx, rolloutPath)
+	a.processSessionFile(ctx, rolloutPath, nil)
 
 	if n := countRows(t, database, "projects"); n != 1 {
 		t.Errorf("projects: got %d, want 1", n)
@@ -411,7 +411,7 @@ func TestWatcherDerivesDiffFromCurrentSchemaApplyPatch(t *testing.T) {
 	})
 
 	a := newAgent(database, sessionsDir, tmpDir)
-	a.processSessionFile(context.Background(), rolloutPath)
+	a.processSessionFile(context.Background(), rolloutPath, nil)
 
 	var diffCount int
 	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'thread-apply-patch' AND content LIKE '```diff%'").Scan(&diffCount); err != nil {
@@ -458,7 +458,7 @@ func TestWatcherReconcileOrphanedRatingCurrentSchema(t *testing.T) {
 
 	a := newAgent(database, sessionsDir, tmpDir)
 	ctx := context.Background()
-	a.processSessionFile(ctx, rolloutPath)
+	a.processSessionFile(ctx, rolloutPath, nil)
 
 	var conversationID string
 	err = database.QueryRow("SELECT conversation_id FROM ratings WHERE id = ?", rating.ID).Scan(&conversationID)
