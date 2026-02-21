@@ -1360,25 +1360,25 @@ func TestBuildDailySummary(t *testing.T) {
 
 	result := buildDailySummary(commits, 30, time.UTC)
 
-	// Should return exactly 90 entries.
-	if len(result) != 90 {
-		t.Fatalf("len = %d, want 90", len(result))
+	// Should return exactly 30 entries.
+	if len(result) != 30 {
+		t.Fatalf("len = %d, want 30", len(result))
 	}
 
 	// Last entry should be today's date.
 	todayStr := today.Format("2006-01-02")
-	if result[89].Date != todayStr {
-		t.Fatalf("last date = %q, want %q", result[89].Date, todayStr)
+	if result[29].Date != todayStr {
+		t.Fatalf("last date = %q, want %q", result[29].Date, todayStr)
 	}
 
-	// First entry should be 89 days ago.
-	firstDate := today.AddDate(0, 0, -89).Format("2006-01-02")
+	// First entry should be 29 days ago.
+	firstDate := today.AddDate(0, 0, -29).Format("2006-01-02")
 	if result[0].Date != firstDate {
 		t.Fatalf("first date = %q, want %q", result[0].Date, firstDate)
 	}
 
-	// Today's entry (index 89) should aggregate both commits.
-	todayEntry := result[89]
+	// Today's entry (index 29) should aggregate both commits.
+	todayEntry := result[29]
 	if todayEntry.LinesTotal != 30 {
 		t.Fatalf("today linesTotal = %d, want 30", todayEntry.LinesTotal)
 	}
@@ -1403,8 +1403,8 @@ func TestBuildDailySummary(t *testing.T) {
 		t.Fatalf("today codex lines = %d, want 2", agentMap["codex"])
 	}
 
-	// Yesterday's entry (index 88).
-	yesterdayEntry := result[88]
+	// Yesterday's entry (index 28).
+	yesterdayEntry := result[28]
 	if yesterdayEntry.LinesTotal != 5 {
 		t.Fatalf("yesterday linesTotal = %d, want 5", yesterdayEntry.LinesTotal)
 	}
@@ -1412,8 +1412,8 @@ func TestBuildDailySummary(t *testing.T) {
 		t.Fatalf("yesterday commits = %d, want 1", len(yesterdayEntry.Commits))
 	}
 
-	// Ten days ago entry (index 79).
-	tenDaysAgoEntry := result[79]
+	// Ten days ago entry (index 19).
+	tenDaysAgoEntry := result[19]
 	expectedDate := today.AddDate(0, 0, -10).Format("2006-01-02")
 	if tenDaysAgoEntry.Date != expectedDate {
 		t.Fatalf("ten days ago date = %q, want %q", tenDaysAgoEntry.Date, expectedDate)

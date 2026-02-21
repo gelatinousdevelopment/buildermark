@@ -1816,8 +1816,15 @@ func summarizeCommitCoverage(commits []projectCommitCoverage) projectCommitSumma
 }
 
 // buildDailySummary buckets commits by date in the given location and produces
-// exactly `days` entries (today - (days-1) through today), newest last.
+// a trailing daily window ending today, newest last.
+//
+// The chart UX relies on at least 30 day buckets, so shorter requested windows
+// are expanded to 30 days.
 func buildDailySummary(allCoverage []projectCommitCoverage, days int, loc *time.Location) []dailyCommitSummary {
+	if days < 30 {
+		days = 30
+	}
+
 	now := time.Now().In(loc)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
