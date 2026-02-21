@@ -95,37 +95,6 @@
 <div class="settings limited-content-width inset-when-limited-content-width">
 	<h1>Global Settings</h1>
 
-	<h2>Local Environment</h2>
-	{#if localSettingsLoading}
-		<p>Loading local settings...</p>
-	{:else if localSettingsError}
-		<p class="error">{localSettingsError}</p>
-	{:else if localSettings}
-		<div class="local-info">
-			<p class="label">Home Folder</p>
-			<p class="path">{localSettings.homePath}</p>
-			<button type="button" class="toggle" onclick={() => (showSearchPaths = !showSearchPaths)}>
-				{showSearchPaths ? 'Hide Conversation Search Paths' : 'Show Conversation Search Paths'}
-			</button>
-			{#if showSearchPaths}
-				{#if localSettings.conversationSearchPaths.length === 0}
-					<p class="muted">No agent watchers are currently registered.</p>
-				{:else}
-					<ul class="search-paths">
-						{#each localSettings.conversationSearchPaths as entry}
-							<li>
-								<span class="agent">{entry.agent}</span>
-								<span class="path">{entry.path}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			{/if}
-		</div>
-	{/if}
-
-	<h2>Project Tracking</h2>
-
 	{#if loadingProjects}
 		<p>Loading projects...</p>
 	{:else if projectError}
@@ -133,42 +102,70 @@
 	{:else if rows.length === 0}
 		<p>No projects found.</p>
 	{:else}
-		<table class="project-table">
-			<thead>
-				<tr>
-					<th></th>
-					<th>Project</th>
-					<th>Path</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each rows as row (row.project.id)}
+		<div>
+			<h2>Project Tracking</h2>
+			<table class="project-table">
+				<thead>
 					<tr>
-						<td>
-							<input
-								type="checkbox"
-								checked={row.tracked}
-								disabled={row.saving}
-								onchange={(event) =>
-									setTracked(row.project.id, (event.currentTarget as HTMLInputElement).checked)}
-							/>
-						</td>
-						<td class="project-name-cell" title={projectName(row.project)}
-							>{projectName(row.project)}</td
-						>
-						<td class="project-path">
-							{#if row.saving}
-								<span class="status">Saving...</span>
-							{:else if row.error}
-								<span class="error">{row.error}</span>
-							{:else}
-								{row.project.path}
-							{/if}
-						</td>
+						<th></th>
+						<th>Project</th>
+						<th>Path</th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{#each rows as row (row.project.id)}
+						<tr>
+							<td>
+								<input
+									type="checkbox"
+									checked={row.tracked}
+									disabled={row.saving}
+									onchange={(event) =>
+										setTracked(row.project.id, (event.currentTarget as HTMLInputElement).checked)}
+								/>
+							</td>
+							<td class="project-name-cell" title={projectName(row.project)}
+								>{projectName(row.project)}</td
+							>
+							<td class="project-path">
+								{#if row.saving}
+									<span class="status">Saving...</span>
+								{:else if row.error}
+									<span class="error">{row.error}</span>
+								{:else}
+									{row.project.path}
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+
+	{#if localSettingsLoading}
+		<p>Loading local settings...</p>
+	{:else if localSettingsError}
+		<p class="error">{localSettingsError}</p>
+	{:else if localSettings}
+		<div class="local-info">
+			<h2>Local Environment</h2>
+			<p class="label">Home Folder</p>
+			<p class="path">{localSettings.homePath}</p>
+			<p class="label">Agent Search Paths</p>
+			{#if localSettings.conversationSearchPaths.length === 0}
+				<p class="muted">No agent watchers are currently registered.</p>
+			{:else}
+				<ul class="search-paths">
+					{#each localSettings.conversationSearchPaths as entry, index (index)}
+						<li>
+							<span class="agent">{entry.agent}</span>
+							<span class="path">{entry.path}</span>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -177,6 +174,9 @@
 		background: var(--color-background-content);
 		padding: 1rem;
 		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
 	}
 
 	h1 {
@@ -189,13 +189,6 @@
 		font-size: 1rem;
 	}
 
-	.local-info {
-		background: #fff;
-		border: 1px solid #ddd;
-		border-radius: 8px;
-		padding: 0.75rem;
-	}
-
 	.label {
 		margin: 0;
 		font-size: 0.8rem;
@@ -205,8 +198,9 @@
 	}
 
 	.path {
-		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-			'Courier New', monospace;
+		font-family:
+			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+			monospace;
 		word-break: break-all;
 	}
 
