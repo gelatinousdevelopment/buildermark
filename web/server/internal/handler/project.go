@@ -94,6 +94,11 @@ func (s *Server) handleSetProjectLabel(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, http.StatusOK, nil)
 }
 
+type projectDetailResponse struct {
+	*db.ProjectDetail
+	RemoteURL string `json:"remoteUrl"`
+}
+
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -121,7 +126,10 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeSuccess(w, http.StatusOK, project)
+	writeSuccess(w, http.StatusOK, projectDetailResponse{
+		ProjectDetail: project,
+		RemoteURL:     remoteURL(project.Remote),
+	})
 }
 
 func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.Request) {

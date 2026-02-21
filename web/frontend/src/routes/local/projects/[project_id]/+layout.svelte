@@ -64,7 +64,13 @@
 		</div>
 		<div class="project-path">
 			<div class="label">Remote:</div>
-			<div class="value">{project.remote}</div>
+			<div class="value">
+				{#if project.remoteUrl}
+					<a href={project.remoteUrl} target="_blank" rel="noopener noreferrer">{project.remote}</a>
+				{:else}
+					{project.remote}
+				{/if}
+			</div>
 		</div>
 	{/if}
 </div>

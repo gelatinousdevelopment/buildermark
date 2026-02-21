@@ -17,6 +17,7 @@ export interface ProjectDetail {
 	gitId: string;
 	defaultBranch: string;
 	remote: string;
+	remoteUrl: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;

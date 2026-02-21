@@ -5,6 +5,7 @@
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import type { Project, ProjectDetail } from '$lib/types';
+	import Icon from '$lib/Icon.svelte';
 
 	type ProjectRow = {
 		project: Project;
@@ -80,7 +81,14 @@
 								>{projectName(row.project)}</a
 							>
 						</div>
-						<div class="path">{row.project.path}</div>
+						<div class="right">
+							<div class="path">{row.project.path}</div>
+							<!-- <a
+								href={resolve('/local/projects/[project_id]/settings', {
+									project_id: row.project.id
+								})}><Icon name="gear" width="14px" /></a
+							> -->
+						</div>
 					</div>
 					<div class="content">
 						<div class="column conversations">
@@ -170,6 +178,17 @@
 	.project .meta .label:has(a:hover) {
 		opacity: 1;
 	}
+
+	.project .meta .right {
+		align-items: center;
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	/*.project .meta .right a:not(:hover) {
+		color: var(--color-text);
+		text-decoration: none;
+	}*/
 
 	.project:has(.content:hover) {
 		.meta .label {

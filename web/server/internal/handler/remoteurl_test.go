@@ -77,6 +77,59 @@ func TestParseRemoteURL(t *testing.T) {
 	}
 }
 
+func TestRemoteURL(t *testing.T) {
+	tests := []struct {
+		name   string
+		remote string
+		want   string
+	}{
+		{
+			name:   "github https",
+			remote: "https://github.com/owner/repo.git",
+			want:   "https://github.com/owner/repo",
+		},
+		{
+			name:   "github ssh",
+			remote: "git@github.com:owner/repo.git",
+			want:   "https://github.com/owner/repo",
+		},
+		{
+			name:   "gitlab https",
+			remote: "https://gitlab.com/owner/repo.git",
+			want:   "https://gitlab.com/owner/repo",
+		},
+		{
+			name:   "gitlab subgroup",
+			remote: "https://gitlab.com/group/subgroup/repo.git",
+			want:   "https://gitlab.com/group/subgroup/repo",
+		},
+		{
+			name:   "bitbucket",
+			remote: "https://bitbucket.org/owner/repo.git",
+			want:   "https://bitbucket.org/owner/repo",
+		},
+		{
+			name:   "custom domain",
+			remote: "https://gitea.example.com/owner/repo.git",
+			want:   "https://gitea.example.com/owner/repo",
+		},
+		{
+			name:   "empty remote",
+			remote: "",
+			want:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := remoteURL(tt.remote)
+			if got != tt.want {
+				t.Errorf("remoteURL(%q) = %q, want %q", tt.remote, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCommitURL(t *testing.T) {
 	hash := "abc123def456"
 

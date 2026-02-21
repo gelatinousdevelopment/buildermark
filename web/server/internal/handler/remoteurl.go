@@ -77,6 +77,20 @@ func parseRemoteURL(raw string) (parsedRemote, bool) {
 	}, true
 }
 
+// repoURL returns the base web URL for the repository homepage.
+func (p parsedRemote) repoURL() string {
+	return fmt.Sprintf("https://%s/%s/%s", p.Domain, p.Owner, p.Repo)
+}
+
+// remoteURL converts a git remote string to the repository homepage URL.
+func remoteURL(remoteRaw string) string {
+	parsed, ok := parseRemoteURL(remoteRaw)
+	if !ok {
+		return ""
+	}
+	return parsed.repoURL()
+}
+
 // commitURL produces a web URL for viewing a commit on a known forge.
 func commitURL(remoteRaw, hash string) string {
 	parsed, ok := parseRemoteURL(remoteRaw)
@@ -84,17 +98,13 @@ func commitURL(remoteRaw, hash string) string {
 		return ""
 	}
 
+	base := parsed.repoURL()
 	switch parsed.Domain {
-	case "github.com":
-		return fmt.Sprintf("https://github.com/%s/%s/commit/%s", parsed.Owner, parsed.Repo, hash)
 	case "gitlab.com":
-		return fmt.Sprintf("https://gitlab.com/%s/%s/-/commit/%s", parsed.Owner, parsed.Repo, hash)
-	case "codeberg.org":
-		return fmt.Sprintf("https://codeberg.org/%s/%s/commit/%s", parsed.Owner, parsed.Repo, hash)
+		return base + "/-/commit/" + hash
 	case "bitbucket.org":
-		return fmt.Sprintf("https://bitbucket.org/%s/%s/commits/%s", parsed.Owner, parsed.Repo, hash)
+		return base + "/commits/" + hash
 	default:
-		// Covers GitHub Enterprise, Gitea, Forgejo, etc.
-		return fmt.Sprintf("https://%s/%s/%s/commit/%s", parsed.Domain, parsed.Owner, parsed.Repo, hash)
+		return base + "/commit/" + hash
 	}
 }
