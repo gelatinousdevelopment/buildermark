@@ -29,6 +29,12 @@
 		summary: DailyCommitSummary;
 	}
 
+	interface KeySegment {
+		key: string;
+		percent: number;
+		color: string;
+	}
+
 	let agentNames = $derived.by(() => {
 		const names = new SvelteSet<string>();
 		for (const day of dailySummary) {
@@ -91,6 +97,56 @@
 		});
 	});
 
+	const historyTotalLines = $derived.by(() =>
+		dailySummary.reduce((sum, day) => sum + Math.max(0, day.linesTotal), 0)
+	);
+
+	const historyLinesByAgent = $derived.by(() => {
+		const byAgent = new SvelteMap<string, number>();
+		for (const day of dailySummary) {
+			for (const seg of day.agentSegments ?? []) {
+				byAgent.set(seg.agent, (byAgent.get(seg.agent) ?? 0) + seg.linesFromAgent);
+			}
+		}
+		return byAgent;
+	});
+
+	const historyAgentLines = $derived.by(() => {
+		let total = 0;
+		for (const lines of historyLinesByAgent.values()) total += lines;
+		return total;
+	});
+
+	const historyManualLines = $derived.by(() => Math.max(0, historyTotalLines - historyAgentLines));
+
+	const historyKeySegments = $derived.by((): KeySegment[] => {
+		if (historyTotalLines <= 0) return [];
+		const segments: KeySegment[] = [];
+		for (const name of agentNames) {
+			const lines = historyLinesByAgent.get(name) ?? 0;
+			if (lines > 0) {
+				segments.push({
+					key: name,
+					percent: (lines / historyTotalLines) * 100,
+					color: agentColorMap.get(name) ?? '#999'
+				});
+			}
+		}
+		if (historyManualLines > 0) {
+			segments.push({
+				key: 'manual',
+				percent: (historyManualLines / historyTotalLines) * 100,
+				color: agentColorMap.get('manual') ?? '#656565'
+			});
+		}
+		return segments;
+	});
+
+	const historyAgentPercent = $derived.by(() => {
+		if (historyTotalLines <= 0) return 0;
+		return (historyAgentLines / historyTotalLines) * 100;
+	});
+
 	function formatDateLong(dateStr: string): string {
 		const [y, m, d] = dateStr.split('-').map(Number);
 		const date = new Date(y, m - 1, d);
@@ -104,6 +160,13 @@
 			return date.toLocaleDateString(undefined, { month: 'short' });
 		}
 		return String(d);
+	}
+
+	function formatKeyPercent(percent: number): string {
+		if (percent < 1 || (percent > 99 && percent < 100)) {
+			return `${percent.toFixed(1)}%`;
+		}
+		return `${Math.round(percent)}%`;
 	}
 
 	const autoScrollKey = $derived.by(() => {
@@ -123,70 +186,153 @@
 	});
 </script>
 
-<div class="dc-wrap" bind:this={scrollWrap}>
-	<div class="dc-chart">
-		{#each columns as col (col.date)}
-			<div class="dc-col">
-				<div class="dc-bar-area">
-					{#if col.total > 0}
-						<Popover position="below" width="250px" padding="0" fixed={true}>
-							<div class="dc-bar">
-								{#each col.segments as seg (seg.key)}
-									<div class="dc-seg" style="height:{seg.percent}%;background:{seg.color}"></div>
-								{/each}
-							</div>
-							{#snippet popover()}
-								<div class="dc-popover">
-									<div class="dc-popover-summary">
-										<div class="dc-popover-date">{formatDateLong(col.date)}</div>
-										<div class="dc-popover-lines">
-											{col.total} line{col.total !== 1 ? 's' : ''}
-										</div>
-										<div class="dc-popover-breakdown">
-											{#each col.segments as seg (seg.key)}
-												<div class="dc-popover-row">
-													<span class="dc-swatch" style="background:{seg.color}"></span>
-													<span class="dc-popover-name">{seg.key}</span>
-													<span class="dc-popover-pct">{seg.percent.toFixed(1)}%</span>
-												</div>
-											{/each}
-										</div>
-									</div>
-									{#if col.summary.commits.length > 0}
-										<div class="dc-popover-commits">
-											{#each col.summary.commits as c (c.commitHash)}
-												<a
-													href={resolve(
-														`/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(branch)}/${encodeURIComponent(c.commitHash)}`
-													)}
-													class="dc-commit-link"
-												>
-													{c.subject || c.commitHash.slice(0, 8)}
-												</a>
-											{/each}
-										</div>
-									{/if}
+<div class="dc-layout">
+	<div class="dc-wrap" bind:this={scrollWrap}>
+		<div class="dc-chart">
+			{#each columns as col (col.date)}
+				<div class="dc-col">
+					<div class="dc-bar-area">
+						{#if col.total > 0}
+							<Popover position="below" width="250px" padding="0" fixed={true}>
+								<div class="dc-bar">
+									{#each col.segments as seg (seg.key)}
+										<div class="dc-seg" style="height:{seg.percent}%;background:{seg.color}"></div>
+									{/each}
 								</div>
-							{/snippet}
-						</Popover>
-					{:else}
-						<div class="dc-bar dc-bar-empty"></div>
-					{/if}
+								{#snippet popover()}
+									<div class="dc-popover">
+										<div class="dc-popover-summary">
+											<div class="dc-popover-date">{formatDateLong(col.date)}</div>
+											<div class="dc-popover-lines">
+												{col.total} line{col.total !== 1 ? 's' : ''}
+											</div>
+											<div class="dc-popover-breakdown">
+												{#each col.segments as seg (seg.key)}
+													<div class="dc-popover-row">
+														<span class="dc-swatch" style="background:{seg.color}"></span>
+														<span class="dc-popover-name">{seg.key}</span>
+														<span class="dc-popover-pct">{seg.percent.toFixed(1)}%</span>
+													</div>
+												{/each}
+											</div>
+										</div>
+										{#if col.summary.commits.length > 0}
+											<div class="dc-popover-commits">
+												{#each col.summary.commits as c (c.commitHash)}
+													<a
+														href={resolve(
+															`/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(branch)}/${encodeURIComponent(c.commitHash)}`
+														)}
+														class="dc-commit-link"
+													>
+														{c.subject || c.commitHash.slice(0, 8)}
+													</a>
+												{/each}
+											</div>
+										{/if}
+									</div>
+								{/snippet}
+							</Popover>
+						{:else}
+							<div class="dc-bar dc-bar-empty"></div>
+						{/if}
+					</div>
+					<div class="dc-date">
+						{formatDateLabel(col.date)}
+					</div>
 				</div>
-				<div class="dc-date">
-					{formatDateLabel(col.date)}
-				</div>
+			{/each}
+		</div>
+	</div>
+	<div class="dc-side">
+		{#if historyKeySegments.length > 0}
+			<div class="dc-key">
+				{#each historyKeySegments as seg (seg.key)}
+					<span class="dc-key-item">
+						<span class="dc-swatch" style="background:{seg.color}"></span>
+						<span class="dc-key-label">{seg.key}</span>
+						<span class="dc-key-pct">{formatKeyPercent(seg.percent)}</span>
+					</span>
+				{/each}
 			</div>
-		{/each}
+		{/if}
+		<div class="dc-history-agent">
+			<div class="title">{Math.round(historyAgentPercent)}% by agents</div>
+			<div class="subtitle">last {columns.length} day{columns.length === 1 ? '' : 's'}</div>
+		</div>
 	</div>
 </div>
 
 <style>
+	.dc-layout {
+		display: flex;
+		align-items: flex-start;
+		gap: 1rem;
+	}
+
 	.dc-wrap {
+		flex: 1;
 		max-width: 100%;
 		overflow-x: auto;
 		overflow-y: hidden;
 		padding-bottom: 0.25rem;
+	}
+
+	.dc-side {
+		min-width: 140px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding-top: 0.1rem;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 5px;
+		padding: 0.7rem;
+	}
+
+	.dc-key {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.dc-key-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.9rem;
+		color: #555;
+	}
+
+	.dc-key-label {
+		max-width: 110px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.dc-key-pct {
+		color: #888;
+		font-variant-numeric: tabular-nums;
+		margin-left: auto;
+		padding-left: 0.4rem;
+	}
+
+	.dc-history-agent {
+		font-size: 0.88rem;
+		color: #444;
+		margin-top: 0.2rem;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.4;
+	}
+
+	.dc-history-agent .title {
+		font-size: 1.3em;
+		font-weight: 600;
+	}
+
+	.dc-history-agent .subtitle {
+		font-size: 1em;
+		opacity: 0.8;
 	}
 
 	.dc-chart {
@@ -322,5 +468,21 @@
 
 	.dc-commit-link:hover {
 		text-decoration: underline;
+	}
+
+	@media (max-width: 780px) {
+		.dc-layout {
+			flex-direction: column;
+		}
+
+		.dc-side {
+			min-width: 0;
+		}
+
+		.dc-key {
+			flex-direction: row;
+			flex-wrap: wrap;
+			gap: 0.5rem 0.75rem;
+		}
 	}
 </style>

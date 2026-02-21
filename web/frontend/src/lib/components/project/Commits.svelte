@@ -244,7 +244,7 @@
 	<div class="top-row">
 		{#if showBranchPicker}
 			<div class="branch-picker">
-				<label for="branch-{projectId}">Branch</label>
+				<label for="branch-{projectId}">Branch:</label>
 				<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
 					{#each data.branches as b (b)}
 						<option value={b}>{b}</option>
@@ -458,15 +458,20 @@
 		align-items: flex-start;
 		border-bottom: 0.5px solid var(--color-divider);
 		display: flex;
+		flex-direction: row-reverse;
 		gap: 1rem;
 		justify-content: space-between;
-		padding: 1rem 1rem 0.5rem 1rem;
+		padding: 1rem 1rem 1rem 1rem;
 	}
 
-	@media (max-width: 1000px) {
+	@media (max-width: 1100px) {
 		.top-row {
-			flex-direction: column;
+			flex-direction: column-reverse;
 		}
+	}
+
+	.summary-chart {
+		margin-bottom: -0.5rem;
 	}
 
 	.link-button {
@@ -712,5 +717,9 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+	}
+
+	.branch-picker select {
+		max-width: 200px;
 	}
 </style>
