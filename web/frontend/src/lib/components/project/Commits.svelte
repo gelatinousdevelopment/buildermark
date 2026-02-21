@@ -260,7 +260,7 @@
 </script>
 
 {#if showHeader}
-	<div class="heading">{header}</div>
+	<div class="heading">{header}{#if selectedBranch || data?.branch} <span class="heading-branch">({selectedBranch || data?.branch})</span>{/if}</div>
 {/if}
 
 {#if loading && !data}
@@ -498,6 +498,10 @@
 		margin-bottom: 0.75rem;
 		opacity: 0.5;
 		text-transform: uppercase;
+	}
+
+	.heading-branch {
+		text-transform: none;
 	}
 
 	.top-row {

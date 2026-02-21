@@ -14,7 +14,7 @@ export async function load({ params, fetch }) {
 		throw error(404, 'Project not found');
 	}
 
-	const branch = project.defaultBranch || 'main';
+	const branch = project.currentBranch || project.defaultBranch || 'main';
 	throw redirect(
 		302,
 		`/local/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(branch)}`

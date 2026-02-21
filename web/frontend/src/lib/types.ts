@@ -28,6 +28,7 @@ export interface ProjectDetail {
 	label: string;
 	gitId: string;
 	defaultBranch: string;
+	currentBranch: string;
 	remote: string;
 	remoteUrl: string;
 	localUser: string;
