@@ -586,9 +586,13 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		return
 	}
 	if branch == "" {
-		branch = strings.TrimSpace(project.DefaultBranch)
-		if branch == "" {
-			branch = "main"
+		if current := detectCurrentBranch(r.Context(), project.Path); current != "" {
+			branch = current
+		} else {
+			branch = strings.TrimSpace(project.DefaultBranch)
+			if branch == "" {
+				branch = "main"
+			}
 		}
 	}
 

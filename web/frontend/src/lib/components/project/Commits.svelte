@@ -32,6 +32,7 @@
 		compact?: boolean;
 		showHeader?: boolean;
 		header?: string;
+		headerLink?: string;
 		showBranchPicker?: boolean;
 		showUserPicker?: boolean;
 		showCoverageBar?: boolean;
@@ -59,6 +60,7 @@
 		compact = false,
 		showHeader = false,
 		header = 'Git Commits',
+		headerLink = undefined,
 		showBranchPicker = false,
 		showUserPicker = false,
 		showCoverageBar = false,
@@ -260,7 +262,9 @@
 </script>
 
 {#if showHeader}
-	<div class="heading">{header}{#if selectedBranch || data?.branch} <span class="heading-branch">({selectedBranch || data?.branch})</span>{/if}</div>
+	<div class="heading">
+		{#if headerLink}<a href={headerLink}>{header}</a>{:else}{header}{/if}{#if selectedBranch || data?.branch} <span class="heading-branch">({selectedBranch || data?.branch})</span>{/if}
+	</div>
 {/if}
 
 {#if loading && !data}
@@ -497,7 +501,17 @@
 		font-weight: 600;
 		margin-bottom: 0.75rem;
 		opacity: 0.5;
+		padding: 0 1rem;
 		text-transform: uppercase;
+	}
+
+	.heading a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.heading a:hover {
+		text-decoration: underline;
 	}
 
 	.heading-branch {

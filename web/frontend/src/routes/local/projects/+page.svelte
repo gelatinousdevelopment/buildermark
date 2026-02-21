@@ -111,20 +111,12 @@
 							/>
 						</div>
 						<div class="column commits">
-							<div class="heading">
-								<a
-									href={resolve(
-										row.project.defaultBranch
-											? `/local/projects/${encodeURIComponent(row.project.id)}/commits/${encodeURIComponent(row.project.defaultBranch)}`
-											: `/local/projects/${encodeURIComponent(row.project.id)}/commits`
-									)}>Git Commits</a
-								>
-							</div>
 							<Commits
 								projectId={row.project.id}
-								branch={row.project.defaultBranch}
 								limit={10}
 								compact={true}
+								showHeader={true}
+								headerLink={resolve(`/local/projects/${encodeURIComponent(row.project.id)}/commits`)}
 								showBranch={false}
 								useLoadQueue={true}
 								loadPriority={index}

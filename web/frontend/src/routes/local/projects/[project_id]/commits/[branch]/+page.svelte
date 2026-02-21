@@ -25,7 +25,6 @@
 	{projectId}
 	{branch}
 	pageSize={40}
-	showHeader={true}
 	showBranchPicker={true}
 	showUserPicker={true}
 	showCoverageBar={true}
