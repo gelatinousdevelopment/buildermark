@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { listProjects, getProject } from '$lib/api';
+	import { listProjects, getProject, setProjectIgnored } from '$lib/api';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import type { Project, ProjectDetail } from '$lib/types';
-	import Icon from '$lib/Icon.svelte';
 
 	type ProjectRow = {
 		project: Project;
@@ -17,6 +16,14 @@
 	let rows: ProjectRow[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
+	let detectedProjects: Project[] = $state([]);
+	let detectedLoading = $state(false);
+	let detectedError: string | null = $state(null);
+	let selectedProjectIds: string[] = $state([]);
+	let savingSelection = $state(false);
+	let saveSelectionError: string | null = $state(null);
+
+	const selectedCount = $derived(selectedProjectIds.length);
 
 	function projectName(project: Project): string {
 		return project.label || project.path;
@@ -29,7 +36,62 @@
 		return projectName(a.project).localeCompare(projectName(b.project));
 	}
 
-	onMount(async () => {
+	function pathTail(path: string): string {
+		const normalized = path.replace(/[\\/]+$/, '');
+		const parts = normalized.split(/[\\/]/);
+		return parts[parts.length - 1] || path;
+	}
+
+	function previousLocationSuggestions(currentProject: Project): Project[] {
+		const currentTail = pathTail(currentProject.path).toLowerCase();
+		return detectedProjects.filter(
+			(project) =>
+				project.id !== currentProject.id && pathTail(project.path).toLowerCase() === currentTail
+		);
+	}
+
+	function toggleSelection(projectId: string, checked: boolean) {
+		if (checked) {
+			selectedProjectIds = selectedProjectIds.includes(projectId)
+				? selectedProjectIds
+				: [...selectedProjectIds, projectId];
+		} else {
+			selectedProjectIds = selectedProjectIds.filter((id) => id !== projectId);
+		}
+	}
+
+	async function loadDetectedProjects() {
+		detectedLoading = true;
+		detectedError = null;
+		try {
+			detectedProjects = (await listProjects(true)).sort((a, b) =>
+				projectName(a).localeCompare(projectName(b))
+			);
+		} catch (e) {
+			detectedError = e instanceof Error ? e.message : 'Failed to load detected projects';
+		} finally {
+			detectedLoading = false;
+		}
+	}
+
+	async function startTrackingSelected() {
+		if (selectedProjectIds.length === 0) return;
+		savingSelection = true;
+		saveSelectionError = null;
+		try {
+			await Promise.all(selectedProjectIds.map((projectId) => setProjectIgnored(projectId, false)));
+			selectedProjectIds = [];
+			await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
+		} catch (e) {
+			saveSelectionError = e instanceof Error ? e.message : 'Failed to update project tracking';
+		} finally {
+			savingSelection = false;
+		}
+	}
+
+	async function loadTrackedRows() {
+		loading = true;
+		error = null;
 		try {
 			const projects = (await listProjects(false)).filter((project) => project.gitId);
 			const loadedRows = await Promise.all(
@@ -61,6 +123,10 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(async () => {
+		await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
 	});
 </script>
 
@@ -70,7 +136,83 @@
 	{:else if error}
 		<p class="error">{error}</p>
 	{:else if rows.length === 0}
-		<p>No tracked projects with git IDs found.</p>
+		<div class="onboarding inset-when-limited-content-width">
+			<div class="column left">
+				<h2>Welcome to BuilderBit Local</h2>
+				<p>
+					Track projects to see agent conversations and commit attribution side-by-side in one
+					dashboard.
+				</p>
+				<p class="muted">
+					We found projects from your agent conversation folders. Choose what to track now—you can
+					always change this later in settings.
+				</p>
+			</div>
+			<div class="column right">
+				<h3>Select projects to track</h3>
+				{#if detectedLoading}
+					<p class="loading">Finding projects from agent conversations…</p>
+				{:else if detectedError}
+					<p class="error">{detectedError}</p>
+				{:else if detectedProjects.length === 0}
+					<p class="muted">No detected projects found yet.</p>
+				{:else}
+					<ul class="project-options">
+						{#each detectedProjects as project (project.id)}
+							<li>
+								<label>
+									<input
+										type="checkbox"
+										checked={selectedProjectIds.includes(project.id)}
+										onchange={(event) =>
+											toggleSelection(
+												project.id,
+												(event.currentTarget as HTMLInputElement).checked
+											)}
+									/>
+									<span class="text">
+										<span class="title">{projectName(project)}</span>
+										<span class="subtitle">{project.path}</span>
+									</span>
+								</label>
+								{#if previousLocationSuggestions(project).length > 0}
+									<ul class="suggestions">
+										{#each previousLocationSuggestions(project) as suggestion (suggestion.id)}
+											<li>
+												<label>
+													<input
+														type="checkbox"
+														checked={selectedProjectIds.includes(suggestion.id)}
+														onchange={(event) =>
+															toggleSelection(
+																suggestion.id,
+																(event.currentTarget as HTMLInputElement).checked
+															)}
+													/>
+													<span>{suggestion.path}</span>
+												</label>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+					{#if saveSelectionError}
+						<p class="error">{saveSelectionError}</p>
+					{/if}
+					<button
+						class="btn-sm"
+						disabled={selectedCount === 0 || savingSelection}
+						onclick={startTrackingSelected}
+					>
+						{savingSelection
+							? 'Saving…'
+							: `Track ${selectedCount || ''} selected project${selectedCount === 1 ? '' : 's'}`}
+					</button>
+				{/if}
+			</div>
+		</div>
 	{:else}
 		<div class="projects">
 			{#each rows as row, index (row.project.id)}
@@ -143,6 +285,100 @@
 		flex-direction: column;
 		gap: 1rem;
 		padding: 1rem;
+	}
+
+	.onboarding {
+		display: grid;
+		grid-template-columns: 40% 60%;
+		padding: 1.2rem;
+		gap: 1.2rem;
+	}
+
+	.onboarding h2,
+	.onboarding h3 {
+		margin: 0;
+	}
+
+	.onboarding .left {
+		display: flex;
+		flex-direction: column;
+		gap: 0.7rem;
+	}
+
+	.onboarding .left p {
+		margin: 0;
+		font-size: 1rem;
+		line-height: 1.45;
+	}
+
+	.onboarding .muted {
+		opacity: 0.75;
+	}
+
+	.onboarding .right {
+		display: flex;
+		flex-direction: column;
+		gap: 0.8rem;
+	}
+
+	.project-options {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		max-height: 30rem;
+		overflow: auto;
+	}
+
+	.project-options > li {
+		border: 0.5px solid var(--color-divider);
+		border-radius: 8px;
+		padding: 0.45rem 0.55rem;
+	}
+
+	.project-options label {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.45rem;
+	}
+
+	.project-options .text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+
+	.project-options .title {
+		font-weight: 600;
+	}
+
+	.project-options .subtitle {
+		opacity: 0.7;
+		font-size: 0.85rem;
+		font-family: var(--font-family-monospace);
+	}
+
+	.suggestions {
+		list-style: none;
+		margin: 0.45rem 0 0 1.6rem;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.suggestions span {
+		font-size: 0.8rem;
+		opacity: 0.75;
+		font-family: var(--font-family-monospace);
+	}
+
+	@media (max-width: 900px) {
+		.onboarding {
+			grid-template-columns: 1fr;
+		}
 	}
 
 	.project .content {
