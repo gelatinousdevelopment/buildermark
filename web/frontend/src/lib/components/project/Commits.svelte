@@ -263,7 +263,7 @@
 
 {#if showHeader}
 	<div class="heading">
-		{#if headerLink}<a href={headerLink}>{header}</a>{:else}{header}{/if}{#if selectedBranch || data?.branch} <span class="heading-branch">({selectedBranch || data?.branch})</span>{/if}
+		{#if headerLink}<a href={headerLink}>{header}</a>{:else}{header}{/if}{#if selectedBranch || data?.branch}<span class="heading-branch"><Icon name="branch" width="13px" />{selectedBranch || data?.branch}</span>{/if}
 	</div>
 {/if}
 
@@ -497,8 +497,11 @@
 
 <style>
 	.heading {
+		align-items: center;
+		display: flex;
 		font-size: 0.9rem;
 		font-weight: 600;
+		justify-content: space-between;
 		margin-bottom: 0.75rem;
 		opacity: 0.5;
 		padding: 0 1rem;
@@ -515,6 +518,10 @@
 	}
 
 	.heading-branch {
+		align-items: center;
+		display: inline-flex;
+		font-weight: 400;
+		gap: 0.2rem;
 		text-transform: none;
 	}
 
