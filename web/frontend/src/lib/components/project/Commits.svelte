@@ -263,7 +263,10 @@
 
 {#if showHeader}
 	<div class="heading">
-		{#if headerLink}<a href={headerLink}>{header}</a>{:else}{header}{/if}{#if selectedBranch || data?.branch}<span class="heading-branch"><Icon name="branch" width="13px" />{selectedBranch || data?.branch}</span>{/if}
+		{#if headerLink}<a href={headerLink}>{header}</a
+			>{:else}{header}{/if}{#if selectedBranch || data?.branch}<span class="heading-branch"
+				><Icon name="branch" width="13px" />{selectedBranch || data?.branch}</span
+			>{/if}
 	</div>
 {/if}
 
@@ -805,6 +808,6 @@
 	.branch-picker label,
 	.user-picker label {
 		text-align: right;
-		width: 80px;
+		width: 60px;
 	}
 </style>

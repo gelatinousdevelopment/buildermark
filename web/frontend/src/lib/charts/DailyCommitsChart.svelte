@@ -279,14 +279,25 @@
 	}
 
 	.dc-side {
-		min-width: 140px;
-		flex-shrink: 0;
+		box-sizing: border-box;
+		align-self: stretch;
+		display: flex;
+		flex-direction: row;
+		gap: 1rem;
+		align-items: stretch;
+		padding-bottom: 1.4rem;
+	}
+
+	.dc-side > div {
+		background: #fbfbfb;
+		border-radius: 5px;
+		border: 0.5px solid var(--color-divider);
 		display: flex;
 		flex-direction: column;
+		flex-shrink: 0;
 		gap: 0.4rem;
+		min-width: 130px;
 		padding-top: 0.1rem;
-		border: 0.5px solid var(--color-divider);
-		border-radius: 5px;
 		padding: 0.7rem;
 	}
 
@@ -314,15 +325,12 @@
 		color: #888;
 		font-variant-numeric: tabular-nums;
 		margin-left: auto;
-		padding-left: 0.4rem;
 	}
 
 	.dc-history-agent {
 		font-size: 0.88rem;
 		color: #444;
-		margin-top: 0.2rem;
 		font-variant-numeric: tabular-nums;
-		line-height: 1.4;
 	}
 
 	.dc-history-agent .title {

@@ -11,7 +11,7 @@
 		if (!projectId || !nextBranch) return;
 		const base = resolve('/local/projects/[project_id]/commits/[branch]', {
 			project_id: projectId,
-			branch: nextBranch
+			branch: encodeURIComponent(nextBranch)
 		});
 		await goto(base, {
 			replaceState: true,
