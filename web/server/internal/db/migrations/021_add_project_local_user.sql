@@ -1,0 +1,2 @@
+ALTER TABLE projects ADD COLUMN local_user TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN local_email TEXT NOT NULL DEFAULT '';

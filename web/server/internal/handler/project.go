@@ -126,6 +126,8 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ensureProjectLocalUser(r.Context(), s.DB, project)
+
 	writeSuccess(w, http.StatusOK, projectDetailResponse{
 		ProjectDetail: project,
 		RemoteURL:     remoteURL(project.Remote),

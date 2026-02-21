@@ -18,6 +18,8 @@ export interface ProjectDetail {
 	defaultBranch: string;
 	remote: string;
 	remoteUrl: string;
+	localUser: string;
+	localEmail: string;
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;

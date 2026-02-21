@@ -852,6 +852,23 @@ func ensureProjectRemote(ctx context.Context, database *sql.DB, project *db.Proj
 	return remote
 }
 
+func ensureProjectLocalUser(ctx context.Context, database *sql.DB, p *db.ProjectDetail) {
+	if p.LocalUser != "" {
+		return
+	}
+	name, _ := runGit(ctx, p.Path, "config", "--get", "user.name")
+	email, _ := runGit(ctx, p.Path, "config", "--get", "user.email")
+	name = strings.TrimSpace(name)
+	email = strings.TrimSpace(email)
+	if name == "" && email == "" {
+		return
+	}
+	if err := db.UpdateProjectLocalUser(ctx, database, p.ID, name, email); err == nil {
+		p.LocalUser = name
+		p.LocalEmail = email
+	}
+}
+
 func groupProjectsByGitID(projects []db.Project) []projectGroup {
 	groups := make(map[string][]db.Project)
 	for _, p := range projects {

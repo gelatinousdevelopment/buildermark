@@ -72,6 +72,18 @@
 				{/if}
 			</div>
 		</div>
+		{#if project.localUser || project.localEmail}
+			<div class="project-path">
+				<div class="label">User:</div>
+				<div class="value">
+					{#if project.localUser && project.localEmail}
+						{project.localUser} &lt;{project.localEmail}&gt;
+					{:else}
+						{project.localUser || project.localEmail}
+					{/if}
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>
 
