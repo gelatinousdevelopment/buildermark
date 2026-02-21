@@ -21,9 +21,9 @@
 	--agent-foreground-color-manual: #fff;
 	--agent-color-claude: #cf6f30;
 	--agent-foreground-color-claude: rgb(255, 255, 255, 0.9);
-	--agent-color-codex: #34a869;
+	--agent-color-codex: #4c5dff;
 	--agent-foreground-color-codex: rgb(255, 255, 255, 0.9);
-	--agent-color-gemini: #3b82f6;
+	--agent-color-gemini: #3180f7;
 	--agent-foreground-color-gemini: rgb(255, 255, 255, 0.9);
 
 	--font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
