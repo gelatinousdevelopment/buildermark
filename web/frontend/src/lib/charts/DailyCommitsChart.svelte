@@ -326,7 +326,7 @@
 	}
 
 	.dc-history-agent .title {
-		font-size: 1.3em;
+		font-size: 1.4em;
 		font-weight: 600;
 	}
 
@@ -350,7 +350,7 @@
 	}
 
 	.dc-bar-area {
-		height: 100px;
+		height: 114px;
 	}
 
 	/* Popover wrapper must fill bar area */

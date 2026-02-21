@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listProjects, setProjectIgnored } from '$lib/api';
-	import type { Project } from '$lib/types';
+	import { getLocalSettings, listProjects, setProjectIgnored } from '$lib/api';
+	import type { LocalSettings, Project } from '$lib/types';
 
 	type ProjectSetting = {
 		project: Project;
@@ -11,8 +11,13 @@
 	};
 
 	let rows: ProjectSetting[] = $state([]);
-	let loading = $state(true);
-	let error: string | null = $state(null);
+	let loadingProjects = $state(true);
+	let projectError: string | null = $state(null);
+
+	let localSettingsLoading = $state(true);
+	let localSettingsError: string | null = $state(null);
+	let localSettings: LocalSettings | null = $state(null);
+	let showSearchPaths = $state(false);
 
 	function projectName(project: Project): string {
 		return project.label || project.path;
@@ -23,6 +28,10 @@
 	}
 
 	onMount(async () => {
+		await Promise.all([loadProjects(), loadLocalSettings()]);
+	});
+
+	async function loadProjects() {
 		try {
 			const [trackedProjects, ignoredProjects] = await Promise.all([
 				listProjects(false),
@@ -44,11 +53,21 @@
 				projectName(a.project).localeCompare(projectName(b.project))
 			);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load projects';
+			projectError = e instanceof Error ? e.message : 'Failed to load projects';
 		} finally {
-			loading = false;
+			loadingProjects = false;
 		}
-	});
+	}
+
+	async function loadLocalSettings() {
+		try {
+			localSettings = await getLocalSettings();
+		} catch (e) {
+			localSettingsError = e instanceof Error ? e.message : 'Failed to load local settings';
+		} finally {
+			localSettingsLoading = false;
+		}
+	}
 
 	async function setTracked(projectId: string, tracked: boolean) {
 		const rowIndex = rows.findIndex((row) => row.project.id === projectId);
@@ -75,12 +94,42 @@
 
 <div class="settings limited-content-width inset-when-limited-content-width">
 	<h1>Global Settings</h1>
+
+	<h2>Local Environment</h2>
+	{#if localSettingsLoading}
+		<p>Loading local settings...</p>
+	{:else if localSettingsError}
+		<p class="error">{localSettingsError}</p>
+	{:else if localSettings}
+		<div class="local-info">
+			<p class="label">Home Folder</p>
+			<p class="path">{localSettings.homePath}</p>
+			<button type="button" class="toggle" onclick={() => (showSearchPaths = !showSearchPaths)}>
+				{showSearchPaths ? 'Hide Conversation Search Paths' : 'Show Conversation Search Paths'}
+			</button>
+			{#if showSearchPaths}
+				{#if localSettings.conversationSearchPaths.length === 0}
+					<p class="muted">No agent watchers are currently registered.</p>
+				{:else}
+					<ul class="search-paths">
+						{#each localSettings.conversationSearchPaths as entry}
+							<li>
+								<span class="agent">{entry.agent}</span>
+								<span class="path">{entry.path}</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{/if}
+		</div>
+	{/if}
+
 	<h2>Project Tracking</h2>
 
-	{#if loading}
+	{#if loadingProjects}
 		<p>Loading projects...</p>
-	{:else if error}
-		<p class="error">{error}</p>
+	{:else if projectError}
+		<p class="error">{projectError}</p>
 	{:else if rows.length === 0}
 		<p>No projects found.</p>
 	{:else}
@@ -138,6 +187,58 @@
 	h2 {
 		margin-top: 1rem;
 		font-size: 1rem;
+	}
+
+	.local-info {
+		background: #fff;
+		border: 1px solid #ddd;
+		border-radius: 8px;
+		padding: 0.75rem;
+	}
+
+	.label {
+		margin: 0;
+		font-size: 0.8rem;
+		color: #666;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+	}
+
+	.path {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+			'Courier New', monospace;
+		word-break: break-all;
+	}
+
+	.toggle {
+		margin-top: 0.25rem;
+		border: 1px solid #ccc;
+		background: #f7f7f7;
+		border-radius: 6px;
+		padding: 0.35rem 0.6rem;
+		font-size: 0.85rem;
+		cursor: pointer;
+	}
+
+	.muted {
+		color: #777;
+		font-size: 0.85rem;
+	}
+
+	.search-paths {
+		margin: 0.75rem 0 0;
+		padding: 0 0 0 1rem;
+	}
+
+	.search-paths li {
+		margin-bottom: 0.4rem;
+	}
+
+	.agent {
+		display: inline-block;
+		min-width: 4.5rem;
+		font-weight: 600;
+		text-transform: lowercase;
 	}
 
 	.project-table {

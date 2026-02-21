@@ -26,6 +26,7 @@
 	{branch}
 	pageSize={40}
 	showBranchPicker={true}
+	showUserPicker={true}
 	showCoverageBar={true}
 	showPagination={true}
 	showLoadMore={true}

@@ -360,8 +360,8 @@ func ingestCommits(
 			BranchName:      branch,
 			CommitHash:      gc.Hash,
 			Subject:         gc.Subject,
-			AuthorName:      gc.AuthorName,
-			AuthorEmail:     gc.AuthorEmail,
+			UserName:      gc.UserName,
+			UserEmail:     gc.UserEmail,
 			AuthoredAt:      gc.TimestampUnix,
 			DiffContent:     cleanDiff,
 			LinesTotal:      totalLines,
@@ -492,8 +492,8 @@ func recomputeCommitCoverageForProject(
 			BranchName:      c.BranchName,
 			CommitHash:      c.CommitHash,
 			Subject:         c.Subject,
-			AuthorName:      c.AuthorName,
-			AuthorEmail:     c.AuthorEmail,
+			UserName:      c.UserName,
+			UserEmail:     c.UserEmail,
 			AuthoredAt:      c.AuthoredAt,
 			DiffContent:     cleanDiff,
 			LinesTotal:      totalLines,
@@ -587,8 +587,8 @@ func listAllCommitsByIdentity(ctx context.Context, path, branch string, identity
 		}
 		c := gitCommit{
 			Hash:          strings.TrimSpace(parts[0]),
-			AuthorName:    strings.TrimSpace(parts[1]),
-			AuthorEmail:   strings.TrimSpace(parts[2]),
+			UserName:    strings.TrimSpace(parts[1]),
+			UserEmail:   strings.TrimSpace(parts[2]),
 			TimestampUnix: ts,
 			Subject:       strings.TrimSpace(parts[4]),
 		}

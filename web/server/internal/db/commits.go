@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+// UserInfo holds a distinct user name + email pair.
+type UserInfo struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
 // Commit represents a row in the commits table.
 type Commit struct {
 	ID              string `json:"id"`
@@ -14,8 +20,8 @@ type Commit struct {
 	BranchName      string `json:"branchName"`
 	CommitHash      string `json:"commitHash"`
 	Subject         string `json:"subject"`
-	AuthorName      string `json:"authorName"`
-	AuthorEmail     string `json:"authorEmail"`
+	UserName        string `json:"userName"`
+	UserEmail       string `json:"userEmail"`
 	AuthoredAt      int64  `json:"authoredAt"` // unix seconds
 	DiffContent     string `json:"diffContent"`
 	LinesTotal      int    `json:"linesTotal"`
@@ -34,13 +40,13 @@ func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
 		c.ID = newID()
 	}
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version)
+		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(project_id, commit_hash) DO UPDATE SET
 		   branch_name = excluded.branch_name,
 		   subject = excluded.subject,
-		   author_name = excluded.author_name,
-		   author_email = excluded.author_email,
+		   user_name = excluded.user_name,
+		   user_email = excluded.user_email,
 		   diff_content = excluded.diff_content,
 		   lines_total = excluded.lines_total,
 		   chars_total = excluded.chars_total,
@@ -49,7 +55,7 @@ func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
 		   lines_added = excluded.lines_added,
 		   lines_removed = excluded.lines_removed,
 		   coverage_version = excluded.coverage_version`,
-		c.ID, c.ProjectID, c.BranchName, c.CommitHash, c.Subject, c.AuthorName, c.AuthorEmail, c.AuthoredAt,
+		c.ID, c.ProjectID, c.BranchName, c.CommitHash, c.Subject, c.UserName, c.UserEmail, c.AuthoredAt,
 		c.DiffContent, c.LinesTotal, c.CharsTotal, c.LinesFromAgent, c.CharsFromAgent, c.LinesAdded, c.LinesRemoved, c.CoverageVersion,
 	)
 	if err != nil {
@@ -71,13 +77,13 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version)
+		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(project_id, commit_hash) DO UPDATE SET
 		   branch_name = excluded.branch_name,
 		   subject = excluded.subject,
-		   author_name = excluded.author_name,
-		   author_email = excluded.author_email,
+		   user_name = excluded.user_name,
+		   user_email = excluded.user_email,
 		   diff_content = excluded.diff_content,
 		   lines_total = excluded.lines_total,
 		   chars_total = excluded.chars_total,
@@ -97,7 +103,7 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 			c.ID = newID()
 		}
 		if _, err := stmt.ExecContext(ctx,
-			c.ID, c.ProjectID, c.BranchName, c.CommitHash, c.Subject, c.AuthorName, c.AuthorEmail, c.AuthoredAt,
+			c.ID, c.ProjectID, c.BranchName, c.CommitHash, c.Subject, c.UserName, c.UserEmail, c.AuthoredAt,
 			c.DiffContent, c.LinesTotal, c.CharsTotal, c.LinesFromAgent, c.CharsFromAgent, c.LinesAdded, c.LinesRemoved, c.CoverageVersion,
 		); err != nil {
 			return fmt.Errorf("upsert commit %s: %w", c.CommitHash, err)
@@ -114,7 +120,7 @@ func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID, branchName
 		limit = 20
 	}
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
 		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
 		 FROM commits
 		 WHERE project_id = ? AND branch_name = ?
@@ -130,7 +136,7 @@ func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID, branchName
 	commits := []Commit{}
 	for rows.Next() {
 		var c Commit
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
 			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
 		}
@@ -149,15 +155,89 @@ func CountCommitsByProject(ctx context.Context, db *sql.DB, projectID, branchNam
 	return count, nil
 }
 
+// ListDistinctUsers returns distinct user name/email pairs for a project and branch.
+func ListDistinctUsers(ctx context.Context, db *sql.DB, projectID, branchName string) ([]UserInfo, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT user_name, user_email FROM commits
+		 WHERE project_id = ? AND branch_name = ?
+		 GROUP BY user_email
+		 ORDER BY user_name`,
+		projectID, branchName,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list distinct users: %w", err)
+	}
+	defer rows.Close()
+
+	users := []UserInfo{}
+	for rows.Next() {
+		var u UserInfo
+		if err := rows.Scan(&u.Name, &u.Email); err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+// ListCommitsByProjectAndUser returns commits filtered by an optional user email.
+// When userEmail is empty it delegates to ListCommitsByProject.
+func ListCommitsByProjectAndUser(ctx context.Context, db *sql.DB, projectID, branchName, userEmail string, limit, offset int) ([]Commit, error) {
+	if userEmail == "" {
+		return ListCommitsByProject(ctx, db, projectID, branchName, limit, offset)
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		 FROM commits
+		 WHERE project_id = ? AND branch_name = ? AND user_email = ?
+		 ORDER BY authored_at DESC
+		 LIMIT ? OFFSET ?`,
+		projectID, branchName, userEmail, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query commits by user: %w", err)
+	}
+	defer rows.Close()
+
+	commits := []Commit{}
+	for rows.Next() {
+		var c Commit
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		commits = append(commits, c)
+	}
+	return commits, rows.Err()
+}
+
+// CountCommitsByProjectAndUser returns the total count filtered by optional user email.
+// When userEmail is empty it delegates to CountCommitsByProject.
+func CountCommitsByProjectAndUser(ctx context.Context, db *sql.DB, projectID, branchName, userEmail string) (int, error) {
+	if userEmail == "" {
+		return CountCommitsByProject(ctx, db, projectID, branchName)
+	}
+	var count int
+	err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM commits WHERE project_id = ? AND branch_name = ? AND user_email = ?", projectID, branchName, userEmail).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count commits by user: %w", err)
+	}
+	return count, nil
+}
+
 // GetCommitByHash returns a single commit by project ID and commit hash.
 func GetCommitByHash(ctx context.Context, db *sql.DB, projectID, branchName, commitHash string) (*Commit, error) {
 	var c Commit
 	err := db.QueryRowContext(ctx,
-		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
 		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
 		 FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
 		projectID, branchName, commitHash,
-	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
+	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
 		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -172,12 +252,12 @@ func GetCommitByHash(ctx context.Context, db *sql.DB, projectID, branchName, com
 func OldestCommitByProject(ctx context.Context, db *sql.DB, projectID, branchName string) (*Commit, error) {
 	var c Commit
 	err := db.QueryRowContext(ctx,
-		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
 		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
 		 FROM commits WHERE project_id = ? AND branch_name = ?
 		 ORDER BY authored_at ASC LIMIT 1`,
 		projectID, branchName,
-	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
+	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
 		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -208,7 +288,7 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
 	query := fmt.Sprintf(
-		`SELECT id, project_id, branch_name, commit_hash, subject, author_name, author_email, authored_at,
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
 		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
 		 FROM commits
 		 WHERE project_id IN (%s) AND branch_name = ?
@@ -230,7 +310,7 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	commits := []Commit{}
 	for rows.Next() {
 		var c Commit
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.AuthorName, &c.AuthorEmail, &c.AuthoredAt,
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
 			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
 		}

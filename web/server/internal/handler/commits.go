@@ -99,6 +99,8 @@ type projectCommitDetailResponse struct {
 type projectCommitPageResponse struct {
 	Branch       string                  `json:"branch"`
 	Branches     []string                `json:"branches"`
+	Users        []db.UserInfo            `json:"users"`
+	UserFilter   string                  `json:"userFilter"`
 	CurrentUser  string                  `json:"currentUser"`
 	CurrentEmail string                  `json:"currentEmail"`
 	Project      db.Project              `json:"project"`
@@ -174,8 +176,8 @@ type gitIdentity struct {
 type gitCommit struct {
 	Hash          string
 	Subject       string
-	AuthorName    string
-	AuthorEmail   string
+	UserName      string
+	UserEmail     string
 	TimestampUnix int64
 }
 
@@ -409,8 +411,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		commit = gitCommit{
 			Hash:          dbCommit.CommitHash,
 			Subject:       dbCommit.Subject,
-			AuthorName:    dbCommit.AuthorName,
-			AuthorEmail:   dbCommit.AuthorEmail,
+			UserName:    dbCommit.UserName,
+			UserEmail:   dbCommit.UserEmail,
 			TimestampUnix: dbCommit.AuthoredAt,
 		}
 		commitDiff = dbCommit.DiffContent
@@ -571,6 +573,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 	clientLoc := time.FixedZone("client", -tzOffsetMin*60)
 
+	userFilter := strings.TrimSpace(r.URL.Query().Get("user"))
+
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
 		log.Printf("error loading project %s: %v", projectID, err)
@@ -610,6 +614,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		branch = defaultBranch
 	}
 	branches, _ := listRepoBranches(r.Context(), repoProject.Path, defaultBranch)
+	users, _ := db.ListDistinctUsers(r.Context(), s.DB, repoProject.ID, branch)
 
 	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 	if err != nil {
@@ -665,9 +670,20 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		}
 	}
 
+	// Compute filtered total for pagination when an author filter is active.
+	filteredTotal := total
+	if userFilter != "" {
+		filteredTotal, err = db.CountCommitsByProjectAndUser(r.Context(), s.DB, repoProject.ID, branch, userFilter)
+		if err != nil {
+			log.Printf("error counting filtered commits for %s: %v", repoProject.Path, err)
+			writeError(w, http.StatusInternalServerError, "failed to count commits")
+			return
+		}
+	}
+
 	totalPages := 0
-	if total > 0 {
-		totalPages = (total + pageSize - 1) / pageSize
+	if filteredTotal > 0 {
+		totalPages = (filteredTotal + pageSize - 1) / pageSize
 	}
 	if totalPages > 0 && page > totalPages {
 		page = totalPages
@@ -677,7 +693,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		offset = 0
 	}
 
-	dbCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, branch, pageSize, offset)
+	dbCommits, err := db.ListCommitsByProjectAndUser(r.Context(), s.DB, repoProject.ID, branch, userFilter, pageSize, offset)
 	if err != nil {
 		log.Printf("error listing commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -685,7 +701,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	// Collect all commit IDs for agent coverage lookup.
-	allDBCommits, err := db.ListCommitsByProject(r.Context(), s.DB, repoProject.ID, branch, total, 0)
+	allDBCommits, err := db.ListCommitsByProjectAndUser(r.Context(), s.DB, repoProject.ID, branch, userFilter, filteredTotal, 0)
 	if err != nil {
 		log.Printf("error listing all commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -727,8 +743,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		allCoverage = append(allCoverage, cov)
 	}
 
-	// Add working copy on page 1.
-	if page == 1 {
+	// Add working copy on page 1 when no author filter or filter matches current identity.
+	if page == 1 && (userFilter == "" || strings.EqualFold(userFilter, identity.Email)) {
 		if wc, ok := hasWorkingCopyChanges(r.Context(), repoProject); ok {
 			paged = append([]projectCommitCoverage{wc}, paged...)
 		}
@@ -749,6 +765,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	writeSuccess(w, http.StatusOK, projectCommitPageResponse{
 		Branch:       branch,
 		Branches:     branches,
+		Users:        users,
+		UserFilter:   userFilter,
 		CurrentUser:  identity.Name,
 		CurrentEmail: identity.Email,
 		Project:      *project,
@@ -758,7 +776,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		Pagination: projectCommitPagination{
 			Page:       page,
 			PageSize:   pageSize,
-			Total:      total,
+			Total:      filteredTotal,
 			TotalPages: totalPages,
 		},
 		Commits: paged,
@@ -968,8 +986,8 @@ func listCommitsByIdentity(ctx context.Context, path, branch string, identity gi
 		}
 		c := gitCommit{
 			Hash:          strings.TrimSpace(parts[0]),
-			AuthorName:    strings.TrimSpace(parts[1]),
-			AuthorEmail:   strings.TrimSpace(parts[2]),
+			UserName:    strings.TrimSpace(parts[1]),
+			UserEmail:   strings.TrimSpace(parts[2]),
 			TimestampUnix: ts,
 			Subject:       strings.TrimSpace(parts[4]),
 		}
@@ -1045,10 +1063,10 @@ func makeCommitRefreshState(syncState *db.CommitSyncState, stale bool) commitRef
 
 func commitMatchesIdentity(c gitCommit, identity gitIdentity) bool {
 	if identity.Email != "" {
-		return strings.EqualFold(strings.TrimSpace(c.AuthorEmail), identity.Email)
+		return strings.EqualFold(strings.TrimSpace(c.UserEmail), identity.Email)
 	}
 	if identity.Name != "" {
-		return strings.TrimSpace(c.AuthorName) == identity.Name
+		return strings.TrimSpace(c.UserName) == identity.Name
 	}
 	return false
 }

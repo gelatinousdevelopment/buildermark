@@ -1,7 +1,7 @@
 import { redirect, error } from '@sveltejs/kit';
 import { getConversation } from '$lib/api';
 
-export async function load({ params }) {
+export async function load({ params, fetch }) {
 	const id = params.id;
 	if (!id) {
 		throw error(400, 'Missing conversation ID');
@@ -9,7 +9,7 @@ export async function load({ params }) {
 
 	let conversation: Awaited<ReturnType<typeof getConversation>>;
 	try {
-		conversation = await getConversation(id);
+		conversation = await getConversation(id, fetch);
 	} catch {
 		throw error(404, 'Conversation not found');
 	}

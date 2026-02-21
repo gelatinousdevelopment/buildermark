@@ -11,6 +11,16 @@ export interface Project {
 	ignoreDefaultDiffPaths: boolean;
 }
 
+export interface AgentConversationSearchPath {
+	agent: string;
+	path: string;
+}
+
+export interface LocalSettings {
+	homePath: string;
+	conversationSearchPaths: AgentConversationSearchPath[];
+}
+
 export interface ProjectDetail {
 	id: string;
 	path: string;
@@ -90,9 +100,16 @@ export interface ProjectCommitCoverageResponse {
 	commits: ProjectCommitCoverage[];
 }
 
+export interface UserInfo {
+	name: string;
+	email: string;
+}
+
 export interface ProjectCommitPageResponse {
 	branch: string;
 	branches: string[];
+	users: UserInfo[];
+	userFilter: string;
 	currentUser: string;
 	currentEmail: string;
 	project: Project;

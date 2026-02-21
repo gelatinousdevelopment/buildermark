@@ -1,6 +1,7 @@
 import { PUBLIC_API_URL } from '$env/static/public';
 import type {
 	Project,
+	LocalSettings,
 	ProjectDetail,
 	Conversation,
 	ConversationDetail,
@@ -18,8 +19,10 @@ interface Envelope<T> {
 	error?: string;
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-	const res = await fetch(`${PUBLIC_API_URL}${path}`, init);
+type APIFetch = typeof fetch;
+
+async function api<T>(path: string, init?: RequestInit, fetchFn: APIFetch = fetch): Promise<T> {
+	const res = await fetchFn(`${PUBLIC_API_URL}${path}`, init);
 	const raw = await res.text();
 	let envelope: Envelope<T> | null = null;
 	try {
@@ -36,6 +39,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function listProjects(ignored = false): Promise<Project[]> {
 	return api(`/api/v1/projects?ignored=${ignored}`);
+}
+
+export function getLocalSettings(): Promise<LocalSettings> {
+	return api('/api/v1/local/settings');
 }
 
 export function setProjectIgnored(id: string, ignored: boolean): Promise<void> {
@@ -62,12 +69,17 @@ export function setProjectOldPaths(id: string, oldPaths: string): Promise<void> 
 	});
 }
 
-export function getProject(id: string, page?: number, pageSize?: number): Promise<ProjectDetail> {
+export function getProject(
+	id: string,
+	page?: number,
+	pageSize?: number,
+	fetchFn?: APIFetch
+): Promise<ProjectDetail> {
 	const params = new URLSearchParams();
 	if (page !== undefined) params.set('page', String(page));
 	if (pageSize !== undefined) params.set('pageSize', String(pageSize));
 	const q = params.size > 0 ? `?${params.toString()}` : '';
-	return api(`/api/v1/projects/${id}${q}`);
+	return api(`/api/v1/projects/${id}${q}`, undefined, fetchFn);
 }
 
 export function setProjectIgnoreDiffPaths(id: string, ignoreDiffPaths: string): Promise<void> {
@@ -93,8 +105,8 @@ export function listConversations(): Promise<Conversation[]> {
 	return api('/api/v1/conversations');
 }
 
-export function getConversation(id: string): Promise<ConversationDetail> {
-	return api(`/api/v1/conversations/${id}`);
+export function getConversation(id: string, fetchFn?: APIFetch): Promise<ConversationDetail> {
+	return api(`/api/v1/conversations/${id}`, undefined, fetchFn);
 }
 
 export function listRatings(): Promise<Rating[]> {
@@ -122,10 +134,12 @@ export function listProjectCommitsPage(
 	projectId: string,
 	page = 1,
 	branch = '',
-	pageSize = 10
+	pageSize = 10,
+	user = ''
 ): Promise<ProjectCommitPageResponse> {
 	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 	if (branch) params.set('branch', branch);
+	if (user) params.set('user', user);
 	params.set('tzOffset', String(new Date().getTimezoneOffset()));
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }

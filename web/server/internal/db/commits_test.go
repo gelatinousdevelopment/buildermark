@@ -21,8 +21,8 @@ func TestUpsertCommit_ConflictOnProjectAndHash(t *testing.T) {
 		BranchName:  "main",
 		CommitHash:  commitHash,
 		Subject:     "first subject",
-		AuthorName:  "Test User",
-		AuthorEmail: "test@example.com",
+		UserName:  "Test User",
+		UserEmail: "test@example.com",
 		AuthoredAt:  1700000000,
 		DiffContent: "diff --git a/a b/a",
 	}); err != nil {
@@ -34,8 +34,8 @@ func TestUpsertCommit_ConflictOnProjectAndHash(t *testing.T) {
 		BranchName:  "feature",
 		CommitHash:  commitHash,
 		Subject:     "updated subject",
-		AuthorName:  "Test User",
-		AuthorEmail: "test@example.com",
+		UserName:  "Test User",
+		UserEmail: "test@example.com",
 		AuthoredAt:  1700000001,
 		DiffContent: "diff --git a/a b/a\n+line",
 	}); err != nil {
@@ -62,6 +62,96 @@ func TestUpsertCommit_ConflictOnProjectAndHash(t *testing.T) {
 	}
 }
 
+func TestListDistinctUsers(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, database, "/tmp/zrate-test-users")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	// Insert commits from two different users.
+	for _, c := range []Commit{
+		{ProjectID: projectID, BranchName: "main", CommitHash: "aaa", Subject: "a", UserName: "Alice", UserEmail: "alice@example.com", AuthoredAt: 1700000000},
+		{ProjectID: projectID, BranchName: "main", CommitHash: "bbb", Subject: "b", UserName: "Bob", UserEmail: "bob@example.com", AuthoredAt: 1700000001},
+		{ProjectID: projectID, BranchName: "main", CommitHash: "ccc", Subject: "c", UserName: "Alice", UserEmail: "alice@example.com", AuthoredAt: 1700000002},
+	} {
+		if err := UpsertCommit(ctx, database, c); err != nil {
+			t.Fatalf("UpsertCommit %s: %v", c.CommitHash, err)
+		}
+	}
+
+	users, err := ListDistinctUsers(ctx, database, projectID, "main")
+	if err != nil {
+		t.Fatalf("ListDistinctUsers: %v", err)
+	}
+	if len(users) != 2 {
+		t.Fatalf("got %d users, want 2", len(users))
+	}
+	// Ordered by user_name: Alice, Bob.
+	if users[0].Name != "Alice" || users[0].Email != "alice@example.com" {
+		t.Errorf("users[0] = %+v, want Alice", users[0])
+	}
+	if users[1].Name != "Bob" || users[1].Email != "bob@example.com" {
+		t.Errorf("users[1] = %+v, want Bob", users[1])
+	}
+}
+
+func TestListAndCountCommitsByProjectAndUser(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, database, "/tmp/zrate-test-user-filter")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	for _, c := range []Commit{
+		{ProjectID: projectID, BranchName: "main", CommitHash: "aaa", Subject: "a", UserName: "Alice", UserEmail: "alice@example.com", AuthoredAt: 1700000000},
+		{ProjectID: projectID, BranchName: "main", CommitHash: "bbb", Subject: "b", UserName: "Bob", UserEmail: "bob@example.com", AuthoredAt: 1700000001},
+		{ProjectID: projectID, BranchName: "main", CommitHash: "ccc", Subject: "c", UserName: "Alice", UserEmail: "alice@example.com", AuthoredAt: 1700000002},
+	} {
+		if err := UpsertCommit(ctx, database, c); err != nil {
+			t.Fatalf("UpsertCommit %s: %v", c.CommitHash, err)
+		}
+	}
+
+	// Filter by Alice.
+	commits, err := ListCommitsByProjectAndUser(ctx, database, projectID, "main", "alice@example.com", 20, 0)
+	if err != nil {
+		t.Fatalf("ListCommitsByProjectAndUser alice: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("got %d commits for alice, want 2", len(commits))
+	}
+
+	count, err := CountCommitsByProjectAndUser(ctx, database, projectID, "main", "alice@example.com")
+	if err != nil {
+		t.Fatalf("CountCommitsByProjectAndUser alice: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("count = %d, want 2", count)
+	}
+
+	// Empty user returns all (backward compat).
+	allCommits, err := ListCommitsByProjectAndUser(ctx, database, projectID, "main", "", 20, 0)
+	if err != nil {
+		t.Fatalf("ListCommitsByProjectAndUser empty: %v", err)
+	}
+	if len(allCommits) != 3 {
+		t.Fatalf("got %d commits for empty user, want 3", len(allCommits))
+	}
+
+	allCount, err := CountCommitsByProjectAndUser(ctx, database, projectID, "main", "")
+	if err != nil {
+		t.Fatalf("CountCommitsByProjectAndUser empty: %v", err)
+	}
+	if allCount != 3 {
+		t.Fatalf("allCount = %d, want 3", allCount)
+	}
+}
+
 func TestHasStaleCommitCoverage(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()
@@ -76,8 +166,8 @@ func TestHasStaleCommitCoverage(t *testing.T) {
 		BranchName:      "main",
 		CommitHash:      "hash-fresh",
 		Subject:         "fresh",
-		AuthorName:      "Test User",
-		AuthorEmail:     "test@example.com",
+		UserName:      "Test User",
+		UserEmail:     "test@example.com",
 		AuthoredAt:      1700000000,
 		DiffContent:     "diff --git a/a b/a",
 		CoverageVersion: 1,
@@ -98,8 +188,8 @@ func TestHasStaleCommitCoverage(t *testing.T) {
 		BranchName:      "main",
 		CommitHash:      "hash-stale",
 		Subject:         "stale",
-		AuthorName:      "Test User",
-		AuthorEmail:     "test@example.com",
+		UserName:      "Test User",
+		UserEmail:     "test@example.com",
 		AuthoredAt:      1700000001,
 		DiffContent:     "diff --git a/b b/b",
 		CoverageVersion: 0,

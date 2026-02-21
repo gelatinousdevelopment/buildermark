@@ -33,6 +33,7 @@
 		showHeader?: boolean;
 		header?: string;
 		showBranchPicker?: boolean;
+		showUserPicker?: boolean;
 		showCoverageBar?: boolean;
 		showPagination?: boolean;
 		showLoadMore?: boolean;
@@ -59,6 +60,7 @@
 		showHeader = false,
 		header = 'Git Commits',
 		showBranchPicker = false,
+		showUserPicker = false,
 		showCoverageBar = false,
 		showPagination = false,
 		showLoadMore = false,
@@ -84,6 +86,7 @@
 	let loadMoreError: string | null = $state(null);
 	let internalPage = $state(1);
 	let internalBranch = $state('');
+	let internalUser = $state('');
 	let initialized = $state(false);
 	let requestToken = 0;
 	let lastLoadKey = '';
@@ -97,11 +100,13 @@
 	$effect(() => {
 		if (initialized) return;
 		initialized = true;
-		internalPage =
-			page ??
-			(syncPaginationWithUrl && browser
-				? parsePositivePage(new URLSearchParams(window.location.search).get('page'))
-				: 1);
+		if (syncPaginationWithUrl && browser) {
+			const params = new URLSearchParams(window.location.search);
+			internalPage = page ?? parsePositivePage(params.get('page'));
+			internalUser = params.get('user') ?? '';
+		} else {
+			internalPage = page ?? 1;
+		}
 		internalBranch = branch ?? '';
 		loading = autoload;
 	});
@@ -116,6 +121,7 @@
 
 	const currentPage = $derived(page ?? internalPage);
 	const selectedBranch = $derived(branch ?? internalBranch);
+	const selectedUser = $derived(internalUser);
 	const visibleCommits = $derived.by(() => {
 		const all = data?.commits ?? [];
 		if (limit > 0) return all.slice(0, limit);
@@ -152,7 +158,7 @@
 		try {
 			const pageNum = Math.max(1, currentPage);
 			const loaded = await withOptionalQueue(() =>
-				listProjectCommitsPage(projectId, pageNum, selectedBranch, pageSize)
+				listProjectCommitsPage(projectId, pageNum, selectedBranch, pageSize, selectedUser)
 			);
 			if (myToken !== requestToken) return;
 			data = loaded;
@@ -170,7 +176,7 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();
@@ -204,11 +210,34 @@
 		if (branch === undefined) {
 			internalBranch = value;
 		}
+		// Reset author filter when branch changes (author may not exist on new branch).
+		internalUser = '';
+		if (syncPaginationWithUrl && browser) {
+			const url = new URL(window.location.href);
+			url.searchParams.delete('user');
+			window.history.replaceState(window.history.state, '', url);
+		}
 		if (onBranchChange) {
 			await onBranchChange(value);
 			return;
 		}
 		await goToPage(1);
+	}
+
+	function handleUserChange(event: Event) {
+		const value = (event.currentTarget as HTMLSelectElement).value;
+		internalUser = value;
+		if (syncPaginationWithUrl && browser) {
+			const url = new URL(window.location.href);
+			if (value) {
+				url.searchParams.set('user', value);
+			} else {
+				url.searchParams.delete('user');
+			}
+			url.searchParams.delete('page');
+			window.history.replaceState(window.history.state, '', url);
+		}
+		internalPage = 1;
 	}
 
 	async function handleLoadMore() {
@@ -243,16 +272,31 @@
 {:else}
 	{#if showBranchPicker || showCoverageBar}
 		<div class="top-row">
-			{#if showBranchPicker}
-				<div class="branch-picker">
-					<label for="branch-{projectId}">Branch:</label>
-					<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
-						{#each data.branches as b (b)}
-							<option value={b}>{b}</option>
-						{/each}
-					</select>
-				</div>
-			{/if}
+			<div class="filters">
+				{#if showBranchPicker}
+					<div class="branch-picker">
+						<label for="branch-{projectId}">Branch:</label>
+						<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
+							{#each data.branches as b (b)}
+								<option value={b}>{b}</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+
+				{#if showUserPicker && data.users && data.users.length > 0}
+					<div class="user-picker">
+						<label for="user-{projectId}">User:</label>
+						<select id="user-{projectId}" value={selectedUser} onchange={handleUserChange}>
+							<option value="">All</option>
+							<hr />
+							{#each data.users as a (a.email)}
+								<option value={a.email}>{a.name} ({a.email})</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+			</div>
 
 			{#if showCoverageBar}
 				{#if data.dailySummary && data.dailySummary.length > 0}
@@ -715,14 +759,27 @@
 		padding-right: 1rem;
 	}
 
-	.branch-picker {
+	.filters {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.branch-picker,
+	.user-picker {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 	}
 
-	.branch-picker select {
-		max-width: 200px;
+	.branch-picker select,
+	.user-picker select {
 		width: 200px;
+	}
+
+	.branch-picker label,
+	.user-picker label {
+		text-align: right;
+		width: 80px;
 	}
 </style>
