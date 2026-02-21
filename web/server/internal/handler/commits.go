@@ -258,12 +258,31 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 			log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
 		}
 
-		// Read commits from database.
-		dbCommits, err := db.ListCommitsByProjectIDs(r.Context(), s.DB, projectIDs(group), branch)
-		if err != nil {
-			log.Printf("error listing db commits for %s: %v", repoProject.Path, err)
+		// Get branch hashes and query DB by hash list.
+		branchHashes, hashErr := listBranchCommitHashes(r.Context(), repoProject.Path, branch)
+		if hashErr != nil {
+			log.Printf("error listing branch hashes for %s: %v", repoProject.Path, hashErr)
 			continue
 		}
+
+		// Get all project commits from DB and intersect with branch hashes.
+		allProjectCommits, listErr := db.ListAllCommitsByProject(r.Context(), s.DB, repoProject.ID, 0, 0)
+		if listErr != nil {
+			log.Printf("error listing project commits for %s: %v", repoProject.Path, listErr)
+			continue
+		}
+		hashSet := make(map[string]bool, len(branchHashes))
+		for _, h := range branchHashes {
+			hashSet[h] = true
+		}
+
+		var dbCommits []db.Commit
+		for _, c := range allProjectCommits {
+			if hashSet[c.CommitHash] {
+				dbCommits = append(dbCommits, c)
+			}
+		}
+
 		// Collect commit IDs for bulk agent coverage lookup.
 		commitIDs := make([]string, 0, len(dbCommits))
 		for _, c := range dbCommits {
@@ -358,22 +377,18 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	branches, _ := listRepoBranches(r.Context(), repoProject.Path, defaultBranch)
 	remote := ensureProjectRemote(r.Context(), s.DB, repoProject)
 
-	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "git identity not configured for project")
-		return
-	}
-
-	commits, err := listCommitsByIdentity(r.Context(), repoProject.Path, branch, identity)
-	if err != nil {
-		log.Printf("error listing commits for %s: %v", repoProject.Path, err)
-		writeError(w, http.StatusInternalServerError, "failed to list commits")
-		return
-	}
-
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 
 	if commitHash == workingCopyCommitHash {
+		identity, identErr := resolveGitIdentity(r.Context(), repoProject.Path)
+		if identErr != nil {
+			writeError(w, http.StatusNotFound, "git identity not configured for project")
+			return
+		}
+		commits, listErr := listCommitsByIdentity(r.Context(), repoProject.Path, branch, identity)
+		if listErr != nil {
+			log.Printf("error listing commits for working copy: %v", listErr)
+		}
 		coverage, messages, diffText, files, ok := computeWorkingCopyDetail(
 			r.Context(),
 			s.DB,
@@ -396,8 +411,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Try to load from database first.
-	dbCommit, err := db.GetCommitByHash(r.Context(), s.DB, repoProject.ID, branch, commitHash)
+	// Try to load from database first (no branch filter).
+	dbCommit, err := db.GetCommitByProjectAndHash(r.Context(), s.DB, repoProject.ID, commitHash)
 	if err != nil {
 		log.Printf("error checking db for commit %s: %v", commitHash, err)
 	}
@@ -411,8 +426,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		commit = gitCommit{
 			Hash:          dbCommit.CommitHash,
 			Subject:       dbCommit.Subject,
-			UserName:    dbCommit.UserName,
-			UserEmail:   dbCommit.UserEmail,
+			UserName:      dbCommit.UserName,
+			UserEmail:     dbCommit.UserEmail,
 			TimestampUnix: dbCommit.AuthoredAt,
 		}
 		commitDiff = dbCommit.DiffContent
@@ -450,19 +465,13 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	} else {
-		// Fallback to git for commits not yet ingested.
-		commitIdx := -1
-		for i := range commits {
-			if commits[i].Hash == commitHash {
-				commitIdx = i
-				break
-			}
-		}
-		if commitIdx < 0 {
-			writeError(w, http.StatusNotFound, "commit not found for current user")
+		// Fallback: get commit metadata directly from git (no identity filter).
+		gc, gcErr := getCommitMetadata(r.Context(), repoProject.Path, commitHash)
+		if gcErr != nil {
+			writeError(w, http.StatusNotFound, "commit not found")
 			return
 		}
-		commit = commits[commitIdx]
+		commit = *gc
 
 		rawDiff, gitErr := runGit(
 			r.Context(),
@@ -618,7 +627,6 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		branch = defaultBranch
 	}
 	branches, _ := listRepoBranches(r.Context(), repoProject.Path, defaultBranch)
-	users, _ := db.ListDistinctUsers(r.Context(), s.DB, repoProject.ID, branch)
 
 	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 	if err != nil {
@@ -631,38 +639,52 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		log.Printf("error loading commit sync state for %s: %v", repoProject.Path, err)
 	}
 
-	// Read commits from database.
-	total, err := db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID, branch)
+	// Use git hash list as source of truth for branch membership.
+	allHashes, err := listBranchCommitHashes(r.Context(), repoProject.Path, branch)
 	if err != nil {
-		log.Printf("error counting commits for %s: %v", repoProject.Path, err)
-		writeError(w, http.StatusInternalServerError, "failed to count commits")
+		log.Printf("error listing branch hashes for %s: %v", repoProject.Path, err)
+		writeError(w, http.StatusInternalServerError, "failed to list branch commits")
 		return
 	}
-	if total == 0 {
+
+	// Check how many of these hashes exist in DB.
+	existing, err := db.ExistingCommitHashes(r.Context(), s.DB, repoProject.ID, allHashes)
+	if err != nil {
+		log.Printf("error checking existing hashes for %s: %v", repoProject.Path, err)
+	}
+
+	// If recent commits are missing, trigger default ingestion.
+	recentMissing := 0
+	checkLimit := defaultIngestCount
+	if checkLimit > len(allHashes) {
+		checkLimit = len(allHashes)
+	}
+	for _, h := range allHashes[:checkLimit] {
+		if !existing[h] {
+			recentMissing++
+		}
+	}
+	if recentMissing > 0 {
 		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
 			log.Printf("warning: seed commit ingestion failed for %s: %v", repoProject.Path, err)
 		}
-		total, err = db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID, branch)
-		if err != nil {
-			log.Printf("error counting commits after seed ingest for %s: %v", repoProject.Path, err)
-			writeError(w, http.StatusInternalServerError, "failed to count commits")
-			return
-		}
+		// Refresh existing set after ingestion.
+		existing, _ = db.ExistingCommitHashes(r.Context(), s.DB, repoProject.ID, allHashes)
 	}
 
+	// Also check if the current user's latest commit is ingested (for auto-refresh).
 	if head, headErr := latestCommitByIdentity(r.Context(), repoProject.Path, branch, identity); headErr == nil && head != nil {
-		latest, getErr := db.GetCommitByHash(r.Context(), s.DB, repoProject.ID, branch, head.Hash)
-		if getErr != nil || latest == nil {
+		if !existing[head.Hash] {
 			if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
 				log.Printf("warning: latest-head ingestion failed for %s: %v", repoProject.Path, err)
-			} else if recount, countErr := db.CountCommitsByProject(r.Context(), s.DB, repoProject.ID, branch); countErr == nil {
-				total = recount
 			}
+			existing, _ = db.ExistingCommitHashes(r.Context(), s.DB, repoProject.ID, allHashes)
 		}
 	}
 
+	// Check for stale coverage using hash-based query.
 	staleCoverage := false
-	staleCoverage, err = db.HasStaleCommitCoverage(r.Context(), s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
+	staleCoverage, err = db.HasStaleCommitCoverageByHashes(r.Context(), s.DB, repoProject.ID, allHashes, currentCommitCoverageVersion)
 	if err != nil {
 		log.Printf("error checking stale coverage for %s: %v", repoProject.Path, err)
 		staleCoverage = false
@@ -674,10 +696,14 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		}
 	}
 
+	// Get users and totals from hash-based queries.
+	users, _ := db.ListDistinctUsersByHashes(r.Context(), s.DB, repoProject.ID, allHashes)
+	total, _ := db.CountCommitsByHashes(r.Context(), s.DB, repoProject.ID, allHashes)
+
 	// Compute filtered total for pagination when an author filter is active.
 	filteredTotal := total
 	if userFilter != "" {
-		filteredTotal, err = db.CountCommitsByProjectAndUser(r.Context(), s.DB, repoProject.ID, branch, userFilter)
+		filteredTotal, err = db.CountCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, allHashes, userFilter)
 		if err != nil {
 			log.Printf("error counting filtered commits for %s: %v", repoProject.Path, err)
 			writeError(w, http.StatusInternalServerError, "failed to count commits")
@@ -697,27 +723,47 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		offset = 0
 	}
 
-	dbCommits, err := db.ListCommitsByProjectAndUser(r.Context(), s.DB, repoProject.ID, branch, userFilter, pageSize, offset)
+	// Query the page of commits using hash-based query.
+	dbCommits, err := db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, allHashes, userFilter, pageSize, offset)
 	if err != nil {
 		log.Printf("error listing commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
 		return
 	}
 
-	// Collect all commit IDs for agent coverage lookup.
-	allDBCommits, err := db.ListCommitsByProjectAndUser(r.Context(), s.DB, repoProject.ID, branch, userFilter, filteredTotal, 0)
+	// For summary: get all project commits from DB and intersect with git hash set.
+	// This avoids huge IN clauses for summary computation.
+	allProjectCommits, err := db.ListAllCommitsByProject(r.Context(), s.DB, repoProject.ID, 0, 0)
 	if err != nil {
-		log.Printf("error listing all commits from db for %s: %v", repoProject.Path, err)
+		log.Printf("error listing all project commits for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
 		return
 	}
-	allCommitIDs := make([]string, 0, len(allDBCommits))
-	for _, c := range allDBCommits {
+
+	// Build hash set for fast lookup.
+	hashSet := make(map[string]bool, len(allHashes))
+	for _, h := range allHashes {
+		hashSet[h] = true
+	}
+
+	// Filter to only commits on this branch.
+	var branchCommits []db.Commit
+	for _, c := range allProjectCommits {
+		if hashSet[c.CommitHash] {
+			if userFilter == "" || strings.EqualFold(c.UserEmail, userFilter) {
+				branchCommits = append(branchCommits, c)
+			}
+		}
+	}
+
+	// Collect all commit IDs for agent coverage lookup.
+	allCommitIDs := make([]string, 0, len(branchCommits))
+	for _, c := range branchCommits {
 		allCommitIDs = append(allCommitIDs, c.ID)
 	}
 	agentCovMap, _ := db.ListCommitAgentCoverageByCommitIDs(r.Context(), s.DB, allCommitIDs)
 
-	// Convert DB commits to coverage structs.
+	// Convert DB commits to coverage structs for the current page.
 	paged := make([]projectCommitCoverage, 0, len(dbCommits))
 	for _, c := range dbCommits {
 		cov := dbCommitToCoverage(c, repoProject)
@@ -732,9 +778,9 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		paged = append(paged, cov)
 	}
 
-	// Compute summary from all DB commits.
-	allCoverage := make([]projectCommitCoverage, 0, len(allDBCommits))
-	for _, c := range allDBCommits {
+	// Compute summary from all branch commits.
+	allCoverage := make([]projectCommitCoverage, 0, len(branchCommits))
+	for _, c := range branchCommits {
 		cov := dbCommitToCoverage(c, repoProject)
 		if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
 			cov.AgentSegments = segs
@@ -765,6 +811,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 			}
 		}
 	}
+	_ = refreshQueued
 
 	writeSuccess(w, http.StatusOK, projectCommitPageResponse{
 		Branch:       branch,
@@ -1013,6 +1060,97 @@ func latestCommitByIdentity(ctx context.Context, path, branch string, identity g
 	return &commits[len(commits)-1], nil
 }
 
+// listBranchCommitHashes returns all commit hashes on a branch, newest first.
+func listBranchCommitHashes(ctx context.Context, repoPath, branch string) ([]string, error) {
+	out, err := runGit(ctx, repoPath, "log", branch, "--format=%H")
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	hashes := make([]string, 0, len(lines))
+	for _, line := range lines {
+		h := strings.TrimSpace(line)
+		if h != "" {
+			hashes = append(hashes, h)
+		}
+	}
+	return hashes, nil
+}
+
+// countBranchCommits returns the total number of commits on a branch.
+func countBranchCommits(ctx context.Context, repoPath, branch string) (int, error) {
+	out, err := runGit(ctx, repoPath, "rev-list", "--count", branch)
+	if err != nil {
+		return 0, err
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return 0, fmt.Errorf("parse rev-list count: %w", err)
+	}
+	return count, nil
+}
+
+// listBranchCommits returns commits on a branch WITHOUT identity filtering.
+// Returned in oldest-first order. maxCount=0 means no limit.
+func listBranchCommits(ctx context.Context, repoPath, branch string, maxCount int) ([]gitCommit, error) {
+	args := []string{"log", branch, "--pretty=format:%H%x1f%an%x1f%ae%x1f%ct%x1f%s%x1e", "--reverse"}
+	if maxCount > 0 {
+		args = append(args, fmt.Sprintf("--max-count=%d", maxCount))
+	}
+	out, err := runGit(ctx, repoPath, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	records := strings.Split(out, "\x1e")
+	commits := make([]gitCommit, 0, len(records))
+	for _, rec := range records {
+		rec = strings.TrimSpace(rec)
+		if rec == "" {
+			continue
+		}
+		parts := strings.Split(rec, "\x1f")
+		if len(parts) < 5 {
+			continue
+		}
+		ts, err := strconv.ParseInt(strings.TrimSpace(parts[3]), 10, 64)
+		if err != nil {
+			continue
+		}
+		commits = append(commits, gitCommit{
+			Hash:          strings.TrimSpace(parts[0]),
+			UserName:      strings.TrimSpace(parts[1]),
+			UserEmail:     strings.TrimSpace(parts[2]),
+			TimestampUnix: ts,
+			Subject:       strings.TrimSpace(parts[4]),
+		})
+	}
+	return commits, nil
+}
+
+// getCommitMetadata fetches metadata for a single commit hash from git.
+func getCommitMetadata(ctx context.Context, repoPath, hash string) (*gitCommit, error) {
+	out, err := runGit(ctx, repoPath, "show", "-s", "--format=%H%x1f%an%x1f%ae%x1f%ct%x1f%s", hash)
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(strings.TrimSpace(out), "\x1f")
+	if len(parts) < 5 {
+		return nil, fmt.Errorf("unexpected git show output for %s", hash)
+	}
+	ts, err := strconv.ParseInt(strings.TrimSpace(parts[3]), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse timestamp for %s: %w", hash, err)
+	}
+	return &gitCommit{
+		Hash:          strings.TrimSpace(parts[0]),
+		UserName:      strings.TrimSpace(parts[1]),
+		UserEmail:     strings.TrimSpace(parts[2]),
+		TimestampUnix: ts,
+		Subject:       strings.TrimSpace(parts[4]),
+	}, nil
+}
+
 func shouldQueueCommitRefresh(
 	ctx context.Context,
 	database *sql.DB,
@@ -1034,11 +1172,11 @@ func shouldQueueCommitRefresh(
 		return false
 	}
 	if syncState == nil {
-		latest, getErr := db.GetCommitByHash(ctx, database, repoProject.ID, branch, head.Hash)
+		latest, getErr := db.GetCommitByProjectAndHash(ctx, database, repoProject.ID, head.Hash)
 		return getErr != nil || latest == nil
 	}
 	if syncState.LastProcessedHeadHash == "" {
-		latest, getErr := db.GetCommitByHash(ctx, database, repoProject.ID, branch, head.Hash)
+		latest, getErr := db.GetCommitByProjectAndHash(ctx, database, repoProject.ID, head.Hash)
 		return getErr != nil || latest == nil
 	}
 	return syncState.LastProcessedHeadHash != head.Hash

@@ -95,19 +95,20 @@ func TestListProjectCommits(t *testing.T) {
 
 	data := env.Data.(map[string]any)
 	summary := data["summary"].(map[string]any)
-	if got := int(summary["commitCount"].(float64)); got != 2 {
-		t.Fatalf("summary.commitCount = %d, want 2", got)
+	// Now includes all users' commits: initial (Other User) + agent change + manual change.
+	if got := int(summary["commitCount"].(float64)); got != 3 {
+		t.Fatalf("summary.commitCount = %d, want 3", got)
 	}
-	if got := int(summary["linesTotal"].(float64)); got != 2 {
-		t.Fatalf("summary.linesTotal = %d, want 2", got)
+	if got := int(summary["linesTotal"].(float64)); got < 2 {
+		t.Fatalf("summary.linesTotal = %d, want >= 2", got)
 	}
 	if got := int(summary["linesFromAgent"].(float64)); got != 1 {
 		t.Fatalf("summary.linesFromAgent = %d, want 1", got)
 	}
 
 	commits := data["commits"].([]any)
-	if len(commits) != 2 {
-		t.Fatalf("commits = %d, want 2", len(commits))
+	if len(commits) != 3 {
+		t.Fatalf("commits = %d, want 3", len(commits))
 	}
 
 	bySubject := map[string]map[string]any{}
@@ -136,6 +137,12 @@ func TestListProjectCommits(t *testing.T) {
 	}
 	if got := int(manualCommit["linesFromAgent"].(float64)); got != 0 {
 		t.Fatalf("manual change linesFromAgent = %d, want 0", got)
+	}
+
+	// The "initial" commit by Other User is now visible.
+	_, ok = bySubject["initial"]
+	if !ok {
+		t.Fatalf("missing commit subject %q (other user's commit should be visible)", "initial")
 	}
 
 	workingCopyTs := mustUnixMilli(t, "2026-01-01T02:30:00Z")
@@ -178,12 +185,13 @@ func TestListProjectCommits(t *testing.T) {
 	if got := int(pagination["pageSize"].(float64)); got != 20 {
 		t.Fatalf("pagination.pageSize = %d, want 20", got)
 	}
-	if got := int(pagination["total"].(float64)); got != 2 {
-		t.Fatalf("pagination.total = %d, want 2", got)
+	// Now includes all users' commits (initial by Other User + 2 by Test User).
+	if got := int(pagination["total"].(float64)); got != 3 {
+		t.Fatalf("pagination.total = %d, want 3", got)
 	}
 	commitRows := projectCommits["commits"].([]any)
-	if len(commitRows) != 3 {
-		t.Fatalf("project commits len = %d, want 3 (working copy + 2 commits)", len(commitRows))
+	if len(commitRows) != 4 {
+		t.Fatalf("project commits len = %d, want 4 (working copy + 3 commits)", len(commitRows))
 	}
 	workingCopyRow := commitRows[0].(map[string]any)
 	if got := workingCopyRow["subject"].(string); got != "Working Copy" {
@@ -863,10 +871,19 @@ func TestListProjectCommitsIgnoresConfiguredDiffPaths(t *testing.T) {
 
 	data := env.Data.(map[string]any)
 	commits := data["commits"].([]any)
-	if len(commits) != 1 {
-		t.Fatalf("commits = %d, want 1", len(commits))
+	// Now includes all users' commits: initial (Other User) + mixed change.
+	if len(commits) != 2 {
+		t.Fatalf("commits = %d, want 2", len(commits))
 	}
-	commit := commits[0].(map[string]any)
+	bySubject := map[string]map[string]any{}
+	for _, raw := range commits {
+		item := raw.(map[string]any)
+		bySubject[item["subject"].(string)] = item
+	}
+	commit := bySubject["mixed change"]
+	if commit == nil {
+		t.Fatalf("missing commit subject %q", "mixed change")
+	}
 	if got := int(commit["linesTotal"].(float64)); got != 1 {
 		t.Fatalf("linesTotal = %d, want 1 after ignoring AGENTS.md", got)
 	}

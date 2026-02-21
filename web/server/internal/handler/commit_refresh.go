@@ -97,19 +97,24 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 
 	err := IngestDefaultCommits(ctx, s.DB, &repoProject, group, identity, branch)
 	if err == nil {
-		staleCoverage, staleErr := db.HasStaleCommitCoverage(ctx, s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
-		if staleErr != nil {
-			err = staleErr
-		} else if staleCoverage {
-			_, err = recomputeCommitCoverageForProject(ctx, s.DB, &repoProject, group, branch)
+		branchHashes, hashErr := listBranchCommitHashes(ctx, repoProject.Path, branch)
+		if hashErr != nil {
+			err = hashErr
+		} else {
+			staleCoverage, staleErr := db.HasStaleCommitCoverageByHashes(ctx, s.DB, repoProject.ID, branchHashes, currentCommitCoverageVersion)
+			if staleErr != nil {
+				err = staleErr
+			} else if staleCoverage {
+				_, err = recomputeCommitCoverageForProject(ctx, s.DB, &repoProject, group, branch)
+			}
 		}
 	}
 
 	finishedAt := time.Now().UnixMilli()
 	duration := finishedAt - startedAt
 	estimatedTotal := 0
-	if all, listErr := listAllCommitsByIdentity(ctx, repoProject.Path, branch, identity); listErr == nil {
-		estimatedTotal = len(all)
+	if count, countErr := countBranchCommits(ctx, repoProject.Path, branch); countErr == nil {
+		estimatedTotal = count
 	}
 	if c, latestErr := latestCommitByIdentity(ctx, repoProject.Path, branch, identity); latestErr == nil && c != nil {
 		head = c.Hash
