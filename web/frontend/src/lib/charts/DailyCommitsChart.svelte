@@ -191,20 +191,20 @@
 
 	.dc-chart {
 		display: inline-flex;
-		gap: 2px;
+		gap: 1px;
 		align-items: stretch;
 		min-width: max-content;
 	}
 
 	.dc-col {
 		flex: 0 0 10px;
-		min-width: 20px;
+		min-width: 18px;
 		display: flex;
 		flex-direction: column;
 	}
 
 	.dc-bar-area {
-		height: 120px;
+		height: 100px;
 	}
 
 	/* Popover wrapper must fill bar area */
@@ -219,7 +219,8 @@
 		overflow: hidden;
 		display: flex;
 		flex-direction: column-reverse;
-		gap: 0.5px;
+		gap: 1px;
+		background: var(--color-background-empty, #f0f0f0);
 	}
 
 	.dc-bar-empty {

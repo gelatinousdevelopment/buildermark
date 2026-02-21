@@ -754,7 +754,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		Project:      *project,
 		Refresh:      makeCommitRefreshState(syncState, staleCoverage),
 		Summary:      summarizeCommitCoverage(allCoverage),
-		DailySummary: buildDailySummary(allCoverage, 90, clientLoc),
+		DailySummary: buildDailySummary(allCoverage, 30, clientLoc),
 		Pagination: projectCommitPagination{
 			Page:       page,
 			PageSize:   pageSize,

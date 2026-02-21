@@ -241,35 +241,37 @@
 {:else if !data || visibleCommits.length === 0}
 	<p class="message">No commits found for this project and current git user.</p>
 {:else}
-	{#if showBranchPicker}
-		<div class="branch-picker">
-			<label for="branch-{projectId}">Branch</label>
-			<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
-				{#each data.branches as b (b)}
-					<option value={b}>{b}</option>
-				{/each}
-			</select>
-		</div>
-	{/if}
-
-	{#if showCoverageBar}
-		{#if data.dailySummary && data.dailySummary.length > 0}
-			<div class="summary-chart">
-				<DailyCommitsChart
-					dailySummary={data.dailySummary}
-					branch={selectedBranch || data.branch || ''}
-				/>
-			</div>
-		{:else}
-			<div class="summary-bar">
-				<AgentPercentageBar
-					agentPercent={data.summary.linePercent}
-					segments={toBarSegments(data.summary.agentSegments)}
-					showManual={true}
-				/>
+	<div class="top-row">
+		{#if showBranchPicker}
+			<div class="branch-picker">
+				<label for="branch-{projectId}">Branch</label>
+				<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
+					{#each data.branches as b (b)}
+						<option value={b}>{b}</option>
+					{/each}
+				</select>
 			</div>
 		{/if}
-	{/if}
+
+		{#if showCoverageBar}
+			{#if data.dailySummary && data.dailySummary.length > 0}
+				<div class="summary-chart">
+					<DailyCommitsChart
+						dailySummary={data.dailySummary}
+						branch={selectedBranch || data.branch || ''}
+					/>
+				</div>
+			{:else}
+				<div class="summary-bar">
+					<AgentPercentageBar
+						agentPercent={data.summary.linePercent}
+						segments={toBarSegments(data.summary.agentSegments)}
+						showManual={true}
+					/>
+				</div>
+			{/if}
+		{/if}
+	</div>
 
 	<table class="data" class:compact>
 		<colgroup>
@@ -445,27 +447,42 @@
 
 <style>
 	.heading {
-		font-weight: 600;
-		text-transform: uppercase;
 		font-size: 0.9rem;
-		opacity: 0.5;
+		font-weight: 600;
 		margin-bottom: 0.75rem;
+		opacity: 0.5;
+		text-transform: uppercase;
+	}
+
+	.top-row {
+		align-items: flex-start;
+		border-bottom: 0.5px solid var(--color-divider);
+		display: flex;
+		gap: 1rem;
+		justify-content: space-between;
+		padding: 1rem 1rem 0.5rem 1rem;
+	}
+
+	@media (max-width: 1000px) {
+		.top-row {
+			flex-direction: column;
+		}
 	}
 
 	.link-button {
-		display: block;
-		max-width: 100%;
 		background: none;
 		border: 0;
-		padding: 0;
 		color: var(--link-color, #1f4cd1);
 		cursor: pointer;
+		display: block;
 		font: inherit;
-		text-decoration: none;
-		text-align: left;
-		white-space: nowrap;
+		max-width: 100%;
 		overflow: hidden;
+		padding: 0;
+		text-align: left;
+		text-decoration: none;
 		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.link-button:hover {
@@ -514,10 +531,6 @@
 		border-radius: 4px;
 		font-size: 0.9rem;
 		text-align: center;
-	}
-
-	.summary-chart {
-		margin: 0 1rem 1rem 1rem;
 	}
 
 	.summary-bar {
@@ -699,6 +712,5 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin: 1rem;
 	}
 </style>

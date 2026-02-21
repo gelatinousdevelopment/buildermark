@@ -1358,7 +1358,7 @@ func TestBuildDailySummary(t *testing.T) {
 		},
 	}
 
-	result := buildDailySummary(commits, 90, time.UTC)
+	result := buildDailySummary(commits, 30, time.UTC)
 
 	// Should return exactly 90 entries.
 	if len(result) != 90 {
