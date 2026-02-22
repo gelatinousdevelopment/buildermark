@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 // ExtractReliableDiff extracts unified diff output when it can be identified
@@ -83,6 +85,9 @@ func ExtractReliableDiffFromJSON(raw string) (string, bool) {
 	if diff, ok := extractStructuredPatchDiffFromValue(value); ok && len(diff) > len(best) {
 		best = diff
 	}
+	if diff, ok := extractOldNewEditDiffFromValue(value); ok && len(diff) > len(best) {
+		best = diff
+	}
 	if best == "" {
 		if diff, ok := extractFileSnapshotDiffFromValue(value); ok {
 			best = diff
@@ -93,6 +98,136 @@ func ExtractReliableDiffFromJSON(raw string) (string, bool) {
 		return "", false
 	}
 	return best, true
+}
+
+func extractOldNewEditDiffFromValue(v any) (string, bool) {
+	best := ""
+
+	var walk func(node any, inheritedCWD string)
+	walk = func(node any, inheritedCWD string) {
+		switch x := node.(type) {
+		case map[string]any:
+			cwd := inheritedCWD
+			if s, ok := x["cwd"].(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					cwd = trimmed
+				}
+			}
+			if diff, ok := extractOldNewEditDiffFromMap(x, cwd); ok && len(diff) > len(best) {
+				best = diff
+			}
+			for _, nested := range x {
+				walk(nested, cwd)
+			}
+		case []any:
+			for _, nested := range x {
+				walk(nested, inheritedCWD)
+			}
+		}
+	}
+
+	walk(v, "")
+	if best == "" {
+		return "", false
+	}
+	return best, true
+}
+
+func extractOldNewEditDiffFromMap(obj map[string]any, cwd string) (string, bool) {
+	filePath := ""
+	for _, key := range []string{"filePath", "file_path", "path"} {
+		if s, ok := obj[key].(string); ok {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				filePath = trimmed
+				break
+			}
+		}
+	}
+	if filePath == "" {
+		return "", false
+	}
+
+	oldText := ""
+	newText := ""
+	for _, key := range []string{"oldString", "old_string"} {
+		if s, ok := obj[key].(string); ok {
+			oldText = strings.ReplaceAll(s, "\r\n", "\n")
+			break
+		}
+	}
+	for _, key := range []string{"newString", "new_string"} {
+		if s, ok := obj[key].(string); ok {
+			newText = strings.ReplaceAll(s, "\r\n", "\n")
+			break
+		}
+	}
+	if oldText == "" && newText == "" {
+		return "", false
+	}
+	if oldText == newText {
+		return "", false
+	}
+
+	paths := buildStructuredPatchPathCandidates(filePath, cwd)
+	if len(paths) == 0 {
+		return "", false
+	}
+
+	var out strings.Builder
+	for _, path := range paths {
+		diff, ok := buildUnifiedDiffFromStrings(oldText, newText, path)
+		if !ok {
+			continue
+		}
+		if out.Len() > 0 {
+			out.WriteString("\n")
+		}
+		out.WriteString(diff)
+	}
+	combined := strings.TrimSpace(out.String())
+	if combined == "" || !looksLikeUnifiedDiff(combined) {
+		return "", false
+	}
+	return combined, true
+}
+
+func buildUnifiedDiffFromStrings(oldText, newText, repoPath string) (string, bool) {
+	repoPath = strings.TrimSpace(repoPath)
+	if repoPath == "" {
+		return "", false
+	}
+
+	oldNorm := strings.ReplaceAll(oldText, "\r\n", "\n")
+	newNorm := strings.ReplaceAll(newText, "\r\n", "\n")
+	if oldNorm == newNorm {
+		return "", false
+	}
+	if !strings.HasSuffix(oldNorm, "\n") {
+		oldNorm += "\n"
+	}
+	if !strings.HasSuffix(newNorm, "\n") {
+		newNorm += "\n"
+	}
+
+	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A:        difflib.SplitLines(oldNorm),
+		B:        difflib.SplitLines(newNorm),
+		FromFile: "a/" + repoPath,
+		ToFile:   "b/" + repoPath,
+		Context:  3,
+	})
+	if err != nil {
+		return "", false
+	}
+	diff = strings.TrimSpace(diff)
+	if diff == "" {
+		return "", false
+	}
+	diff = "diff --git a/" + repoPath + " b/" + repoPath + "\n" + diff
+	if !looksLikeUnifiedDiff(diff) {
+		return "", false
+	}
+	return diff, true
 }
 
 func extractStructuredPatchDiffFromValue(v any) (string, bool) {

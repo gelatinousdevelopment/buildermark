@@ -202,14 +202,14 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 		limit = total
 	}
 
-	// Fetch conversations for this project ordered by start time.
+	// Fetch conversations for this project ordered by latest activity.
 	selectArgs := append([]any{projectID}, filterArgs...)
 	selectArgs = append(selectArgs, limit, offset)
 	convRows, err := db.QueryContext(ctx,
-		`SELECT c.id, c.agent, c.title, c.started_at
+		`SELECT c.id, c.agent, c.title, c.ended_at
 		 FROM conversations c
 		 WHERE c.project_id = ?`+filterWhere+`
-		 ORDER BY c.started_at DESC, c.id DESC
+		 ORDER BY c.ended_at DESC, c.id DESC
 		 LIMIT ? OFFSET ?`,
 		selectArgs...,
 	)

@@ -54,6 +54,7 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 	}
 
 	usedTimestamps := make(map[int64]struct{}, len(messages))
+	seenDerived := make(map[string]struct{}, len(messages))
 	snapshotState := newClaudeSnapshotState()
 	for _, m := range messages {
 		usedTimestamps[m.Timestamp] = struct{}{}
@@ -73,6 +74,11 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 		if !ok {
 			continue
 		}
+		diffKey := m.ConversationID + "\n" + m.Role + "\n" + diff
+		if _, seen := seenDerived[diffKey]; seen {
+			continue
+		}
+		seenDerived[diffKey] = struct{}{}
 
 		ts := m.Timestamp + 1
 		for {

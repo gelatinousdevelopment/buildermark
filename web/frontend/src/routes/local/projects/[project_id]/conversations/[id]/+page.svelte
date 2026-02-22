@@ -516,6 +516,7 @@
 		padding: 0;
 		width: fit-content;
 		border-radius: 5px;
+		max-width: calc(100% - 1rem);
 	}
 
 	.log-group.message-collapsed:hover {

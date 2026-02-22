@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -324,6 +325,65 @@ func TestInsertMessages(t *testing.T) {
 	}
 	if endedAt != 3000 {
 		t.Errorf("ended_at = %d, want 3000", endedAt)
+	}
+}
+
+func TestInsertMessagesFiltersShortBracketedMessagesAtIngest(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	messages := []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "<command-name>/clear</command-name>"},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "[progress]"},
+		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real prompt"},
+		{Timestamp: 4000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "[assistant]"},
+	}
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("message count = %d, want 1", count)
+	}
+}
+
+func TestInsertMessagesKeepsLongBracketedMessages(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	longPayload := "<" + strings.Repeat("a", 260) + ">"
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: longPayload},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("message count = %d, want 1", count)
 	}
 }
 

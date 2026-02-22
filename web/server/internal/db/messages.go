@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // Message holds the data for a single conversation message to be inserted.
@@ -114,10 +116,15 @@ func EnsureConversation(ctx context.Context, db *sql.DB, conversationID, project
 // two messages with the same conversation, role, and content are considered duplicates.
 const dupWindowMs = 10_000 // 10 seconds
 
+const hiddenIngestMessageMaxLen = 256
+
+var hiddenIngestMessageRe = regexp.MustCompile(`(?s)^[\[<].*[\]>]$`)
+
 // InsertMessages inserts multiple messages in a single transaction, skipping duplicates.
 // Duplicates are detected both within the batch (same conversation + role + content
 // within dupWindowMs) and against existing rows in the database.
 func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
+	messages = filterMessagesForIngest(messages)
 	messages = deduplicateMessages(messages)
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -210,6 +217,28 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	}
 
 	return tx.Commit()
+}
+
+func filterMessagesForIngest(messages []Message) []Message {
+	result := make([]Message, 0, len(messages))
+	for _, m := range messages {
+		if shouldSkipMessageOnIngest(m) {
+			continue
+		}
+		result = append(result, m)
+	}
+	return result
+}
+
+func shouldSkipMessageOnIngest(m Message) bool {
+	trimmed := strings.TrimSpace(m.Content)
+	if trimmed == "" {
+		return false
+	}
+	if utf8.RuneCountInString(trimmed) >= hiddenIngestMessageMaxLen {
+		return false
+	}
+	return hiddenIngestMessageRe.MatchString(trimmed)
 }
 
 // deduplicateMessages removes messages within the same conversation that have the same

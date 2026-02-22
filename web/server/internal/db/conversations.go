@@ -9,15 +9,6 @@ import (
 )
 
 var pastedTextRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
-var hiddenMessagePrefixes = []string{
-	"<command-message",
-	"<command-name",
-	"<command-args",
-	"<local-command",
-	"<system-reminder>",
-	"<user-prompt-submit-hook>",
-	"[Request interrupted",
-}
 
 // Conversation represents a row in the conversations table.
 type Conversation struct {
@@ -216,17 +207,9 @@ func abs64(x int64) int64 {
 	return x
 }
 
-func shouldHideMessageContent(role, trimmed string) bool {
+func shouldHideMessageContent(_ string, trimmed string) bool {
 	if trimmed == "" || trimmed == "[user]" {
 		return true
-	}
-	if strings.ToLower(strings.TrimSpace(role)) != "user" {
-		return false
-	}
-	for _, prefix := range hiddenMessagePrefixes {
-		if strings.HasPrefix(trimmed, prefix) {
-			return true
-		}
 	}
 	return false
 }

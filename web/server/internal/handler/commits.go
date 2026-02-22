@@ -26,7 +26,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 4
+	currentCommitCoverageVersion = 5
 )
 
 var defaultMessageWindowMs = func() int64 {
@@ -87,19 +87,27 @@ type projectCommitCoverage struct {
 }
 
 type projectCommitDetailResponse struct {
-	Branch    string                      `json:"branch"`
-	Branches  []string                    `json:"branches"`
-	CommitURL string                      `json:"commitUrl"`
-	Commit    projectCommitCoverage       `json:"commit"`
-	Diff      string                      `json:"diff"`
-	Files     []commitFileCoverage        `json:"files"`
-	Messages  []commitContributionMessage `json:"messages"`
+	Branch      string                      `json:"branch"`
+	Branches    []string                    `json:"branches"`
+	CommitURL   string                      `json:"commitUrl"`
+	Commit      projectCommitCoverage       `json:"commit"`
+	Attribution commitAttribution           `json:"attribution"`
+	Diff        string                      `json:"diff"`
+	Files       []commitFileCoverage        `json:"files"`
+	Messages    []commitContributionMessage `json:"messages"`
+}
+
+type commitAttribution struct {
+	ExactMatchedLines    int  `json:"exactMatchedLines"`
+	FallbackMatchedLines int  `json:"fallbackMatchedLines"`
+	HasFallback          bool `json:"hasFallbackAttribution"`
+	MatchedMessagesCount int  `json:"matchedMessagesCount"`
 }
 
 type projectCommitPageResponse struct {
 	Branch       string                  `json:"branch"`
 	Branches     []string                `json:"branches"`
-	Users        []db.UserInfo            `json:"users"`
+	Users        []db.UserInfo           `json:"users"`
 	UserFilter   string                  `json:"userFilter"`
 	CurrentUser  string                  `json:"currentUser"`
 	CurrentEmail string                  `json:"currentEmail"`
@@ -389,7 +397,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		if listErr != nil {
 			log.Printf("error listing commits for working copy: %v", listErr)
 		}
-		coverage, messages, diffText, files, ok := computeWorkingCopyDetail(
+		coverage, attribution, messages, diffText, files, ok := computeWorkingCopyDetail(
 			r.Context(),
 			s.DB,
 			repoProject,
@@ -402,11 +410,12 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
-			Branch:   branch,
-			Commit:   coverage,
-			Diff:     diffText,
-			Files:    files,
-			Messages: messages,
+			Branch:      branch,
+			Commit:      coverage,
+			Attribution: attribution,
+			Diff:        diffText,
+			Files:       files,
+			Messages:    messages,
 		})
 		return
 	}
@@ -522,6 +531,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	exactMatchedLines := matchedLines
 	totalLines, totalChars := tokenTotals(commitTokens)
 	files, fallbackLines, fallbackChars := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 	matchedLines += fallbackLines
@@ -554,6 +564,12 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			LinesAdded:       detailAdded,
 			LinesRemoved:     detailRemoved,
 			AgentSegments:    agentSegments,
+		},
+		Attribution: commitAttribution{
+			ExactMatchedLines:    exactMatchedLines,
+			FallbackMatchedLines: fallbackLines,
+			HasFallback:          fallbackLines > 0 || fallbackChars > 0,
+			MatchedMessagesCount: len(contribMessages),
 		},
 		Diff:     commitDiff,
 		Files:    files,
@@ -1037,8 +1053,8 @@ func listCommitsByIdentity(ctx context.Context, path, branch string, identity gi
 		}
 		c := gitCommit{
 			Hash:          strings.TrimSpace(parts[0]),
-			UserName:    strings.TrimSpace(parts[1]),
-			UserEmail:   strings.TrimSpace(parts[2]),
+			UserName:      strings.TrimSpace(parts[1]),
+			UserEmail:     strings.TrimSpace(parts[2]),
 			TimestampUnix: ts,
 			Subject:       strings.TrimSpace(parts[4]),
 		}
@@ -2248,7 +2264,7 @@ func computeWorkingCopyDetail(
 	projectIDs []string,
 	ignorePatterns []string,
 	commits []gitCommit,
-) (projectCommitCoverage, []commitContributionMessage, string, []commitFileCoverage, bool) {
+) (projectCommitCoverage, commitAttribution, []commitContributionMessage, string, []commitFileCoverage, bool) {
 	diffText, err := runGit(
 		ctx,
 		repoProject.Path,
@@ -2260,11 +2276,11 @@ func computeWorkingCopyDetail(
 		"--ignore-blank-lines",
 	)
 	if err != nil {
-		return projectCommitCoverage{}, nil, "", nil, false
+		return projectCommitCoverage{}, commitAttribution{}, nil, "", nil, false
 	}
 	commitTokens := parseUnifiedDiffTokens(diffText, ignorePatterns)
 	if len(commitTokens) == 0 {
-		return projectCommitCoverage{}, nil, "", nil, false
+		return projectCommitCoverage{}, commitAttribution{}, nil, "", nil, false
 	}
 
 	nowMs := time.Now().UnixMilli()
@@ -2279,11 +2295,12 @@ func computeWorkingCopyDetail(
 
 	messages, err := listDerivedDiffMessages(ctx, database, projectIDs, windowStart, windowEnd)
 	if err != nil {
-		return projectCommitCoverage{}, nil, "", nil, false
+		return projectCommitCoverage{}, commitAttribution{}, nil, "", nil, false
 	}
 
 	totalLines, totalChars := tokenTotals(commitTokens)
 	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	exactMatchedLines := matchedLines
 	files, fallbackLines, fallbackChars := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 	matchedLines += fallbackLines
 	matchedChars += fallbackChars
@@ -2292,6 +2309,13 @@ func computeWorkingCopyDetail(
 	agentSegments := agentSegmentsFromContribs(contribMessages, totalLines)
 	if len(agentSegments) == 0 && matchedLines > 0 {
 		agentSegments = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+	}
+
+	attribution := commitAttribution{
+		ExactMatchedLines:    exactMatchedLines,
+		FallbackMatchedLines: fallbackLines,
+		HasFallback:          fallbackLines > 0 || fallbackChars > 0,
+		MatchedMessagesCount: len(contribMessages),
 	}
 
 	return projectCommitCoverage{
@@ -2312,7 +2336,7 @@ func computeWorkingCopyDetail(
 		LinesAdded:       wcAdded,
 		LinesRemoved:     wcRemoved,
 		AgentSegments:    agentSegments,
-	}, contribMessages, diffText, files, true
+	}, attribution, contribMessages, diffText, files, true
 }
 
 func summarizeDiffFiles(

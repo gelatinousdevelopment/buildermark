@@ -16,6 +16,7 @@ import (
 )
 
 const claudeWatcherSourceKindHistoryFile = "history_file"
+const claudeWatcherSourceKindProjectFile = "project_file"
 
 // Run performs an initial scan (last 1 week) then polls for new data until ctx is cancelled.
 func (a *Agent) Run(ctx context.Context) {
@@ -23,7 +24,11 @@ func (a *Agent) Run(ctx context.Context) {
 
 	start := time.Now()
 	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
+	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-agent.DefaultScanWindow), true, nil)
 	log.Printf("claude watcher: startup scan duration %s", time.Since(start))
+	if projectScanCount > 0 {
+		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
+	}
 	a.backfillTitles(ctx)
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
@@ -38,6 +43,7 @@ func (a *Agent) Run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.poll(ctx)
+			a.pollProjectFiles(ctx)
 			a.backfillGitIDs(ctx)
 		}
 	}
@@ -47,13 +53,16 @@ func (a *Agent) Run(ctx context.Context) {
 // the given cutoff. This is used by the API to trigger a historical scan.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
 	n := a.doScan(ctx, since, false, nil)
+	n += a.scanProjectFilesSince(ctx, since, false, nil)
 	log.Printf("claude watcher: manual scan processed %d entries (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
 
 // ScanPathsSince scans only entries for matching project paths.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
-	n := a.doScan(ctx, since, false, newPathFilter(paths))
+	filter := newPathFilter(paths)
+	n := a.doScan(ctx, since, false, filter)
+	n += a.scanProjectFilesSince(ctx, since, false, filter)
 	log.Printf("claude watcher: manual path scan processed %d entries (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
@@ -156,6 +165,132 @@ func (a *Agent) poll(ctx context.Context) {
 	}
 	a.offset = newOffset
 	a.persistHistoryOffset(ctx, newOffset)
+}
+
+func (a *Agent) pollProjectFiles(ctx context.Context) {
+	n := a.scanProjectFilesSince(ctx, time.Time{}, true, nil)
+	if n > 0 {
+		log.Printf("claude watcher: project poll processed %d entries", n)
+	}
+}
+
+func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter) int {
+	paths := listProjectConversationFiles(a.home)
+	if len(paths) == 0 {
+		return 0
+	}
+
+	cutoffMs := since.UnixMilli()
+	processed := 0
+	for _, path := range paths {
+		startOffset := int64(0)
+		if updateOffset {
+			startOffset = a.restoreProjectFileOffset(ctx, path)
+		}
+
+		entries, newOffset := a.readProjectFileFrom(path, startOffset)
+		if len(entries) > 0 {
+			filtered := make([]historyEntry, 0, len(entries))
+			for _, e := range entries {
+				if e.Timestamp < cutoffMs {
+					continue
+				}
+				if filter != nil && !filter.match(e.Project) {
+					continue
+				}
+				filtered = append(filtered, e)
+			}
+			if len(filtered) > 0 {
+				a.processEntries(ctx, filtered)
+				processed += len(filtered)
+			}
+		}
+
+		if updateOffset {
+			a.persistProjectFileOffset(ctx, path, newOffset)
+		}
+	}
+	return processed
+}
+
+func (a *Agent) readProjectFileFrom(path string, offset int64) ([]historyEntry, int64) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, offset
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, offset
+	}
+
+	size := info.Size()
+	if size < offset {
+		offset = 0
+	}
+	if size == offset {
+		return nil, offset
+	}
+
+	buf := make([]byte, size-offset)
+	n, err := f.ReadAt(buf, offset)
+	if err != nil && err != io.EOF {
+		return nil, offset
+	}
+	buf = buf[:n]
+
+	entries := make([]historyEntry, 0, 64)
+	for _, line := range strings.Split(string(buf), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		entry, ok := parseProjectConversationLine(line)
+		if !ok {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries, offset + int64(n)
+}
+
+func (a *Agent) restoreProjectFileOffset(ctx context.Context, path string) int64 {
+	st, err := db.GetWatcherScanState(ctx, a.db, a.Name(), claudeWatcherSourceKindProjectFile, path)
+	if err != nil || st == nil {
+		return 0
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+
+	size := info.Size()
+	mtimeMs := info.ModTime().UnixMilli()
+	if st.FileSize == size && st.FileMtimeMs == mtimeMs {
+		return size
+	}
+	if st.FileOffset > 0 && st.FileOffset <= size {
+		return st.FileOffset
+	}
+	return 0
+}
+
+func (a *Agent) persistProjectFileOffset(ctx context.Context, path string, offset int64) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		Agent:       a.Name(),
+		SourceKind:  claudeWatcherSourceKindProjectFile,
+		SourceKey:   path,
+		FileSize:    info.Size(),
+		FileMtimeMs: info.ModTime().UnixMilli(),
+		FileOffset:  offset,
+	})
 }
 
 // readFrom reads the file starting at the given byte offset and returns parsed
@@ -416,7 +551,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 
 		for _, e := range g.entries {
 			role := "user"
-			if e.Type == "assistant" {
+			if e.Type == "assistant" || strings.TrimSpace(e.SourceToolAssistantUUID) != "" {
 				role = "agent"
 			}
 
@@ -425,7 +560,11 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				display = resolvePastedContents(a.home, display, e.PastedContents)
 			}
 
-			rawJSON, _ := json.Marshal(e)
+			rawJSON := strings.TrimSpace(e.RawJSON)
+			if rawJSON == "" {
+				b, _ := json.Marshal(e)
+				rawJSON = string(b)
+			}
 
 			messages = append(messages, db.Message{
 				Timestamp:      e.Timestamp,
@@ -434,7 +573,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				Role:           role,
 				Model:          mapRoleModel(role, historyEntryModel(e)),
 				Content:        display,
-				RawJSON:        string(rawJSON),
+				RawJSON:        rawJSON,
 			})
 		}
 

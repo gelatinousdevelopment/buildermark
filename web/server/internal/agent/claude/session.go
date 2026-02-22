@@ -20,15 +20,16 @@ type pastedContent struct {
 }
 
 type historyEntry struct {
-	Display        string                   `json:"display"`
-	Timestamp      int64                    `json:"timestamp"`
-	SessionID      string                   `json:"sessionId"`
-	Project        string                   `json:"project"`
-	Type           string                   `json:"type"`
-	Model          string                   `json:"model"`
-	Message        historyEntryMessage      `json:"message"`
-	PastedContents map[string]pastedContent `json:"pastedContents"`
-	RawJSON        string                   `json:"-"`
+	Display                 string                   `json:"display"`
+	Timestamp               int64                    `json:"timestamp"`
+	SessionID               string                   `json:"sessionId"`
+	Project                 string                   `json:"project"`
+	Type                    string                   `json:"type"`
+	Model                   string                   `json:"model"`
+	SourceToolAssistantUUID string                   `json:"sourceToolAssistantUUID"`
+	Message                 historyEntryMessage      `json:"message"`
+	PastedContents          map[string]pastedContent `json:"pastedContents"`
+	RawJSON                 string                   `json:"-"`
 }
 
 type historyEntryMessage struct {

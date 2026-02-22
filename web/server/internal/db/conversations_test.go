@@ -149,7 +149,7 @@ func TestGetConversationDetailFiltersMessages(t *testing.T) {
 		{Timestamp: 8000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "/new"},
 		{Timestamp: 9000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[Pasted text #1 from clipboard]"},
 		{Timestamp: 10000, ProjectID: pid, ConversationID: "conv-filter", Role: "user", Content: "[Pasted text #42 some long description here]"},
-		// Should be preserved (agent/system logs are intentionally visible):
+		// Ingest-time filtering now also applies to non-user roles:
 		{Timestamp: 11000, ProjectID: pid, ConversationID: "conv-filter", Role: "agent", Content: "<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>"},
 	}
 	if err := InsertMessages(ctx, db, messages); err != nil {
@@ -161,13 +161,13 @@ func TestGetConversationDetailFiltersMessages(t *testing.T) {
 		t.Fatalf("GetConversationDetail: %v", err)
 	}
 
-	// "real prompt", "response", and the agent command/system log should survive.
-	if len(detail.Messages) != 3 {
+	// Only "real prompt" and "response" should survive.
+	if len(detail.Messages) != 2 {
 		contents := make([]string, len(detail.Messages))
 		for i, m := range detail.Messages {
 			contents[i] = m.Content
 		}
-		t.Fatalf("got %d messages %v, want 3", len(detail.Messages), contents)
+		t.Fatalf("got %d messages %v, want 2", len(detail.Messages), contents)
 	}
 }
 

@@ -101,6 +101,98 @@ func TestReadConversationLogEntriesSkipsInvalidTimestamp(t *testing.T) {
 	}
 }
 
+func TestParseProjectConversationLineExtractsToolUsePlanText(t *testing.T) {
+	line := `{"type":"assistant","timestamp":"2026-02-22T11:46:04.226Z","sessionId":"sess-1","cwd":"/proj/a","message":{"role":"assistant","content":[{"type":"tool_use","input":{"content":"# Escape HTML in user messages\n\nUser messages in conversations often contain raw HTML"}}]}}`
+	entry, ok := parseProjectConversationLine(line)
+	if !ok {
+		t.Fatal("expected parseProjectConversationLine to succeed")
+	}
+	if entry.SessionID != "sess-1" {
+		t.Fatalf("sessionId = %q, want %q", entry.SessionID, "sess-1")
+	}
+	if entry.Project != "/proj/a" {
+		t.Fatalf("project = %q, want %q", entry.Project, "/proj/a")
+	}
+	if !strings.Contains(entry.Display, "User messages in conversations often contain raw HTML") {
+		t.Fatalf("display missing extracted tool text: %q", entry.Display)
+	}
+}
+
+func TestScanProjectFilesSinceIngestsOrphanSession(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/a"
+	dirName := strings.ReplaceAll(projectPath, "/", "-")
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+
+	sessionID := "sess-orphan"
+	line := `{"type":"user","timestamp":"2026-02-22T11:51:25.292Z","sessionId":"sess-orphan","cwd":"/proj/a","message":{"role":"user","content":"Implement the following plan:\n\n# Escape HTML in user messages\n\nUser messages in conversations often contain raw HTML"}}`
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(line+"\n"), 0o644); err != nil {
+		t.Fatalf("write project conversation: %v", err)
+	}
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil)
+	if n != 1 {
+		t.Fatalf("scanProjectFilesSince = %d, want 1", n)
+	}
+
+	var convID string
+	if err := database.QueryRow("SELECT id FROM conversations WHERE id = ?", sessionID).Scan(&convID); err != nil {
+		t.Fatalf("conversation not ingested: %v", err)
+	}
+
+	var content string
+	if err := database.QueryRow("SELECT content FROM messages WHERE conversation_id = ? LIMIT 1", sessionID).Scan(&content); err != nil {
+		t.Fatalf("query ingested message: %v", err)
+	}
+	if !strings.Contains(content, "User messages in conversations often contain raw HTML") {
+		t.Fatalf("ingested content missing expected plan text: %q", content)
+	}
+}
+
+func TestScanProjectFilesDerivesDiffFromToolUseEdit(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/a"
+	dirName := strings.ReplaceAll(projectPath, "/", "-")
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+
+	sessionID := "sess-edit-raw"
+	lines := []string{
+		`{"type":"user","timestamp":"2026-02-22T11:51:25.292Z","sessionId":"sess-edit-raw","cwd":"/proj/a","message":{"role":"user","content":"apply change"}}`,
+		`{"type":"assistant","timestamp":"2026-02-22T11:51:35.482Z","sessionId":"sess-edit-raw","cwd":"/proj/a","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/proj/a/web/frontend/src/lib/messageUtils.ts","old_string":"old line","new_string":"new line"}}]}}`,
+	}
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write project conversation: %v", err)
+	}
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	if n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil); n != 2 {
+		t.Fatalf("scanProjectFilesSince = %d, want 2", n)
+	}
+
+	var derivedCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{\"source\":\"derived_diff\"}'", sessionID).Scan(&derivedCount); err != nil {
+		t.Fatalf("count derived diff messages: %v", err)
+	}
+	if derivedCount == 0 {
+		t.Fatal("expected derived diff message for Edit payload")
+	}
+}
+
 func TestWatcherProcessEntries(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

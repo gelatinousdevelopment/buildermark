@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -15,8 +16,16 @@ import (
 type conversationEntry struct {
 	Type                    string `json:"type"`
 	Timestamp               string `json:"timestamp"`
+	SessionID               string `json:"sessionId"`
+	Cwd                     string `json:"cwd"`
 	SourceToolAssistantUUID string `json:"sourceToolAssistantUUID"`
-	Message                 struct {
+	PlanContent             string `json:"planContent"`
+	ToolUseResult           struct {
+		Content any `json:"content"`
+	} `json:"toolUseResult"`
+	Message struct {
+		Role    string          `json:"role"`
+		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 }
@@ -99,44 +108,168 @@ func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
 	return firstText, firstTS
 }
 
+const maxExtractedContentLen = 64 * 1024
+
 // extractUserText extracts text from a conversation entry's content field,
 // which can be either a JSON string or an array of content blocks.
 func extractUserText(raw json.RawMessage) string {
+	return joinTextParts(extractContentTextParts(raw))
+}
+
+func extractContentTextParts(raw json.RawMessage) []string {
 	if len(raw) == 0 {
-		return ""
+		return nil
 	}
 
 	// Try as string first (plan mode prompts use a plain string).
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
-		return strings.TrimSpace(s)
+		return []string{strings.TrimSpace(s)}
 	}
 
 	// Try as array of content blocks.
 	var blocks []map[string]any
 	if err := json.Unmarshal(raw, &blocks); err == nil {
+		var out []string
 		for _, b := range blocks {
 			typ, _ := b["type"].(string)
 			switch typ {
 			case "text":
 				if text, ok := b["text"].(string); ok {
-					text = strings.TrimSpace(text)
-					if text != "" {
-						return text
-					}
+					out = append(out, text)
 				}
 			case "tool_result":
-				if content, ok := b["content"].(string); ok {
-					content = strings.TrimSpace(content)
-					if content != "" {
-						return content
-					}
-				}
+				appendPreferredText(&out, b["content"])
+			case "tool_use":
+				appendToolInputText(&out, b["input"])
+			}
+		}
+		return uniqueNonEmpty(out)
+	}
+
+	return nil
+}
+
+func appendPreferredText(out *[]string, v any) {
+	switch x := v.(type) {
+	case string:
+		*out = append(*out, x)
+	case []any:
+		for _, item := range x {
+			appendPreferredText(out, item)
+		}
+	case map[string]any:
+		if content, ok := x["content"]; ok {
+			appendPreferredText(out, content)
+		}
+		if text, ok := x["text"]; ok {
+			appendPreferredText(out, text)
+		}
+	}
+}
+
+func appendToolInputText(out *[]string, v any) {
+	switch x := v.(type) {
+	case string:
+		*out = append(*out, x)
+	case []any:
+		for _, item := range x {
+			appendToolInputText(out, item)
+		}
+	case map[string]any:
+		preferredKeys := []string{"plan", "content", "text", "prompt"}
+		for _, k := range preferredKeys {
+			if val, ok := x[k]; ok {
+				appendToolInputText(out, val)
 			}
 		}
 	}
+}
 
-	return ""
+func uniqueNonEmpty(parts []string) []string {
+	if len(parts) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	return out
+}
+
+func joinTextParts(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	joined := strings.TrimSpace(strings.Join(parts, "\n\n"))
+	if joined == "" {
+		return ""
+	}
+	if len(joined) <= maxExtractedContentLen {
+		return joined
+	}
+	return joined[:maxExtractedContentLen] + "\n...[truncated]"
+}
+
+func contentFromConversationEntry(entry conversationEntry) string {
+	parts := extractContentTextParts(entry.Message.Content)
+	appendPreferredText(&parts, entry.ToolUseResult.Content)
+	if s := strings.TrimSpace(entry.PlanContent); s != "" {
+		parts = append(parts, s)
+	}
+	return joinTextParts(uniqueNonEmpty(parts))
+}
+
+func parseProjectConversationLine(line string) (historyEntry, bool) {
+	var entry conversationEntry
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return historyEntry{}, false
+	}
+
+	sessionID := strings.TrimSpace(entry.SessionID)
+	project := strings.TrimSpace(entry.Cwd)
+	if sessionID == "" || project == "" {
+		return historyEntry{}, false
+	}
+
+	parsed, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
+	if err != nil {
+		return historyEntry{}, false
+	}
+	ts := parsed.UnixMilli()
+
+	typ := strings.TrimSpace(entry.Type)
+	if typ == "" {
+		typ = strings.TrimSpace(entry.Message.Role)
+	}
+	if typ == "" {
+		typ = "user"
+	}
+
+	display := contentFromConversationEntry(entry)
+	if display == "" {
+		display = fmt.Sprintf("[%s]", typ)
+	}
+
+	return historyEntry{
+		Display:                 display,
+		Timestamp:               ts,
+		SessionID:               sessionID,
+		Project:                 project,
+		Type:                    typ,
+		Model:                   strings.TrimSpace(entry.Message.Model),
+		SourceToolAssistantUUID: strings.TrimSpace(entry.SourceToolAssistantUUID),
+		RawJSON:                 line,
+	}, true
 }
 
 func readConversationLogEntries(home, projectPath, sessionID string) []conversationLogEntry {
@@ -144,7 +277,7 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 	result := make([]conversationLogEntry, 0, 64)
 
 	scanConversationFile(convPath, func(line string, entry conversationEntry) {
-		content := extractUserText(entry.Message.Content)
+		content := contentFromConversationEntry(entry)
 		if content == "" {
 			content = fmt.Sprintf("[%s]", strings.TrimSpace(entry.Type))
 		}
@@ -177,6 +310,28 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 	})
 
 	return result
+}
+
+func listProjectConversationFiles(home string) []string {
+	root := filepath.Join(home, ".claude", "projects")
+	files := make([]string, 0, 128)
+
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(d.Name()) != ".jsonl" {
+			return nil
+		}
+		files = append(files, path)
+		return nil
+	})
+
+	sort.Strings(files)
+	return files
 }
 
 // sessionsIndex represents the top-level structure of Claude's sessions-index.json.

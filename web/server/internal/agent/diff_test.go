@@ -258,3 +258,35 @@ func TestExtractReliableDiffFromJSONPrefersRealDiffOverSnapshot(t *testing.T) {
 		t.Fatalf("unexpected fallback snapshot diff selected: %q", diff)
 	}
 }
+
+func TestExtractReliableDiffFromJSONClaudeEditOldNewString(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := repo
+	filePath := filepath.Join(repo, "web", "frontend", "src", "lib", "messageUtils.ts")
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"message":{
+			"content":[
+				{"type":"tool_use","name":"Edit","input":{
+					"file_path":%q,
+					"old_string":"export function renderMarkdown(content: string): string {\n\treturn marked.parse(content, { gfm: true, breaks: true }) as string;\n}",
+					"new_string":"marked.use({\n\trenderer: {\n\t\thtml(token) {\n\t\t\treturn escapeHtml(token.text);\n\t\t}\n\t}\n});\n\nexport function renderMarkdown(content: string): string {\n\treturn marked.parse(content, { gfm: true, breaks: true }) as string;\n}"
+				}}
+			]
+		}
+	}`, cwd, filePath)
+
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from Claude Edit old/new string payload")
+	}
+	if !strings.Contains(diff, "diff --git a/web/frontend/src/lib/messageUtils.ts b/web/frontend/src/lib/messageUtils.ts") {
+		t.Fatalf("missing expected file path in extracted diff: %q", diff)
+	}
+	if !strings.Contains(diff, "+marked.use({") {
+		t.Fatalf("missing expected added content in extracted diff: %q", diff)
+	}
+}

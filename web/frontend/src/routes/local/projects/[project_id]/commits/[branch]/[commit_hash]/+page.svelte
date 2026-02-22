@@ -279,6 +279,12 @@
 				{allMessagesExpanded ? 'Collapse All' : 'Expand All'}
 			</button>
 		</div>
+		{#if detail.attribution?.hasFallbackAttribution}
+			<p class="fallback-note">
+				Attribution includes fallback copied-line matching ({detail.attribution.fallbackMatchedLines}
+				lines). Exact matched-message lines: {detail.attribution.exactMatchedLines}.
+			</p>
+		{/if}
 		{#if detail.messages.length === 0}
 			<p>No tracked diff messages matched this commit.</p>
 		{:else}
@@ -323,6 +329,12 @@
 <style>
 	.content {
 		padding: 0 1rem;
+	}
+
+	.fallback-note {
+		color: #8a6d1f;
+		font-size: 0.9rem;
+		margin: 0.35rem 0 0.6rem 0;
 	}
 
 	h3 {

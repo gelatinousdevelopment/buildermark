@@ -165,9 +165,17 @@ export interface ProjectCommitDetailResponse {
 	branches: string[];
 	commitUrl: string;
 	commit: ProjectCommitCoverage;
+	attribution: ProjectCommitAttribution;
 	diff: string;
 	files: ProjectCommitFileCoverage[];
 	messages: ProjectCommitContributionMessage[];
+}
+
+export interface ProjectCommitAttribution {
+	exactMatchedLines: number;
+	fallbackMatchedLines: number;
+	hasFallbackAttribution: boolean;
+	matchedMessagesCount: number;
 }
 
 export interface ProjectCommitFileCoverage {
