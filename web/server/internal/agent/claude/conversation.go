@@ -18,6 +18,7 @@ type conversationEntry struct {
 	Timestamp               string `json:"timestamp"`
 	SessionID               string `json:"sessionId"`
 	Cwd                     string `json:"cwd"`
+	Summary                 string `json:"summary"`
 	SourceToolAssistantUUID string `json:"sourceToolAssistantUUID"`
 	PlanContent             string `json:"planContent"`
 	ToolUseResult           struct {
@@ -256,6 +257,9 @@ func parseProjectConversationLine(line string) (historyEntry, bool) {
 	}
 
 	display := contentFromConversationEntry(entry)
+	if typ == "summary" && strings.TrimSpace(entry.Summary) != "" {
+		display = strings.TrimSpace(entry.Summary)
+	}
 	if display == "" {
 		display = fmt.Sprintf("[%s]", typ)
 	}
@@ -267,6 +271,7 @@ func parseProjectConversationLine(line string) (historyEntry, bool) {
 		Project:                 project,
 		Type:                    typ,
 		Model:                   strings.TrimSpace(entry.Message.Model),
+		Summary:                 strings.TrimSpace(entry.Summary),
 		SourceToolAssistantUUID: strings.TrimSpace(entry.SourceToolAssistantUUID),
 		RawJSON:                 line,
 	}, true
@@ -275,9 +280,13 @@ func parseProjectConversationLine(line string) (historyEntry, bool) {
 func readConversationLogEntries(home, projectPath, sessionID string) []conversationLogEntry {
 	convPath := conversationPath(home, projectPath, sessionID)
 	result := make([]conversationLogEntry, 0, 64)
+	lastTS := int64(0)
 
 	scanConversationFile(convPath, func(line string, entry conversationEntry) {
 		content := contentFromConversationEntry(entry)
+		if entry.Type == "summary" && strings.TrimSpace(entry.Summary) != "" {
+			content = strings.TrimSpace(entry.Summary)
+		}
 		if content == "" {
 			content = fmt.Sprintf("[%s]", strings.TrimSpace(entry.Type))
 		}
@@ -285,11 +294,18 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 			content = "[entry]"
 		}
 
-		parsed, err := time.Parse(time.RFC3339Nano, entry.Timestamp)
-		if err != nil {
+		ts := int64(0)
+		if parsed, err := time.Parse(time.RFC3339Nano, entry.Timestamp); err == nil {
+			ts = parsed.UnixMilli()
+		} else if entry.Type != "summary" {
 			return
 		}
-		ts := parsed.UnixMilli()
+		if ts == 0 && lastTS > 0 {
+			ts = lastTS + 1
+		}
+		if ts > 0 {
+			lastTS = ts
+		}
 
 		role := "agent"
 		if entry.Type == "user" {
@@ -348,11 +364,15 @@ type sessionsIndexEntry struct {
 // maxTitleLen is the maximum character length for a title derived from the first prompt.
 const maxTitleLen = 100
 
-// readSessionTitle returns a title for the given session. It first checks
-// Claude's sessions-index.json for a summary. If the session is not indexed,
-// it falls back to extracting the first user prompt from the conversation
-// .jsonl file and truncating it.
+// readSessionTitle returns a title for the given session. Priority:
+// 1. Inline summary from conversation JSONL (type="summary" entries)
+// 2. Claude's sessions-index.json
+// 3. First user prompt from the conversation file
 func readSessionTitle(home, projectPath, sessionID string) string {
+	if s := readSummaryFromConversationFile(home, projectPath, sessionID); s != "" {
+		return s
+	}
+
 	if s := readSessionSummaryFromIndex(home, projectPath, sessionID); s != "" {
 		return s
 	}
@@ -364,6 +384,23 @@ func readSessionTitle(home, projectPath, sessionID string) string {
 	}
 
 	return titleFromPrompt(text)
+}
+
+// readSummaryFromConversationFile scans the conversation JSONL for
+// type="summary" entries and returns the last non-empty summary found.
+func readSummaryFromConversationFile(home, projectPath, sessionID string) string {
+	convPath := conversationPath(home, projectPath, sessionID)
+	var lastSummary string
+
+	scanConversationFile(convPath, func(_ string, entry conversationEntry) {
+		if entry.Type == "summary" {
+			if s := strings.TrimSpace(entry.Summary); s != "" {
+				lastSummary = s
+			}
+		}
+	})
+
+	return lastSummary
 }
 
 // readSessionSummaryFromIndex reads Claude's sessions-index.json and returns

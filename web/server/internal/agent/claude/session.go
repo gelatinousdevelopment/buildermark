@@ -26,6 +26,7 @@ type historyEntry struct {
 	Project                 string                   `json:"project"`
 	Type                    string                   `json:"type"`
 	Model                   string                   `json:"model"`
+	Summary                 string                   `json:"summary"`
 	SourceToolAssistantUUID string                   `json:"sourceToolAssistantUUID"`
 	Message                 historyEntryMessage      `json:"message"`
 	PastedContents          map[string]pastedContent `json:"pastedContents"`
@@ -169,13 +170,19 @@ func collectSessionEntries(home, path, sessionID string) []agent.Entry {
 		}
 
 		role := "user"
-		if entry.Type == "assistant" {
+		if entry.Type == "assistant" || entry.Type == "summary" || strings.TrimSpace(entry.SourceToolAssistantUUID) != "" {
 			role = "agent"
 		}
 
 		display := entry.Display
+		if entry.Type == "summary" && strings.TrimSpace(entry.Summary) != "" {
+			display = strings.TrimSpace(entry.Summary)
+		}
 		if len(entry.PastedContents) > 0 {
 			display = resolvePastedContents(home, display, entry.PastedContents)
+		}
+		if strings.TrimSpace(display) == "" {
+			display = "[" + strings.TrimSpace(entry.Type) + "]"
 		}
 
 		entries = append(entries, agent.Entry{

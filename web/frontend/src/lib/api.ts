@@ -11,7 +11,8 @@ import type {
 	ProjectCommitDetailResponse,
 	ProjectCommitPageResponse,
 	IngestCommitsResponse,
-	CommitIngestionStatusResponse
+	CommitIngestionStatusResponse,
+	HistoryScanResponse
 } from './types';
 
 interface Envelope<T> {
@@ -190,5 +191,13 @@ export function refreshProjectCommits(
 	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
 	return api(`/api/v1/projects/${projectId}/refresh-commits${q}`, {
 		method: 'POST'
+	});
+}
+
+export function scanHistory(timeframe: string, agent = ''): Promise<HistoryScanResponse> {
+	return api('/api/v1/history/scan', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ timeframe, agent })
 	});
 }

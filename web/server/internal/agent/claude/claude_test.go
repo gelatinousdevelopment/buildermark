@@ -157,6 +157,43 @@ func TestScanProjectFilesSinceIngestsOrphanSession(t *testing.T) {
 	}
 }
 
+func TestScanProjectFilesSinceIngestsMinimalSummaryLine(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/min-summary"
+	dirName := strings.ReplaceAll(projectPath, "/", "-")
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+
+	sessionID := "sess-min-summary"
+	lines := []string{
+		`{"type":"user","timestamp":"2026-02-22T11:51:25.292Z","sessionId":"sess-min-summary","cwd":"/proj/min-summary","message":{"role":"user","content":"Implement plan"}}`,
+		`{"leafUuid":"a3f5416e-4c51-4907-ad27-7c554dad4048","summary":"Add reloadNow selector to TerminalClientApp","type":"summary"}`,
+	}
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write project conversation: %v", err)
+	}
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil)
+	if n != 2 {
+		t.Fatalf("scanProjectFilesSince = %d, want 2", n)
+	}
+
+	var count int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND content = ?`, sessionID, "Add reloadNow selector to TerminalClientApp").Scan(&count); err != nil {
+		t.Fatalf("query summary message: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("summary messages = %d, want 1", count)
+	}
+}
+
 func TestScanProjectFilesDerivesDiffFromToolUseEdit(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()
@@ -1507,6 +1544,272 @@ func TestConversationLogDedupDoesNotDropDuplicateContent(t *testing.T) {
 	}
 	if !diff2Found {
 		t.Error("derived diff for second edit (old2->new2) not found")
+	}
+}
+
+// --- Summary entry tests ---
+
+func TestReadSummaryFromConversationFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/summary"
+	sessionID := "sess-summary"
+
+	convPath := conversationPath(tmpDir, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []string{
+		`{"type":"user","timestamp":"2026-02-23T10:00:00.000Z","sessionId":"sess-summary","cwd":"/proj/summary","message":{"content":"Fix the bug"}}`,
+		`{"type":"summary","timestamp":"2026-02-23T10:01:00.000Z","sessionId":"sess-summary","cwd":"/proj/summary","summary":"Add reloadNow selector to TerminalClientApp"}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	got := readSummaryFromConversationFile(tmpDir, projectPath, sessionID)
+	if got != "Add reloadNow selector to TerminalClientApp" {
+		t.Errorf("readSummaryFromConversationFile() = %q, want %q", got, "Add reloadNow selector to TerminalClientApp")
+	}
+}
+
+func TestReadSummaryFromConversationFileUsesLast(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/summary2"
+	sessionID := "sess-summary2"
+
+	convPath := conversationPath(tmpDir, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []string{
+		`{"type":"summary","timestamp":"2026-02-23T10:00:00.000Z","sessionId":"sess-summary2","cwd":"/proj/summary2","summary":"First summary"}`,
+		`{"type":"summary","timestamp":"2026-02-23T10:05:00.000Z","sessionId":"sess-summary2","cwd":"/proj/summary2","summary":"Updated summary"}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	got := readSummaryFromConversationFile(tmpDir, projectPath, sessionID)
+	if got != "Updated summary" {
+		t.Errorf("readSummaryFromConversationFile() = %q, want %q", got, "Updated summary")
+	}
+}
+
+func TestReadSummaryFromConversationFileMissing(t *testing.T) {
+	got := readSummaryFromConversationFile(t.TempDir(), "/proj/missing", "sess-none")
+	if got != "" {
+		t.Errorf("readSummaryFromConversationFile() = %q, want empty", got)
+	}
+}
+
+func TestSummaryEntryTitlePriorityOverSessionsIndex(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/summary-prio"
+	sessionID := "sess-summary-prio"
+	dirName := strings.ReplaceAll(projectPath, "/", "-")
+
+	// Create sessions-index.json with a different summary.
+	indexDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(indexDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	indexContent := fmt.Sprintf(`{"version":1,"entries":[{"sessionId":"%s","summary":"Sessions index title"}]}`, sessionID)
+	if err := os.WriteFile(filepath.Join(indexDir, "sessions-index.json"), []byte(indexContent), 0644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	// Create a conversation file with a summary entry.
+	convPath := filepath.Join(indexDir, sessionID+".jsonl")
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-02-23T10:00:00.000Z","sessionId":"sess-summary-prio","cwd":"/proj/summary-prio","message":{"content":"Fix the bug"}}`,
+		`{"type":"summary","timestamp":"2026-02-23T10:01:00.000Z","sessionId":"sess-summary-prio","cwd":"/proj/summary-prio","summary":"Inline summary title"}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(convLines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	// Write a history entry to trigger processEntries.
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "Fix the bug", Timestamp: 1000, SessionID: sessionID, Project: projectPath, Type: "user"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	var title string
+	if err := database.QueryRow("SELECT title FROM conversations WHERE id = ?", sessionID).Scan(&title); err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if title != "Inline summary title" {
+		t.Errorf("title = %q, want %q", title, "Inline summary title")
+	}
+}
+
+func TestProcessEntriesIncludesSummaryInMessages(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/summary-msg"
+	sessionID := "sess-summary-msg"
+	dirName := strings.ReplaceAll(projectPath, "/", "-")
+
+	// Create conversation file with a summary entry.
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-02-23T10:00:00.000Z","sessionId":"sess-summary-msg","cwd":"/proj/summary-msg","message":{"content":"Fix the bug"}}`,
+		`{"type":"summary","timestamp":"2026-02-23T10:01:00.000Z","sessionId":"sess-summary-msg","cwd":"/proj/summary-msg","summary":"Summary title"}`,
+		`{"type":"assistant","timestamp":"2026-02-23T10:02:00.000Z","sessionId":"sess-summary-msg","cwd":"/proj/summary-msg","message":{"content":"Done"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(convLines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	// Write history entries including a summary type.
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "Fix the bug", Timestamp: 1000, SessionID: sessionID, Project: projectPath, Type: "user"},
+		{Display: "[summary]", Timestamp: 2000, SessionID: sessionID, Project: projectPath, Type: "summary", Summary: "Summary title"},
+		{Display: "Done", Timestamp: 3000, SessionID: sessionID, Project: projectPath, Type: "assistant"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Summary entries should appear as messages using their summary text.
+	rows, err := database.Query("SELECT content FROM messages WHERE conversation_id = ?", sessionID)
+	if err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+	defer rows.Close()
+
+	var contents []string
+	for rows.Next() {
+		var c string
+		rows.Scan(&c)
+		contents = append(contents, c)
+	}
+
+	// Should have user + summary + assistant messages.
+	hasFix := false
+	hasSummary := false
+	hasDone := false
+	for _, c := range contents {
+		if strings.Contains(c, "Fix the bug") {
+			hasFix = true
+		}
+		if c == "Summary title" {
+			hasSummary = true
+		}
+		if c == "Done" {
+			hasDone = true
+		}
+	}
+	if !hasFix {
+		t.Error("expected 'Fix the bug' message")
+	}
+	if !hasSummary {
+		t.Error("expected summary message")
+	}
+	if !hasDone {
+		t.Error("expected 'Done' message")
+	}
+}
+
+func TestReadConversationLogEntriesIncludesSummary(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/logskip"
+	sessionID := "sess-logskip"
+
+	convPath := conversationPath(tmpDir, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []string{
+		`{"type":"user","timestamp":"2026-02-23T10:00:00.000Z","message":{"content":"hello"}}`,
+		`{"type":"summary","timestamp":"2026-02-23T10:01:00.000Z","summary":"A summary"}`,
+		`{"type":"assistant","timestamp":"2026-02-23T10:02:00.000Z","message":{"content":"world"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	entries := readConversationLogEntries(tmpDir, projectPath, sessionID)
+	foundSummary := false
+	for _, e := range entries {
+		if e.Type == "summary" && e.Content == "A summary" {
+			foundSummary = true
+		}
+	}
+	if !foundSummary {
+		t.Error("expected summary entry from readConversationLogEntries")
+	}
+	if len(entries) != 3 {
+		t.Errorf("entries len = %d, want 3", len(entries))
+	}
+}
+
+func TestCollectSessionEntriesIncludesSummary(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "history.jsonl")
+
+	entries := []historyEntry{
+		{Display: "hello", Timestamp: 1000, SessionID: "sess-1", Project: "/proj/a", Type: "user"},
+		{Display: "[summary]", Timestamp: 2000, SessionID: "sess-1", Project: "/proj/a", Type: "summary", Summary: "Title"},
+		{Display: "response", Timestamp: 3000, SessionID: "sess-1", Project: "/proj/a", Type: "assistant"},
+	}
+	writeHistoryFile(t, path, entries)
+
+	result := collectSessionEntries(dir, path, "sess-1")
+	if len(result) != 3 {
+		t.Fatalf("got %d entries, want 3", len(result))
+	}
+	foundSummary := false
+	for _, e := range result {
+		if e.Display == "Title" && e.Role == "agent" {
+			foundSummary = true
+		}
+	}
+	if !foundSummary {
+		t.Error("summary entry missing from collected session entries")
+	}
+}
+
+func TestProcessEntriesInlineSummaryFromHistoryEntries(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/inline-sum"
+	sessionID := "sess-inline-sum"
+
+	// No sessions-index.json, no conversation file — only history entries.
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "do the thing", Timestamp: 1000, SessionID: sessionID, Project: projectPath, Type: "user"},
+		{Display: "[summary]", Timestamp: 5000, SessionID: sessionID, Project: projectPath, Type: "summary", Summary: "Inline title from history"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	var title string
+	if err := database.QueryRow("SELECT title FROM conversations WHERE id = ?", sessionID).Scan(&title); err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if title != "Inline title from history" {
+		t.Errorf("title = %q, want %q", title, "Inline title from history")
 	}
 }
 

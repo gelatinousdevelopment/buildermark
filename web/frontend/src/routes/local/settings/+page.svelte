@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLocalSettings, listProjects, setProjectIgnored } from '$lib/api';
+	import { getLocalSettings, listProjects, scanHistory, setProjectIgnored } from '$lib/api';
 	import type { LocalSettings, Project } from '$lib/types';
 
 	type ProjectSetting = {
@@ -17,6 +17,12 @@
 	let localSettingsLoading = $state(true);
 	let localSettingsError: string | null = $state(null);
 	let localSettings: LocalSettings | null = $state(null);
+	let historyImportDays = $state('7');
+	let importingHistory = $state(false);
+	let historyImportError: string | null = $state(null);
+	let historyImportResult: string | null = $state(null);
+
+	const historyImportDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
 
 	function projectName(project: Project): string {
 		return project.label || project.path;
@@ -89,6 +95,36 @@
 			rows = rows.slice();
 		}
 	}
+
+	function historyImportTimeframe(days: string): string {
+		if (days === 'all') {
+			// About 100 years; effectively "all" for practical local history.
+			return '876000h';
+		}
+		return `${Number(days) * 24}h`;
+	}
+
+	function historyOptionLabel(days: string): string {
+		if (days === 'all') {
+			return 'All';
+		}
+		return `${days} days`;
+	}
+
+	async function importHistory() {
+		if (importingHistory) return;
+		importingHistory = true;
+		historyImportError = null;
+		historyImportResult = null;
+		try {
+			const response = await scanHistory(historyImportTimeframe(historyImportDays));
+			historyImportResult = `Imported ${response.entriesProcessed.toLocaleString()} entries.`;
+		} catch (e) {
+			historyImportError = e instanceof Error ? e.message : 'Failed to import history';
+		} finally {
+			importingHistory = false;
+		}
+	}
 </script>
 
 <div class="settings limited-content-width inset-when-limited-content-width">
@@ -141,6 +177,32 @@
 			</table>
 		</div>
 	{/if}
+
+	<div class="history-import">
+		<h2>Import Conversation History</h2>
+		<p class="muted">This may take a while.</p>
+		<div class="history-import-controls">
+			<label for="history-days-select">Import window</label>
+			<select id="history-days-select" bind:value={historyImportDays} disabled={importingHistory}>
+				{#each historyImportDayOptions as option (option)}
+					<option value={option}>{historyOptionLabel(option)}</option>
+				{/each}
+			</select>
+			<button class="btn-sm import-btn" onclick={importHistory} disabled={importingHistory}>
+				{#if importingHistory}
+					<span class="spinner" aria-hidden="true"></span>
+					Importing...
+				{:else}
+					Import
+				{/if}
+			</button>
+		</div>
+		{#if historyImportError}
+			<p class="error">{historyImportError}</p>
+		{:else if historyImportResult}
+			<p class="status">{historyImportResult}</p>
+		{/if}
+	</div>
 
 	{#if localSettingsLoading}
 		<p>Loading local settings...</p>
@@ -217,6 +279,48 @@
 		margin-bottom: 0.4rem;
 	}
 
+	.history-import-controls {
+		display: flex;
+		gap: 0.6rem;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.history-import-controls select {
+		padding: 0.25rem 0.5rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		background: #fff;
+		color: #444;
+		font-size: 0.85rem;
+	}
+
+	.import-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+
+	.import-btn:disabled {
+		opacity: 0.7;
+		cursor: wait;
+	}
+
+	.spinner {
+		width: 0.8rem;
+		height: 0.8rem;
+		border: 2px solid #bbb;
+		border-top-color: #333;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
 	.agent {
 		display: inline-block;
 		min-width: 4.5rem;
@@ -282,7 +386,7 @@
 
 	.status {
 		font-size: 0.85rem;
-		color: #666;
+		color: #2c7a2c;
 	}
 
 	.error {

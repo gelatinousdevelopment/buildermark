@@ -241,6 +241,8 @@ func (a *Agent) readProjectFileFrom(path string, offset int64) ([]historyEntry, 
 	buf = buf[:n]
 
 	entries := make([]historyEntry, 0, 64)
+	sessionHint := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	projectHint := projectPathFromConversationFile(path)
 	for _, line := range strings.Split(string(buf), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -248,12 +250,70 @@ func (a *Agent) readProjectFileFrom(path string, offset int64) ([]historyEntry, 
 		}
 		entry, ok := parseProjectConversationLine(line)
 		if !ok {
+			entry, ok = parseSummaryConversationLine(line, sessionHint, projectHint)
+		}
+		if !ok {
 			continue
+		}
+		if sessionHint == "" && strings.TrimSpace(entry.SessionID) != "" {
+			sessionHint = strings.TrimSpace(entry.SessionID)
+		}
+		if projectHint == "" && strings.TrimSpace(entry.Project) != "" {
+			projectHint = strings.TrimSpace(entry.Project)
 		}
 		entries = append(entries, entry)
 	}
 
 	return entries, offset + int64(n)
+}
+
+func parseSummaryConversationLine(line, sessionHint, projectHint string) (historyEntry, bool) {
+	var entry conversationEntry
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return historyEntry{}, false
+	}
+	if strings.TrimSpace(entry.Type) != "summary" {
+		return historyEntry{}, false
+	}
+	summary := strings.TrimSpace(entry.Summary)
+	if summary == "" {
+		return historyEntry{}, false
+	}
+
+	sessionID := strings.TrimSpace(entry.SessionID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(sessionHint)
+	}
+	project := strings.TrimSpace(entry.Cwd)
+	if project == "" {
+		project = strings.TrimSpace(projectHint)
+	}
+	if sessionID == "" || project == "" {
+		return historyEntry{}, false
+	}
+
+	ts := int64(0)
+	if parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(entry.Timestamp)); err == nil {
+		ts = parsed.UnixMilli()
+	}
+
+	return historyEntry{
+		Display:   summary,
+		Timestamp: ts,
+		SessionID: sessionID,
+		Project:   project,
+		Type:      "summary",
+		Summary:   summary,
+		RawJSON:   line,
+	}, true
+}
+
+func projectPathFromConversationFile(path string) string {
+	dirName := strings.TrimSpace(filepath.Base(filepath.Dir(path)))
+	if dirName == "" || dirName == "." {
+		return ""
+	}
+	return strings.ReplaceAll(dirName, "-", "/")
 }
 
 func (a *Agent) restoreProjectFileOffset(ctx context.Context, path string) int64 {
@@ -505,7 +565,19 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			conversationLogCache[cacheKey] = readConversationLogEntries(a.home, g.project, sid)
 		}
 		if _, ok := sessionTitleCache[cacheKey]; !ok {
-			title := readSessionSummaryFromIndex(a.home, g.project, sid)
+			// Highest priority: inline summary from type="summary" entries.
+			var title string
+			for _, e := range g.entries {
+				if e.Type == "summary" && strings.TrimSpace(e.Summary) != "" {
+					title = strings.TrimSpace(e.Summary)
+				}
+			}
+			if title == "" {
+				title = readSummaryFromConversationFile(a.home, g.project, sid)
+			}
+			if title == "" {
+				title = readSessionSummaryFromIndex(a.home, g.project, sid)
+			}
 			if title == "" {
 				title = titleFromConversationLogs(conversationLogCache[cacheKey])
 			}
@@ -551,13 +623,19 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 
 		for _, e := range g.entries {
 			role := "user"
-			if e.Type == "assistant" || strings.TrimSpace(e.SourceToolAssistantUUID) != "" {
+			if e.Type == "assistant" || e.Type == "summary" || strings.TrimSpace(e.SourceToolAssistantUUID) != "" {
 				role = "agent"
 			}
 
 			display := e.Display
+			if e.Type == "summary" && strings.TrimSpace(e.Summary) != "" {
+				display = strings.TrimSpace(e.Summary)
+			}
 			if len(e.PastedContents) > 0 {
 				display = resolvePastedContents(a.home, display, e.PastedContents)
+			}
+			if strings.TrimSpace(display) == "" {
+				display = "[" + strings.TrimSpace(e.Type) + "]"
 			}
 
 			rawJSON := strings.TrimSpace(e.RawJSON)
@@ -565,9 +643,20 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				b, _ := json.Marshal(e)
 				rawJSON = string(b)
 			}
+			if e.Type == "summary" {
+				if summary := strings.TrimSpace(e.Summary); summary != "" {
+					display = summary
+				} else if summary := extractSummaryFromJSONLine(rawJSON); summary != "" {
+					display = summary
+				}
+			}
+			ts := e.Timestamp
+			if ts <= 0 {
+				ts = nextMessageTimestamp(messages)
+			}
 
 			messages = append(messages, db.Message{
-				Timestamp:      e.Timestamp,
+				Timestamp:      ts,
 				ProjectID:      projectID,
 				ConversationID: sid,
 				Role:           role,
@@ -601,7 +690,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			}
 
 			messages = append(messages, db.Message{
-				Timestamp:      e.Timestamp,
+				Timestamp:      normalizeMessageTimestamp(e.Timestamp, messages),
 				ProjectID:      projectID,
 				ConversationID: sid,
 				Role:           e.Role,
@@ -632,6 +721,39 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			}
 		}
 	}
+}
+
+func normalizeMessageTimestamp(ts int64, existing []db.Message) int64 {
+	if ts > 0 {
+		return ts
+	}
+	return nextMessageTimestamp(existing)
+}
+
+func nextMessageTimestamp(existing []db.Message) int64 {
+	maxTS := int64(0)
+	for _, m := range existing {
+		if m.Timestamp > maxTS {
+			maxTS = m.Timestamp
+		}
+	}
+	if maxTS <= 0 {
+		return 1
+	}
+	return maxTS + 1
+}
+
+func extractSummaryFromJSONLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(line), &payload); err != nil {
+		return ""
+	}
+	s, _ := payload["summary"].(string)
+	return strings.TrimSpace(s)
 }
 
 func firstPromptFromConversationLogs(entries []conversationLogEntry) (string, int64) {
