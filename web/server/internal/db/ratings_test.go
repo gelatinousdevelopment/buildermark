@@ -29,8 +29,8 @@ func TestInsertRating(t *testing.T) {
 	if r.Note != "good work" {
 		t.Errorf("Note = %q, want %q", r.Note, "good work")
 	}
-	if r.CreatedAt.IsZero() {
-		t.Error("expected non-zero CreatedAt")
+	if r.CreatedAt <= 0 {
+		t.Error("expected CreatedAt > 0")
 	}
 }
 
@@ -130,7 +130,7 @@ func TestReconcileOrphanedRating(t *testing.T) {
 	}
 
 	// The history timestamp should be close to the rating's created_at.
-	historyTs := r.CreatedAt.UnixMilli()
+	historyTs := r.CreatedAt
 	realSessionID := "real-session-id"
 
 	if err := ReconcileOrphanedRating(ctx, database, 4, "great work", historyTs, realSessionID); err != nil {
@@ -161,7 +161,7 @@ func TestReconcileOrphanedRating_NoMatchWrongRating(t *testing.T) {
 	}
 
 	// Try to reconcile with a different rating value — should not match.
-	if err := ReconcileOrphanedRating(ctx, database, 3, "note", r.CreatedAt.UnixMilli(), "real-session"); err != nil {
+	if err := ReconcileOrphanedRating(ctx, database, 3, "note", r.CreatedAt, "real-session"); err != nil {
 		t.Fatalf("ReconcileOrphanedRating: %v", err)
 	}
 
@@ -182,7 +182,7 @@ func TestReconcileOrphanedRating_NoMatchWrongNote(t *testing.T) {
 	}
 
 	// Try to reconcile with a different note — should not match.
-	if err := ReconcileOrphanedRating(ctx, database, 4, "note B", r.CreatedAt.UnixMilli(), "real-session"); err != nil {
+	if err := ReconcileOrphanedRating(ctx, database, 4, "note B", r.CreatedAt, "real-session"); err != nil {
 		t.Fatalf("ReconcileOrphanedRating: %v", err)
 	}
 
@@ -235,7 +235,7 @@ func TestReconcileOrphanedRating_SkipsNonOrphaned(t *testing.T) {
 	}
 
 	// Try to reconcile — should not touch this rating because it's linked to a real conversation.
-	if err := ReconcileOrphanedRating(ctx, database, 4, "note", r.CreatedAt.UnixMilli(), "other-session"); err != nil {
+	if err := ReconcileOrphanedRating(ctx, database, 4, "note", r.CreatedAt, "other-session"); err != nil {
 		t.Fatalf("ReconcileOrphanedRating: %v", err)
 	}
 

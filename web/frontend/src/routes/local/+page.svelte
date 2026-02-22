@@ -10,8 +10,8 @@
 	let loading = $state(true);
 	let error: string | null = $state(null);
 
-	function latestRatingTimestamp(project: ProjectDetail): string {
-		let latest = '';
+	function latestRatingTimestamp(project: ProjectDetail): number {
+		let latest = 0;
 		for (const conv of project.conversations) {
 			for (const r of conv.ratings) {
 				if (r.createdAt > latest) latest = r.createdAt;
@@ -26,7 +26,7 @@
 			const tb = latestRatingTimestamp(b);
 			if (ta && !tb) return -1;
 			if (!ta && tb) return 1;
-			if (ta !== tb) return tb.localeCompare(ta);
+			if (ta !== tb) return tb - ta;
 			return a.path.localeCompare(b.path);
 		});
 	}

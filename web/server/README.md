@@ -32,7 +32,7 @@ curl -X POST http://localhost:7022/api/v1/rating \
 
 Response (201):
 ```json
-{"ok":true,"data":{"id":"uuid","conversationId":"abc-123","rating":4,"note":"Helpful session","createdAt":"..."}}
+{"ok":true,"data":{"id":"uuid","conversationId":"abc-123","rating":4,"note":"Helpful session","createdAt":1735689600000}}
 ```
 
 **Validation:**

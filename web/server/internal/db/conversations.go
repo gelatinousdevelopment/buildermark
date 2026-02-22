@@ -120,7 +120,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 
 	// Fetch ratings.
 	ratRows, err := db.QueryContext(ctx,
-		"SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id = ? ORDER BY created_at DESC",
+		"SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC",
 		resolvedID,
 	)
 	if err != nil {
@@ -131,13 +131,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	c.Ratings = []Rating{}
 	for ratRows.Next() {
 		var r Rating
-		var createdAt string
-		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan rating: %w", err)
-		}
-		r.CreatedAt, err = parseTime(createdAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse rating created_at %q: %w", createdAt, err)
 		}
 		c.Ratings = append(c.Ratings, r)
 	}
@@ -148,7 +143,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	// Match each rating to the closest /zrate user message within 120s.
 	matchedMessageIDs := make(map[string]bool)
 	for i := range c.Ratings {
-		ratingTime := c.Ratings[i].CreatedAt.UnixMilli()
+		ratingTime := c.Ratings[i].CreatedAt
 		var bestIdx int
 		var bestDelta int64 = 120_001
 		for j := range c.Messages {
@@ -278,7 +273,7 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 		fmt.Sprintf(`SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at
 			FROM ratings
 			WHERE conversation_id IN (%s)
-			ORDER BY created_at DESC`, placeholders),
+			ORDER BY created_at DESC, rowid DESC`, placeholders),
 		idArgs...,
 	)
 	if err != nil {
@@ -289,13 +284,8 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 	allRatings := make(map[string][]Rating)
 	for ratRows.Next() {
 		var r Rating
-		var createdAt string
-		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan batch rating: %w", err)
-		}
-		r.CreatedAt, err = parseTime(createdAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse batch rating created_at: %w", err)
 		}
 		allRatings[r.ConversationID] = append(allRatings[r.ConversationID], r)
 	}
@@ -311,7 +301,7 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 		// Match ratings to /zrate messages (same logic as GetConversationDetail).
 		matchedMessageIDs := make(map[string]bool)
 		for i := range ratings {
-			ratingTime := ratings[i].CreatedAt.UnixMilli()
+			ratingTime := ratings[i].CreatedAt
 			var bestIdx int
 			var bestDelta int64 = 120_001
 			for j := range msgs {

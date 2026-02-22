@@ -184,8 +184,8 @@ func TestGetConversationDetailRatingMatching(t *testing.T) {
 	}
 
 	// The /zrate message timestamp and rating createdAt are within 120s.
-	ratingCreatedAt := time.Now().UTC()
-	zrateTimestamp := ratingCreatedAt.UnixMilli() + 500 // 500ms after rating
+	ratingCreatedAt := time.Now().UTC().UnixMilli()
+	zrateTimestamp := ratingCreatedAt + 500 // 500ms after rating
 
 	messages := []Message{
 		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "do something"},
@@ -415,41 +415,5 @@ func TestUpdateConversationProject(t *testing.T) {
 	}
 	if detail.ProjectID != pidB {
 		t.Errorf("project_id = %q, want %q", detail.ProjectID, pidB)
-	}
-}
-
-func TestParseTimeRFC3339(t *testing.T) {
-	input := "2024-06-15T10:30:00.123456789Z"
-	got, err := parseTime(input)
-	if err != nil {
-		t.Fatalf("parseTime(%q): %v", input, err)
-	}
-
-	want := time.Date(2024, 6, 15, 10, 30, 0, 123456789, time.UTC)
-	if !got.Equal(want) {
-		t.Errorf("parseTime(%q) = %v, want %v", input, got, want)
-	}
-}
-
-func TestParseTimeSQLiteFormat(t *testing.T) {
-	input := "2024-06-15 10:30:00"
-	got, err := parseTime(input)
-	if err != nil {
-		t.Fatalf("parseTime(%q): %v", input, err)
-	}
-
-	want := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
-	if !got.Equal(want) {
-		t.Errorf("parseTime(%q) = %v, want %v", input, got, want)
-	}
-}
-
-func TestParseTimeInvalid(t *testing.T) {
-	got, err := parseTime("not a time")
-	if err == nil {
-		t.Fatal("expected parseTime to return an error")
-	}
-	if !got.IsZero() {
-		t.Errorf("parseTime with invalid input = %v, want zero time with error", got)
 	}
 }

@@ -13,11 +13,11 @@ type Rating struct {
 	ConversationID string `json:"conversationId"`
 	// TempConversationID is the per-rating temporary ID returned to plugins.
 	// It can be used as an alias that resolves to ConversationID.
-	TempConversationID string    `json:"tempConversationId"`
-	Rating             int       `json:"rating"`
-	Note               string    `json:"note"`
-	Analysis           string    `json:"analysis"`
-	CreatedAt          time.Time `json:"createdAt"`
+	TempConversationID string `json:"tempConversationId"`
+	Rating             int    `json:"rating"`
+	Note               string `json:"note"`
+	Analysis           string `json:"analysis"`
+	CreatedAt          int64  `json:"createdAt"`
 	// MatchedTimestamp is the message timestamp of the /zrate user message
 	// that was matched to this rating (within 120s). Nil if unmatched.
 	MatchedTimestamp *int64 `json:"matchedTimestamp,omitempty"`
@@ -35,7 +35,7 @@ func InsertRatingWithTemp(ctx context.Context, db *sql.DB, conversationID, tempC
 	}
 
 	id := newID()
-	now := time.Now().UTC()
+	now := time.Now().UTC().UnixMilli()
 
 	_, err := db.ExecContext(ctx,
 		"INSERT INTO ratings (id, conversation_id, temp_conversation_id, rating, note, analysis, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -79,7 +79,7 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 	}
 
 	rows, err := db.QueryContext(ctx,
-		"SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings ORDER BY created_at DESC LIMIT ?",
+		"SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings ORDER BY created_at DESC, rowid DESC LIMIT ?",
 		limit,
 	)
 	if err != nil {
@@ -90,14 +90,8 @@ func ListRatings(ctx context.Context, db *sql.DB, limit int) ([]Rating, error) {
 	ratings := []Rating{}
 	for rows.Next() {
 		var r Rating
-		var createdAt string
-		if err := rows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan rating: %w", err)
-		}
-
-		r.CreatedAt, err = parseTime(createdAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse rating created_at %q: %w", createdAt, err)
 		}
 
 		ratings = append(ratings, r)
@@ -114,7 +108,7 @@ func ResolveConversationIDByTempID(ctx context.Context, db *sql.DB, tempConversa
 		`SELECT conversation_id
 		 FROM ratings
 		 WHERE temp_conversation_id = ?
-		 ORDER BY created_at DESC
+		 ORDER BY created_at DESC, rowid DESC
 		 LIMIT 1`,
 		tempConversationID,
 	).Scan(&conversationID)
@@ -131,10 +125,8 @@ func ResolveConversationIDByTempID(ctx context.Context, db *sql.DB, tempConversa
 // matching row in conversations) that matches the given rating value, note, and
 // timestamp within 60 seconds, then updates it to point to realSessionID.
 func ReconcileOrphanedRating(ctx context.Context, db *sql.DB, rating int, note string, historyTimestampMs int64, realSessionID string) error {
-	// Convert history timestamp to time.Time for comparison with created_at.
-	historyTime := time.UnixMilli(historyTimestampMs).UTC()
-	windowStart := historyTime.Add(-60 * time.Second)
-	windowEnd := historyTime.Add(60 * time.Second)
+	windowStart := historyTimestampMs - int64(60*time.Second/time.Millisecond)
+	windowEnd := historyTimestampMs + int64(60*time.Second/time.Millisecond)
 
 	var ratingID string
 	err := db.QueryRowContext(ctx, `
@@ -145,9 +137,9 @@ func ReconcileOrphanedRating(ctx context.Context, db *sql.DB, rating int, note s
 		  AND r.note = ?
 		  AND r.created_at >= ?
 		  AND r.created_at <= ?
-		ORDER BY ABS(CAST(strftime('%s', r.created_at) AS INTEGER) - CAST(strftime('%s', ?) AS INTEGER)) ASC
+		ORDER BY ABS(r.created_at - ?) ASC, r.created_at DESC, r.rowid DESC
 		LIMIT 1`,
-		rating, note, windowStart, windowEnd, historyTime,
+		rating, note, windowStart, windowEnd, historyTimestampMs,
 	).Scan(&ratingID)
 	if err == sql.ErrNoRows {
 		return nil

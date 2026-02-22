@@ -109,7 +109,7 @@
 
 		// Ratings have matchedTimestamp from server-side rating matching.
 		for (const rating of conversation.ratings) {
-			const time = rating.matchedTimestamp ?? new Date(rating.createdAt).getTime();
+			const time = rating.matchedTimestamp ?? rating.createdAt;
 			items.push({ kind: 'rating', rating, time });
 		}
 

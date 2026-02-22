@@ -251,7 +251,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 
 		// Fetch ratings for all conversations in this page.
 		ratRows, err := db.QueryContext(ctx,
-			fmt.Sprintf("SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (%s) ORDER BY created_at DESC", placeholders),
+			fmt.Sprintf("SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (%s) ORDER BY created_at DESC, rowid DESC", placeholders),
 			idArgs...,
 		)
 		if err != nil {
@@ -261,13 +261,8 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 
 		for ratRows.Next() {
 			var r Rating
-			var createdAt string
-			if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+			if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &r.CreatedAt); err != nil {
 				return nil, fmt.Errorf("scan rating: %w", err)
-			}
-			r.CreatedAt, err = parseTime(createdAt)
-			if err != nil {
-				return nil, fmt.Errorf("parse rating created_at %q: %w", createdAt, err)
 			}
 			if c, ok := convMap[r.ConversationID]; ok {
 				c.Ratings = append(c.Ratings, r)

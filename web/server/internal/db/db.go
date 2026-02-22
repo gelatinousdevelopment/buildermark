@@ -3,13 +3,11 @@ package db
 import (
 	"database/sql"
 	"embed"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -48,7 +46,7 @@ func InitDB(path string) (*sql.DB, error) {
 func runMigrations(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
 		version INTEGER PRIMARY KEY,
-		applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		applied_at INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return fmt.Errorf("create schema_version table: %w", err)
@@ -108,27 +106,4 @@ func runMigrations(db *sql.DB) error {
 	}
 
 	return nil
-}
-
-// parseTime parses a timestamp string from SQLite. It handles RFC3339 formats
-// as well as SQLite's default format which uses a space instead of 'T'.
-func parseTime(s string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err == nil {
-		return t, nil
-	}
-
-	// SQLite stores timestamps with a space separator; convert to RFC3339.
-	t, errSpace := time.Parse(time.RFC3339Nano, strings.Replace(s, " ", "T", 1))
-	if errSpace == nil {
-		return t, nil
-	}
-
-	// Bare SQLite format without timezone.
-	t, errBare := time.Parse("2006-01-02 15:04:05", s)
-	if errBare == nil {
-		return t, nil
-	}
-
-	return time.Time{}, errors.Join(err, errSpace, errBare)
 }

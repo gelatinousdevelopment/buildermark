@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -86,4 +87,42 @@ func TestMigrationsIdempotent(t *testing.T) {
 	if countAfter != countBefore {
 		t.Errorf("expected migration count to remain %d after idempotent run, got %d", countBefore, countAfter)
 	}
+}
+
+func TestTimestampColumnsUseIntegerUnixMs(t *testing.T) {
+	db := setupTestDB(t)
+
+	assertColumnType := func(table, column, wantType string) {
+		t.Helper()
+		rows, err := db.Query("PRAGMA table_info(" + table + ")")
+		if err != nil {
+			t.Fatalf("pragma table_info(%s): %v", table, err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var cid int
+			var name, colType string
+			var notNull int
+			var dflt sql.NullString
+			var pk int
+			if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+				t.Fatalf("scan pragma for %s: %v", table, err)
+			}
+			if name == column {
+				if strings.ToUpper(colType) != wantType {
+					t.Fatalf("%s.%s type = %s, want %s", table, column, colType, wantType)
+				}
+				return
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("iterate pragma for %s: %v", table, err)
+		}
+		t.Fatalf("column %s.%s not found", table, column)
+	}
+
+	assertColumnType("ratings", "created_at", "INTEGER")
+	assertColumnType("commits", "created_at", "INTEGER")
+	assertColumnType("schema_version", "applied_at", "INTEGER")
 }

@@ -96,7 +96,7 @@ export interface Rating {
 	rating: number;
 	note: string;
 	analysis: string;
-	createdAt: string;
+	createdAt: number;
 	matchedTimestamp?: number;
 }
 
