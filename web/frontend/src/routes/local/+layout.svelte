@@ -23,6 +23,11 @@
 			route: '/local/projects/[project_id]/commits' as const
 		},
 		{
+			label: 'Insights',
+			segment: 'insights',
+			route: '/local/projects/[project_id]/insights' as const
+		},
+		{
 			label: 'Settings',
 			segment: 'settings',
 			route: '/local/projects/[project_id]/settings' as const

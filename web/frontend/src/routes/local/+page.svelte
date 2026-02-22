@@ -57,18 +57,18 @@
 {:else}
 	{#each projects as project (project.id)}
 		<div class="project-section">
-				<div class="project-heading">
-					<h2>{project.label || project.path}</h2>
-					<a
-						class="btn-sm settings-link"
-						href={resolve(
-							project.defaultBranch
-								? `/local/projects/${encodeURIComponent(project.id)}/commits/${encodeURIComponent(project.defaultBranch)}`
-								: `/local/projects/${encodeURIComponent(project.id)}/commits`
-						)}
-					>
-						Commits
-					</a>
+			<div class="project-heading">
+				<h2>{project.label || project.path}</h2>
+				<a
+					class="btn-sm settings-link"
+					href={resolve(
+						project.defaultBranch
+							? `/local/projects/${encodeURIComponent(project.id)}/commits/${encodeURIComponent(project.defaultBranch)}`
+							: `/local/projects/${encodeURIComponent(project.id)}/commits`
+					)}
+				>
+					Commits
+				</a>
 				<a
 					class="btn-sm settings-link"
 					href={resolve('/local/projects/[project_id]/conversations', { project_id: project.id })}

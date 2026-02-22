@@ -28,6 +28,15 @@
 	onDestroy(() => {
 		navStore.projectName = null;
 	});
+
+	function getDomain(url: string): string {
+		try {
+			const parsedUrl = new URL(url);
+			return parsedUrl.hostname;
+		} catch {
+			return url;
+		}
+	}
 </script>
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
@@ -57,33 +66,39 @@
 		{#if project.label}
 			<p class="project-path">{project.path}</p>
 		{/if} -->
-		<!-- <h2>{project.label || project.path}</h2> -->
-		<div class="project-path">
-			<div class="label">Local:</div>
-			<div class="value">{project.path}</div>
-		</div>
-		<div class="project-path">
-			<div class="label">Remote:</div>
-			<div class="value">
-				{#if project.remoteUrl}
-					<a href={project.remoteUrl} target="_blank" rel="noopener noreferrer">{project.remote}</a>
-				{:else}
-					{project.remote}
-				{/if}
-			</div>
-		</div>
-		{#if project.localUser || project.localEmail}
+		<div class="title">
+			<h2>{project.label || project.path}</h2>
 			<div class="project-path">
-				<div class="label">User:</div>
+				<!-- <div class="label">Local:</div> -->
+				<div class="value">{project.path}</div>
+			</div>
+			{#if project.localUser || project.localEmail}
+				<div class="project-path">
+					<!-- <div class="label">User:</div> -->
+					<div class="value">
+						{#if project.localUser && project.localEmail}
+							{project.localUser} &lt;{project.localEmail}&gt;
+						{:else}
+							{project.localUser || project.localEmail}
+						{/if}
+					</div>
+				</div>
+			{/if}
+		</div>
+		<div class="details">
+			<div class="project-path">
+				<!-- <div class="label">Remote:</div> -->
 				<div class="value">
-					{#if project.localUser && project.localEmail}
-						{project.localUser} &lt;{project.localEmail}&gt;
+					{#if project.remoteUrl}
+						<a href={project.remoteUrl} target="_blank" rel="noopener noreferrer" class="bordered"
+							>{getDomain(project.remoteUrl)}</a
+						>
 					{:else}
-						{project.localUser || project.localEmail}
+						{project.remote}
 					{/if}
 				</div>
 			</div>
-		{/if}
+		</div>
 	{/if}
 </div>
 
@@ -102,6 +117,20 @@
 		flex-direction: column;
 		gap: 0rem;
 		padding: 1rem;
+		align-items: center;
+		flex-direction: row;
+	}
+
+	.project-header .title {
+		flex: 1;
+	}
+
+	.project-header .details {
+	}
+
+	h2 {
+		line-height: 1;
+		margin: 0;
 	}
 
 	.project-path {

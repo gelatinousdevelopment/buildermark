@@ -12,17 +12,26 @@
 		const parsed = Number.parseInt(raw, 10);
 		return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 	});
+	const currentAgent = $derived(page.url.searchParams.get('agent') ?? '');
+	const currentRating = $derived.by(() => {
+		const raw = page.url.searchParams.get('rating');
+		if (!raw) return 0;
+		const parsed = Number.parseInt(raw, 10);
+		return Number.isInteger(parsed) ? parsed : 0;
+	});
 
-	async function handlePageChange(nextPage: number) {
+	function updateUrl(updates: Record<string, string | null>) {
 		if (!projectId) return;
 		const params = new SvelteURLSearchParams(page.url.searchParams);
-		if (nextPage <= 1) {
-			params.delete('page');
-		} else {
-			params.set('page', String(nextPage));
+		for (const [key, value] of Object.entries(updates)) {
+			if (value === null || value === '' || value === '0') {
+				params.delete(key);
+			} else {
+				params.set(key, value);
+			}
 		}
 		const query = params.toString();
-		await goto(
+		void goto(
 			resolve(
 				`/local/projects/${encodeURIComponent(projectId)}/conversations${query ? `?${query}` : ''}`
 			),
@@ -33,16 +42,33 @@
 			}
 		);
 	}
+
+	async function handlePageChange(nextPage: number) {
+		updateUrl({ page: nextPage <= 1 ? null : String(nextPage) });
+	}
+
+	function handleAgentChange(value: string) {
+		updateUrl({ agent: value || null, page: null });
+	}
+
+	function handleRatingChange(value: string) {
+		updateUrl({ rating: value === '0' ? null : value, page: null });
+	}
 </script>
 
 <div class="project-section">
 	<Conversations
 		{projectId}
+		showFilters={true}
 		page={currentPage}
 		pageSize={40}
 		compact={false}
 		showPagination={true}
+		agent={currentAgent}
+		rating={currentRating}
 		onPageChange={handlePageChange}
+		onAgentChange={handleAgentChange}
+		onRatingChange={handleRatingChange}
 	/>
 </div>
 

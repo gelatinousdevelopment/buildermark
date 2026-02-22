@@ -12,8 +12,14 @@
 		popover: Snippet;
 	}
 
-	let { position = 'leading', width, padding = '1rem', fixed = false, children, popover }: Props =
-		$props();
+	let {
+		position = 'leading',
+		width,
+		padding = '1rem',
+		fixed = false,
+		children,
+		popover
+	}: Props = $props();
 
 	let visible = $state(false);
 	let wrapperEl: HTMLDivElement | undefined = $state();
@@ -109,7 +115,13 @@
 		return { fits: false, shift, mh };
 	}
 
-	function placementTop(wrapRect: DOMRect, pos: Position, natW: number, natH: number, dy = 0): number {
+	function placementTop(
+		wrapRect: DOMRect,
+		pos: Position,
+		natW: number,
+		natH: number,
+		dy = 0
+	): number {
 		if (pos === 'above') return wrapRect.top - GAP - natH + dy;
 		if (pos === 'below') return wrapRect.bottom + GAP + dy;
 		return wrapRect.top + wrapRect.height / 2 - natH / 2 + dy;

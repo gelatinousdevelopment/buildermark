@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -293,7 +294,15 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 		pageSize = parsePositiveInt(pageSizeRaw, 10)
 	}
 
-	project, err := db.GetProjectDetailPage(r.Context(), s.DB, id, page, pageSize)
+	var filters db.ConversationFilters
+	filters.Agent = strings.TrimSpace(r.URL.Query().Get("agent"))
+	if ratingRaw := strings.TrimSpace(r.URL.Query().Get("rating")); ratingRaw != "" {
+		if v, err := strconv.Atoi(ratingRaw); err == nil {
+			filters.Rating = v
+		}
+	}
+
+	project, err := db.GetProjectDetailPage(r.Context(), s.DB, id, page, pageSize, filters)
 	if err != nil {
 		log.Printf("error getting project: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to get project")

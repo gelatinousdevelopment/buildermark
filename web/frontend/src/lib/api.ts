@@ -5,6 +5,7 @@ import type {
 	ProjectDetail,
 	Conversation,
 	ConversationDetail,
+	ConversationBatchDetail,
 	Rating,
 	ProjectCommitCoverageResponse,
 	ProjectCommitDetailResponse,
@@ -73,11 +74,15 @@ export function getProject(
 	id: string,
 	page?: number,
 	pageSize?: number,
-	fetchFn?: APIFetch
+	fetchFn?: APIFetch,
+	filters?: { agent?: string; rating?: number }
 ): Promise<ProjectDetail> {
 	const params = new URLSearchParams();
 	if (page !== undefined) params.set('page', String(page));
 	if (pageSize !== undefined) params.set('pageSize', String(pageSize));
+	if (filters?.agent) params.set('agent', filters.agent);
+	if (filters?.rating !== undefined && filters.rating !== 0)
+		params.set('rating', String(filters.rating));
 	const q = params.size > 0 ? `?${params.toString()}` : '';
 	return api(`/api/v1/projects/${id}${q}`, undefined, fetchFn);
 }
@@ -107,6 +112,10 @@ export function listConversations(): Promise<Conversation[]> {
 
 export function getConversation(id: string, fetchFn?: APIFetch): Promise<ConversationDetail> {
 	return api(`/api/v1/conversations/${id}`, undefined, fetchFn);
+}
+
+export function getConversationsBatchDetail(ids: string[]): Promise<ConversationBatchDetail[]> {
+	return api(`/api/v1/conversations/batch-detail?ids=${ids.map(encodeURIComponent).join(',')}`);
 }
 
 export function listRatings(): Promise<Rating[]> {

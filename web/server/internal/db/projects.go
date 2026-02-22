@@ -41,6 +41,7 @@ type ProjectDetail struct {
 	Ignored                bool                      `json:"ignored"`
 	IgnoreDiffPaths        string                    `json:"ignoreDiffPaths"`
 	IgnoreDefaultDiffPaths bool                      `json:"ignoreDefaultDiffPaths"`
+	Agents                 []string                  `json:"agents"`
 	ConversationPagination ConversationPagination    `json:"conversationPagination"`
 	Conversations          []ConversationWithRatings `json:"conversations"`
 }
@@ -52,6 +53,12 @@ type ConversationWithRatings struct {
 	Title                string   `json:"title"`
 	LastMessageTimestamp int64    `json:"lastMessageTimestamp"`
 	Ratings              []Rating `json:"ratings"`
+}
+
+// ConversationFilters holds optional filter criteria for conversation queries.
+type ConversationFilters struct {
+	Agent  string // filter by agent name (empty = all)
+	Rating int    // 0 = all, -1 = < 5 stars, 1-5 = exact rating
 }
 
 type ConversationPagination struct {
@@ -99,12 +106,13 @@ func SetProjectIgnored(ctx context.Context, db *sql.DB, projectID string, ignore
 // GetProjectDetail returns a project with all its conversations and each
 // conversation's ratings.
 func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*ProjectDetail, error) {
-	return GetProjectDetailPage(ctx, db, projectID, 1, 0)
+	return GetProjectDetailPage(ctx, db, projectID, 1, 0, ConversationFilters{})
 }
 
 // GetProjectDetailPage returns a project with conversations sorted by most
 // recent message first. If pageSize <= 0, all conversations are returned.
-func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, page, pageSize int) (*ProjectDetail, error) {
+// Filters optionally restrict results by agent name and/or rating.
+func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, page, pageSize int, filters ConversationFilters) (*ProjectDetail, error) {
 	var p ProjectDetail
 	err := db.QueryRowContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path, &p.OldPaths, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths)
 	if err == sql.ErrNoRows {
@@ -114,12 +122,51 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 		return nil, fmt.Errorf("query project: %w", err)
 	}
 
+	// Fetch distinct agents for filter dropdown.
+	agentRows, err := db.QueryContext(ctx, "SELECT DISTINCT agent FROM conversations WHERE project_id = ? ORDER BY agent", projectID)
+	if err != nil {
+		return nil, fmt.Errorf("query distinct agents: %w", err)
+	}
+	defer agentRows.Close()
+	p.Agents = []string{}
+	for agentRows.Next() {
+		var a string
+		if err := agentRows.Scan(&a); err != nil {
+			return nil, fmt.Errorf("scan agent: %w", err)
+		}
+		p.Agents = append(p.Agents, a)
+	}
+	if err := agentRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate agents: %w", err)
+	}
+
 	if page < 1 {
 		page = 1
 	}
 
+	// Build filter WHERE clauses.
+	var filterClauses []string
+	var filterArgs []any
+	if filters.Agent != "" {
+		filterClauses = append(filterClauses, "c.agent = ?")
+		filterArgs = append(filterArgs, filters.Agent)
+	}
+	if filters.Rating == -1 {
+		// "< 5 stars" — conversations that have at least one rating but none equal to 5
+		filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM ratings) AND c.id NOT IN (SELECT conversation_id FROM ratings WHERE rating = 5)")
+	} else if filters.Rating >= 1 && filters.Rating <= 5 {
+		filterClauses = append(filterClauses, "c.id IN (SELECT conversation_id FROM ratings WHERE rating = ?)")
+		filterArgs = append(filterArgs, filters.Rating)
+	}
+
+	filterWhere := ""
+	if len(filterClauses) > 0 {
+		filterWhere = " AND " + strings.Join(filterClauses, " AND ")
+	}
+
 	var total int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM conversations WHERE project_id = ?", projectID).Scan(&total); err != nil {
+	countArgs := append([]any{projectID}, filterArgs...)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM conversations c WHERE c.project_id = ?"+filterWhere, countArgs...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count conversations: %w", err)
 	}
 
@@ -154,13 +201,15 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	}
 
 	// Fetch conversations for this project ordered by start time.
+	selectArgs := append([]any{projectID}, filterArgs...)
+	selectArgs = append(selectArgs, limit, offset)
 	convRows, err := db.QueryContext(ctx,
-		`SELECT id, agent, title, started_at
-		 FROM conversations
-		 WHERE project_id = ?
-		 ORDER BY started_at DESC, id DESC
+		`SELECT c.id, c.agent, c.title, c.started_at
+		 FROM conversations c
+		 WHERE c.project_id = ?`+filterWhere+`
+		 ORDER BY c.started_at DESC, c.id DESC
 		 LIMIT ? OFFSET ?`,
-		projectID, limit, offset,
+		selectArgs...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
@@ -190,16 +239,17 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 		convMap[p.Conversations[i].ID] = &p.Conversations[i]
 	}
 
-	// Fetch ratings for all conversations in this project.
 	if len(convIDs) > 0 {
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(convIDs)), ",")
-		args := make([]any, 0, len(convIDs))
+		idArgs := make([]any, 0, len(convIDs))
 		for _, id := range convIDs {
-			args = append(args, id)
+			idArgs = append(idArgs, id)
 		}
+
+		// Fetch ratings for all conversations in this page.
 		ratRows, err := db.QueryContext(ctx,
 			fmt.Sprintf("SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at FROM ratings WHERE conversation_id IN (%s) ORDER BY created_at DESC", placeholders),
-			args...,
+			idArgs...,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("query ratings for project: %w", err)

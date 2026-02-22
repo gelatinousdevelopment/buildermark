@@ -234,7 +234,9 @@
 						</div>
 					{:else if item.kind === 'message' && isDiffMessage(item.message)}
 						{@const messageSelected = selectedMessage?.id === item.message.id}
-						{@const diffExpanded = isWideMode ? messageSelected : expandedMessages.has(item.message.id)}
+						{@const diffExpanded = isWideMode
+							? messageSelected
+							: expandedMessages.has(item.message.id)}
 						{@const messageInteractive = isWideMode || !diffExpanded}
 						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 						<div
@@ -255,7 +257,9 @@
 								content={item.message.content}
 								expanded={diffExpanded}
 								subtleAgentTag={true}
-								onToggle={!isWideMode && diffExpanded ? () => toggleExpanded(item.message.id) : undefined}
+								onToggle={!isWideMode && diffExpanded
+									? () => toggleExpanded(item.message.id)
+									: undefined}
 							/>
 						</div>
 					{:else if item.kind === 'rating'}
@@ -449,9 +453,9 @@
 	}
 
 	.message.user-message {
-		background: #ebfddd;
-		border: 1px solid #a8ef70;
-		color: #626262;
+		background: var(--color-prompt-background);
+		border: 1px solid var(--color-prompt-border);
+		color: #444;
 	}
 
 	.agent-header {
@@ -486,11 +490,12 @@
 	}
 
 	.rating-card {
+		background: var(--color-rating-background);
+		border-radius: 8px;
+		border: 1px solid var(--color-rating-border);
 		margin-bottom: 1rem;
 		padding: 0.75rem;
-		border: 2px solid #f0c040;
-		border-radius: 4px;
-		background: #fffbea;
+		color: #444;
 	}
 
 	.rating-input {

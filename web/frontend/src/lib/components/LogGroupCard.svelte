@@ -84,7 +84,7 @@
 		{messages.length}
 		{messages.length == 1 ? 'log' : 'logs'} from
 		{#if groupedModelLabel === agent}
-			<AgentTag agent={agent} subtle={subtleAgentTag} />
+			<AgentTag {agent} subtle={subtleAgentTag} />
 		{:else}
 			{groupedModelLabel}
 		{/if}

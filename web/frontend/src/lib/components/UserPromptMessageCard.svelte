@@ -31,7 +31,7 @@
 	}
 
 	.message-model {
-		color: #9a9a9a;
+		opacity: 0.7;
 	}
 
 	.message-content {

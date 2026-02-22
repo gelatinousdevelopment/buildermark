@@ -231,6 +231,163 @@ func shouldHideMessageContent(role, trimmed string) bool {
 	return false
 }
 
+// ConversationBatchDetail holds the user messages and ratings for a single
+// conversation, used by the batch-detail endpoint.
+type ConversationBatchDetail struct {
+	ConversationID string        `json:"conversationId"`
+	UserMessages   []MessageRead `json:"userMessages"`
+	Ratings        []Rating      `json:"ratings"`
+}
+
+// GetConversationsBatchDetail returns filtered user messages and ratings for
+// multiple conversations in a single optimized query set.
+func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationIDs []string) ([]ConversationBatchDetail, error) {
+	if len(conversationIDs) == 0 {
+		return []ConversationBatchDetail{}, nil
+	}
+
+	result := make(map[string]*ConversationBatchDetail, len(conversationIDs))
+	for _, id := range conversationIDs {
+		result[id] = &ConversationBatchDetail{
+			ConversationID: id,
+			UserMessages:   []MessageRead{},
+			Ratings:        []Rating{},
+		}
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(conversationIDs)), ",")
+	idArgs := make([]any, len(conversationIDs))
+	for i, id := range conversationIDs {
+		idArgs[i] = id
+	}
+
+	// Fetch all user-role messages for these conversations.
+	msgRows, err := db.QueryContext(ctx,
+		fmt.Sprintf(`SELECT id, timestamp, conversation_id, role, model, content, raw_json
+			FROM messages
+			WHERE conversation_id IN (%s) AND role = 'user'
+			ORDER BY timestamp ASC`, placeholders),
+		idArgs...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query batch user messages: %w", err)
+	}
+	defer msgRows.Close()
+
+	// Collect all user messages, plus track /zrate messages for rating matching.
+	type userMsg struct {
+		msg MessageRead
+	}
+	allUserMsgs := make(map[string][]userMsg)
+	for msgRows.Next() {
+		var m MessageRead
+		if err := msgRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Model, &m.Content, &m.RawJSON); err != nil {
+			return nil, fmt.Errorf("scan batch user message: %w", err)
+		}
+		allUserMsgs[m.ConversationID] = append(allUserMsgs[m.ConversationID], userMsg{msg: m})
+	}
+	if err := msgRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate batch user messages: %w", err)
+	}
+
+	// Fetch all ratings for these conversations.
+	ratRows, err := db.QueryContext(ctx,
+		fmt.Sprintf(`SELECT id, conversation_id, temp_conversation_id, rating, note, analysis, created_at
+			FROM ratings
+			WHERE conversation_id IN (%s)
+			ORDER BY created_at DESC`, placeholders),
+		idArgs...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query batch ratings: %w", err)
+	}
+	defer ratRows.Close()
+
+	allRatings := make(map[string][]Rating)
+	for ratRows.Next() {
+		var r Rating
+		var createdAt string
+		if err := ratRows.Scan(&r.ID, &r.ConversationID, &r.TempConversationID, &r.Rating, &r.Note, &r.Analysis, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan batch rating: %w", err)
+		}
+		r.CreatedAt, err = parseTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse batch rating created_at: %w", err)
+		}
+		allRatings[r.ConversationID] = append(allRatings[r.ConversationID], r)
+	}
+	if err := ratRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate batch ratings: %w", err)
+	}
+
+	// For each conversation, match ratings to /zrate messages and filter.
+	for convID, detail := range result {
+		msgs := allUserMsgs[convID]
+		ratings := allRatings[convID]
+
+		// Match ratings to /zrate messages (same logic as GetConversationDetail).
+		matchedMessageIDs := make(map[string]bool)
+		for i := range ratings {
+			ratingTime := ratings[i].CreatedAt.UnixMilli()
+			var bestIdx int
+			var bestDelta int64 = 120_001
+			for j := range msgs {
+				m := &msgs[j].msg
+				if m.Role != "user" {
+					continue
+				}
+				trimmed := strings.TrimLeft(m.Content, " \t\n\r")
+				if !strings.HasPrefix(trimmed, "/zrate") && !strings.HasPrefix(trimmed, "$zrate") {
+					continue
+				}
+				if matchedMessageIDs[m.ID] {
+					continue
+				}
+				delta := abs64(m.Timestamp - ratingTime)
+				if delta < bestDelta {
+					bestDelta = delta
+					bestIdx = j
+				}
+			}
+			if bestDelta <= 120_000 {
+				matchedMessageIDs[msgs[bestIdx].msg.ID] = true
+				ts := msgs[bestIdx].msg.Timestamp
+				ratings[i].MatchedTimestamp = &ts
+			}
+		}
+
+		// Filter user messages using the same rules as GetConversationDetail.
+		for _, um := range msgs {
+			m := um.msg
+			if matchedMessageIDs[m.ID] {
+				continue
+			}
+			trimmed := strings.TrimSpace(m.Content)
+			if shouldHideMessageContent(m.Role, trimmed) {
+				continue
+			}
+			if strings.HasPrefix(trimmed, "/zrate") || strings.HasPrefix(trimmed, "$zrate") {
+				continue
+			}
+			if trimmed == "/clear" || trimmed == "/new" {
+				continue
+			}
+			if pastedTextRe.MatchString(trimmed) {
+				continue
+			}
+			detail.UserMessages = append(detail.UserMessages, m)
+		}
+
+		detail.Ratings = ratings
+	}
+
+	out := make([]ConversationBatchDetail, 0, len(conversationIDs))
+	for _, id := range conversationIDs {
+		out = append(out, *result[id])
+	}
+	return out, nil
+}
+
 // UntitledConversation is a conversation with an empty title, joined with its project path.
 type UntitledConversation struct {
 	ID          string

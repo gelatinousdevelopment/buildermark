@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
@@ -44,4 +45,24 @@ func (s *Server) handleGetConversation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeSuccess(w, http.StatusOK, conv)
+}
+
+func (s *Server) handleGetConversationsBatchDetail(w http.ResponseWriter, r *http.Request) {
+	idsRaw := strings.TrimSpace(r.URL.Query().Get("ids"))
+	if idsRaw == "" {
+		writeError(w, http.StatusBadRequest, "ids query parameter is required")
+		return
+	}
+	ids := strings.Split(idsRaw, ",")
+	if len(ids) > 200 {
+		ids = ids[:200]
+	}
+
+	details, err := db.GetConversationsBatchDetail(r.Context(), s.DB, ids)
+	if err != nil {
+		log.Printf("error getting batch conversation detail: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to get conversation details")
+		return
+	}
+	writeSuccess(w, http.StatusOK, details)
 }

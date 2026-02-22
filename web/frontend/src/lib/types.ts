@@ -36,6 +36,7 @@ export interface ProjectDetail {
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
+	agents: string[];
 	conversationPagination: ConversationPagination;
 	conversations: ConversationWithRatings[];
 }
@@ -52,6 +53,12 @@ export interface ConversationWithRatings {
 	agent: string;
 	title: string;
 	lastMessageTimestamp: number;
+	ratings: Rating[];
+}
+
+export interface ConversationBatchDetail {
+	conversationId: string;
+	userMessages: MessageRead[];
 	ratings: Rating[];
 }
 

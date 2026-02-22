@@ -259,7 +259,7 @@ func TestGetProjectDetailPageSortsByLastMessageTimestampAndPaginates(t *testing.
 		t.Fatalf("InsertMessages: %v", err)
 	}
 
-	page1, err := GetProjectDetailPage(ctx, db, pid, 1, 2)
+	page1, err := GetProjectDetailPage(ctx, db, pid, 1, 2, ConversationFilters{})
 	if err != nil {
 		t.Fatalf("GetProjectDetailPage page1: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestGetProjectDetailPageSortsByLastMessageTimestampAndPaginates(t *testing.
 		t.Fatalf("page1 totalPages = %d, want 2", got)
 	}
 
-	page2, err := GetProjectDetailPage(ctx, db, pid, 2, 2)
+	page2, err := GetProjectDetailPage(ctx, db, pid, 2, 2, ConversationFilters{})
 	if err != nil {
 		t.Fatalf("GetProjectDetailPage page2: %v", err)
 	}

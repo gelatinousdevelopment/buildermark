@@ -1,13 +1,17 @@
 <script lang="ts">
-	import { getProject } from '$lib/api';
+	import { getProject, getConversationsBatchDetail } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
 	import { shortId, formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import RatingStars from '$lib/components/RatingStars.svelte';
+	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
+	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import { resolve } from '$app/paths';
-	import type { ProjectDetail } from '$lib/types';
+	import { SvelteMap } from 'svelte/reactivity';
+	import type { ProjectDetail, ConversationBatchDetail } from '$lib/types';
 
 	type PageChangeHandler = (page: number) => void | Promise<void>;
+	type FilterChangeHandler = (value: string) => void | Promise<void>;
 
 	interface Props {
 		projectId: string;
@@ -16,12 +20,17 @@
 		limit?: number;
 		compact?: boolean;
 		showHeader?: boolean;
+		showFilters?: boolean;
 		header?: string;
 		showAgentColumn?: boolean;
 		showRatingsColumn?: boolean;
 		showPagination?: boolean;
 		showColumnNames?: boolean;
 		onPageChange?: PageChangeHandler;
+		onAgentChange?: FilterChangeHandler;
+		onRatingChange?: FilterChangeHandler;
+		agent?: string;
+		rating?: number;
 		autoload?: boolean;
 		useLoadQueue?: boolean;
 		loadPriority?: number;
@@ -37,12 +46,17 @@
 		limit = 0,
 		compact = false,
 		showHeader = false,
+		showFilters = false,
 		header = 'Agent Conversations',
 		showAgentColumn = true,
 		showRatingsColumn = true,
 		showPagination = false,
 		showColumnNames = false,
 		onPageChange,
+		onAgentChange,
+		onRatingChange,
+		agent = undefined,
+		rating = undefined,
 		autoload = true,
 		useLoadQueue = false,
 		loadPriority = 0,
@@ -55,9 +69,16 @@
 	let loading = $state(false);
 	let error: string | null = $state(null);
 	let internalPage = $state(1);
+	let internalAgent = $state('');
+	let internalRating = $state(0);
+	let detailed = $state(false);
 	let initialized = $state(false);
 	let requestToken = 0;
 	let lastLoadKey = '';
+
+	// Detailed mode data: keyed by conversation ID
+	let detailData = new SvelteMap<string, ConversationBatchDetail>();
+	let lastDetailIds = '';
 
 	$effect(() => {
 		if (initialized) return;
@@ -65,6 +86,8 @@
 		project = initialData;
 		error = initialError;
 		internalPage = page ?? 1;
+		internalAgent = agent ?? '';
+		internalRating = rating ?? 0;
 		loading = autoload && !initialData;
 	});
 
@@ -72,7 +95,17 @@
 		if (page !== undefined) internalPage = page;
 	});
 
+	$effect(() => {
+		if (agent !== undefined) internalAgent = agent;
+	});
+
+	$effect(() => {
+		if (rating !== undefined) internalRating = rating;
+	});
+
 	const currentPage = $derived(page ?? internalPage);
+	const selectedAgent = $derived(agent ?? internalAgent);
+	const selectedRating = $derived(rating ?? internalRating);
 	const visibleConversations = $derived.by(() => {
 		const all = project?.conversations ?? [];
 		if (limit > 0) return all.slice(0, limit);
@@ -95,8 +128,11 @@
 		try {
 			const requestedPage = Math.max(1, currentPage);
 			const requestedPageSize = pageSize > 0 ? pageSize : undefined;
+			const filters: { agent?: string; rating?: number } = {};
+			if (selectedAgent) filters.agent = selectedAgent;
+			if (selectedRating !== 0) filters.rating = selectedRating;
 			const detail = await withOptionalQueue(() =>
-				getProject(projectId, requestedPage, requestedPageSize)
+				getProject(projectId, requestedPage, requestedPageSize, undefined, filters)
 			);
 			if (myToken !== requestToken) return;
 			project = detail;
@@ -110,11 +146,33 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadProjectData();
 	});
+
+	// Load batch detail data when detailed mode is on and conversations change.
+	$effect(() => {
+		if (!detailed) return;
+		const ids = visibleConversations.map((c) => c.id);
+		const idsKey = ids.join(',');
+		if (idsKey === lastDetailIds || ids.length === 0) return;
+		lastDetailIds = idsKey;
+		void loadDetailData(ids);
+	});
+
+	async function loadDetailData(ids: string[]) {
+		try {
+			const details = await getConversationsBatchDetail(ids);
+			detailData.clear();
+			for (const d of details) {
+				detailData.set(d.conversationId, d);
+			}
+		} catch {
+			// Silently fail — detailed data is supplementary
+		}
+	}
 
 	async function goToPage(nextPage: number) {
 		if (!project?.conversationPagination) return;
@@ -129,30 +187,89 @@
 			void loadProjectData();
 		}
 	}
+
+	function handleAgentChange(event: Event) {
+		const value = (event.currentTarget as HTMLSelectElement).value;
+		if (agent === undefined) {
+			internalAgent = value;
+		}
+		internalPage = 1;
+		if (onAgentChange) {
+			onAgentChange(value);
+		}
+	}
+
+	function handleRatingChange(event: Event) {
+		const value = Number((event.currentTarget as HTMLSelectElement).value);
+		if (rating === undefined) {
+			internalRating = value;
+		}
+		internalPage = 1;
+		if (onRatingChange) {
+			onRatingChange(String(value));
+		}
+	}
 </script>
 
 {#if showHeader}
 	<div class="heading">{header}</div>
 {/if}
 
-{#if loading}
+{#if showFilters}
+	<div class="top-row">
+		<div class="filters">
+			{#if project?.agents && project.agents.length > 1}
+				<div class="filter-picker">
+					<!-- <label for="agent-{projectId}">Agent:</label> -->
+					<select id="agent-{projectId}" value={selectedAgent} onchange={handleAgentChange}>
+						<option value="">All Agents</option>
+						<hr />
+						{#each project.agents as a (a)}
+							<option value={a}>{a}</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
+			<div class="filter-picker">
+				<!-- <label for="rating-{projectId}">Rating:</label> -->
+				<select id="rating-{projectId}" value={selectedRating} onchange={handleRatingChange}>
+					<option value={0}>All Ratings</option>
+					<hr />
+					<option value={-1}>&lt; 5 Stars</option>
+					<hr />
+					<option value={5}>5</option>
+					<option value={4}>4</option>
+					<option value={3}>3</option>
+					<option value={2}>2</option>
+					<option value={1}>1</option>
+				</select>
+			</div>
+			<label class="toggle-label">
+				<input type="checkbox" bind:checked={detailed} />
+				Show prompts and ratings
+			</label>
+		</div>
+	</div>
+{/if}
+
+{#if loading && !project}
 	<p class="message loading">Loading conversations...</p>
 {:else if error}
 	<p class="message error">{error}</p>
 {:else if !project || visibleConversations.length === 0}
 	<p class="message">No conversations.</p>
 {:else}
-	<table class="data" class:compact>
+	<table class="data" class:compact class:detailed>
 		<colgroup>
 			{#if !compact}
 				<col class="date-col" />
 			{/if}
 			<col />
+			{#if showRatingsColumn}
+				<col class={detailed ? 'ratings-col-detailed' : 'ratings-col'} />
+			{/if}
 			{#if showAgentColumn}
 				<col class="agent-col" />
-			{/if}
-			{#if showRatingsColumn}
-				<col class="ratings-col" />
 			{/if}
 		</colgroup>
 		{#if showColumnNames}
@@ -162,17 +279,18 @@
 						<th class="date-col">Date</th>
 					{/if}
 					<th>Conversation</th>
-					{#if showAgentColumn}
-						<th>Agent</th>
-					{/if}
 					{#if showRatingsColumn}
 						<th>Ratings</th>
+					{/if}
+					{#if showAgentColumn}
+						<th>Agent</th>
 					{/if}
 				</tr>
 			</thead>
 		{/if}
 		<tbody>
 			{#each visibleConversations as conv (conv.id)}
+				{@const detail = detailData.get(conv.id)}
 				<tr>
 					{#if !compact}
 						<td class="date" title={formatFullDateTitle(conv.lastMessageTimestamp)}
@@ -188,14 +306,33 @@
 						>
 							{conv.title || shortId(conv.id)}
 						</a>
+						{#if detailed && detail}
+							<div class="detail-messages">
+								{#each detail.userMessages as msg (msg.id)}
+									<div class="detail-user-message">
+										<UserPromptMessageCard message={msg} />
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</td>
-					{#if showAgentColumn}
-						<td class="agent"><AgentTag agent={conv.agent} /></td>
-					{/if}
 					{#if showRatingsColumn}
 						<td class="ratings">
-							<RatingStars ratings={conv.ratings} />
+							{#if detailed && detail}
+								<div class="ratings-detail">
+									{#each detail.ratings as r (r.id)}
+										<div class="detail-rating-card">
+											<RatingMessageCard rating={r} />
+										</div>
+									{/each}
+								</div>
+							{:else}
+								<RatingStars ratings={conv.ratings} />
+							{/if}
 						</td>
+					{/if}
+					{#if showAgentColumn}
+						<td class="agent"><AgentTag agent={conv.agent} /></td>
 					{/if}
 				</tr>
 			{/each}
@@ -231,6 +368,53 @@
 		margin-bottom: 0.75rem;
 	}
 
+	.top-row {
+		align-items: flex-start;
+		border-bottom: 0.5px solid var(--color-divider);
+		display: flex;
+		flex-direction: row;
+		gap: 1rem;
+		justify-content: space-between;
+		padding: 0.5rem 1rem 1rem 1rem;
+	}
+
+	@media (max-width: 1100px) {
+		.top-row {
+			flex-direction: column-reverse;
+		}
+	}
+
+	.filters {
+		align-items: center;
+		display: flex;
+		flex-direction: row;
+		gap: 1.5rem;
+	}
+
+	.filter-picker {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.filter-picker select {
+		min-width: 100px;
+	}
+
+	/*.filter-picker label {
+		text-align: right;
+		width: auto;
+	}*/
+
+	.toggle-label {
+		align-items: center;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		cursor: pointer;
+		user-select: none;
+	}
+
 	.message {
 		padding-left: 1rem;
 		padding-right: 1rem;
@@ -244,18 +428,22 @@
 		border-bottom: 0px;
 	}
 
+	table.data.detailed td {
+		vertical-align: top;
+	}
+
 	table.data:not(.compact) tr:nth-child(even) {
 		background: var(--color-alternate-table-row-background);
 	}
 
-	table.data tr:hover,
-	table.data:not(.compact) tr:nth-child(even):hover {
+	table.data:not(.detailed) tr:hover,
+	table.data:not(.compact):not(.detailed) tr:nth-child(even):hover {
 		background: var(--accent-color-ultralight);
 	}
 
 	table.data:not(.compact) td {
-		padding-bottom: 0.7rem;
-		padding-top: 0.7rem;
+		padding-bottom: 0.6rem;
+		padding-top: 0.6rem;
 	}
 
 	.agent-col {
@@ -270,9 +458,17 @@
 		width: 78px;
 	}
 
+	.ratings-col-detailed {
+		width: 30%;
+	}
+
 	.date {
 		padding-left: 1rem;
 		white-space: nowrap;
+	}
+
+	table.data.detailed td.date {
+		vertical-align: top;
 	}
 
 	.title {
@@ -298,19 +494,64 @@
 		white-space: normal;
 	}
 
+	table.data.detailed .title a {
+		-webkit-line-clamp: unset;
+		line-clamp: unset;
+	}
+
 	.title a:hover {
 		color: var(--accent-color);
+	}
+
+	.detail-messages {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+
+	.detail-user-message {
+		background: var(--color-prompt-background);
+		border: 1px solid var(--color-prompt-border);
+		border-radius: 8px;
+		color: #444;
+		padding: 0.5rem 0.75rem;
+	}
+
+	.ratings-detail {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.detail-rating-card {
+		background: var(--color-rating-background);
+		border: 1px solid var(--color-rating-border);
+		border-radius: 8px;
+		padding: 0.5rem 0.75rem;
+		color: #444;
+	}
+
+	table.data.detailed td.ratings {
+		vertical-align: top;
 	}
 
 	.agent {
 		text-align: center;
 	}
 
+	table.data.detailed td.agent {
+		vertical-align: top;
+	}
+
 	.ratings {
+		padding-right: 1rem;
+	}
+
+	table.data:not(.detailed) .ratings {
 		align-items: center;
 		display: flex;
 		gap: 0.5rem;
-		padding-right: 1rem;
 	}
 
 	.pager {
