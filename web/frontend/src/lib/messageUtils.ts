@@ -10,6 +10,14 @@ export function escapeHtml(s: string): string {
 		.replaceAll("'", '&#39;');
 }
 
+marked.use({
+	renderer: {
+		html(token) {
+			return escapeHtml(token.text);
+		}
+	}
+});
+
 export function renderMarkdown(content: string): string {
 	return marked.parse(content, { gfm: true, breaks: true }) as string;
 }
