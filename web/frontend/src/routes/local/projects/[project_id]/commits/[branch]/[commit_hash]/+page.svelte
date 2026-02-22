@@ -194,13 +194,13 @@
 		{:else}
 			<div class="file-table-wrap">
 				<table class="file-table">
-					<thead>
+					<!-- <thead>
 						<tr>
 							<th>File</th>
 							<th>Changes</th>
 							<th class="pct-col">Agents</th>
 						</tr>
-					</thead>
+					</thead> -->
 					<tbody>
 						{#each visibleFiles as file (file.path)}
 							<tr class:ignored-row={file.ignored || file.moved}>
@@ -325,6 +325,12 @@
 		padding: 0 1rem;
 	}
 
+	h3 {
+		line-height: 1;
+		margin: 1.5rem 0 0.5rem 0;
+		padding: 0;
+	}
+
 	.file-table-wrap {
 		overflow-x: auto;
 		margin-bottom: 0.75rem;
@@ -336,27 +342,29 @@
 		font-size: 0.9rem;
 	}
 
-	.file-table th,
+	/*.file-table th,*/
 	.file-table td {
 		padding: 0.4rem 0.5rem;
 		border-bottom: 1px solid #ececec;
 		text-align: left;
 	}
 
-	.file-table th {
+	/*.file-table th {
 		color: #666;
 		font-size: 0.82rem;
 		font-weight: 600;
-	}
+	}*/
 
-	.pct-col {
+	.file-table .pct-col {
 		text-align: right;
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 	}
 
-	.changes-col {
+	.file-table .changes-col {
 		font-variant-numeric: tabular-nums;
+		padding-right: 1.5rem;
+		text-align: right;
 		white-space: nowrap;
 	}
 
