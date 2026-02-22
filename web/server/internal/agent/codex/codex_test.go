@@ -422,6 +422,97 @@ func TestWatcherDerivesDiffFromCurrentSchemaApplyPatch(t *testing.T) {
 	}
 }
 
+func TestWatcherImportsReasoningSummaryText(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+
+	now := time.Now().UTC()
+	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "22", "rollout-2026-02-22T17-59-57-thread-reasoning.jsonl")
+	writeJSONLObjects(t, rolloutPath, []any{
+		map[string]any{
+			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"type":      "session_meta",
+			"payload": map[string]any{
+				"id":    "thread-reasoning",
+				"cwd":   "/proj/reasoning",
+				"model": "gpt-5-codex",
+			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),
+			"type":      "response_item",
+			"payload": map[string]any{
+				"type": "reasoning",
+				"summary": []map[string]any{
+					{"type": "summary_text", "text": "**Reformatting changed files**"},
+				},
+				"content": nil,
+			},
+		},
+	})
+
+	a := newAgent(database, sessionsDir, tmpDir)
+	a.processSessionFile(context.Background(), rolloutPath, nil)
+
+	var got string
+	if err := database.QueryRow("SELECT content FROM messages WHERE conversation_id = 'thread-reasoning' AND json_extract(raw_json, '$.type') = 'response_item' LIMIT 1").Scan(&got); err != nil {
+		t.Fatalf("query reasoning summary message: %v", err)
+	}
+	if got != "**Reformatting changed files**" {
+		t.Fatalf("reasoning summary content = %q, want %q", got, "**Reformatting changed files**")
+	}
+}
+
+func TestWatcherUsesReasoningSummaryForConversationTitle(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+
+	now := time.Now().UTC()
+	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "22", "rollout-2026-02-22T18-10-00-thread-reasoning-title.jsonl")
+	writeJSONLObjects(t, rolloutPath, []any{
+		map[string]any{
+			"timestamp": now.Add(-3 * time.Second).Format(time.RFC3339Nano),
+			"type":      "session_meta",
+			"payload": map[string]any{
+				"id":    "thread-reasoning-title",
+				"cwd":   "/proj/reasoning-title",
+				"model": "gpt-5-codex",
+			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"type":      "event_msg",
+			"payload": map[string]any{
+				"type":    "user_message",
+				"message": "A long initial prompt that should not be the final title",
+			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),
+			"type":      "response_item",
+			"payload": map[string]any{
+				"type": "reasoning",
+				"summary": []map[string]any{
+					{"type": "summary_text", "text": "**Reformatting changed files**"},
+				},
+			},
+		},
+	})
+
+	a := newAgent(database, sessionsDir, tmpDir)
+	a.processSessionFile(context.Background(), rolloutPath, nil)
+
+	var title string
+	if err := database.QueryRow("SELECT title FROM conversations WHERE id = 'thread-reasoning-title'").Scan(&title); err != nil {
+		t.Fatalf("query title: %v", err)
+	}
+	if title != "Reformatting changed files" {
+		t.Fatalf("title = %q, want %q", title, "Reformatting changed files")
+	}
+}
+
 func TestWatcherReconcileOrphanedRatingCurrentSchema(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

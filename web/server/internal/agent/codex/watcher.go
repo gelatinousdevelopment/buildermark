@@ -285,6 +285,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 	var firstEventMsgUser string
 	var firstResponseItemUser string
 	var firstLegacyUser string
+	var latestReasoningSummary string
 	var zrateEntries []struct {
 		rating    int
 		note      string
@@ -362,6 +363,13 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 			}
 			role := "agent"
 			content := extractResponseItemText(item.Content)
+			summaryText := extractResponseItemSummaryText(item.Summary)
+			if strings.TrimSpace(content) == "" {
+				content = summaryText
+			}
+			if item.Type == "reasoning" && strings.TrimSpace(summaryText) != "" {
+				latestReasoningSummary = strings.TrimSpace(summaryText)
+			}
 			if item.Type == "message" {
 				role = "user"
 				if item.Role == "assistant" {
@@ -569,14 +577,18 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 		return
 	}
 
-	titlePrompt := firstEventMsgUser
-	if titlePrompt == "" {
-		titlePrompt = firstResponseItemUser
+	title := normalizeSummaryTitle(latestReasoningSummary)
+	if title == "" {
+		titlePrompt := firstEventMsgUser
+		if titlePrompt == "" {
+			titlePrompt = firstResponseItemUser
+		}
+		if titlePrompt == "" {
+			titlePrompt = firstLegacyUser
+		}
+		title = titleFromPrompt(titlePrompt)
 	}
-	if titlePrompt == "" {
-		titlePrompt = firstLegacyUser
-	}
-	if title := titleFromPrompt(titlePrompt); title != "" {
+	if title != "" {
 		if err := db.UpdateConversationTitle(ctx, a.db, threadID, title); err != nil {
 			log.Printf("codex watcher: update title for %s: %v", threadID, err)
 		}
@@ -756,6 +768,25 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeSummaryTitle(summary string) string {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return ""
+	}
+	title := titleFromPrompt(summary)
+	if title == "" {
+		return ""
+	}
+	title = strings.TrimSpace(title)
+	if strings.HasPrefix(title, "**") && strings.HasSuffix(title, "**") && len(title) > 4 {
+		title = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(title, "**"), "**"))
+	}
+	if strings.HasPrefix(title, "__") && strings.HasSuffix(title, "__") && len(title) > 4 {
+		title = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(title, "__"), "__"))
+	}
+	return strings.TrimSpace(title)
 }
 
 func extractCodexModelFromRawLine(line string) string {

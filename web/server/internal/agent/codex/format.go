@@ -42,10 +42,16 @@ type codexResponseContentBlock struct {
 	Text string `json:"text"`
 }
 
+type codexResponseSummaryBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
 type codexResponseItemPayload struct {
 	Type      string                      `json:"type"`
 	Role      string                      `json:"role"`
 	Content   []codexResponseContentBlock `json:"content"`
+	Summary   []codexResponseSummaryBlock `json:"summary"`
 	Model     string                      `json:"model"`
 	ModelSlug string                      `json:"model_slug"`
 }
@@ -91,6 +97,23 @@ func extractResponseItemText(blocks []codexResponseContentBlock) string {
 	var text strings.Builder
 	for _, c := range blocks {
 		if c.Type != "text" && c.Type != "input_text" && c.Type != "output_text" {
+			continue
+		}
+		if c.Text == "" {
+			continue
+		}
+		if text.Len() > 0 {
+			text.WriteString("\n")
+		}
+		text.WriteString(c.Text)
+	}
+	return strings.TrimSpace(text.String())
+}
+
+func extractResponseItemSummaryText(blocks []codexResponseSummaryBlock) string {
+	var text strings.Builder
+	for _, c := range blocks {
+		if c.Type != "summary_text" && c.Type != "text" {
 			continue
 		}
 		if c.Text == "" {
