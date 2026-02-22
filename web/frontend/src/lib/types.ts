@@ -54,6 +54,7 @@ export interface ConversationWithRatings {
 	title: string;
 	lastMessageTimestamp: number;
 	ratings: Rating[];
+	filesEdited: string[];
 }
 
 export interface ConversationBatchDetail {

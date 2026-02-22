@@ -60,6 +60,7 @@
 	<Conversations
 		{projectId}
 		showFilters={true}
+		showFilesColumn={true}
 		page={currentPage}
 		pageSize={40}
 		compact={false}

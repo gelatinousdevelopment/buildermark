@@ -32,6 +32,11 @@
 	--color-prompt-border: #a8ef70;
 	--color-rating-background: #fffbea;
 	--color-rating-border: #f0c040;
+	--color-tag-border: #555;
+	--color-tag-background: #eee;
+	--color-tag-text: #555;
+	--color-tag-background-hover: #555;
+	--color-tag-text-hover: white;
 }
 
 html,

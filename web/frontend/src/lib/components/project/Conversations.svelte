@@ -4,6 +4,7 @@
 	import { shortId, formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import RatingStars from '$lib/components/RatingStars.svelte';
+	import Popover from '$lib/components/Popover.svelte';
 	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import { resolve } from '$app/paths';
@@ -23,6 +24,7 @@
 		showFilters?: boolean;
 		header?: string;
 		showAgentColumn?: boolean;
+		showFilesColumn?: boolean;
 		showRatingsColumn?: boolean;
 		showPagination?: boolean;
 		showColumnNames?: boolean;
@@ -49,6 +51,7 @@
 		showFilters = false,
 		header = 'Agent Conversations',
 		showAgentColumn = true,
+		showFilesColumn = false,
 		showRatingsColumn = true,
 		showPagination = false,
 		showColumnNames = false,
@@ -268,6 +271,9 @@
 			{#if showRatingsColumn}
 				<col class={detailed ? 'ratings-col-detailed' : 'ratings-col'} />
 			{/if}
+			{#if showFilesColumn}
+				<col class="files-col" />
+			{/if}
 			{#if showAgentColumn}
 				<col class="agent-col" />
 			{/if}
@@ -281,6 +287,9 @@
 					<th>Conversation</th>
 					{#if showRatingsColumn}
 						<th>Ratings</th>
+					{/if}
+					{#if showFilesColumn}
+						<th>Files</th>
 					{/if}
 					{#if showAgentColumn}
 						<th>Agent</th>
@@ -328,6 +337,25 @@
 								</div>
 							{:else}
 								<RatingStars ratings={conv.ratings} />
+							{/if}
+						</td>
+					{/if}
+					{#if showFilesColumn}
+						<td class="files">
+							{#if conv.filesEdited.length > 0}
+								<Popover position="leading" width="500px" padding="0.75rem">
+									<span class="files-tag"
+										>{conv.filesEdited.length}
+										{conv.filesEdited.length === 1 ? 'File' : 'Files'}</span
+									>
+									{#snippet popover()}
+										<div class="files-popover">
+											{#each conv.filesEdited as fp (fp)}
+												<div class="files-path" title={fp}>{fp}</div>
+											{/each}
+										</div>
+									{/snippet}
+								</Popover>
 							{/if}
 						</td>
 					{/if}
@@ -444,6 +472,60 @@
 	table.data:not(.compact) td {
 		padding-bottom: 0.6rem;
 		padding-top: 0.6rem;
+	}
+
+	.files-col {
+		width: 70px;
+	}
+
+	.files {
+		text-align: center;
+	}
+
+	table.data.detailed td.files {
+		vertical-align: top;
+	}
+
+	.files-tag {
+		display: inline-flex;
+		align-items: center;
+		padding: calc(0.2rem - 0.5px) calc(0.6rem - 0.5px);
+		border-radius: 999px;
+		background: var(--color-tag-background, #e8e8e8);
+		color: var(--color-tag-text, #555);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.2;
+		margin: -0.1rem 0;
+		white-space: nowrap;
+		cursor: default;
+		border: 0.5px solid var(--color-tag-border, #888);
+		box-sizing: border-box;
+	}
+
+	.files-tag:hover {
+		background: var(--color-tag-background-hover, #d8d8d8);
+		color: var(--color-tag-text-hover, #333);
+	}
+
+	.files-popover {
+		display: flex;
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 0.25rem;
+		font-size: 0.82rem;
+		white-space: normal;
+	}
+
+	.files-path {
+		font-family: var(--font-mono, monospace);
+		font-size: 0.78rem;
+		color: #444;
+		white-space: nowrap;
+		line-height: 1.4;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
 	}
 
 	.agent-col {
