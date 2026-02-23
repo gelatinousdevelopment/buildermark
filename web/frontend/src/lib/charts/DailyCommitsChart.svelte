@@ -14,8 +14,9 @@
 	}
 
 	let { dailySummary, branch }: Props = $props();
-	let menuOpen = $state(false);
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
+	let menuBtn: HTMLButtonElement | undefined;
+	let menuBody: HTMLDivElement | undefined;
 	let scrollWrap: HTMLDivElement | undefined;
 	let lastAutoScrollKey = '';
 
@@ -201,28 +202,36 @@
 			scrollWrap.scrollLeft = scrollWrap.scrollWidth;
 		});
 	});
+
+	function toggleMenu() {
+		if (!menuBtn || !menuBody) return;
+		if (!menuBody.matches(':popover-open')) {
+			const rect = menuBtn.getBoundingClientRect();
+			menuBody.style.top = `${rect.bottom + 4}px`;
+			menuBody.style.left = `${rect.left}px`;
+		}
+		menuBody.togglePopover();
+	}
 </script>
 
 <div class="dc-layout">
-	<div class="dc-chart-area" class:dc-menu-open={menuOpen}>
-		<button class="dc-menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label="Chart options">
+	<div class="dc-chart-area">
+		<button class="dc-menu-btn" bind:this={menuBtn} onclick={toggleMenu} aria-label="Chart options">
 			<Icon name="chevronRight" width="12px" />
 		</button>
-		{#if menuOpen}
-			<div class="dc-menu">
-				<label class="dc-menu-option">
-					<input
-						type="checkbox"
-						checked={settingsStore.commitsChartScaleByLines}
-						onchange={(e) =>
-							(settingsStore.commitsChartScaleByLines = (
-								e.currentTarget as HTMLInputElement
-							).checked)}
-					/>
-					Scale bars by line count
-				</label>
-			</div>
-		{/if}
+		<div class="dc-menu-body" bind:this={menuBody} popover="auto">
+			<label class="dc-menu-option">
+				<input
+					type="checkbox"
+					checked={settingsStore.commitsChartScaleByLines}
+					onchange={(e) =>
+						(settingsStore.commitsChartScaleByLines = (
+							e.currentTarget as HTMLInputElement
+						).checked)}
+				/>
+				Scale bars by line count
+			</label>
+		</div>
 		<div class="dc-wrap" bind:this={scrollWrap}>
 			<div class="dc-chart">
 				{#each columns as col (col.date)}
@@ -340,15 +349,14 @@
 	}
 
 	.dc-chart-area:hover .dc-menu-btn,
-	.dc-menu-open .dc-menu-btn {
+	.dc-chart-area:has(:popover-open) .dc-menu-btn {
 		opacity: 1;
 	}
 
-	.dc-menu {
-		position: absolute;
-		top: 26px;
-		left: 6px;
-		z-index: 3;
+	.dc-menu-body {
+		position: fixed;
+		inset: unset;
+		margin: 0;
 		background: #fff;
 		border: 0.5px solid var(--color-divider);
 		border-radius: 5px;
