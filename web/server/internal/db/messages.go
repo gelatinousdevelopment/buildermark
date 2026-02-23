@@ -118,7 +118,7 @@ const dupWindowMs = 10_000 // 10 seconds
 
 const hiddenIngestMessageMaxLen = 256
 
-var hiddenIngestMessageRe = regexp.MustCompile(`(?s)^[\[<].*[\]>]$`)
+var hiddenIngestMessageRe = regexp.MustCompile(`^[\[<].*[\]>](?s)`)
 
 // InsertMessages inserts multiple messages in a single transaction, skipping duplicates.
 // Duplicates are detected both within the batch (same conversation + role + content

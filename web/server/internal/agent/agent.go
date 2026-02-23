@@ -38,6 +38,13 @@ type PathFilteredWatcher interface {
 	ScanPathsSince(ctx context.Context, since time.Time, paths []string) int
 }
 
+// ProjectPathDiscoverer returns likely project paths touched by an agent since
+// the given cutoff without importing conversation data.
+type ProjectPathDiscoverer interface {
+	Agent
+	DiscoverProjectPathsSince(ctx context.Context, since time.Time) []string
+}
+
 // SessionResolver resolves a rating to a real session with conversation entries.
 type SessionResolver interface {
 	Agent

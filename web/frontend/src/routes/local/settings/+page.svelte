@@ -1,18 +1,27 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLocalSettings, listProjects, scanHistory, setProjectIgnored } from '$lib/api';
-	import type { LocalSettings, Project } from '$lib/types';
+	import {
+		discoverImportableProjects,
+		getLocalSettings,
+		importProjects,
+		listProjects,
+		scanHistory,
+		setProjectIgnored
+	} from '$lib/api';
+	import ProjectTrackingForm from '$lib/components/project/ProjectTrackingForm.svelte';
+	import type { LocalSettings, Project, ProjectTrackingOption } from '$lib/types';
 
-	type ProjectSetting = {
-		project: Project;
-		tracked: boolean;
-		saving: boolean;
-		error: string | null;
+	type SettingsTrackingOption = ProjectTrackingOption & {
+		originalTracked: boolean;
 	};
 
-	let rows: ProjectSetting[] = $state([]);
+	let trackingOptions: SettingsTrackingOption[] = $state([]);
+	let checkedProjectPaths: string[] = $state([]);
 	let loadingProjects = $state(true);
 	let projectError: string | null = $state(null);
+	let trackingImportDays = $state('90');
+	let savingTracking = $state(false);
+	let saveTrackingError: string | null = $state(null);
 
 	let localSettingsLoading = $state(true);
 	let localSettingsError: string | null = $state(null);
@@ -24,7 +33,21 @@
 
 	const historyImportDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
 
-	function projectName(project: Project): string {
+	const selectedImportablePaths = $derived(
+		trackingOptions
+			.filter((option) => checkedProjectPaths.includes(option.path) && option.importable)
+			.map((option) => option.path)
+	);
+	const trackingHasChanges = $derived(
+		trackingOptions.some(
+			(option) => checkedProjectPaths.includes(option.path) !== option.originalTracked
+		)
+	);
+	const trackingSubmitDisabled = $derived(
+		!trackingHasChanges && selectedImportablePaths.length === 0
+	);
+
+	function projectName(project: { label: string; path: string }): string {
 		return project.label || project.path;
 	}
 
@@ -33,34 +56,129 @@
 	}
 
 	onMount(async () => {
-		await Promise.all([loadProjects(), loadLocalSettings()]);
+		await Promise.all([loadTrackingOptions(), loadLocalSettings()]);
 	});
 
-	async function loadProjects() {
+	function setTrackingImportDays(days: string) {
+		trackingImportDays = days;
+	}
+
+	function toggleSelection(projectPath: string, checked: boolean) {
+		if (checked) {
+			checkedProjectPaths = checkedProjectPaths.includes(projectPath)
+				? checkedProjectPaths
+				: [...checkedProjectPaths, projectPath];
+		} else {
+			checkedProjectPaths = checkedProjectPaths.filter((path) => path !== projectPath);
+		}
+	}
+
+	async function loadTrackingOptions() {
+		loadingProjects = true;
+		projectError = null;
 		try {
-			const [trackedProjects, ignoredProjects] = await Promise.all([
+			const [trackedProjects, ignoredProjects, discovered] = await Promise.all([
 				listProjects(false),
-				listProjects(true)
+				listProjects(true),
+				discoverImportableProjects(30)
 			]);
-			const tracked = sortProjects(trackedProjects).map((project) => ({
-				project,
-				tracked: true,
-				saving: false,
-				error: null
-			}));
-			const ignored = sortProjects(ignoredProjects).map((project) => ({
-				project,
-				tracked: false,
-				saving: false,
-				error: null
-			}));
-			rows = [...tracked, ...ignored].sort((a, b) =>
-				projectName(a.project).localeCompare(projectName(b.project))
+
+			const byPath: Record<string, SettingsTrackingOption> = {};
+
+			const upsertProject = (project: Project, tracked: boolean) => {
+				const existing = byPath[project.path];
+				const next: SettingsTrackingOption = {
+					path: project.path,
+					label: project.label,
+					projectId: project.id,
+					tracked,
+					originalTracked: tracked,
+					importable: false,
+					missingOnDisk: true
+				};
+				if (!existing) {
+					byPath[project.path] = next;
+					return;
+				}
+				byPath[project.path] = {
+					...existing,
+					...next,
+					importable: existing.importable,
+					missingOnDisk: existing.missingOnDisk
+				};
+			};
+
+			for (const project of sortProjects(trackedProjects)) {
+				upsertProject(project, true);
+			}
+			for (const project of sortProjects(ignoredProjects)) {
+				upsertProject(project, false);
+			}
+
+			for (const project of discovered.projects) {
+				const existing = byPath[project.path];
+				if (!existing) {
+					byPath[project.path] = {
+						path: project.path,
+						label: project.label,
+						projectId: project.projectId,
+						tracked: project.tracked,
+						originalTracked: project.tracked,
+						importable: true,
+						missingOnDisk: false
+					};
+					continue;
+				}
+
+				byPath[project.path] = {
+					...existing,
+					label: existing.label || project.label,
+					projectId: existing.projectId || project.projectId,
+					importable: true,
+					missingOnDisk: false
+				};
+			}
+
+			trackingOptions = Object.values(byPath).sort((a, b) =>
+				projectName(a).localeCompare(projectName(b))
 			);
+			checkedProjectPaths = trackingOptions
+				.filter((option) => option.tracked)
+				.map((option) => option.path);
 		} catch (e) {
 			projectError = e instanceof Error ? e.message : 'Failed to load projects';
 		} finally {
 			loadingProjects = false;
+		}
+	}
+
+	async function saveProjectTracking() {
+		if (savingTracking || trackingSubmitDisabled) return;
+		savingTracking = true;
+		saveTrackingError = null;
+		try {
+			const desiredTracked = new Set(checkedProjectPaths);
+			const updates = trackingOptions.filter(
+				(option) => option.projectId && desiredTracked.has(option.path) !== option.originalTracked
+			);
+
+			if (updates.length > 0) {
+				await Promise.all(
+					updates.map((option) =>
+						setProjectIgnored(option.projectId!, !desiredTracked.has(option.path))
+					)
+				);
+			}
+
+			if (selectedImportablePaths.length > 0) {
+				await importProjects(selectedImportablePaths, trackingImportDays);
+			}
+
+			await loadTrackingOptions();
+		} catch (e) {
+			saveTrackingError = e instanceof Error ? e.message : 'Failed to update project tracking';
+		} finally {
+			savingTracking = false;
 		}
 	}
 
@@ -71,28 +189,6 @@
 			localSettingsError = e instanceof Error ? e.message : 'Failed to load local settings';
 		} finally {
 			localSettingsLoading = false;
-		}
-	}
-
-	async function setTracked(projectId: string, tracked: boolean) {
-		const rowIndex = rows.findIndex((row) => row.project.id === projectId);
-		if (rowIndex < 0) return;
-
-		const previousTracked = rows[rowIndex].tracked;
-		rows[rowIndex] = { ...rows[rowIndex], tracked, saving: true, error: null };
-		rows = rows.slice();
-
-		try {
-			await setProjectIgnored(projectId, !tracked);
-		} catch (e) {
-			rows[rowIndex] = {
-				...rows[rowIndex],
-				tracked: previousTracked,
-				error: e instanceof Error ? e.message : 'Failed to update tracking state'
-			};
-		} finally {
-			rows[rowIndex] = { ...rows[rowIndex], saving: false };
-			rows = rows.slice();
 		}
 	}
 
@@ -130,53 +226,31 @@
 <div class="settings limited-content-width inset-when-limited-content-width">
 	<h1>Global Settings</h1>
 
-	{#if loadingProjects}
-		<p>Loading projects...</p>
-	{:else if projectError}
-		<p class="error">{projectError}</p>
-	{:else if rows.length === 0}
-		<p>No projects found.</p>
-	{:else}
-		<div>
-			<h2>Project Tracking</h2>
-			<table class="project-table">
-				<thead>
-					<tr>
-						<th></th>
-						<th>Project</th>
-						<th>Path</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each rows as row (row.project.id)}
-						<tr>
-							<td>
-								<input
-									type="checkbox"
-									checked={row.tracked}
-									disabled={row.saving}
-									onchange={(event) =>
-										setTracked(row.project.id, (event.currentTarget as HTMLInputElement).checked)}
-								/>
-							</td>
-							<td class="project-name-cell" title={projectName(row.project)}
-								>{projectName(row.project)}</td
-							>
-							<td class="project-path">
-								{#if row.saving}
-									<span class="status">Saving...</span>
-								{:else if row.error}
-									<span class="error">{row.error}</span>
-								{:else}
-									{row.project.path}
-								{/if}
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
+	<div class="tracking-section">
+		{#if loadingProjects}
+			<p>Loading projects...</p>
+		{:else if projectError}
+			<p class="error">{projectError}</p>
+		{:else}
+			<ProjectTrackingForm
+				heading="Project Tracking"
+				projects={trackingOptions}
+				loading={loadingProjects}
+				error={projectError}
+				emptyMessage="No projects found yet."
+				checkedPaths={checkedProjectPaths}
+				selectedHistoryDays={trackingImportDays}
+				historyDayOptions={historyImportDayOptions}
+				saving={savingTracking}
+				saveError={saveTrackingError}
+				submitLabel="Import Projects"
+				submitDisabled={trackingSubmitDisabled}
+				onToggle={toggleSelection}
+				onHistoryDaysChange={setTrackingImportDays}
+				onSubmit={saveProjectTracking}
+			/>
+		{/if}
+	</div>
 
 	<div class="history-import">
 		<h2>Import Conversation History</h2>
@@ -270,6 +344,12 @@
 		font-size: 0.85rem;
 	}
 
+	.tracking-section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
 	.search-paths {
 		margin: 0.75rem 0 0;
 		padding: 0 0 0 1rem;
@@ -326,78 +406,5 @@
 		min-width: 4.5rem;
 		font-weight: 600;
 		text-transform: lowercase;
-	}
-
-	.project-table {
-		width: 100%;
-		border-collapse: collapse;
-		table-layout: fixed;
-		background: #fff;
-		border: 1px solid #ddd;
-		border-radius: 8px;
-		overflow: hidden;
-	}
-
-	.project-table th,
-	.project-table td {
-		padding: 0.45rem 0.6rem;
-		border-bottom: 1px solid #eee;
-		text-align: left;
-		font-size: 0.9rem;
-		vertical-align: middle;
-	}
-
-	.project-table th {
-		font-size: 0.8rem;
-		color: #666;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.02em;
-	}
-
-	.project-table tbody tr:last-child td {
-		border-bottom: none;
-	}
-
-	.project-table th:nth-child(1),
-	.project-table td:nth-child(1) {
-		width: 1.5rem;
-	}
-
-	.project-table th:nth-child(2),
-	.project-table td:nth-child(2) {
-		width: 10rem;
-	}
-
-	.project-name-cell {
-		font-weight: 500;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.project-path {
-		color: #777;
-		font-size: 0.85rem;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.status {
-		font-size: 0.85rem;
-		color: #2c7a2c;
-	}
-
-	.error {
-		color: #b00020;
-		font-size: 0.85rem;
-	}
-
-	@media (max-width: 800px) {
-		.project-table th:nth-child(2),
-		.project-table td:nth-child(2) {
-			width: 10rem;
-		}
 	}
 </style>

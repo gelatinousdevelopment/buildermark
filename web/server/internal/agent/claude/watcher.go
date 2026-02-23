@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -22,9 +23,10 @@ const claudeWatcherSourceKindProjectFile = "project_file"
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("claude watcher: starting, monitoring %s", a.path)
 
+	trackedFilter := a.trackedProjectFilter(ctx)
 	start := time.Now()
-	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
-	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-agent.DefaultScanWindow), true, nil)
+	a.scanSinceFiltered(ctx, time.Now().Add(-agent.DefaultScanWindow), trackedFilter)
+	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-agent.DefaultScanWindow), true, trackedFilter)
 	log.Printf("claude watcher: startup scan duration %s", time.Since(start))
 	if projectScanCount > 0 {
 		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
@@ -42,11 +44,58 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("claude watcher: stopped")
 			return
 		case <-ticker.C:
-			a.poll(ctx)
-			a.pollProjectFiles(ctx)
+			trackedFilter = a.trackedProjectFilter(ctx)
+			a.pollFiltered(ctx, trackedFilter)
+			a.pollProjectFiles(ctx, trackedFilter)
 			a.backfillGitIDs(ctx)
 		}
 	}
+}
+
+// DiscoverProjectPathsSince returns project paths inferred from Claude project
+// conversation files modified since the given cutoff.
+func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []string {
+	seen := make(map[string]struct{})
+	cutoffMs := since.UnixMilli()
+
+	if f, err := os.Open(a.path); err == nil {
+		scanner := bufio.NewScanner(f)
+		scanner.Buffer(make([]byte, 0, 256*1024), 1024*1024)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			var entry historyEntry
+			if err := json.Unmarshal([]byte(line), &entry); err != nil {
+				continue
+			}
+			projectPath := strings.TrimSpace(entry.Project)
+			if projectPath == "" || entry.Timestamp < cutoffMs {
+				continue
+			}
+			seen[filepath.Clean(projectPath)] = struct{}{}
+		}
+		_ = f.Close()
+	}
+
+	paths := listProjectConversationFiles(a.home)
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil || info.ModTime().Before(since) {
+			continue
+		}
+		projectPath := strings.TrimSpace(projectPathFromConversationFile(p))
+		if projectPath == "" {
+			continue
+		}
+		seen[filepath.Clean(projectPath)] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	return out
 }
 
 // ScanSince reads the entire file and imports entries with timestamps after
@@ -70,7 +119,11 @@ func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []str
 // scanSince reads the entire file and processes only entries newer than the cutoff,
 // then updates the file offset so subsequent polls start from the end.
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	n := a.doScan(ctx, since, true, nil)
+	a.scanSinceFiltered(ctx, since, nil)
+}
+
+func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter pathFilter) {
+	n := a.doScan(ctx, since, true, filter)
 	if n > 0 {
 		log.Printf("claude watcher: initial scan processed %d entries", n)
 	}
@@ -111,8 +164,12 @@ type pathFilter map[string]struct{}
 func newPathFilter(paths []string) pathFilter {
 	out := make(pathFilter)
 	for _, p := range paths {
-		p = strings.TrimSpace(filepath.Clean(p))
+		p = strings.TrimSpace(p)
 		if p == "" {
+			continue
+		}
+		p = filepath.Clean(p)
+		if p == "." {
 			continue
 		}
 		out[p] = struct{}{}
@@ -124,8 +181,11 @@ func newPathFilter(paths []string) pathFilter {
 }
 
 func (f pathFilter) match(projectPath string) bool {
-	if len(f) == 0 {
+	if f == nil {
 		return true
+	}
+	if len(f) == 0 {
+		return false
 	}
 	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
 	if projectPath == "" {
@@ -145,6 +205,10 @@ func (f pathFilter) match(projectPath string) bool {
 // poll reads new data appended since the last read. If the file shrank
 // (rotation), it resets and rescans from the beginning.
 func (a *Agent) poll(ctx context.Context) {
+	a.pollFiltered(ctx, nil)
+}
+
+func (a *Agent) pollFiltered(ctx context.Context, filter pathFilter) {
 	info, err := os.Stat(a.path)
 	if err != nil {
 		return
@@ -161,17 +225,57 @@ func (a *Agent) poll(ctx context.Context) {
 
 	entries, newOffset := a.readFrom(a.offset)
 	if len(entries) > 0 {
-		a.processEntries(ctx, entries)
+		filtered := entries
+		if filter != nil {
+			filtered = filtered[:0]
+			for _, e := range entries {
+				if filter.match(e.Project) {
+					filtered = append(filtered, e)
+				}
+			}
+		}
+		if len(filtered) > 0 {
+			a.processEntries(ctx, filtered)
+		}
 	}
 	a.offset = newOffset
 	a.persistHistoryOffset(ctx, newOffset)
 }
 
-func (a *Agent) pollProjectFiles(ctx context.Context) {
-	n := a.scanProjectFilesSince(ctx, time.Time{}, true, nil)
+func (a *Agent) pollProjectFiles(ctx context.Context, filter pathFilter) {
+	n := a.scanProjectFilesSince(ctx, time.Time{}, true, filter)
 	if n > 0 {
 		log.Printf("claude watcher: project poll processed %d entries", n)
 	}
+}
+
+func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
+	projects, err := db.ListProjects(ctx, a.db, false)
+	if err != nil {
+		return make(pathFilter)
+	}
+	out := make(pathFilter)
+	for _, p := range projects {
+		path := strings.TrimSpace(p.Path)
+		if path != "" {
+			path = filepath.Clean(path)
+		}
+		if path != "" && path != "." {
+			out[path] = struct{}{}
+		}
+		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
+			oldPath = strings.TrimSpace(oldPath)
+			if oldPath == "" {
+				continue
+			}
+			oldPath = filepath.Clean(oldPath)
+			if oldPath == "." {
+				continue
+			}
+			out[oldPath] = struct{}{}
+		}
+	}
+	return out
 }
 
 func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter) int {
@@ -534,6 +638,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		g.entries = append(g.entries, e)
 	}
 
+	gitRootCache := agent.NewGitRootCache()
 	projectIDCache := make(map[string]string)
 	sessionTitleCache := make(map[string]string)
 	conversationLogCache := make(map[string][]conversationLogEntry)
@@ -544,15 +649,16 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			continue
 		}
 
-		projectID := projectIDCache[g.project]
+		normalizedProject := gitRootCache.Resolve(g.project)
+		projectID := projectIDCache[normalizedProject]
 		if projectID == "" {
 			var err error
-			projectID, err = db.EnsureProject(ctx, a.db, g.project)
+			projectID, err = db.EnsureProject(ctx, a.db, normalizedProject)
 			if err != nil {
-				log.Printf("claude watcher: ensure project %q: %v", g.project, err)
+				log.Printf("claude watcher: ensure project %q: %v", normalizedProject, err)
 				continue
 			}
-			projectIDCache[g.project] = projectID
+			projectIDCache[normalizedProject] = projectID
 		}
 
 		if err := db.EnsureConversation(ctx, a.db, sid, projectID, a.Name()); err != nil {

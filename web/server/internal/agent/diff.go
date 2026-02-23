@@ -3,7 +3,6 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -585,7 +584,7 @@ func buildStructuredPatchPathCandidates(filePath, cwd string) []string {
 
 	absFile := filepath.Clean(path)
 	if cwd = strings.TrimSpace(cwd); cwd != "" {
-		if root, ok := findGitRoot(cwd); ok {
+		if root, ok := FindGitRoot(cwd); ok {
 			if rel, ok := relIfContained(root, absFile); ok {
 				return []string{normalize(rel)}
 			}
@@ -616,21 +615,6 @@ func relIfContained(base, target string) (string, bool) {
 	return rel, true
 }
 
-func findGitRoot(start string) (string, bool) {
-	dir := filepath.Clean(start)
-	for {
-		gitPath := filepath.Join(dir, ".git")
-		if _, err := os.Stat(gitPath); err == nil {
-			return dir, true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", false
-}
 
 func extractFencedDiffBlocks(content string) []string {
 	lines := strings.Split(content, "\n")

@@ -244,6 +244,33 @@ export interface HistoryScanResponse {
 	since: string;
 }
 
+export interface ImportableProject {
+	path: string;
+	label: string;
+	projectId?: string;
+	tracked: boolean;
+}
+
+export interface ProjectTrackingOption {
+	path: string;
+	label: string;
+	projectId?: string;
+	tracked: boolean;
+	importable: boolean;
+	missingOnDisk: boolean;
+}
+
+export interface DiscoverImportableProjectsResponse {
+	projects: ImportableProject[];
+	since: string;
+}
+
+export interface ImportProjectsResponse {
+	projectsImported: number;
+	entriesProcessed: number;
+	commitsIngested: number;
+}
+
 export interface ProjectCommitCoverage {
 	workingCopy?: boolean;
 	projectId: string;

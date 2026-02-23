@@ -36,6 +36,18 @@ func (r *Registry) Watchers() []Watcher {
 	return ws
 }
 
+// ProjectPathDiscoverers returns all registered agents that can discover
+// candidate local project paths.
+func (r *Registry) ProjectPathDiscoverers() []ProjectPathDiscoverer {
+	var ds []ProjectPathDiscoverer
+	for _, name := range r.order {
+		if d, ok := r.agents[name].(ProjectPathDiscoverer); ok {
+			ds = append(ds, d)
+		}
+	}
+	return ds
+}
+
 // Resolver returns the SessionResolver for the given agent name, or nil.
 func (r *Registry) Resolver(name string) SessionResolver {
 	a, ok := r.agents[name]

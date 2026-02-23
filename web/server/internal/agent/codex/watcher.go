@@ -58,8 +58,9 @@ type sessionFileInfo struct {
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("codex watcher: starting, monitoring %s", a.sessionsDir)
 
+	trackedFilter := a.trackedProjectFilter(ctx)
 	start := time.Now()
-	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
+	a.scanSinceFiltered(ctx, time.Now().Add(-agent.DefaultScanWindow), trackedFilter)
 	log.Printf("codex watcher: startup scan duration %s", time.Since(start))
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
@@ -75,10 +76,30 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("codex watcher: stopped")
 			return
 		case <-ticker.C:
-			a.poll(ctx, seen)
+			trackedFilter = a.trackedProjectFilter(ctx)
+			a.pollFiltered(ctx, seen, trackedFilter)
 			a.backfillGitIDs(ctx)
 		}
 	}
+}
+
+// DiscoverProjectPathsSince returns working directories found in Codex session
+// files modified since the given cutoff.
+func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []string {
+	files := a.listSessionFiles(since)
+	seen := make(map[string]struct{})
+	for _, fi := range files {
+		workingDir := strings.TrimSpace(readWorkingDir(fi.path))
+		if workingDir == "" {
+			continue
+		}
+		seen[filepath.Clean(workingDir)] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	return out
 }
 
 // ScanSince walks the sessions directory and imports entries from files modified after since.
@@ -97,7 +118,11 @@ func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []str
 
 // scanSince is the internal initial scan.
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	n := a.doScan(ctx, since, nil, true)
+	a.scanSinceFiltered(ctx, since, nil)
+}
+
+func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter pathFilter) {
+	n := a.doScan(ctx, since, filter, true)
 	if n > 0 {
 		log.Printf("codex watcher: initial scan processed %d files", n)
 	}
@@ -141,6 +166,10 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, 
 
 // poll checks for new or modified session files since the last poll.
 func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
+	a.pollFiltered(ctx, seen, nil)
+}
+
+func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile, filter pathFilter) {
 	filepath.Walk(a.sessionsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
@@ -152,6 +181,14 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
 		modTime := info.ModTime()
 		if prev, ok := seen[path]; ok && !modTime.After(prev.modTime) {
 			return nil
+		}
+
+		if filter != nil {
+			workingDir := readWorkingDir(path)
+			if !filter.match(workingDir) {
+				seen[path] = processedFile{modTime: modTime}
+				return nil
+			}
 		}
 
 		a.processSessionFile(ctx, path, nil)
@@ -234,8 +271,12 @@ type pathFilter map[string]struct{}
 func newPathFilter(paths []string) pathFilter {
 	out := make(pathFilter)
 	for _, p := range paths {
-		p = strings.TrimSpace(filepath.Clean(p))
+		p = strings.TrimSpace(p)
 		if p == "" {
+			continue
+		}
+		p = filepath.Clean(p)
+		if p == "." {
 			continue
 		}
 		out[p] = struct{}{}
@@ -247,8 +288,11 @@ func newPathFilter(paths []string) pathFilter {
 }
 
 func (f pathFilter) match(projectPath string) bool {
-	if len(f) == 0 {
+	if f == nil {
 		return true
+	}
+	if len(f) == 0 {
+		return false
 	}
 	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
 	if projectPath == "" {
@@ -263,6 +307,35 @@ func (f pathFilter) match(projectPath string) bool {
 		}
 	}
 	return false
+}
+
+func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
+	projects, err := db.ListProjects(ctx, a.db, false)
+	if err != nil {
+		return make(pathFilter)
+	}
+	out := make(pathFilter)
+	for _, p := range projects {
+		path := strings.TrimSpace(p.Path)
+		if path != "" {
+			path = filepath.Clean(path)
+		}
+		if path != "" && path != "." {
+			out[path] = struct{}{}
+		}
+		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
+			oldPath = strings.TrimSpace(oldPath)
+			if oldPath == "" {
+				continue
+			}
+			oldPath = filepath.Clean(oldPath)
+			if oldPath == "." {
+				continue
+			}
+			out[oldPath] = struct{}{}
+		}
+	}
+	return out
 }
 
 // processSessionFile parses a single rollout JSONL file and imports its data.
@@ -554,6 +627,10 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 
 	if threadID == "" || workingDir == "" {
 		return
+	}
+
+	if root, ok := agent.FindGitRoot(workingDir); ok {
+		workingDir = root
 	}
 
 	projectID := ""

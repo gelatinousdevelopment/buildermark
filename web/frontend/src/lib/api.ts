@@ -12,7 +12,9 @@ import type {
 	ProjectCommitPageResponse,
 	IngestCommitsResponse,
 	CommitIngestionStatusResponse,
-	HistoryScanResponse
+	HistoryScanResponse,
+	DiscoverImportableProjectsResponse,
+	ImportProjectsResponse
 } from './types';
 
 interface Envelope<T> {
@@ -199,5 +201,20 @@ export function scanHistory(timeframe: string, agent = ''): Promise<HistoryScanR
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ timeframe, agent })
+	});
+}
+
+export function discoverImportableProjects(days = 30): Promise<DiscoverImportableProjectsResponse> {
+	return api(`/api/v1/projects/discover-importable?days=${days}`);
+}
+
+export function importProjects(
+	paths: string[],
+	historyDays: string
+): Promise<ImportProjectsResponse> {
+	return api('/api/v1/projects/import', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ paths, historyDays })
 	});
 }

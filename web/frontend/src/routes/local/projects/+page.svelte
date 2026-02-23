@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { listProjects, getProject, setProjectIgnored } from '$lib/api';
+	import { discoverImportableProjects, getProject, importProjects, listProjects } from '$lib/api';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import ProjectOnboarding from '$lib/components/project/ProjectOnboarding.svelte';
-	import type { Project, ProjectDetail } from '$lib/types';
+	import type { ImportableProject, Project, ProjectDetail } from '$lib/types';
 
 	type ProjectRow = {
 		project: Project;
@@ -17,14 +17,16 @@
 	let rows: ProjectRow[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
-	let detectedProjects: Project[] = $state([]);
+	let detectedProjects: ImportableProject[] = $state([]);
 	let detectedLoading = $state(false);
 	let detectedError: string | null = $state(null);
-	let selectedProjectIds: string[] = $state([]);
+	let selectedProjectPaths: string[] = $state([]);
+	let historyImportDays = $state('90');
 	let savingSelection = $state(false);
 	let saveSelectionError: string | null = $state(null);
+	const historyDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
 
-	function projectName(project: Project): string {
+	function projectName(project: { label: string; path: string }): string {
 		return project.label || project.path;
 	}
 
@@ -35,21 +37,26 @@
 		return projectName(a.project).localeCompare(projectName(b.project));
 	}
 
-	function toggleSelection(projectId: string, checked: boolean) {
+	function toggleSelection(projectPath: string, checked: boolean) {
 		if (checked) {
-			selectedProjectIds = selectedProjectIds.includes(projectId)
-				? selectedProjectIds
-				: [...selectedProjectIds, projectId];
+			selectedProjectPaths = selectedProjectPaths.includes(projectPath)
+				? selectedProjectPaths
+				: [...selectedProjectPaths, projectPath];
 		} else {
-			selectedProjectIds = selectedProjectIds.filter((id) => id !== projectId);
+			selectedProjectPaths = selectedProjectPaths.filter((path) => path !== projectPath);
 		}
+	}
+
+	function setHistoryImportDays(days: string) {
+		historyImportDays = days;
 	}
 
 	async function loadDetectedProjects() {
 		detectedLoading = true;
 		detectedError = null;
 		try {
-			detectedProjects = (await listProjects(true)).sort((a, b) =>
+			const response = await discoverImportableProjects(30);
+			detectedProjects = response.projects.sort((a, b) =>
 				projectName(a).localeCompare(projectName(b))
 			);
 		} catch (e) {
@@ -60,15 +67,15 @@
 	}
 
 	async function startTrackingSelected() {
-		if (selectedProjectIds.length === 0) return;
+		if (selectedProjectPaths.length === 0) return;
 		savingSelection = true;
 		saveSelectionError = null;
 		try {
-			await Promise.all(selectedProjectIds.map((projectId) => setProjectIgnored(projectId, false)));
-			selectedProjectIds = [];
+			await importProjects(selectedProjectPaths, historyImportDays);
+			selectedProjectPaths = [];
 			await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
 		} catch (e) {
-			saveSelectionError = e instanceof Error ? e.message : 'Failed to update project tracking';
+			saveSelectionError = e instanceof Error ? e.message : 'Failed to import selected projects';
 		} finally {
 			savingSelection = false;
 		}
@@ -125,10 +132,13 @@
 			{detectedProjects}
 			{detectedLoading}
 			{detectedError}
-			{selectedProjectIds}
+			{selectedProjectPaths}
+			selectedHistoryDays={historyImportDays}
+			{historyDayOptions}
 			{savingSelection}
 			{saveSelectionError}
 			onToggleSelection={toggleSelection}
+			onHistoryDaysChange={setHistoryImportDays}
 			onStartTrackingSelected={startTrackingSelected}
 		/>
 	{:else}

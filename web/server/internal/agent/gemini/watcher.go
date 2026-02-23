@@ -20,7 +20,8 @@ type processedFile struct {
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("gemini watcher: starting, monitoring %s", a.tmpDir)
 
-	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow))
+	trackedFilter := a.trackedProjectFilter(ctx)
+	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow), trackedFilter)
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
 
@@ -35,10 +36,34 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("gemini watcher: stopped")
 			return
 		case <-ticker.C:
-			a.poll(ctx, seen)
+			trackedFilter = a.trackedProjectFilter(ctx)
+			a.poll(ctx, seen, trackedFilter)
 			a.backfillGitIDs(ctx)
 		}
 	}
+}
+
+// DiscoverProjectPathsSince returns local project paths resolved from Gemini
+// session files modified since the given cutoff.
+func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []string {
+	files := a.listSessionFiles(since)
+	seen := make(map[string]struct{})
+	for _, path := range files {
+		conv, err := readConversation(path)
+		if err != nil {
+			continue
+		}
+		projectPath := strings.TrimSpace(a.resolveProjectPath(conv))
+		if projectPath == "" {
+			continue
+		}
+		seen[filepath.Clean(projectPath)] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	return out
 }
 
 func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
@@ -54,8 +79,8 @@ func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []str
 	return n
 }
 
-func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	n := a.doScan(ctx, since, nil)
+func (a *Agent) scanSince(ctx context.Context, since time.Time, filter pathFilter) {
+	n := a.doScan(ctx, since, filter)
 	if n > 0 {
 		log.Printf("gemini watcher: initial scan processed %d files", n)
 	}
@@ -81,7 +106,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter) 
 	return processed
 }
 
-func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
+func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter pathFilter) {
 	filepath.Walk(a.tmpDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
@@ -93,6 +118,14 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
 		modTime := info.ModTime()
 		if prev, ok := seen[path]; ok && !modTime.After(prev.modTime) {
 			return nil
+		}
+
+		if filter != nil {
+			conv, err := readConversation(path)
+			if err != nil || !filter.match(a.resolveProjectPath(conv)) {
+				seen[path] = processedFile{modTime: modTime}
+				return nil
+			}
 		}
 
 		a.processSessionFile(ctx, path)
@@ -132,6 +165,11 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 	projectPath := a.resolveProjectPath(conv)
 	if projectPath == "" {
 		projectPath = "unknown"
+	}
+	if projectPath != "unknown" {
+		if root, ok := agent.FindGitRoot(projectPath); ok {
+			projectPath = root
+		}
 	}
 
 	projectID, err := db.EnsureProject(ctx, a.db, projectPath)
@@ -288,8 +326,12 @@ type pathFilter map[string]struct{}
 func newPathFilter(paths []string) pathFilter {
 	out := make(pathFilter)
 	for _, p := range paths {
-		p = strings.TrimSpace(filepath.Clean(p))
+		p = strings.TrimSpace(p)
 		if p == "" {
+			continue
+		}
+		p = filepath.Clean(p)
+		if p == "." {
 			continue
 		}
 		out[p] = struct{}{}
@@ -301,8 +343,11 @@ func newPathFilter(paths []string) pathFilter {
 }
 
 func (f pathFilter) match(projectPath string) bool {
-	if len(f) == 0 {
+	if f == nil {
 		return true
+	}
+	if len(f) == 0 {
+		return false
 	}
 	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
 	if projectPath == "" {
@@ -317,6 +362,35 @@ func (f pathFilter) match(projectPath string) bool {
 		}
 	}
 	return false
+}
+
+func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
+	projects, err := db.ListProjects(ctx, a.db, false)
+	if err != nil {
+		return make(pathFilter)
+	}
+	out := make(pathFilter)
+	for _, p := range projects {
+		path := strings.TrimSpace(p.Path)
+		if path != "" {
+			path = filepath.Clean(path)
+		}
+		if path != "" && path != "." {
+			out[path] = struct{}{}
+		}
+		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
+			oldPath = strings.TrimSpace(oldPath)
+			if oldPath == "" {
+				continue
+			}
+			oldPath = filepath.Clean(oldPath)
+			if oldPath == "." {
+				continue
+			}
+			out[oldPath] = struct{}{}
+		}
+	}
+	return out
 }
 
 // backfillLabels updates project labels from the last path component to the

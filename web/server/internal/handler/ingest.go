@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
 )
@@ -274,6 +275,40 @@ func IngestDefaultCommits(
 	return err
 }
 
+// IngestCommitsForWindow ingests commits on the given branch either for the
+// full history (includeAll=true) or since the provided cutoff timestamp.
+func IngestCommitsForWindow(
+	ctx context.Context,
+	database *sql.DB,
+	repoProject *db.Project,
+	group projectGroup,
+	branch string,
+	since time.Time,
+	includeAll bool,
+) (int, error) {
+	commits, err := listBranchCommits(ctx, repoProject.Path, branch, 0)
+	if err != nil {
+		return 0, err
+	}
+	if len(commits) == 0 {
+		return 0, nil
+	}
+
+	toIngest := commits
+	if !includeAll {
+		cutoffMs := since.UnixMilli()
+		toIngest = toIngest[:0]
+		for _, commit := range commits {
+			if commit.TimestampUnix*1000 < cutoffMs {
+				continue
+			}
+			toIngest = append(toIngest, commit)
+		}
+	}
+
+	return ingestCommits(ctx, database, repoProject, group, branch, toIngest)
+}
+
 func ingestCommits(
 	ctx context.Context,
 	database *sql.DB,
@@ -366,8 +401,8 @@ func ingestCommits(
 			BranchName:      branch,
 			CommitHash:      gc.Hash,
 			Subject:         gc.Subject,
-			UserName:      gc.UserName,
-			UserEmail:     gc.UserEmail,
+			UserName:        gc.UserName,
+			UserEmail:       gc.UserEmail,
 			AuthoredAt:      gc.TimestampUnix,
 			DiffContent:     cleanDiff,
 			LinesTotal:      totalLines,
@@ -532,8 +567,8 @@ func recomputeCommitCoverageForProject(
 			BranchName:      c.BranchName,
 			CommitHash:      c.CommitHash,
 			Subject:         c.Subject,
-			UserName:      c.UserName,
-			UserEmail:     c.UserEmail,
+			UserName:        c.UserName,
+			UserEmail:       c.UserEmail,
 			AuthoredAt:      c.AuthoredAt,
 			DiffContent:     cleanDiff,
 			LinesTotal:      totalLines,
@@ -627,8 +662,8 @@ func listAllCommitsByIdentity(ctx context.Context, path, branch string, identity
 		}
 		c := gitCommit{
 			Hash:          strings.TrimSpace(parts[0]),
-			UserName:    strings.TrimSpace(parts[1]),
-			UserEmail:   strings.TrimSpace(parts[2]),
+			UserName:      strings.TrimSpace(parts[1]),
+			UserEmail:     strings.TrimSpace(parts[2]),
 			TimestampUnix: ts,
 			Subject:       strings.TrimSpace(parts[4]),
 		}
