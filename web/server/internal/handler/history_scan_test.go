@@ -25,14 +25,14 @@ type mockWatcher struct {
 
 func (m *mockWatcher) Name() string            { return m.name }
 func (m *mockWatcher) Run(ctx context.Context) {}
-func (m *mockWatcher) ScanSince(ctx context.Context, since time.Time) int {
+func (m *mockWatcher) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.scanCount++
 	m.lastSince = since
 	return 10
 }
-func (m *mockWatcher) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
+func (m *mockWatcher) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.scanPathsCount++

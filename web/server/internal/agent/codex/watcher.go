@@ -103,15 +103,15 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 }
 
 // ScanSince walks the sessions directory and imports entries from files modified after since.
-func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
-	n := a.doScan(ctx, since, nil, false)
+func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
+	n := a.doScan(ctx, since, nil, false, progress)
 	log.Printf("codex watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
 
 // ScanPathsSince scans only session files associated with matching working directories.
-func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
-	n := a.doScan(ctx, since, newPathFilter(paths), false)
+func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
+	n := a.doScan(ctx, since, newPathFilter(paths), false, progress)
 	log.Printf("codex watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
@@ -122,18 +122,21 @@ func (a *Agent) scanSince(ctx context.Context, since time.Time) {
 }
 
 func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter pathFilter) {
-	n := a.doScan(ctx, since, filter, true)
+	n := a.doScan(ctx, since, filter, true, nil)
 	if n > 0 {
 		log.Printf("codex watcher: initial scan processed %d files", n)
 	}
 }
 
 // doScan walks the sessions directory and processes files modified after since.
-func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, useCheckpoint bool) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, useCheckpoint bool, progress agent.ScanProgressFunc) int {
 	files := a.listSessionFiles(since)
 	processed := 0
 	projectCache := make(map[string]string)
 	for _, fi := range files {
+		if progress != nil {
+			progress(fi.path)
+		}
 		if filter != nil {
 			workingDir := readWorkingDir(fi.path)
 			if !filter.match(workingDir) {

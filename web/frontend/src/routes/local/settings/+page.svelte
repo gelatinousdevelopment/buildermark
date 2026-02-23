@@ -9,6 +9,7 @@
 		setProjectIgnored
 	} from '$lib/api';
 	import ProjectTrackingForm from '$lib/components/project/ProjectTrackingForm.svelte';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import type { LocalSettings, Project, ProjectTrackingOption } from '$lib/types';
 
 	type SettingsTrackingOption = ProjectTrackingOption & {
@@ -32,6 +33,12 @@
 	let historyImportResult: string | null = $state(null);
 
 	const historyImportDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
+
+	let importStatusMessage = $derived(
+		websocketStore.importStatus?.state === 'running'
+			? websocketStore.importStatus.message
+			: null
+	);
 
 	const selectedImportablePaths = $derived(
 		trackingOptions
@@ -156,6 +163,7 @@
 		if (savingTracking || trackingSubmitDisabled) return;
 		savingTracking = true;
 		saveTrackingError = null;
+		websocketStore.clearImportStatus();
 		try {
 			const desiredTracked = new Set(checkedProjectPaths);
 			const updates = trackingOptions.filter(
@@ -172,6 +180,12 @@
 
 			if (selectedImportablePaths.length > 0) {
 				await importProjects(selectedImportablePaths, trackingImportDays);
+				// Import runs async on the server; wait for completion via WebSocket.
+				const result = await websocketStore.waitForImportComplete();
+				if (result.state === 'error') {
+					saveTrackingError = result.message;
+					return;
+				}
 			}
 
 			await loadTrackingOptions();
@@ -179,6 +193,7 @@
 			saveTrackingError = e instanceof Error ? e.message : 'Failed to update project tracking';
 		} finally {
 			savingTracking = false;
+			websocketStore.clearImportStatus();
 		}
 	}
 
@@ -243,6 +258,7 @@
 				historyDayOptions={historyImportDayOptions}
 				saving={savingTracking}
 				saveError={saveTrackingError}
+				{importStatusMessage}
 				submitLabel="Import Projects"
 				submitDisabled={trackingSubmitDisabled}
 				onToggle={toggleSelection}

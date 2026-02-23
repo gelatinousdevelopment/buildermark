@@ -266,9 +266,7 @@ export interface DiscoverImportableProjectsResponse {
 }
 
 export interface ImportProjectsResponse {
-	projectsImported: number;
-	entriesProcessed: number;
-	commitsIngested: number;
+	started: boolean;
 }
 
 export interface ProjectCommitCoverage {

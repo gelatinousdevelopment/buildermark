@@ -22,18 +22,18 @@ type historyScanResponse struct {
 }
 
 func (s *Server) scanWatchersSince(ctx context.Context, since time.Time, agentName string) int {
-	return s.scanWatchersSincePaths(ctx, since, agentName, nil)
+	return s.scanWatchersSincePaths(ctx, since, agentName, nil, nil)
 }
 
-func (s *Server) scanWatchersSincePaths(ctx context.Context, since time.Time, agentName string, paths []string) int {
+func (s *Server) scanWatchersSincePaths(ctx context.Context, since time.Time, agentName string, paths []string, progress agent.ScanProgressFunc) int {
 	var count int
 	if agentName != "" {
 		for _, w := range s.Agents.Watchers() {
 			if w.Name() == agentName {
 				if pw, ok := w.(agent.PathFilteredWatcher); ok && len(paths) > 0 {
-					count = pw.ScanPathsSince(ctx, since, paths)
+					count = pw.ScanPathsSince(ctx, since, paths, progress)
 				} else {
-					count = w.ScanSince(ctx, since)
+					count = w.ScanSince(ctx, since, progress)
 				}
 				break
 			}
@@ -42,9 +42,9 @@ func (s *Server) scanWatchersSincePaths(ctx context.Context, since time.Time, ag
 	}
 	for _, w := range s.Agents.Watchers() {
 		if pw, ok := w.(agent.PathFilteredWatcher); ok && len(paths) > 0 {
-			count += pw.ScanPathsSince(ctx, since, paths)
+			count += pw.ScanPathsSince(ctx, since, paths, progress)
 		} else {
-			count += w.ScanSince(ctx, since)
+			count += w.ScanSince(ctx, since, progress)
 		}
 	}
 	return count

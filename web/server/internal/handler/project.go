@@ -169,7 +169,7 @@ func (s *Server) backfillProjectForOldPaths(projectID string, paths []string) {
 	defer cancel()
 
 	if s.Agents != nil && len(s.Agents.Watchers()) > 0 && len(paths) > 0 {
-		entriesProcessed := s.scanWatchersSincePaths(ctx, time.Unix(0, 0), "", paths)
+		entriesProcessed := s.scanWatchersSincePaths(ctx, time.Unix(0, 0), "", paths, nil)
 		log.Printf("project old_paths changed for %s; automatic path-filtered history scan processed %d entries across %d paths", projectID, entriesProcessed, len(paths))
 	}
 

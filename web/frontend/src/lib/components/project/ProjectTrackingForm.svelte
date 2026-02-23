@@ -14,6 +14,7 @@
 		saveError: string | null;
 		submitLabel?: string;
 		submitDisabled?: boolean;
+		importStatusMessage?: string | null;
 		onToggle: (projectPath: string, checked: boolean) => void;
 		onHistoryDaysChange: (days: string) => void;
 		onSubmit: () => void;
@@ -32,6 +33,7 @@
 		saveError,
 		submitLabel = 'Import Projects',
 		submitDisabled = false,
+		importStatusMessage = null,
 		onToggle,
 		onHistoryDaysChange,
 		onSubmit
@@ -139,6 +141,9 @@
 			{`${submitLabel} (${selectedCount})`}
 		{/if}
 	</button>
+	{#if saving && importStatusMessage}
+		<p class="import-status">{importStatusMessage}</p>
+	{/if}
 {/if}
 
 <style>
@@ -233,6 +238,22 @@
 		border-top-color: #333;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
+	}
+
+	.import-status {
+		color: #666;
+		font-size: 0.85rem;
+		margin: 0.3rem 0 0 0;
+		animation: fade-in 200ms ease;
+	}
+
+	@keyframes fade-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
 	}
 
 	@keyframes spin {

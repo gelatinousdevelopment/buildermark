@@ -26,7 +26,7 @@ func (a *Agent) Run(ctx context.Context) {
 	trackedFilter := a.trackedProjectFilter(ctx)
 	start := time.Now()
 	a.scanSinceFiltered(ctx, time.Now().Add(-agent.DefaultScanWindow), trackedFilter)
-	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-agent.DefaultScanWindow), true, trackedFilter)
+	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-agent.DefaultScanWindow), true, trackedFilter, nil)
 	log.Printf("claude watcher: startup scan duration %s", time.Since(start))
 	if projectScanCount > 0 {
 		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
@@ -100,18 +100,18 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 
 // ScanSince reads the entire file and imports entries with timestamps after
 // the given cutoff. This is used by the API to trigger a historical scan.
-func (a *Agent) ScanSince(ctx context.Context, since time.Time) int {
+func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	n := a.doScan(ctx, since, false, nil)
-	n += a.scanProjectFilesSince(ctx, since, false, nil)
+	n += a.scanProjectFilesSince(ctx, since, false, nil, progress)
 	log.Printf("claude watcher: manual scan processed %d entries (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
 
 // ScanPathsSince scans only entries for matching project paths.
-func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string) int {
+func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
 	filter := newPathFilter(paths)
 	n := a.doScan(ctx, since, false, filter)
-	n += a.scanProjectFilesSince(ctx, since, false, filter)
+	n += a.scanProjectFilesSince(ctx, since, false, filter, progress)
 	log.Printf("claude watcher: manual path scan processed %d entries (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
@@ -243,7 +243,7 @@ func (a *Agent) pollFiltered(ctx context.Context, filter pathFilter) {
 }
 
 func (a *Agent) pollProjectFiles(ctx context.Context, filter pathFilter) {
-	n := a.scanProjectFilesSince(ctx, time.Time{}, true, filter)
+	n := a.scanProjectFilesSince(ctx, time.Time{}, true, filter, nil)
 	if n > 0 {
 		log.Printf("claude watcher: project poll processed %d entries", n)
 	}
@@ -278,7 +278,7 @@ func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
 	return out
 }
 
-func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter) int {
+func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter, progress agent.ScanProgressFunc) int {
 	paths := listProjectConversationFiles(a.home)
 	if len(paths) == 0 {
 		return 0
@@ -287,6 +287,9 @@ func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, upda
 	cutoffMs := since.UnixMilli()
 	processed := 0
 	for _, path := range paths {
+		if progress != nil {
+			progress(path)
+		}
 		startOffset := int64(0)
 		if updateOffset {
 			startOffset = a.restoreProjectFileOffset(ctx, path)

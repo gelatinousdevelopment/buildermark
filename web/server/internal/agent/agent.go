@@ -25,17 +25,22 @@ type Agent interface {
 	Name() string // e.g. "claude", "codex"
 }
 
+// ScanProgressFunc is called during scanning with the name of each file being
+// processed. Implementations may call it frequently; callers should rate-limit
+// if needed.
+type ScanProgressFunc func(filename string)
+
 // Watcher monitors an agent's log files and imports data into the database.
 type Watcher interface {
 	Agent
 	Run(ctx context.Context)
-	ScanSince(ctx context.Context, since time.Time) int
+	ScanSince(ctx context.Context, since time.Time, progress ScanProgressFunc) int
 }
 
 // PathFilteredWatcher can scan only entries/files that belong to specific project paths.
 type PathFilteredWatcher interface {
 	Watcher
-	ScanPathsSince(ctx context.Context, since time.Time, paths []string) int
+	ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress ScanProgressFunc) int
 }
 
 // ProjectPathDiscoverer returns likely project paths touched by an agent since

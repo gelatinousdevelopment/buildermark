@@ -5,6 +5,7 @@
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import ProjectOnboarding from '$lib/components/project/ProjectOnboarding.svelte';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { ImportableProject, Project, ProjectDetail } from '$lib/types';
@@ -28,6 +29,11 @@
 	let saveSelectionError: string | null = $state(null);
 	const historyDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
 
+	let importStatusMessage = $derived(
+		websocketStore.importStatus?.state === 'running'
+			? websocketStore.importStatus.message
+			: null
+	);
 	// Per-project relationship tracking for hover highlights.
 	const projectCommitHashes = new SvelteMap<string, string[]>();
 	const projectConversationIds = new SvelteMap<string, string[]>();
@@ -93,14 +99,22 @@
 		if (selectedProjectPaths.length === 0) return;
 		savingSelection = true;
 		saveSelectionError = null;
+		websocketStore.clearImportStatus();
 		try {
 			await importProjects(selectedProjectPaths, historyImportDays);
-			selectedProjectPaths = [];
-			await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
+			// Import runs async on the server; wait for completion via WebSocket.
+			const result = await websocketStore.waitForImportComplete();
+			if (result.state === 'error') {
+				saveSelectionError = result.message;
+			} else {
+				selectedProjectPaths = [];
+				await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
+			}
 		} catch (e) {
 			saveSelectionError = e instanceof Error ? e.message : 'Failed to import selected projects';
 		} finally {
 			savingSelection = false;
+			websocketStore.clearImportStatus();
 		}
 	}
 
@@ -160,6 +174,7 @@
 			{historyDayOptions}
 			{savingSelection}
 			{saveSelectionError}
+			{importStatusMessage}
 			onToggleSelection={toggleSelection}
 			onHistoryDaysChange={setHistoryImportDays}
 			onStartTrackingSelected={startTrackingSelected}

@@ -11,6 +11,7 @@
 		historyDayOptions: string[];
 		savingSelection: boolean;
 		saveSelectionError: string | null;
+		importStatusMessage?: string | null;
 		onToggleSelection: (projectPath: string, checked: boolean) => void;
 		onHistoryDaysChange: (days: string) => void;
 		onStartTrackingSelected: () => void;
@@ -25,6 +26,7 @@
 		historyDayOptions,
 		savingSelection,
 		saveSelectionError,
+		importStatusMessage = null,
 		onToggleSelection,
 		onHistoryDaysChange,
 		onStartTrackingSelected
@@ -68,6 +70,7 @@
 			{historyDayOptions}
 			saving={savingSelection}
 			saveError={saveSelectionError}
+			{importStatusMessage}
 			submitLabel="Import Projects"
 			submitDisabled={selectedProjectPaths.length === 0}
 			onToggle={onToggleSelection}

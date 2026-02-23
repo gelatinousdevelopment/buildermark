@@ -114,16 +114,15 @@ func TestImportProjectsImportsHistoryAndCommits(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	// Import now returns 202 Accepted and runs asynchronously.
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
 	}
 
 	var env struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			ProjectsImported int `json:"projectsImported"`
-			EntriesProcessed int `json:"entriesProcessed"`
-			CommitsIngested  int `json:"commitsIngested"`
+			Started bool `json:"started"`
 		} `json:"data"`
 		Error string `json:"error"`
 	}
@@ -133,15 +132,14 @@ func TestImportProjectsImportsHistoryAndCommits(t *testing.T) {
 	if !env.OK {
 		t.Fatalf("ok=false error=%q", env.Error)
 	}
-	if env.Data.ProjectsImported != 1 {
-		t.Fatalf("projectsImported = %d, want 1", env.Data.ProjectsImported)
+	if !env.Data.Started {
+		t.Fatal("started=false, want true")
 	}
-	if env.Data.EntriesProcessed != 10 {
-		t.Fatalf("entriesProcessed = %d, want 10", env.Data.EntriesProcessed)
-	}
-	if env.Data.CommitsIngested < 1 {
-		t.Fatalf("commitsIngested = %d, want >= 1", env.Data.CommitsIngested)
-	}
+
+	// Wait for the background import goroutine to finish.
+	// The import holds s.importMu; acquiring it confirms completion.
+	s.importMu.Lock()
+	s.importMu.Unlock()
 
 	project, err := getProjectByID(ctx, s.DB, projectID)
 	if err != nil || project == nil {
