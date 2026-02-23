@@ -43,7 +43,7 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 
 	if sessionID == "" {
-		log.Printf("gemini session: no match found for /zrate %d %q, using fallback", rating, note)
+		log.Printf("gemini session: no match found for /bb %d %q, using fallback", rating, note)
 		return &agent.SessionResult{SessionID: fallbackID}
 	}
 

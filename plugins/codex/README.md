@@ -1,4 +1,4 @@
-# zrate — Codex CLI Plugin
+# bb — Codex CLI Plugin
 
 Rate conversations on a 0–5 scale. Ratings are sent to the local zrate server and viewable on the dashboard at http://localhost:7022.
 
@@ -10,23 +10,23 @@ Codex CLI discovers skills from `~/.codex/skills/` (user global) or `.agents/ski
 
 ```bash
 mkdir -p ~/.codex/skills
-ln -s /path/to/zrate/plugins/codex/skills/zrate ~/.codex/skills/zrate
+ln -s /path/to/zrate/plugins/codex/skills/bb ~/.codex/skills/bb
 ```
 
 **Option 2: Copy**
 
 ```bash
 mkdir -p ~/.codex/skills
-cp -r /path/to/zrate/plugins/codex/skills/zrate ~/.codex/skills/zrate
+cp -r /path/to/zrate/plugins/codex/skills/bb ~/.codex/skills/bb
 ```
 
 ## Usage
 
 ```
-$zrate
-$zrate 4 Great help with refactoring
-$zrate 5
-$zrate 2 Got stuck on the wrong approach
+$bb
+$bb 4 Great help with refactoring
+$bb 5
+$bb 2 Got stuck on the wrong approach
 ```
 
 If you omit the rating, the model will infer a 0-5 rating from the conversation.

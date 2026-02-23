@@ -183,13 +183,13 @@ func TestGetConversationDetailRatingMatching(t *testing.T) {
 		t.Fatalf("EnsureConversation: %v", err)
 	}
 
-	// The /zrate message timestamp and rating createdAt are within 120s.
+	// The /bb message timestamp and rating createdAt are within 120s.
 	ratingCreatedAt := time.Now().UTC().UnixMilli()
 	zrateTimestamp := ratingCreatedAt + 500 // 500ms after rating
 
 	messages := []Message{
 		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "do something"},
-		{Timestamp: zrateTimestamp, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "/zrate 5"},
+		{Timestamp: zrateTimestamp, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "/bb 5"},
 	}
 	if err := InsertMessages(ctx, db, messages); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
@@ -205,7 +205,7 @@ func TestGetConversationDetailRatingMatching(t *testing.T) {
 		t.Fatalf("GetConversationDetail: %v", err)
 	}
 
-	// The /zrate message should be removed from messages.
+	// The /bb message should be removed from messages.
 	if len(detail.Messages) != 1 {
 		t.Fatalf("got %d messages, want 1 (zrate message should be removed)", len(detail.Messages))
 	}

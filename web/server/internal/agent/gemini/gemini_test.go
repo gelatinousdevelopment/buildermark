@@ -114,7 +114,7 @@ func TestWatcherProcessSessionFile(t *testing.T) {
 				"id":        "m3",
 				"timestamp": now.Format(time.RFC3339Nano),
 				"type":      "user",
-				"content":   "/zrate 4 great work",
+				"content":   "/bb 4 great work",
 			},
 		},
 	})
@@ -266,7 +266,7 @@ func TestSessionResolverFromLogs(t *testing.T) {
 		{
 			"sessionId": sessionID,
 			"type":      "user",
-			"message":   "/zrate 5",
+			"message":   "/bb 5",
 			"timestamp": now.Format(time.RFC3339Nano),
 		},
 	})
@@ -302,10 +302,10 @@ func TestParseZrateDisplay(t *testing.T) {
 		wantRating int
 		wantNote   string
 	}{
-		{"/zrate 4 great work", 4, "great work"},
-		{"/zrate 5", 5, ""},
-		{"/zrate abc", -1, ""},
-		{"[/zrate](/tmp/commands/zrate.toml) 2 meh", 2, "meh"},
+		{"/bb 4 great work", 4, "great work"},
+		{"/bb 5", 5, ""},
+		{"/bb abc", -1, ""},
+		{"[/bb](/tmp/commands/bb.toml) 2 meh", 2, "meh"},
 	}
 
 	for _, tt := range tests {
@@ -351,18 +351,18 @@ func TestResolveProjectPathFromHashKnownProjects(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()
 
-	if _, err := db.EnsureProject(ctx, database, "/Users/davidcann/github/zrate"); err != nil {
+	if _, err := db.EnsureProject(ctx, database, "/Users/davidcann/github/bb"); err != nil {
 		t.Fatalf("EnsureProject: %v", err)
 	}
 
 	a := newAgent(database, t.TempDir(), t.TempDir())
 	conv := &geminiConversation{
-		ProjectHash: hashProjectPath("/Users/davidcann/github/zrate"),
+		ProjectHash: hashProjectPath("/Users/davidcann/github/bb"),
 	}
 
 	got := a.resolveProjectPath(conv)
-	if got != "/Users/davidcann/github/zrate" {
-		t.Errorf("resolveProjectPath = %q, want %q", got, "/Users/davidcann/github/zrate")
+	if got != "/Users/davidcann/github/bb" {
+		t.Errorf("resolveProjectPath = %q, want %q", got, "/Users/davidcann/github/bb")
 	}
 }
 
@@ -370,33 +370,33 @@ func TestResolveProjectPathFromHashOldProjectPaths(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()
 
-	projectID, err := db.EnsureProject(ctx, database, "/Users/davidcann/github/zrate")
+	projectID, err := db.EnsureProject(ctx, database, "/Users/davidcann/github/bb")
 	if err != nil {
 		t.Fatalf("EnsureProject: %v", err)
 	}
-	if err := db.SetProjectOldPaths(ctx, database, projectID, "/Users/davidcann/dev/zrate-old"); err != nil {
+	if err := db.SetProjectOldPaths(ctx, database, projectID, "/Users/davidcann/dev/bb-old"); err != nil {
 		t.Fatalf("SetProjectOldPaths: %v", err)
 	}
 
 	a := newAgent(database, t.TempDir(), t.TempDir())
 	conv := &geminiConversation{
-		ProjectHash: hashProjectPath("/Users/davidcann/dev/zrate-old"),
+		ProjectHash: hashProjectPath("/Users/davidcann/dev/bb-old"),
 	}
 
 	got := a.resolveProjectPath(conv)
-	if got != "/Users/davidcann/dev/zrate-old" {
-		t.Errorf("resolveProjectPath = %q, want %q", got, "/Users/davidcann/dev/zrate-old")
+	if got != "/Users/davidcann/dev/bb-old" {
+		t.Errorf("resolveProjectPath = %q, want %q", got, "/Users/davidcann/dev/bb-old")
 	}
 }
 
 func TestWatcherRepairsWrongHashedProject(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()
-	hash := hashProjectPath("/Users/davidcann/github/zrate")
+	hash := hashProjectPath("/Users/davidcann/github/bb")
 	sessionID := "session-repair-0001"
 
 	// Seed known real project path so hash can be resolved.
-	realPID, err := db.EnsureProject(context.Background(), database, "/Users/davidcann/github/zrate")
+	realPID, err := db.EnsureProject(context.Background(), database, "/Users/davidcann/github/bb")
 	if err != nil {
 		t.Fatalf("EnsureProject real: %v", err)
 	}

@@ -15,7 +15,7 @@ import (
 // ResolveSession attempts to resolve a rating to a real Codex session.
 // If the fallbackID matches a known thread ID (e.g. from CODEX_THREAD_ID),
 // it uses that directly. Otherwise, it scans recent session files for a
-// $zrate entry matching the given rating and note.
+// $bb entry matching the given rating and note.
 func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agent.SessionResult {
 	// First, try using fallbackID as a thread ID (it may be CODEX_THREAD_ID).
 	if path := findSessionFile(a.sessionsDir, fallbackID); path != "" {
@@ -49,7 +49,7 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 
 	if matchPath == "" {
-		log.Printf("codex session: no match found for $zrate %d %q, using fallback", rating, note)
+		log.Printf("codex session: no match found for $bb %d %q, using fallback", rating, note)
 		return &agent.SessionResult{SessionID: fallbackID}
 	}
 
@@ -68,7 +68,7 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 }
 
-// searchRecentFiles scans session files modified within maxAge for a $zrate
+// searchRecentFiles scans session files modified within maxAge for a $bb
 // command matching the given rating and note.
 func (a *Agent) searchRecentFiles(rating int, note string, maxAge time.Duration) (string, string) {
 	cutoff := time.Now().Add(-maxAge)

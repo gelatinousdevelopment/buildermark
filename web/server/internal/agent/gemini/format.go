@@ -107,22 +107,22 @@ func extractContentText(raw json.RawMessage) string {
 func parseZrateDisplay(display string) (int, string) {
 	display = strings.TrimSpace(display)
 
-	if strings.HasPrefix(display, "[/zrate](") {
+	if strings.HasPrefix(display, "[/bb](") {
 		if i := strings.Index(display, ")"); i >= 0 {
-			display = "/zrate" + display[i+1:]
+			display = "/bb" + display[i+1:]
 		}
 	}
 
-	if !strings.HasPrefix(display, "/zrate ") {
-		if i := strings.Index(display, "/zrate "); i >= 0 {
+	if !strings.HasPrefix(display, "/bb ") {
+		if i := strings.Index(display, "/bb "); i >= 0 {
 			display = display[i:]
 		}
 	}
-	if !strings.HasPrefix(display, "/zrate ") {
+	if !strings.HasPrefix(display, "/bb ") {
 		return -1, ""
 	}
 
-	rest := strings.TrimSpace(strings.TrimPrefix(display, "/zrate"))
+	rest := strings.TrimSpace(strings.TrimPrefix(display, "/bb"))
 	if rest == "" {
 		return -1, ""
 	}

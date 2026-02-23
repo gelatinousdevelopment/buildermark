@@ -86,7 +86,7 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 
 		if result.SessionID == fallbackCID {
 			// Resolution failed — don't create phantom conversation/project.
-			// The watcher will reconcile the orphaned rating when it sees the /zrate entry.
+			// The watcher will reconcile the orphaned rating when it sees the /bb entry.
 			return
 		}
 
