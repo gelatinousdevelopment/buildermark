@@ -46,7 +46,7 @@
 
 <div class="onboarding inset-when-limited-content-width">
 	<div class="column left">
-		<h2>Welcome to BuilderBit Local</h2>
+		<h2>Welcome to Buildermark Local</h2>
 		<p>
 			Track projects to see agent conversations and commit attribution side-by-side in one
 			dashboard.

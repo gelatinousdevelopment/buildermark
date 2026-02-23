@@ -46,7 +46,7 @@
 				<a href={resolve('/local/projects')} class="item"
 					><Icon name="wrench" width="22px" />
 					<div class="text">
-						<div class="title">BuilderBit</div>
+						<div class="title">Buildermark</div>
 						<div class="subtitle">Local</div>
 					</div></a
 				>
