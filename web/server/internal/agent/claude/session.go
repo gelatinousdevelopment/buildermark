@@ -38,15 +38,10 @@ type historyEntryMessage struct {
 }
 
 // ResolveSession polls history.jsonl for up to 5 seconds looking for a
-// /zrate entry that matches the given rating and note. When found it
-// collects every entry with the same sessionId and returns them all.
+// /zrate entry. When found it collects every entry with the same
+// sessionId and returns them all.
 // If no match is found the fallbackID is returned with no entries.
 func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agent.SessionResult {
-	expectedDisplay := fmt.Sprintf("/zrate %d", rating)
-	if note != "" {
-		expectedDisplay += " " + note
-	}
-
 	const (
 		pollInterval = 500 * time.Millisecond
 		maxWait      = 5 * time.Second
@@ -57,7 +52,7 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	var sessionID string
 	deadline := time.Now().Add(maxWait)
 	for {
-		if sid, ok := searchHistory(a.path, expectedDisplay, tailBytes, maxAge); ok {
+		if sid, ok := searchHistory(a.path, tailBytes, maxAge); ok {
 			sessionID = sid
 			break
 		}
@@ -68,7 +63,7 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 
 	if sessionID == "" {
-		log.Printf("claude session: no match found for %q, using fallback", expectedDisplay)
+		log.Printf("claude session: no match found for /zrate command, using fallback")
 		return &agent.SessionResult{SessionID: fallbackID}
 	}
 
@@ -88,10 +83,17 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 }
 
+// isZrateDisplay returns true if the display field represents a /zrate
+// command invocation. Matches "/zrate", "/zrate 4", "/zrate:zrate", etc.
+func isZrateDisplay(display string) bool {
+	d := strings.TrimSpace(display)
+	return d == "/zrate" || d == "/zrate:zrate" ||
+		strings.HasPrefix(d, "/zrate ") || strings.HasPrefix(d, "/zrate:zrate ")
+}
+
 // searchHistory reads the last tailBytes of the history file and searches
-// lines in reverse for an entry whose display field matches expectedDisplay
-// and whose timestamp is within maxAge of now.
-func searchHistory(path, expectedDisplay string, tailBytes int64, maxAge time.Duration) (string, bool) {
+// lines in reverse for a /zrate entry whose timestamp is within maxAge of now.
+func searchHistory(path string, tailBytes int64, maxAge time.Duration) (string, bool) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", false
@@ -134,7 +136,7 @@ func searchHistory(path, expectedDisplay string, tailBytes int64, maxAge time.Du
 			break
 		}
 
-		if entry.Display == expectedDisplay && entry.SessionID != "" {
+		if isZrateDisplay(entry.Display) && entry.SessionID != "" {
 			return entry.SessionID, true
 		}
 	}

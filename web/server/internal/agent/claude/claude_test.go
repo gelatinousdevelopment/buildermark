@@ -641,12 +641,51 @@ func TestSearchHistoryMatch(t *testing.T) {
 	}
 	writeHistoryFile(t, path, entries)
 
-	sid, ok := searchHistory(path, "/zrate 4 good work", 64*1024, 30*time.Second)
+	sid, ok := searchHistory(path, 64*1024, 30*time.Second)
 	if !ok {
 		t.Fatal("expected match, got none")
 	}
 	if sid != "sess-123" {
 		t.Errorf("sessionID = %q, want %q", sid, "sess-123")
+	}
+}
+
+func TestSearchHistoryMatchNoArgs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "history.jsonl")
+
+	now := time.Now()
+	entries := []historyEntry{
+		{Display: "some other command", Timestamp: now.Add(-10 * time.Second).UnixMilli(), SessionID: "sess-old", Type: "user"},
+		{Display: "/zrate ", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-456", Type: "user"},
+	}
+	writeHistoryFile(t, path, entries)
+
+	sid, ok := searchHistory(path, 64*1024, 30*time.Second)
+	if !ok {
+		t.Fatal("expected match for /zrate with no args, got none")
+	}
+	if sid != "sess-456" {
+		t.Errorf("sessionID = %q, want %q", sid, "sess-456")
+	}
+}
+
+func TestSearchHistoryMatchPluginQualified(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "history.jsonl")
+
+	now := time.Now()
+	entries := []historyEntry{
+		{Display: "/zrate:zrate", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-789", Type: "user"},
+	}
+	writeHistoryFile(t, path, entries)
+
+	sid, ok := searchHistory(path, 64*1024, 30*time.Second)
+	if !ok {
+		t.Fatal("expected match for /zrate:zrate, got none")
+	}
+	if sid != "sess-789" {
+		t.Errorf("sessionID = %q, want %q", sid, "sess-789")
 	}
 }
 
@@ -656,11 +695,11 @@ func TestSearchHistoryNoMatch(t *testing.T) {
 
 	now := time.Now()
 	entries := []historyEntry{
-		{Display: "/zrate 3 different", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-1", Type: "user"},
+		{Display: "some other command", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-1", Type: "user"},
 	}
 	writeHistoryFile(t, path, entries)
 
-	_, ok := searchHistory(path, "/zrate 5 good work", 64*1024, 30*time.Second)
+	_, ok := searchHistory(path, 64*1024, 30*time.Second)
 	if ok {
 		t.Error("expected no match")
 	}
@@ -675,14 +714,14 @@ func TestSearchHistoryTooOld(t *testing.T) {
 	}
 	writeHistoryFile(t, path, entries)
 
-	_, ok := searchHistory(path, "/zrate 4 good work", 64*1024, 30*time.Second)
+	_, ok := searchHistory(path, 64*1024, 30*time.Second)
 	if ok {
 		t.Error("expected no match for entry older than maxAge")
 	}
 }
 
 func TestSearchHistoryMissingFile(t *testing.T) {
-	_, ok := searchHistory("/nonexistent/path/history.jsonl", "/zrate 3", 64*1024, 30*time.Second)
+	_, ok := searchHistory("/nonexistent/path/history.jsonl", 64*1024, 30*time.Second)
 	if ok {
 		t.Error("expected no match for missing file")
 	}
@@ -698,7 +737,7 @@ func TestSearchHistoryEmptySessionID(t *testing.T) {
 	}
 	writeHistoryFile(t, path, entries)
 
-	_, ok := searchHistory(path, "/zrate 4 test", 64*1024, 30*time.Second)
+	_, ok := searchHistory(path, 64*1024, 30*time.Second)
 	if ok {
 		t.Error("expected no match when sessionID is empty")
 	}
@@ -845,7 +884,7 @@ func TestSearchHistoryTailBytes(t *testing.T) {
 	})
 	f.Close()
 
-	sid, ok := searchHistory(path, "/zrate 5 found it", 1024, 30*time.Second)
+	sid, ok := searchHistory(path, 1024, 30*time.Second)
 	if !ok {
 		t.Fatal("expected match in tail of file")
 	}

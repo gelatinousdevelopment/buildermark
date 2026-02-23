@@ -815,7 +815,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		// Reconcile orphaned ratings: if any entry in this session is a /zrate
 		// command, find the corresponding orphaned rating and re-link it.
 		for _, e := range g.entries {
-			if !strings.HasPrefix(e.Display, "/zrate ") {
+			if !isZrateDisplay(e.Display) {
 				continue
 			}
 			rating, note := parseZrateDisplay(e.Display)
@@ -891,10 +891,22 @@ func mapRoleModel(role, model string) string {
 	return strings.TrimSpace(model)
 }
 
-// parseZrateDisplay parses "/zrate 4 optional note" into (4, "optional note").
-// Returns (-1, "") if the format is invalid.
+// parseZrateDisplay parses "/zrate 4 optional note" or "/zrate:zrate 4 optional note"
+// into (4, "optional note"). Returns (-1, "") if the format is invalid or has no args.
 func parseZrateDisplay(display string) (int, string) {
-	rest := strings.TrimPrefix(display, "/zrate ")
+	rest := display
+	switch {
+	case strings.HasPrefix(rest, "/zrate:zrate "):
+		rest = strings.TrimPrefix(rest, "/zrate:zrate ")
+	case strings.HasPrefix(rest, "/zrate "):
+		rest = strings.TrimPrefix(rest, "/zrate ")
+	default:
+		return -1, ""
+	}
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
+		return -1, ""
+	}
 	parts := strings.SplitN(rest, " ", 2)
 	rating, err := strconv.Atoi(parts[0])
 	if err != nil || rating < 0 || rating > 5 {
@@ -904,5 +916,5 @@ func parseZrateDisplay(display string) (int, string) {
 	if len(parts) > 1 {
 		note = parts[1]
 	}
-	return rating, note
+	return rating, strings.TrimSpace(note)
 }
