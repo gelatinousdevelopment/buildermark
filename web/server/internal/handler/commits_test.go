@@ -625,7 +625,8 @@ func TestProjectCommitsPageAutoHealsStaleCoverage(t *testing.T) {
 		t.Fatalf("detail linesFromAgent = %d, want > 0", expectedLinesFromAgent)
 	}
 
-	// List endpoint should auto-heal stale persisted coverage.
+	// List endpoint should return stale data immediately and signal isStale.
+	// Background refresh handles recomputation asynchronously.
 	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1&branch=main", nil)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -649,39 +650,15 @@ func TestProjectCommitsPageAutoHealsStaleCoverage(t *testing.T) {
 			continue
 		}
 		found = true
-		if got := int(row["linesFromAgent"].(float64)); got != expectedLinesFromAgent {
-			t.Fatalf("list linesFromAgent = %d, want %d", got, expectedLinesFromAgent)
-		}
 		break
 	}
 	if !found {
 		t.Fatalf("did not find commit %s in list response", agentCommitHash)
 	}
 
-	var coverageVersion int
-	err = s.DB.QueryRowContext(ctx,
-		`SELECT coverage_version FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
-		projectID, "main", agentCommitHash,
-	).Scan(&coverageVersion)
-	if err != nil {
-		t.Fatalf("query coverage_version: %v", err)
-	}
-	if coverageVersion != currentCommitCoverageVersion {
-		t.Fatalf("coverage_version = %d, want %d", coverageVersion, currentCommitCoverageVersion)
-	}
-
-	var agentSegCount int
-	err = s.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*)
-		 FROM commit_agent_coverage
-		 WHERE commit_id = (SELECT id FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?)`,
-		projectID, "main", agentCommitHash,
-	).Scan(&agentSegCount)
-	if err != nil {
-		t.Fatalf("count commit_agent_coverage: %v", err)
-	}
-	if agentSegCount < 1 {
-		t.Fatalf("commit_agent_coverage rows = %d, want >= 1", agentSegCount)
+	refresh := data["refresh"].(map[string]any)
+	if isStale, ok := refresh["isStale"].(bool); !ok || !isStale {
+		t.Fatalf("refresh.isStale = %v, want true", refresh["isStale"])
 	}
 }
 

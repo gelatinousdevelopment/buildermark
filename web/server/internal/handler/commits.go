@@ -770,12 +770,6 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	if err != nil {
 		log.Printf("error checking stale coverage for %s: %v", repoProject.Path, err)
 		staleCoverage = false
-	} else if staleCoverage {
-		if _, recErr := recomputeCommitCoverageForProject(r.Context(), s.DB, repoProject, group, branch); recErr != nil {
-			log.Printf("error recomputing stale coverage for %s: %v", repoProject.Path, recErr)
-		} else {
-			staleCoverage = false
-		}
 	}
 
 	// Get users and totals from hash-based queries.
