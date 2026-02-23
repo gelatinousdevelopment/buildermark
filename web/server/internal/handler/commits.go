@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -26,7 +27,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 5
+	currentCommitCoverageVersion = 6
 )
 
 var defaultMessageWindowMs = func() int64 {
@@ -38,6 +39,28 @@ var defaultMessageWindowMs = func() int64 {
 	}
 	return int64(7 * 24 * 60 * 60 * 1000) // 7 days
 }()
+
+// commitDetailCache caches the attribution result for commit detail pages.
+// Key: "projectID:commitHash:coverageVersion"
+type commitDetailCacheEntry struct {
+	files         []commitFileCoverage
+	agentSegments []agentCoverageSegment
+	contribs      []commitContributionMessage
+	matchedLines  int
+	matchedChars  int
+	exactMatched  int
+	fallbackLines int
+	fallbackChars int
+	totalLines    int
+	totalChars    int
+	fetchedAt     time.Time
+}
+
+var (
+	commitDetailCacheMu  sync.RWMutex
+	commitDetailCache    = make(map[string]*commitDetailCacheEntry)
+	commitDetailCacheTTL = 5 * time.Minute
+)
 
 type projectCommitsResponse struct {
 	Branch       string                  `json:"branch"`
@@ -517,30 +540,73 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
-
-	// Determine the time window for message matching.
-	windowStart := commit.TimestampUnix*1000 - defaultMessageWindowMs
-	windowEnd := commit.TimestampUnix*1000 + commitWindowLookaheadMs
-
-	messages, err := listDerivedDiffMessages(r.Context(), s.DB, projectIDs(group), windowStart, windowEnd)
-	if err != nil {
-		log.Printf("error listing derived diff messages: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load matching messages")
-		return
-	}
-
-	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-	exactMatchedLines := matchedLines
-	totalLines, totalChars := tokenTotals(commitTokens)
-	files, fallbackLines, fallbackChars := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
-	matchedLines += fallbackLines
-	matchedChars += fallbackChars
 	detailAdded, detailRemoved := countDiffAddedRemoved(commitDiff)
 
-	agentSegments := agentSegmentsFromContribs(contribMessages, totalLines)
-	if len(agentSegments) == 0 && matchedLines > 0 {
+	// Check attribution cache for immutable commits.
+	detailCacheKey := fmt.Sprintf("%s:%s:%d", project.ID, commit.Hash, currentCommitCoverageVersion)
+	var files []commitFileCoverage
+	var agentSegments []agentCoverageSegment
+	var contribMessages []commitContributionMessage
+	var matchedLines, matchedChars, exactMatchedLines, fallbackLines, fallbackChars, totalLines, totalChars int
+
+	commitDetailCacheMu.RLock()
+	cached, cacheHit := commitDetailCache[detailCacheKey]
+	if cacheHit && time.Since(cached.fetchedAt) >= commitDetailCacheTTL {
+		cacheHit = false
+	}
+	commitDetailCacheMu.RUnlock()
+
+	if cacheHit {
+		files = cached.files
+		agentSegments = cached.agentSegments
+		contribMessages = cached.contribs
+		matchedLines = cached.matchedLines
+		matchedChars = cached.matchedChars
+		exactMatchedLines = cached.exactMatched
+		fallbackLines = cached.fallbackLines
+		fallbackChars = cached.fallbackChars
+		totalLines = cached.totalLines
+		totalChars = cached.totalChars
+	} else {
+		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
+
+		// Determine the time window for message matching.
+		windowStart := commit.TimestampUnix*1000 - defaultMessageWindowMs
+		windowEnd := commit.TimestampUnix*1000 + commitWindowLookaheadMs
+
+		messages, msgErr := listDerivedDiffMessages(r.Context(), s.DB, projectIDs(group), windowStart, windowEnd)
+		if msgErr != nil {
+			log.Printf("error listing derived diff messages: %v", msgErr)
+			writeError(w, http.StatusInternalServerError, "failed to load matching messages")
+			return
+		}
+
+		var fileAgent map[string]commitFileCoverage
+		var remainingNorms map[string]int
+		contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		exactMatchedLines = matchedLines
+		totalLines, totalChars = tokenTotals(commitTokens)
+		files, fallbackLines, fallbackChars = summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		matchedLines += fallbackLines
+		matchedChars += fallbackChars
+
 		agentSegments = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+
+		commitDetailCacheMu.Lock()
+		commitDetailCache[detailCacheKey] = &commitDetailCacheEntry{
+			files:         files,
+			agentSegments: agentSegments,
+			contribs:      contribMessages,
+			matchedLines:  matchedLines,
+			matchedChars:  matchedChars,
+			exactMatched:  exactMatchedLines,
+			fallbackLines: fallbackLines,
+			fallbackChars: fallbackChars,
+			totalLines:    totalLines,
+			totalChars:    totalChars,
+			fetchedAt:     time.Now(),
+		}
+		commitDetailCacheMu.Unlock()
 	}
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
@@ -989,15 +1055,11 @@ func projectIDs(group projectGroup) []string {
 func resolveRepoProject(ctx context.Context, group projectGroup) (*db.Project, error) {
 	for i := range group.Projects {
 		p := group.Projects[i]
-		root, err := gitRootCommit(ctx, p.Path)
-		if err != nil {
-			continue
-		}
-		if root == group.GitID {
+		if info, err := os.Stat(p.Path); err == nil && info.IsDir() {
 			return &p, nil
 		}
 	}
-	return nil, fmt.Errorf("no repo path matched git id %q", group.GitID)
+	return nil, fmt.Errorf("no accessible repo path for git id %q", group.GitID)
 }
 
 func gitRootCommit(ctx context.Context, path string) (string, error) {
@@ -2047,47 +2109,6 @@ func buildDailySummary(allCoverage []projectCommitCoverage, days int, loc *time.
 	return out
 }
 
-// agentSegmentsFromContribs builds per-agent segments from contribution messages.
-func agentSegmentsFromContribs(contribs []commitContributionMessage, linesTotal int) []agentCoverageSegment {
-	if len(contribs) == 0 {
-		return nil
-	}
-	type stats struct {
-		lines int
-		chars int
-	}
-	byAgent := make(map[string]*stats)
-	for _, cm := range contribs {
-		agent := cm.Agent
-		if agent == "" {
-			agent = "unknown"
-		}
-		s := byAgent[agent]
-		if s == nil {
-			s = &stats{}
-			byAgent[agent] = s
-		}
-		s.lines += cm.LinesMatched
-		s.chars += cm.CharsMatched
-	}
-	agents := make([]string, 0, len(byAgent))
-	for a := range byAgent {
-		agents = append(agents, a)
-	}
-	sort.Strings(agents)
-	out := make([]agentCoverageSegment, 0, len(agents))
-	for _, a := range agents {
-		s := byAgent[a]
-		out = append(out, agentCoverageSegment{
-			Agent:          a,
-			LinesFromAgent: s.lines,
-			CharsFromAgent: s.chars,
-			LinePercent:    percentage(s.lines, linesTotal),
-		})
-	}
-	return out
-}
-
 // attributeCopiedFromAgentFiles assigns per-agent segments to files marked as
 // copiedFromAgent by cross-referencing the file's normalized tokens against a
 // norm→agent map built from messages in the commit's time window.
@@ -2306,10 +2327,7 @@ func computeWorkingCopyDetail(
 	matchedChars += fallbackChars
 	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 
-	agentSegments := agentSegmentsFromContribs(contribMessages, totalLines)
-	if len(agentSegments) == 0 && matchedLines > 0 {
-		agentSegments = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
-	}
+	agentSegments := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
 
 	attribution := commitAttribution{
 		ExactMatchedLines:    exactMatchedLines,

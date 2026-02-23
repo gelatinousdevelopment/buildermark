@@ -361,37 +361,19 @@ func ingestCommits(
 		if len(commitTokens) > 0 && len(messages) > 0 {
 			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
-			contribs, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			_, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 			files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 			matchedLines = ml + fallbackLines
 			matchedChars = mc + fallbackChars
 
-			// Aggregate contribution messages by agent.
-			if len(contribs) > 0 {
+			// Aggregate agent attribution from both exact matches and copied-from-agent files.
+			segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+			if len(segs) > 0 {
 				byAgent := make(map[string]*agentStats)
-				for _, cm := range contribs {
-					agent := cm.Agent
-					if agent == "" {
-						agent = "unknown"
-					}
-					s := byAgent[agent]
-					if s == nil {
-						s = &agentStats{}
-						byAgent[agent] = s
-					}
-					s.lines += cm.LinesMatched
-					s.chars += cm.CharsMatched
+				for _, seg := range segs {
+					byAgent[seg.Agent] = &agentStats{lines: seg.LinesFromAgent}
 				}
 				perCommitAgent[gc.Hash] = byAgent
-			} else if fallbackLines > 0 {
-				segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
-				if len(segs) > 0 {
-					byAgent := make(map[string]*agentStats)
-					for _, seg := range segs {
-						byAgent[seg.Agent] = &agentStats{lines: seg.LinesFromAgent}
-					}
-					perCommitAgent[gc.Hash] = byAgent
-				}
 			}
 		}
 
@@ -555,7 +537,7 @@ func recomputeCommitCoverageForProject(
 
 		windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
 		windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
-		contribs, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
 		matchedChars += fallbackChars
@@ -580,29 +562,14 @@ func recomputeCommitCoverageForProject(
 			CoverageVersion: currentCommitCoverageVersion,
 		})
 
-		if len(contribs) > 0 {
+		// Aggregate agent attribution from both exact matches and copied-from-agent files.
+		segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+		if len(segs) > 0 {
 			byAgent := make(map[string]agentStats)
-			for _, cm := range contribs {
-				agentName := cm.Agent
-				if strings.TrimSpace(agentName) == "" {
-					agentName = "unknown"
-				}
-				stats := byAgent[agentName]
-				stats.lines += cm.LinesMatched
-				stats.chars += cm.CharsMatched
-				byAgent[agentName] = stats
+			for _, seg := range segs {
+				byAgent[seg.Agent] = agentStats{lines: seg.LinesFromAgent}
 			}
 			perCommitAgent[c.ID] = byAgent
-		} else if fallbackLines > 0 {
-			// Fallback: derive agent from copied-from-agent file attribution.
-			segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
-			if len(segs) > 0 {
-				byAgent := make(map[string]agentStats)
-				for _, seg := range segs {
-					byAgent[seg.Agent] = agentStats{lines: seg.LinesFromAgent}
-				}
-				perCommitAgent[c.ID] = byAgent
-			}
 		}
 	}
 

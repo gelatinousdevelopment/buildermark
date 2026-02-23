@@ -5,8 +5,22 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/davidcann/zrate/web/server/internal/db"
+)
+
+// branchCacheEntry stores cached branch list results with a TTL.
+type branchCacheEntry struct {
+	branches []string
+	fetchedAt time.Time
+}
+
+var (
+	branchCacheMu sync.RWMutex
+	branchCache   = make(map[string]branchCacheEntry)
+	branchCacheTTL = 30 * time.Second
 )
 
 func detectCurrentBranch(ctx context.Context, repoPath string) string {
@@ -43,6 +57,15 @@ func detectDefaultBranch(ctx context.Context, repoPath string) (string, error) {
 }
 
 func listRepoBranches(ctx context.Context, repoPath, defaultBranch string) ([]string, error) {
+	cacheKey := repoPath + "\x00" + defaultBranch
+
+	branchCacheMu.RLock()
+	if entry, ok := branchCache[cacheKey]; ok && time.Since(entry.fetchedAt) < branchCacheTTL {
+		branchCacheMu.RUnlock()
+		return entry.branches, nil
+	}
+	branchCacheMu.RUnlock()
+
 	out, err := runGit(ctx, repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads")
 	if err != nil {
 		return nil, err
@@ -61,6 +84,11 @@ func listRepoBranches(ctx context.Context, repoPath, defaultBranch string) ([]st
 	for _, line := range strings.Split(out, "\n") {
 		add(line)
 	}
+
+	branchCacheMu.Lock()
+	branchCache[cacheKey] = branchCacheEntry{branches: branches, fetchedAt: time.Now()}
+	branchCacheMu.Unlock()
+
 	return branches, nil
 }
 
@@ -68,11 +96,14 @@ func ensureProjectDefaultBranch(ctx context.Context, database *sql.DB, project *
 	if project == nil {
 		return ""
 	}
+	if project.DefaultBranch != "" {
+		return project.DefaultBranch
+	}
 	defaultBranch, err := detectDefaultBranch(ctx, project.Path)
 	if err != nil {
-		return strings.TrimSpace(project.DefaultBranch)
+		return ""
 	}
-	if defaultBranch != "" && defaultBranch != project.DefaultBranch {
+	if defaultBranch != "" {
 		if err := db.UpdateProjectDefaultBranch(ctx, database, project.ID, defaultBranch); err == nil {
 			project.DefaultBranch = defaultBranch
 		}
