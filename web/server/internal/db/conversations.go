@@ -140,7 +140,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		return nil, fmt.Errorf("iterate ratings: %w", err)
 	}
 
-	// Match each rating to the closest /zrate user message within 120s.
+	// Match each rating to the closest /bb user message within 120s.
 	matchedMessageIDs := make(map[string]bool)
 	for i := range c.Ratings {
 		ratingTime := c.Ratings[i].CreatedAt
@@ -152,7 +152,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 				continue
 			}
 			trimmed := strings.TrimLeft(msg.Content, " \t\n\r")
-			if !strings.HasPrefix(trimmed, "/zrate") && !strings.HasPrefix(trimmed, "$zrate") {
+			if !strings.HasPrefix(trimmed, "/bb") && !strings.HasPrefix(trimmed, "$bb") {
 				continue
 			}
 			if matchedMessageIDs[msg.ID] {
@@ -171,7 +171,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		}
 	}
 
-	// Filter messages: remove matched /zrate messages, empty content,
+	// Filter messages: remove matched /bb messages, empty content,
 	// system/meta command markers, and /clear or /new commands.
 	filtered := make([]MessageRead, 0, len(c.Messages))
 	for _, msg := range c.Messages {
@@ -252,7 +252,7 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 	}
 	defer msgRows.Close()
 
-	// Collect all user messages, plus track /zrate messages for rating matching.
+	// Collect all user messages, plus track /bb messages for rating matching.
 	type userMsg struct {
 		msg MessageRead
 	}
@@ -293,12 +293,12 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 		return nil, fmt.Errorf("iterate batch ratings: %w", err)
 	}
 
-	// For each conversation, match ratings to /zrate messages and filter.
+	// For each conversation, match ratings to /bb messages and filter.
 	for convID, detail := range result {
 		msgs := allUserMsgs[convID]
 		ratings := allRatings[convID]
 
-		// Match ratings to /zrate messages (same logic as GetConversationDetail).
+		// Match ratings to /bb messages (same logic as GetConversationDetail).
 		matchedMessageIDs := make(map[string]bool)
 		for i := range ratings {
 			ratingTime := ratings[i].CreatedAt
@@ -310,7 +310,7 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 					continue
 				}
 				trimmed := strings.TrimLeft(m.Content, " \t\n\r")
-				if !strings.HasPrefix(trimmed, "/zrate") && !strings.HasPrefix(trimmed, "$zrate") {
+				if !strings.HasPrefix(trimmed, "/bb") && !strings.HasPrefix(trimmed, "$bb") {
 					continue
 				}
 				if matchedMessageIDs[m.ID] {
@@ -339,7 +339,7 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 			if shouldHideMessageContent(m.Role, trimmed) {
 				continue
 			}
-			if strings.HasPrefix(trimmed, "/zrate") || strings.HasPrefix(trimmed, "$zrate") {
+			if strings.HasPrefix(trimmed, "/bb") || strings.HasPrefix(trimmed, "$bb") {
 				continue
 			}
 			if trimmed == "/clear" || trimmed == "/new" {

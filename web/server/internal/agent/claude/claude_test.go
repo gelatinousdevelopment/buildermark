@@ -637,7 +637,7 @@ func TestSearchHistoryMatch(t *testing.T) {
 	now := time.Now()
 	entries := []historyEntry{
 		{Display: "some other command", Timestamp: now.Add(-10 * time.Second).UnixMilli(), SessionID: "sess-old", Type: "user"},
-		{Display: "/zrate 4 good work", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-123", Type: "user"},
+		{Display: "/bb 4 good work", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-123", Type: "user"},
 	}
 	writeHistoryFile(t, path, entries)
 
@@ -657,13 +657,13 @@ func TestSearchHistoryMatchNoArgs(t *testing.T) {
 	now := time.Now()
 	entries := []historyEntry{
 		{Display: "some other command", Timestamp: now.Add(-10 * time.Second).UnixMilli(), SessionID: "sess-old", Type: "user"},
-		{Display: "/zrate ", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-456", Type: "user"},
+		{Display: "/bb ", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-456", Type: "user"},
 	}
 	writeHistoryFile(t, path, entries)
 
 	sid, ok := searchHistory(path, 64*1024, 30*time.Second)
 	if !ok {
-		t.Fatal("expected match for /zrate with no args, got none")
+		t.Fatal("expected match for /bb with no args, got none")
 	}
 	if sid != "sess-456" {
 		t.Errorf("sessionID = %q, want %q", sid, "sess-456")
@@ -676,13 +676,13 @@ func TestSearchHistoryMatchPluginQualified(t *testing.T) {
 
 	now := time.Now()
 	entries := []historyEntry{
-		{Display: "/zrate:zrate", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-789", Type: "user"},
+		{Display: "/bb:rate", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "sess-789", Type: "user"},
 	}
 	writeHistoryFile(t, path, entries)
 
 	sid, ok := searchHistory(path, 64*1024, 30*time.Second)
 	if !ok {
-		t.Fatal("expected match for /zrate:zrate, got none")
+		t.Fatal("expected match for /bb:rate, got none")
 	}
 	if sid != "sess-789" {
 		t.Errorf("sessionID = %q, want %q", sid, "sess-789")
@@ -710,7 +710,7 @@ func TestSearchHistoryTooOld(t *testing.T) {
 	path := filepath.Join(dir, "history.jsonl")
 
 	entries := []historyEntry{
-		{Display: "/zrate 4 good work", Timestamp: time.Now().Add(-5 * time.Minute).UnixMilli(), SessionID: "sess-old", Type: "user"},
+		{Display: "/bb 4 good work", Timestamp: time.Now().Add(-5 * time.Minute).UnixMilli(), SessionID: "sess-old", Type: "user"},
 	}
 	writeHistoryFile(t, path, entries)
 
@@ -733,7 +733,7 @@ func TestSearchHistoryEmptySessionID(t *testing.T) {
 
 	now := time.Now()
 	entries := []historyEntry{
-		{Display: "/zrate 4 test", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "", Type: "user"},
+		{Display: "/bb 4 test", Timestamp: now.Add(-2 * time.Second).UnixMilli(), SessionID: "", Type: "user"},
 	}
 	writeHistoryFile(t, path, entries)
 
@@ -877,7 +877,7 @@ func TestSearchHistoryTailBytes(t *testing.T) {
 	}
 
 	enc.Encode(historyEntry{
-		Display:   "/zrate 5 found it",
+		Display:   "/bb 5 found it",
 		Timestamp: now.Add(-1 * time.Second).UnixMilli(),
 		SessionID: "sess-target",
 		Type:      "user",
@@ -1063,7 +1063,7 @@ func TestProcessEntriesAddsFirstPromptFromConversationFile(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	// Use realistic timestamps: plan prompt at T, /zrate 10 minutes later.
+	// Use realistic timestamps: plan prompt at T, /bb 10 minutes later.
 	planTime := time.Date(2026, 2, 11, 9, 50, 0, 0, time.UTC)
 	rateTime := planTime.Add(10 * time.Minute)
 
@@ -1078,14 +1078,14 @@ func TestProcessEntriesAddsFirstPromptFromConversationFile(t *testing.T) {
 
 	// History only has a later prompt (the initial plan prompt is missing from history).
 	writeEntries(t, histPath, []historyEntry{
-		{Display: "/zrate 5 great", Timestamp: rateTime.UnixMilli(), SessionID: sessionID, Project: projectPath, Type: "user"},
+		{Display: "/bb 5 great", Timestamp: rateTime.UnixMilli(), SessionID: sessionID, Project: projectPath, Type: "user"},
 	})
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
 	a.scanSince(ctx, time.Time{})
 
-	// Should have 3 messages: first prompt + assistant reply from conversation file + /zrate from history.
+	// Should have 3 messages: first prompt + assistant reply from conversation file + /bb from history.
 	if n := countRows(t, database, "messages"); n != 3 {
 		t.Errorf("messages = %d, want 3", n)
 	}
@@ -1427,13 +1427,13 @@ func TestParseZrateDisplay(t *testing.T) {
 		wantRating int
 		wantNote   string
 	}{
-		{"/zrate 4 great work", 4, "great work"},
-		{"/zrate 0", 0, ""},
-		{"/zrate 5", 5, ""},
-		{"/zrate 3 ", 3, ""},
-		{"/zrate abc", -1, ""},
-		{"/zrate 6", -1, ""},
-		{"/zrate -1", -1, ""},
+		{"/bb 4 great work", 4, "great work"},
+		{"/bb 0", 0, ""},
+		{"/bb 5", 5, ""},
+		{"/bb 3 ", 3, ""},
+		{"/bb abc", -1, ""},
+		{"/bb 6", -1, ""},
+		{"/bb -1", -1, ""},
 	}
 	for _, tt := range tests {
 		rating, note := parseZrateDisplay(tt.display)
@@ -1458,11 +1458,11 @@ func TestWatcherReconcileOrphanedRating(t *testing.T) {
 		t.Fatalf("InsertRating: %v", err)
 	}
 
-	// Write history entries including a /zrate entry for the real session.
+	// Write history entries including a /bb entry for the real session.
 	realSessionID := "real-sess-id"
 	writeEntries(t, histPath, []historyEntry{
 		{Display: "hello", Timestamp: now.UnixMilli() - 5000, SessionID: realSessionID, Project: "/proj/a", Type: "user"},
-		{Display: "/zrate 4 nice", Timestamp: now.UnixMilli(), SessionID: realSessionID, Project: "/proj/a", Type: "user"},
+		{Display: "/bb 4 nice", Timestamp: now.UnixMilli(), SessionID: realSessionID, Project: "/proj/a", Type: "user"},
 	})
 
 	a := newAgent(database, histPath, tmpDir)
