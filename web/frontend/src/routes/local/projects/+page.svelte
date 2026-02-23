@@ -5,6 +5,8 @@
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import ProjectOnboarding from '$lib/components/project/ProjectOnboarding.svelte';
+	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import type { ImportableProject, Project, ProjectDetail } from '$lib/types';
 
 	type ProjectRow = {
@@ -25,6 +27,27 @@
 	let savingSelection = $state(false);
 	let saveSelectionError: string | null = $state(null);
 	const historyDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
+
+	// Per-project relationship tracking for hover highlights.
+	const projectCommitHashes = new SvelteMap<string, string[]>();
+	const projectConversationIds = new SvelteMap<string, string[]>();
+
+	function triggerRelationshipLoad(projectId: string) {
+		const commitHashes = projectCommitHashes.get(projectId) ?? [];
+		const conversationIds = projectConversationIds.get(projectId) ?? [];
+		if (commitHashes.length === 0) return;
+		void relationshipCache.loadRelationships(projectId, commitHashes, conversationIds);
+	}
+
+	function handleCommitsLoaded(projectId: string, hashes: string[]) {
+		projectCommitHashes.set(projectId, hashes);
+		triggerRelationshipLoad(projectId);
+	}
+
+	function handleConversationsLoaded(projectId: string, ids: string[]) {
+		projectConversationIds.set(projectId, ids);
+		triggerRelationshipLoad(projectId);
+	}
 
 	function projectName(project: { label: string; path: string }): string {
 		return project.label || project.path;
@@ -178,6 +201,8 @@
 								initialError={row.conversationError}
 								showAgentColumn={true}
 								showRatingsColumn={true}
+								enableRelationshipHover={true}
+								onConversationsLoaded={(ids) => handleConversationsLoaded(row.project.id, ids)}
 							/>
 						</div>
 						<div class="column commits">
@@ -192,6 +217,8 @@
 								showBranch={false}
 								useLoadQueue={true}
 								loadPriority={index}
+								enableRelationshipHover={true}
+								onCommitsLoaded={(hashes) => handleCommitsLoaded(row.project.id, hashes)}
 							/>
 						</div>
 					</div>

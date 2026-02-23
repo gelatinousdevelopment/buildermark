@@ -122,10 +122,6 @@
 		text-decoration: underline;
 	}
 
-	.conversations {
-		padding-right: 1rem;
-	}
-
 	.commits {
 		border-left: 0.5px solid var(--color-divider);
 	}
