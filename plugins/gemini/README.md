@@ -1,6 +1,6 @@
-# bb - Gemini CLI Plugin
+# bbrate - Gemini CLI Plugin
 
-Rate conversations on a 0-5 scale. Ratings are sent to the local zrate server and viewable on the dashboard at http://localhost:7022.
+Rate conversations on a 0-5 scale. Ratings are sent to the Buildermark Local server and viewable on the dashboard at http://localhost:7022.
 
 ## Install
 
@@ -10,30 +10,30 @@ Gemini CLI discovers custom commands from `~/.gemini/commands/` (user global) or
 
 ```bash
 mkdir -p ~/.gemini/commands
-ln -s ~/github/zrate/plugins/gemini/commands/bb.toml ~/.gemini/commands/bb.toml
+ln -s ~/github/buildermark/plugins/gemini/commands/bbrate.toml ~/.gemini/commands/bbrate.toml
 ```
 
 **Option 2: Copy**
 
 ```bash
 mkdir -p ~/.gemini/commands
-cp /path/to/zrate/plugins/gemini/commands/bb.toml ~/.gemini/commands/bb.toml
+cp /path/to/buildermark/plugins/gemini/commands/bbrate.toml ~/.gemini/commands/bbrate.toml
 ```
 
 ## Usage
 
 ```text
-/bb
-/bb 4 Great help with refactoring
-/bb 5
-/bb 2 Got stuck on the wrong approach
+/bbrate
+/bbrate 4 Great help with refactoring
+/bbrate 5
+/bbrate 2 Got stuck on the wrong approach
 ```
 
 If you omit the rating, the model will infer a 0-5 rating from the conversation.
 
 ## Prerequisites
 
-The zrate server must be running:
+The Buildermark Local server must be running:
 
 ```bash
 cd web/server && go run .

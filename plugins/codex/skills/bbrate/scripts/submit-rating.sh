@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVER="${ZRATE_SERVER:-http://localhost:7022}"
-DASHBOARD="${ZRATE_DASHBOARD:-http://localhost:5173}"
+SERVER="${BUILDERMARK_LOCAL_SERVER:-http://localhost:7022}"
+DASHBOARD="${BUILDERMARK_LOCAL_DASHBOARD:-http://localhost:5173}"
 
 json_escape() {
   local s="${1:-}"
@@ -36,13 +36,13 @@ fi
 # temp_cid is always per-rating and is used in the callback URL.
 temp_cid=$(uuidgen | tr '[:upper:]' '[:lower:]')
 # conversationId is optional canonical/agent ID when available.
-canonical_cid="${CLAUDE_SESSION_ID:-}"
+canonical_cid="${CODEX_THREAD_ID:-}"
 
 # --- build JSON payload ---
 analysis="${ANALYSIS:-}"
 note_esc=$(json_escape "$note")
 analysis_esc=$(json_escape "$analysis")
-payload="{\"tempConversationId\":\"${temp_cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\""
+payload="{\"tempConversationId\":\"${temp_cid}\",\"rating\":${rating},\"note\":\"${note_esc}\",\"analysis\":\"${analysis_esc}\",\"agent\":\"codex\""
 if [[ -n "$canonical_cid" ]]; then
   canonical_esc=$(json_escape "$canonical_cid")
   payload="${payload},\"conversationId\":\"${canonical_esc}\""
@@ -53,7 +53,7 @@ payload="${payload}}"
 response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
   -H 'Content-Type: application/json' \
   -d "$payload" 2>/dev/null) || {
-  echo "error: could not connect to zrate server at ${SERVER}"
+  echo "error: could not connect to Buildermark Local server at ${SERVER}"
   echo "hint: start the server with: cd web/server && go run ."
   exit 1
 }
