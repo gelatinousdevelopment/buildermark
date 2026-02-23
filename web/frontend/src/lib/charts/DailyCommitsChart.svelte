@@ -4,6 +4,8 @@
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import { agentColor, MANUAL_COLOR } from './chartColors';
 	import Popover from '$lib/components/Popover.svelte';
+	import Icon from '$lib/Icon.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import type { DailyCommitSummary } from '$lib/types';
 
 	interface Props {
@@ -12,6 +14,8 @@
 	}
 
 	let { dailySummary, branch }: Props = $props();
+	let menuOpen = $state(false);
+	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
 	let scrollWrap: HTMLDivElement | undefined;
 	let lastAutoScrollKey = '';
 
@@ -96,6 +100,19 @@
 			return { date: day.date, total: day.linesTotal, segments, summary: day };
 		});
 	});
+
+	let maxDayLines = $derived.by(() => {
+		let max = 0;
+		for (const col of columns) {
+			if (col.total > max) max = col.total;
+		}
+		return max;
+	});
+
+	function barScale(col: ColumnDay): number {
+		if (!scaleByLines || maxDayLines <= 0) return 1;
+		return col.total / maxDayLines;
+	}
 
 	const historyTotalLines = $derived.by(() =>
 		dailySummary.reduce((sum, day) => sum + Math.max(0, day.linesTotal), 0)
@@ -187,61 +204,84 @@
 </script>
 
 <div class="dc-layout">
-	<div class="dc-wrap" bind:this={scrollWrap}>
-		<div class="dc-chart">
-			{#each columns as col (col.date)}
-				<div class="dc-col">
-					<div class="dc-bar-area">
-						{#if col.total > 0}
-							<Popover position="below" width="250px" padding="0" fixed={true}>
-								<div class="dc-bar">
-									{#each col.segments as seg (seg.key)}
-										<div class="dc-seg" style="height:{seg.percent}%;background:{seg.color}"></div>
-									{/each}
-								</div>
-								{#snippet popover()}
-									<div class="dc-popover">
-										<div class="dc-popover-summary">
-											<div class="dc-popover-date">{formatDateLong(col.date)}</div>
-											<div class="dc-popover-lines">
-												{col.total} line{col.total !== 1 ? 's' : ''}
-											</div>
-											<div class="dc-popover-breakdown">
-												{#each col.segments as seg (seg.key)}
-													<div class="dc-popover-row">
-														<span class="dc-swatch" style="background:{seg.color}"></span>
-														<span class="dc-popover-name">{seg.key}</span>
-														<span class="dc-popover-pct">{seg.percent.toFixed(1)}%</span>
-													</div>
-												{/each}
-											</div>
-										</div>
-										{#if col.summary.commits.length > 0}
-											<div class="dc-popover-commits">
-												{#each col.summary.commits as c (c.commitHash)}
-													<a
-														href={resolve(
-															`/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(branch)}/${encodeURIComponent(c.commitHash)}`
-														)}
-														class="dc-commit-link"
-													>
-														{c.subject || c.commitHash.slice(0, 8)}
-													</a>
-												{/each}
-											</div>
-										{/if}
+	<div class="dc-chart-area" class:dc-menu-open={menuOpen}>
+		<button class="dc-menu-btn" onclick={() => (menuOpen = !menuOpen)} aria-label="Chart options">
+			<Icon name="chevronRight" width="12px" />
+		</button>
+		{#if menuOpen}
+			<div class="dc-menu">
+				<label class="dc-menu-option">
+					<input
+						type="checkbox"
+						checked={settingsStore.commitsChartScaleByLines}
+						onchange={(e) =>
+							(settingsStore.commitsChartScaleByLines = (
+								e.currentTarget as HTMLInputElement
+							).checked)}
+					/>
+					Scale bars by line count
+				</label>
+			</div>
+		{/if}
+		<div class="dc-wrap" bind:this={scrollWrap}>
+			<div class="dc-chart">
+				{#each columns as col (col.date)}
+					<div class="dc-col">
+						<div class="dc-bar-area">
+							{#if col.total > 0}
+								<Popover position="below" width="250px" padding="0" fixed={true}>
+									<div class="dc-bar">
+										{#each col.segments as seg (seg.key)}
+											<div
+												class="dc-seg"
+												style="height:{seg.percent * barScale(col)}%;background:{seg.color}"
+											></div>
+										{/each}
 									</div>
-								{/snippet}
-							</Popover>
-						{:else}
-							<div class="dc-bar dc-bar-empty"></div>
-						{/if}
+									{#snippet popover()}
+										<div class="dc-popover">
+											<div class="dc-popover-summary">
+												<div class="dc-popover-date">{formatDateLong(col.date)}</div>
+												<div class="dc-popover-lines">
+													{col.total} line{col.total !== 1 ? 's' : ''}
+												</div>
+												<div class="dc-popover-breakdown">
+													{#each col.segments as seg (seg.key)}
+														<div class="dc-popover-row">
+															<span class="dc-swatch" style="background:{seg.color}"></span>
+															<span class="dc-popover-name">{seg.key}</span>
+															<span class="dc-popover-pct">{seg.percent.toFixed(1)}%</span>
+														</div>
+													{/each}
+												</div>
+											</div>
+											{#if col.summary.commits.length > 0}
+												<div class="dc-popover-commits">
+													{#each col.summary.commits as c (c.commitHash)}
+														<a
+															href={resolve(
+																`/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(branch)}/${encodeURIComponent(c.commitHash)}`
+															)}
+															class="dc-commit-link"
+														>
+															{c.subject || c.commitHash.slice(0, 8)}
+														</a>
+													{/each}
+												</div>
+											{/if}
+										</div>
+									{/snippet}
+								</Popover>
+							{:else}
+								<div class="dc-bar dc-bar-empty"></div>
+							{/if}
+						</div>
+						<div class="dc-date">
+							{formatDateLabel(col.date)}
+						</div>
 					</div>
-					<div class="dc-date">
-						{formatDateLabel(col.date)}
-					</div>
-				</div>
-			{/each}
+				{/each}
+			</div>
 		</div>
 	</div>
 	<div class="dc-side">
@@ -270,8 +310,64 @@
 		gap: 1rem;
 	}
 
-	.dc-wrap {
+	.dc-chart-area {
 		flex: 1;
+		position: relative;
+		min-width: 0;
+	}
+
+	.dc-menu-btn {
+		position: absolute;
+		top: 6px;
+		left: 6px;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 4px;
+		background: #fbfbfb;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+
+	.dc-menu-btn :global(.icon) {
+		transform: rotate(90deg);
+	}
+
+	.dc-chart-area:hover .dc-menu-btn,
+	.dc-menu-open .dc-menu-btn {
+		opacity: 1;
+	}
+
+	.dc-menu {
+		position: absolute;
+		top: 26px;
+		left: 6px;
+		z-index: 3;
+		background: #fff;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 5px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+		padding: 0.5rem 1rem 0.5rem 0.7rem;
+		white-space: nowrap;
+	}
+
+	.dc-menu-option {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		color: #444;
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.dc-wrap {
 		max-width: 100%;
 		overflow-x: auto;
 		overflow-y: hidden;
