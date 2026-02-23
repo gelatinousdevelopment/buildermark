@@ -3,11 +3,21 @@
 	import './markdown.css';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { onMount, onDestroy } from 'svelte';
 	import Icon from '$lib/Icon.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 
 	let { children } = $props();
+
+	onMount(() => {
+		websocketStore.connect();
+	});
+
+	onDestroy(() => {
+		websocketStore.disconnect();
+	});
 
 	let projectId = $derived(page.params.project_id);
 
@@ -105,7 +115,9 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<button class="item" title="Binary Status"><div class="status-dot running"></div></button>
+				<button class="item" title="Server: {websocketStore.connectionState}"
+				><div class="status-dot {websocketStore.connectionState}"></div></button
+			>
 			</nav>
 		</section>
 	</header>
@@ -283,6 +295,30 @@
 		border-radius: 99px;
 		width: 1rem;
 		height: 1rem;
+		background: #999;
+		transition: background 300ms ease;
+	}
+
+	.status-dot.connected {
 		background: var(--color-status-green);
+	}
+
+	.status-dot.connecting {
+		background: #e0a020;
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	.status-dot.disconnected {
+		background: #999;
+	}
+
+	@keyframes pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.4;
+		}
 	}
 </style>

@@ -18,11 +18,18 @@ type Server struct {
 
 	refreshMu sync.Mutex
 	refresher *commitRefreshManager
+
+	ws       *wsHub
+	importMu sync.Mutex // guards against concurrent imports
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.
 func (s *Server) Routes() http.Handler {
+	if s.ws == nil {
+		s.ws = newWSHub()
+	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/ws", s.handleWS)
 	mux.HandleFunc("POST /api/v1/rating", s.handleCreateRating)
 	mux.HandleFunc("GET /api/v1/ratings", s.handleListRatings)
 	mux.HandleFunc("GET /api/v1/projects", s.handleListProjects)
