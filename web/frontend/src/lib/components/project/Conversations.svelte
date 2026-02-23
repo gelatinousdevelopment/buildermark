@@ -10,6 +10,7 @@
 	import { resolve } from '$app/paths';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { ProjectDetail, ConversationBatchDetail } from '$lib/types';
+	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 
 	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
@@ -39,6 +40,8 @@
 		loadSignal?: number;
 		initialData?: ProjectDetail | null;
 		initialError?: string | null;
+		enableRelationshipHover?: boolean;
+		onConversationsLoaded?: (conversationIds: string[]) => void;
 	}
 
 	let {
@@ -65,7 +68,9 @@
 		loadPriority = 0,
 		loadSignal = 0,
 		initialData = null,
-		initialError = null
+		initialError = null,
+		enableRelationshipHover = false,
+		onConversationsLoaded = undefined
 	}: Props = $props();
 
 	let project: ProjectDetail | null = $state(null);
@@ -139,6 +144,9 @@
 			);
 			if (myToken !== requestToken) return;
 			project = detail;
+			if (onConversationsLoaded) {
+				onConversationsLoaded(detail.conversations.map((c) => c.id));
+			}
 		} catch (e) {
 			if (myToken !== requestToken) return;
 			error = e instanceof Error ? e.message : 'Failed to load project conversations';
@@ -297,10 +305,14 @@
 				</tr>
 			</thead>
 		{/if}
-		<tbody>
+		<tbody onmouseleave={() => { if (enableRelationshipHover) relationshipCache.clearHover(); }}>
 			{#each visibleConversations as conv (conv.id)}
 				{@const detail = detailData.get(conv.id)}
-				<tr>
+				<tr
+					class:relationship-highlight={enableRelationshipHover && relationshipCache.highlightedConversationIds.has(conv.id)}
+					class:relationship-source={enableRelationshipHover && relationshipCache.hoveredConversationId === conv.id}
+					onmouseenter={() => { if (enableRelationshipHover) relationshipCache.hoverConversation(projectId, conv.id); }}
+				>
 					{#if !compact}
 						<td class="date" title={formatFullDateTitle(conv.lastMessageTimestamp)}
 							>{formatRelativeOrShortDate(conv.lastMessageTimestamp)}</td
@@ -642,5 +654,13 @@
 		gap: 0.75rem;
 		margin-top: 1rem;
 		padding: 0 1rem;
+	}
+
+	tr.relationship-highlight {
+		background: var(--color-relationship-highlight, #fff8e1) !important;
+	}
+
+	tr.relationship-source {
+		background: var(--color-relationship-source, #e3f2fd) !important;
 	}
 </style>

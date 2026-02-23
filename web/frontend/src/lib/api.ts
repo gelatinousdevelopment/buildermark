@@ -14,7 +14,8 @@ import type {
 	CommitIngestionStatusResponse,
 	HistoryScanResponse,
 	DiscoverImportableProjectsResponse,
-	ImportProjectsResponse
+	ImportProjectsResponse,
+	CommitConversationLinks
 } from './types';
 
 interface Envelope<T> {
@@ -217,4 +218,17 @@ export function importProjects(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ paths, historyDays })
 	});
+}
+
+export function getCommitConversationLinks(
+	projectId: string,
+	commitHashes: string[],
+	conversationIds: string[]
+): Promise<CommitConversationLinks> {
+	const params = new URLSearchParams();
+	params.set('commitHashes', commitHashes.join(','));
+	if (conversationIds.length > 0) {
+		params.set('conversationIds', conversationIds.join(','));
+	}
+	return api(`/api/v1/projects/${projectId}/commit-conversation-links?${params.toString()}`);
 }

@@ -3,8 +3,27 @@
 	import { resolve } from '$app/paths';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
+	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 
 	const projectId = $derived(page.params.project_id ?? '');
+
+	let loadedCommitHashes: string[] = $state([]);
+	let loadedConversationIds: string[] = $state([]);
+
+	function handleCommitsLoaded(hashes: string[]) {
+		loadedCommitHashes = hashes;
+		triggerRelationshipLoad(hashes, loadedConversationIds);
+	}
+
+	function handleConversationsLoaded(ids: string[]) {
+		loadedConversationIds = ids;
+		triggerRelationshipLoad(loadedCommitHashes, ids);
+	}
+
+	function triggerRelationshipLoad(commitHashes: string[], conversationIds: string[]) {
+		if (commitHashes.length === 0 || !projectId) return;
+		void relationshipCache.loadRelationships(projectId, commitHashes, conversationIds);
+	}
 </script>
 
 <div class="project-content">
@@ -22,6 +41,8 @@
 			compact={true}
 			showAgentColumn={true}
 			showRatingsColumn={true}
+			enableRelationshipHover={true}
+			onConversationsLoaded={handleConversationsLoaded}
 		/>
 		<div class="more">
 			<a
@@ -43,6 +64,8 @@
 			headerLink={resolve('/local/projects/[project_id]/commits', { project_id: projectId })}
 			showBranch={false}
 			showDate={true}
+			enableRelationshipHover={true}
+			onCommitsLoaded={handleCommitsLoaded}
 		/>
 		<div class="more">
 			<a
@@ -97,10 +120,6 @@
 
 	.heading a:hover {
 		text-decoration: underline;
-	}
-
-	.conversations {
-		padding-right: 1rem;
 	}
 
 	.commits {
