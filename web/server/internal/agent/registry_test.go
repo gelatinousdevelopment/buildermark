@@ -19,7 +19,7 @@ type stubWatcherAgent struct {
 
 func (s *stubWatcherAgent) Name() string                                  { return s.name }
 func (s *stubWatcherAgent) Run(ctx context.Context)                       {}
-func (s *stubWatcherAgent) ScanSince(ctx context.Context, since time.Time) int {
+func (s *stubWatcherAgent) ScanSince(ctx context.Context, since time.Time, progress ScanProgressFunc) int {
 	s.scanCount++
 	return 42
 }

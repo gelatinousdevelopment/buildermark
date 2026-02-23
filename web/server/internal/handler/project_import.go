@@ -204,7 +204,19 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 	entriesProcessed := 0
 	if s.Agents != nil && len(s.Agents.Watchers()) > 0 {
 		broadcast("running", "Scanning conversation history...", len(projectIDs), 0, 0)
-		entriesProcessed = s.scanWatchersSincePaths(ctx, since, "", roots)
+
+		// Rate-limited progress: report file names no faster than every 50ms.
+		var lastProgress time.Time
+		progress := func(filename string) {
+			now := time.Now()
+			if now.Sub(lastProgress) < 50*time.Millisecond {
+				return
+			}
+			lastProgress = now
+			broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)), len(projectIDs), 0, 0)
+		}
+
+		entriesProcessed = s.scanWatchersSincePaths(ctx, since, "", roots, progress)
 		broadcast("running", fmt.Sprintf("Found %d conversation entries", entriesProcessed), len(projectIDs), entriesProcessed, 0)
 	}
 

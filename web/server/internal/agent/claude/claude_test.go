@@ -138,7 +138,7 @@ func TestScanProjectFilesSinceIngestsOrphanSession(t *testing.T) {
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
-	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil)
+	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil, nil)
 	if n != 1 {
 		t.Fatalf("scanProjectFilesSince = %d, want 1", n)
 	}
@@ -180,7 +180,7 @@ func TestScanProjectFilesSinceIngestsMinimalSummaryLine(t *testing.T) {
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
-	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil)
+	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil, nil)
 	if n != 2 {
 		t.Fatalf("scanProjectFilesSince = %d, want 2", n)
 	}
@@ -217,7 +217,7 @@ func TestScanProjectFilesDerivesDiffFromToolUseEdit(t *testing.T) {
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
-	if n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil); n != 2 {
+	if n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil, nil); n != 2 {
 		t.Fatalf("scanProjectFilesSince = %d, want 2", n)
 	}
 
@@ -611,7 +611,7 @@ func TestWatcherScanSinceAPI(t *testing.T) {
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
 
-	count := a.ScanSince(ctx, now.Add(-30*24*time.Hour))
+	count := a.ScanSince(ctx, now.Add(-30*24*time.Hour), nil)
 	if count != 2 {
 		t.Errorf("ScanSince returned %d, want 2", count)
 	}
@@ -619,7 +619,7 @@ func TestWatcherScanSinceAPI(t *testing.T) {
 		t.Errorf("messages = %d, want 2", n)
 	}
 
-	count = a.ScanSince(ctx, now.Add(-90*24*time.Hour))
+	count = a.ScanSince(ctx, now.Add(-90*24*time.Hour), nil)
 	if count != 3 {
 		t.Errorf("ScanSince returned %d, want 3", count)
 	}

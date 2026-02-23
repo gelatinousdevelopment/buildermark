@@ -176,7 +176,7 @@ func TestWatcherScanSinceFiltersOldFiles(t *testing.T) {
 
 	a := newAgent(database, sessionsDir, tmpDir)
 	ctx := context.Background()
-	n := a.ScanSince(ctx, time.Now().Add(-1*time.Hour))
+	n := a.ScanSince(ctx, time.Now().Add(-1*time.Hour), nil)
 
 	if n != 0 {
 		t.Errorf("ScanSince processed %d files, want 0 (old file should be skipped)", n)
