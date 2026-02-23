@@ -263,7 +263,7 @@ func TestWatcherReconcileOrphanedRating(t *testing.T) {
 		t.Fatalf("insert rating: %v", err)
 	}
 
-	// Create a session file that contains $zrate.
+	// Create a session file that contains $bb.
 	now := time.Now().UnixMilli()
 	events := []rolloutEvent{
 		{Type: "input", ThreadID: "thread-rated", WorkingDir: "/proj/rated", Content: "do something", Timestamp: now - 1000, Role: "user"},
@@ -274,7 +274,7 @@ func TestWatcherReconcileOrphanedRating(t *testing.T) {
 				{Type: "text", Text: "done"},
 			},
 		}},
-		{Type: "input", ThreadID: "thread-rated", WorkingDir: "/proj/rated", Content: "$zrate 4 great work", Timestamp: now, Role: "user"},
+		{Type: "input", ThreadID: "thread-rated", WorkingDir: "/proj/rated", Content: "$bb 4 great work", Timestamp: now, Role: "user"},
 	}
 
 	rolloutPath := filepath.Join(sessionsDir, "2025", "01", "01", "rollout-12345-thread-rated.jsonl")
@@ -541,7 +541,7 @@ func TestWatcherReconcileOrphanedRatingCurrentSchema(t *testing.T) {
 				"type": "message",
 				"role": "user",
 				"content": []map[string]any{
-					{"type": "input_text", "text": "[$zrate](/tmp/skills/zrate/SKILL.md) 4 great work"},
+					{"type": "input_text", "text": "[$bb](/tmp/skills/bb/SKILL.md) 4 great work"},
 				},
 			},
 		},
@@ -634,7 +634,7 @@ func TestSessionResolverCurrentSchema(t *testing.T) {
 				"type": "message",
 				"role": "user",
 				"content": []map[string]any{
-					{"type": "input_text", "text": "[$zrate](/tmp/skills/zrate/SKILL.md) 4 great work"},
+					{"type": "input_text", "text": "[$bb](/tmp/skills/bb/SKILL.md) 4 great work"},
 				},
 			},
 		},
@@ -724,14 +724,14 @@ func TestParseZrateDisplay(t *testing.T) {
 		wantRating int
 		wantNote   string
 	}{
-		{"$zrate 4 great work", 4, "great work"},
-		{"$zrate 5", 5, ""},
-		{"$zrate 0 terrible", 0, "terrible"},
-		{"$zrate 3", 3, ""},
-		{"$zrate abc", -1, ""},
-		{"$zrate 6", -1, ""},
-		{"$zrate -1", -1, ""},
-		{"[$zrate](/tmp/path/SKILL.md) 4 great work", 4, "great work"},
+		{"$bb 4 great work", 4, "great work"},
+		{"$bb 5", 5, ""},
+		{"$bb 0 terrible", 0, "terrible"},
+		{"$bb 3", 3, ""},
+		{"$bb abc", -1, ""},
+		{"$bb 6", -1, ""},
+		{"$bb -1", -1, ""},
+		{"[$bb](/tmp/path/SKILL.md) 4 great work", 4, "great work"},
 	}
 
 	for _, tt := range tests {

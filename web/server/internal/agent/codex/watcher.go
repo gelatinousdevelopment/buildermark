@@ -538,8 +538,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 				Content:   content,
 				RawJSON:   line,
 			})
-			// Check for $zrate command.
-			if strings.HasPrefix(content, "$zrate ") {
+			// Check for $bb command.
+			if strings.HasPrefix(content, "$bb ") {
 				if rating, note := parseZrateDisplay(content); rating >= 0 {
 					zrateEntries = append(zrateEntries, struct {
 						rating    int
@@ -589,8 +589,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 				RawJSON:   line,
 			})
 
-			// Check user messages for $zrate.
-			if role == "user" && strings.HasPrefix(content, "$zrate ") {
+			// Check user messages for $bb.
+			if role == "user" && strings.HasPrefix(content, "$bb ") {
 				if rating, note := parseZrateDisplay(content); rating >= 0 {
 					zrateEntries = append(zrateEntries, struct {
 						rating    int
@@ -804,28 +804,28 @@ func (a *Agent) backfillGitIDs(ctx context.Context) {
 	}
 }
 
-// parseZrateDisplay parses "$zrate 4 optional note" into (4, "optional note").
+// parseZrateDisplay parses "$bb 4 optional note" into (4, "optional note").
 // Returns (-1, "") if the format is invalid.
 func parseZrateDisplay(display string) (int, string) {
 	display = strings.TrimSpace(display)
 
-	// Codex can render the command as markdown link: [$zrate](...) 4 note
-	if strings.HasPrefix(display, "[$zrate](") {
+	// Codex can render the command as markdown link: [$bb](...) 4 note
+	if strings.HasPrefix(display, "[$bb](") {
 		if i := strings.Index(display, ")"); i >= 0 {
-			display = "$zrate" + display[i+1:]
+			display = "$bb" + display[i+1:]
 		}
 	}
 
-	if !strings.HasPrefix(display, "$zrate ") {
-		if i := strings.Index(display, "$zrate "); i >= 0 {
+	if !strings.HasPrefix(display, "$bb ") {
+		if i := strings.Index(display, "$bb "); i >= 0 {
 			display = display[i:]
 		}
 	}
-	if !strings.HasPrefix(display, "$zrate ") {
+	if !strings.HasPrefix(display, "$bb ") {
 		return -1, ""
 	}
 
-	rest := strings.TrimSpace(strings.TrimPrefix(display, "$zrate"))
+	rest := strings.TrimSpace(strings.TrimPrefix(display, "$bb"))
 	if rest == "" {
 		return -1, ""
 	}

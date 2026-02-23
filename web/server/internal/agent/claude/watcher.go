@@ -815,7 +815,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			log.Printf("claude watcher: insert messages for session %s: %v", sid, err)
 		}
 
-		// Reconcile orphaned ratings: if any entry in this session is a /zrate
+		// Reconcile orphaned ratings: if any entry in this session is a /bb
 		// command, find the corresponding orphaned rating and re-link it.
 		for _, e := range g.entries {
 			if !isZrateDisplay(e.Display) {
@@ -894,15 +894,15 @@ func mapRoleModel(role, model string) string {
 	return strings.TrimSpace(model)
 }
 
-// parseZrateDisplay parses "/zrate 4 optional note" or "/zrate:zrate 4 optional note"
+// parseZrateDisplay parses "/bb 4 optional note" or "/bb:rate 4 optional note"
 // into (4, "optional note"). Returns (-1, "") if the format is invalid or has no args.
 func parseZrateDisplay(display string) (int, string) {
 	rest := display
 	switch {
-	case strings.HasPrefix(rest, "/zrate:zrate "):
-		rest = strings.TrimPrefix(rest, "/zrate:zrate ")
-	case strings.HasPrefix(rest, "/zrate "):
-		rest = strings.TrimPrefix(rest, "/zrate ")
+	case strings.HasPrefix(rest, "/bb:rate "):
+		rest = strings.TrimPrefix(rest, "/bb:rate ")
+	case strings.HasPrefix(rest, "/bb "):
+		rest = strings.TrimPrefix(rest, "/bb ")
 	default:
 		return -1, ""
 	}

@@ -288,3 +288,8 @@ export interface ProjectCommitCoverage {
 	linesRemoved: number;
 	agentSegments?: AgentCoverageSegment[];
 }
+
+export interface CommitConversationLinks {
+	commitToConversations: Record<string, string[]>;
+	conversationToCommits: Record<string, string[]>;
+}

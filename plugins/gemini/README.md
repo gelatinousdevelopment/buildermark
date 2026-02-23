@@ -1,4 +1,4 @@
-# zrate - Gemini CLI Plugin
+# bb - Gemini CLI Plugin
 
 Rate conversations on a 0-5 scale. Ratings are sent to the local zrate server and viewable on the dashboard at http://localhost:7022.
 
@@ -10,23 +10,23 @@ Gemini CLI discovers custom commands from `~/.gemini/commands/` (user global) or
 
 ```bash
 mkdir -p ~/.gemini/commands
-ln -s ~/github/zrate/plugins/gemini/commands/zrate.toml ~/.gemini/commands/zrate.toml
+ln -s ~/github/zrate/plugins/gemini/commands/bb.toml ~/.gemini/commands/bb.toml
 ```
 
 **Option 2: Copy**
 
 ```bash
 mkdir -p ~/.gemini/commands
-cp /path/to/zrate/plugins/gemini/commands/zrate.toml ~/.gemini/commands/zrate.toml
+cp /path/to/zrate/plugins/gemini/commands/bb.toml ~/.gemini/commands/bb.toml
 ```
 
 ## Usage
 
 ```text
-/zrate
-/zrate 4 Great help with refactoring
-/zrate 5
-/zrate 2 Got stuck on the wrong approach
+/bb
+/bb 4 Great help with refactoring
+/bb 5
+/bb 2 Got stuck on the wrong approach
 ```
 
 If you omit the rating, the model will infer a 0-5 rating from the conversation.

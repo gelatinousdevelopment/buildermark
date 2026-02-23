@@ -18,7 +18,7 @@ type Rating struct {
 	Note               string `json:"note"`
 	Analysis           string `json:"analysis"`
 	CreatedAt          int64  `json:"createdAt"`
-	// MatchedTimestamp is the message timestamp of the /zrate user message
+	// MatchedTimestamp is the message timestamp of the /bb user message
 	// that was matched to this rating (within 120s). Nil if unmatched.
 	MatchedTimestamp *int64 `json:"matchedTimestamp,omitempty"`
 }

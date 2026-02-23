@@ -34,15 +34,14 @@
 	.agent-tag {
 		display: inline-flex;
 		align-items: center;
-		padding: 0.16rem 0.6rem;
-		border-radius: 999px;
 		background: var(--agent-tag-bg);
+		border-radius: 999px;
 		color: var(--agent-tag-fg);
-		font-size: 0.75rem;
-		font-weight: 600;
+		font-family: var(--font-family-monospace);
+		font-size: 0.8rem;
 		line-height: 1.2;
-		margin: -0.1rem 0;
-		text-transform: uppercase;
+		margin: -0.2rem 0;
+		padding: 0.16rem 0.6rem;
 		white-space: nowrap;
 	}
 

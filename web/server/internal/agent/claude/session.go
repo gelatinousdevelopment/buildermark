@@ -38,7 +38,7 @@ type historyEntryMessage struct {
 }
 
 // ResolveSession polls history.jsonl for up to 5 seconds looking for a
-// /zrate entry. When found it collects every entry with the same
+// /bb entry. When found it collects every entry with the same
 // sessionId and returns them all.
 // If no match is found the fallbackID is returned with no entries.
 func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agent.SessionResult {
@@ -63,7 +63,7 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 
 	if sessionID == "" {
-		log.Printf("claude session: no match found for /zrate command, using fallback")
+		log.Printf("claude session: no match found for /bb command, using fallback")
 		return &agent.SessionResult{SessionID: fallbackID}
 	}
 
@@ -83,16 +83,16 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 }
 
-// isZrateDisplay returns true if the display field represents a /zrate
-// command invocation. Matches "/zrate", "/zrate 4", "/zrate:zrate", etc.
+// isZrateDisplay returns true if the display field represents a /bb
+// command invocation. Matches "/bb", "/bb 4", "/bb:rate", etc.
 func isZrateDisplay(display string) bool {
 	d := strings.TrimSpace(display)
-	return d == "/zrate" || d == "/zrate:zrate" ||
-		strings.HasPrefix(d, "/zrate ") || strings.HasPrefix(d, "/zrate:zrate ")
+	return d == "/bb" || d == "/bb:rate" ||
+		strings.HasPrefix(d, "/bb ") || strings.HasPrefix(d, "/bb:rate ")
 }
 
 // searchHistory reads the last tailBytes of the history file and searches
-// lines in reverse for a /zrate entry whose timestamp is within maxAge of now.
+// lines in reverse for a /bb entry whose timestamp is within maxAge of now.
 func searchHistory(path string, tailBytes int64, maxAge time.Duration) (string, bool) {
 	f, err := os.Open(path)
 	if err != nil {

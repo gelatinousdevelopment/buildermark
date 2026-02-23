@@ -319,6 +319,62 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	return commits, rows.Err()
 }
 
+// ListCommitsWithDiffByHashes loads commits (including diff_content) for the
+// given project IDs and commit hashes. Only returns rows where
+// lines_from_agent > 0 (commits with zero agent attribution can't have
+// matching messages). Results are batched by sqliteBatchSize.
+func ListCommitsWithDiffByHashes(ctx context.Context, database *sql.DB, projectIDs []string, hashes []string) ([]Commit, error) {
+	if len(projectIDs) == 0 || len(hashes) == 0 {
+		return nil, nil
+	}
+
+	pidPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
+	var all []Commit
+
+	for i := 0; i < len(hashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(hashes) {
+			end = len(hashes)
+		}
+		batch := hashes[i:end]
+		hashPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf(
+			`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
+			        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+			 FROM commits
+			 WHERE project_id IN (%s) AND commit_hash IN (%s) AND lines_from_agent > 0`,
+			pidPlaceholders, hashPlaceholders,
+		)
+		args := make([]any, 0, len(projectIDs)+len(batch))
+		for _, pid := range projectIDs {
+			args = append(args, pid)
+		}
+		for _, h := range batch {
+			args = append(args, h)
+		}
+
+		rows, err := database.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("query commits with diff by hashes: %w", err)
+		}
+		for rows.Next() {
+			var c Commit
+			if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
+				&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan commit with diff: %w", err)
+			}
+			all = append(all, c)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	return all, nil
+}
+
 // CommitAgentCoverage represents a row in the commit_agent_coverage table.
 type CommitAgentCoverage struct {
 	ID             string `json:"id"`
