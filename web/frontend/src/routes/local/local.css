@@ -37,6 +37,9 @@
 	--color-tag-text: #555;
 	--color-tag-background-hover: #555;
 	--color-tag-text-hover: white;
+
+	--color-relationship-highlight: #fff8e1;
+	--color-relationship-source: #e3f2fd;
 }
 
 html,

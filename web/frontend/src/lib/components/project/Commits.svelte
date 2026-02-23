@@ -13,6 +13,7 @@
 	import DiffCount from '$lib/components/DiffCount.svelte';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { formatRelativeOrShortDate, formatFullDateTitle, commitUrl } from '$lib/utils';
 
 	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
@@ -49,6 +50,8 @@
 		useLoadQueue?: boolean;
 		loadPriority?: number;
 		loadSignal?: number;
+		enableRelationshipHover?: boolean;
+		onCommitsLoaded?: (commitHashes: string[]) => void;
 	}
 
 	let {
@@ -76,7 +79,9 @@
 		autoload = true,
 		useLoadQueue = false,
 		loadPriority = 0,
-		loadSignal = 0
+		loadSignal = 0,
+		enableRelationshipHover = false,
+		onCommitsLoaded = undefined
 	}: Props = $props();
 
 	let data: ProjectCommitPageResponse | null = $state(null);
@@ -168,6 +173,9 @@
 				internalBranch = loaded.branch;
 			}
 			void loadIngestionStatus(branch ?? internalBranch);
+			if (onCommitsLoaded) {
+				onCommitsLoaded(loaded.commits.map((c) => c.commitHash));
+			}
 		} catch (e) {
 			if (myToken !== requestToken) return;
 			error = e instanceof Error ? e.message : 'Failed to load commit coverage';
@@ -369,9 +377,13 @@
 				</tr>
 			</thead>
 		{/if}
-		<tbody>
+		<tbody onmouseleave={() => { if (enableRelationshipHover) relationshipCache.clearHover(); }}>
 			{#each visibleCommits as c (c.commitHash)}
-				<tr>
+				<tr
+					class:relationship-highlight={enableRelationshipHover && relationshipCache.highlightedCommitHashes.has(c.commitHash)}
+					class:relationship-source={enableRelationshipHover && relationshipCache.hoveredCommitHash === c.commitHash}
+					onmouseenter={() => { if (enableRelationshipHover) relationshipCache.hoverCommit(projectId, c.commitHash); }}
+				>
 					{#if !compact}
 						<td class="timeline">
 							<span class="timeline-line"></span>
@@ -809,5 +821,13 @@
 	.user-picker label {
 		text-align: right;
 		width: 60px;
+	}
+
+	tr.relationship-highlight {
+		background: var(--color-relationship-highlight, #fff8e1) !important;
+	}
+
+	tr.relationship-source {
+		background: var(--color-relationship-source, #e3f2fd) !important;
 	}
 </style>
