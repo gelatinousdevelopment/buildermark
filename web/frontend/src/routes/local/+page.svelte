@@ -110,7 +110,7 @@
 					<tbody>
 						{#each project.conversations as conv (conv.id)}
 							<tr>
-								<td>
+								<td class="title">
 									<a
 										href={resolve('/local/projects/[project_id]/conversations/[id]', {
 											project_id: project.id,
@@ -174,6 +174,17 @@
 		margin: 0 0 0.5rem 0;
 		font-size: 0.8rem;
 		color: #888;
+	}
+
+	.title {
+		max-width: 0;
+	}
+
+	.title a {
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.ratings {

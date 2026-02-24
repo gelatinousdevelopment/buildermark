@@ -12,9 +12,13 @@
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
+	import Popover from '$lib/components/Popover.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { formatRelativeOrShortDate, formatFullDateTitle, commitUrl } from '$lib/utils';
+
+	const AGENT_EMAILS = ['noreply@anthropic.com'];
+	const USER_AND_AGENTS = '@me+agents';
 
 	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
 		if (!segs || segs.length === 0) return [];
@@ -42,6 +46,7 @@
 		showDate?: boolean;
 		showBranch?: boolean;
 		showDiffCount?: boolean;
+		showUser?: boolean;
 		showColumnNames?: boolean;
 		syncPaginationWithUrl?: boolean;
 		onPageChange?: PageChangeHandler;
@@ -72,6 +77,7 @@
 		showDate = false,
 		showBranch = false,
 		showDiffCount = true,
+		showUser = false,
 		showColumnNames = false,
 		syncPaginationWithUrl = false,
 		onPageChange,
@@ -159,6 +165,12 @@
 		}
 	}
 
+	function resolveUserFilter(raw: string, currentEmail: string | undefined): string {
+		if (raw !== USER_AND_AGENTS) return raw;
+		if (!currentEmail) return '';
+		return [currentEmail, ...AGENT_EMAILS].join(',');
+	}
+
 	async function loadCommitsData() {
 		if (!projectId) {
 			error = 'Missing project ID';
@@ -169,8 +181,9 @@
 		error = null;
 		try {
 			const pageNum = Math.max(1, currentPage);
+			const resolvedUser = resolveUserFilter(selectedUser, data?.currentEmail);
 			const loaded = await withOptionalQueue(() =>
-				listProjectCommitsPage(projectId, pageNum, selectedBranch, pageSize, selectedUser)
+				listProjectCommitsPage(projectId, pageNum, selectedBranch, pageSize, resolvedUser)
 			);
 			if (myToken !== requestToken) return;
 			data = loaded;
@@ -190,6 +203,10 @@
 					return; // effect will re-fire with user filter
 				}
 			}
+			// Re-fire if we had a sentinel that needed currentEmail to resolve.
+			if (selectedUser === USER_AND_AGENTS && resolvedUser === '' && loaded.currentEmail) {
+				return; // data is now set with currentEmail; effect will re-fire
+			}
 			void loadIngestionStatus(branch ?? internalBranch);
 			if (onCommitsLoaded) {
 				onCommitsLoaded(loaded.commits.map((c) => c.commitHash));
@@ -204,7 +221,8 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${loadSignal}`;
+		const resolved = resolveUserFilter(selectedUser, data?.currentEmail);
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();
@@ -328,6 +346,8 @@
 						<select id="user-{projectId}" value={selectedUser} onchange={handleUserChange}>
 							<option value="">All</option>
 							<hr />
+							<option value={USER_AND_AGENTS}>Current user and agents</option>
+							<hr />
 							{#each data.users as a (a.email)}
 								<option value={a.email}>{a.name} ({a.email})</option>
 							{/each}
@@ -375,6 +395,9 @@
 			{#if !compact}
 				<col class="hash-col" />
 			{/if}
+			{#if showUser}
+				<col class="user-col" />
+			{/if}
 			<col class="bar-col" />
 		</colgroup>
 		{#if showColumnNames}
@@ -395,6 +418,9 @@
 					{/if}
 					{#if !compact}
 						<th class="hash-col">Hash</th>
+					{/if}
+					{#if showUser}
+						<th class="user-col">User</th>
 					{/if}
 					<th class="bar-col">Agent %</th>
 				</tr>
@@ -476,6 +502,23 @@
 										<Icon name="externalLink" width="14px" />
 									</a>
 								{/if}
+							{/if}
+						</td>
+					{/if}
+					{#if showUser}
+						<td class="user">
+							{#if c.userName}
+								<Popover position="leading" width="auto" padding="0.5rem 0.75rem">
+									<span class="user-tag">{c.userName}</span>
+									{#snippet popover()}
+										<div class="user-popover">
+											<div class="user-popover-name">{c.userName}</div>
+											{#if c.userEmail}
+												<div class="user-popover-email">{c.userEmail}</div>
+											{/if}
+										</div>
+									{/snippet}
+								</Popover>
 							{/if}
 						</td>
 					{/if}
@@ -860,5 +903,46 @@
 
 	tr.relationship-source {
 		background: var(--color-relationship-source, #e3f2fd) !important;
+	}
+
+	.user-col {
+		width: 120px;
+	}
+
+	.user-tag {
+		display: inline-flex;
+		align-items: center;
+		padding: calc(0.2rem - 0.5px) calc(0.6rem - 0.5px);
+		border-radius: 999px;
+		background: var(--color-tag-background, #e8e8e8);
+		color: var(--color-tag-text, #555);
+		font-size: 0.82rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
+		cursor: default;
+		border: 0.5px solid var(--color-tag-border, #888);
+		box-sizing: border-box;
+	}
+
+	.user-tag:hover {
+		background: var(--color-tag-background-hover, #d8d8d8);
+		color: var(--color-tag-text-hover, #333);
+	}
+
+	.user-popover {
+		white-space: nowrap;
+	}
+
+	.user-popover-name {
+		font-weight: 600;
+		font-size: 0.85rem;
+	}
+
+	.user-popover-email {
+		font-size: 0.82rem;
+		color: var(--color-text-secondary, #666);
+		margin-top: 0.15rem;
 	}
 </style>

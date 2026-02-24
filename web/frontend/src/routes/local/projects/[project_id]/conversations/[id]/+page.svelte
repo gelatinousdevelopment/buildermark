@@ -459,6 +459,12 @@
 		color: #444;
 	}
 
+	h2 {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
 	.agent-header {
 		display: flex;
 		align-items: center;

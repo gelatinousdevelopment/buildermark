@@ -523,16 +523,17 @@ func ListCommitsByHashes(ctx context.Context, db *sql.DB, projectID string, hash
 
 	// For small hash lists, use a single query.
 	if len(hashes) <= sqliteBatchSize {
-		return listCommitsByHashesSingle(ctx, db, projectID, hashes, "", limit, offset)
+		return listCommitsByHashesSingle(ctx, db, projectID, hashes, nil, limit, offset)
 	}
 
 	// For large hash lists, batch and merge in Go.
-	return listCommitsByHashesBatched(ctx, db, projectID, hashes, "", limit, offset)
+	return listCommitsByHashesBatched(ctx, db, projectID, hashes, nil, sqliteBatchSize, limit, offset)
 }
 
-// ListCommitsByHashesAndUser returns commits matching hashes filtered by user email.
-func ListCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string, limit, offset int) ([]Commit, error) {
-	if userEmail == "" {
+// ListCommitsByHashesAndUser returns commits matching hashes filtered by user emails.
+// When userEmails is empty, no user filter is applied.
+func ListCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, limit, offset int) ([]Commit, error) {
+	if len(userEmails) == 0 {
 		return ListCommitsByHashes(ctx, db, projectID, hashes, limit, offset)
 	}
 	if len(hashes) == 0 {
@@ -542,17 +543,25 @@ func ListCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID strin
 		limit = 20
 	}
 
-	if len(hashes) <= sqliteBatchSize {
-		return listCommitsByHashesSingle(ctx, db, projectID, hashes, userEmail, limit, offset)
+	// Leave room for email params within SQLite's 999 param limit.
+	hashBatchSize := sqliteBatchSize - len(userEmails) - 1 // -1 for projectID
+	if hashBatchSize < 1 {
+		hashBatchSize = 1
 	}
-	return listCommitsByHashesBatched(ctx, db, projectID, hashes, userEmail, limit, offset)
+
+	if len(hashes) <= hashBatchSize {
+		return listCommitsByHashesSingle(ctx, db, projectID, hashes, userEmails, limit, offset)
+	}
+	return listCommitsByHashesBatched(ctx, db, projectID, hashes, userEmails, hashBatchSize, limit, offset)
 }
 
-func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string, limit, offset int) ([]Commit, error) {
+func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, limit, offset int) ([]Commit, error) {
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(hashes)), ",")
 	userClause := ""
-	if userEmail != "" {
+	if len(userEmails) == 1 {
 		userClause = " AND user_email = ?"
+	} else if len(userEmails) > 1 {
+		userClause = " AND user_email IN (" + strings.TrimSuffix(strings.Repeat("?,", len(userEmails)), ",") + ")"
 	}
 	query := fmt.Sprintf(
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
@@ -563,13 +572,13 @@ func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string
 		 LIMIT ? OFFSET ?`,
 		placeholders, userClause,
 	)
-	args := make([]any, 0, 1+len(hashes)+2)
+	args := make([]any, 0, 1+len(hashes)+len(userEmails)+2)
 	args = append(args, projectID)
 	for _, h := range hashes {
 		args = append(args, h)
 	}
-	if userEmail != "" {
-		args = append(args, userEmail)
+	for _, e := range userEmails {
+		args = append(args, e)
 	}
 	args = append(args, limit, offset)
 
@@ -591,15 +600,15 @@ func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string
 	return commits, rows.Err()
 }
 
-func listCommitsByHashesBatched(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string, limit, offset int) ([]Commit, error) {
+func listCommitsByHashesBatched(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, hashBatchSize, limit, offset int) ([]Commit, error) {
 	// Collect all matching commits across batches, then sort and paginate in Go.
 	var all []Commit
-	for i := 0; i < len(hashes); i += sqliteBatchSize {
-		end := i + sqliteBatchSize
+	for i := 0; i < len(hashes); i += hashBatchSize {
+		end := i + hashBatchSize
 		if end > len(hashes) {
 			end = len(hashes)
 		}
-		batch, err := listCommitsByHashesSingle(ctx, db, projectID, hashes[i:end], userEmail, end-i, 0)
+		batch, err := listCommitsByHashesSingle(ctx, db, projectID, hashes[i:end], userEmails, end-i, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -656,29 +665,42 @@ func CountCommitsByHashes(ctx context.Context, db *sql.DB, projectID string, has
 	return total, nil
 }
 
-// CountCommitsByHashesAndUser returns the count of commits matching hashes and user email.
-func CountCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmail string) (int, error) {
-	if userEmail == "" {
+// CountCommitsByHashesAndUser returns the count of commits matching hashes and user emails.
+// When userEmails is empty, no user filter is applied.
+func CountCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string) (int, error) {
+	if len(userEmails) == 0 {
 		return CountCommitsByHashes(ctx, db, projectID, hashes)
 	}
 	if len(hashes) == 0 {
 		return 0, nil
 	}
+	hashBatchSize := sqliteBatchSize - len(userEmails) - 1
+	if hashBatchSize < 1 {
+		hashBatchSize = 1
+	}
 	total := 0
-	for i := 0; i < len(hashes); i += sqliteBatchSize {
-		end := i + sqliteBatchSize
+	for i := 0; i < len(hashes); i += hashBatchSize {
+		end := i + hashBatchSize
 		if end > len(hashes) {
 			end = len(hashes)
 		}
 		batch := hashes[i:end]
-		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
-		query := fmt.Sprintf("SELECT COUNT(*) FROM commits WHERE project_id = ? AND commit_hash IN (%s) AND user_email = ?", placeholders)
-		args := make([]any, 0, 2+len(batch))
+		hashPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		userClause := ""
+		if len(userEmails) == 1 {
+			userClause = " AND user_email = ?"
+		} else {
+			userClause = " AND user_email IN (" + strings.TrimSuffix(strings.Repeat("?,", len(userEmails)), ",") + ")"
+		}
+		query := fmt.Sprintf("SELECT COUNT(*) FROM commits WHERE project_id = ? AND commit_hash IN (%s)%s", hashPlaceholders, userClause)
+		args := make([]any, 0, 1+len(batch)+len(userEmails))
 		args = append(args, projectID)
 		for _, h := range batch {
 			args = append(args, h)
 		}
-		args = append(args, userEmail)
+		for _, e := range userEmails {
+			args = append(args, e)
+		}
 		var count int
 		if err := db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
 			return 0, fmt.Errorf("count commits by hashes and user: %w", err)

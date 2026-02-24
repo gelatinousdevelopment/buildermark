@@ -118,6 +118,8 @@ type projectCommitCoverage struct {
 	ProjectGitID     string                 `json:"projectGitId"`
 	CommitHash       string                 `json:"commitHash"`
 	Subject          string                 `json:"subject"`
+	UserName         string                 `json:"userName,omitempty"`
+	UserEmail        string                 `json:"userEmail,omitempty"`
 	AuthoredAtUnixMs int64                  `json:"authoredAtUnixMs"`
 	LinesTotal       int                    `json:"linesTotal"`
 	LinesFromAgent   int                    `json:"linesFromAgent"`
@@ -685,7 +687,15 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 	clientLoc := time.FixedZone("client", -tzOffsetMin*60)
 
-	userFilter := strings.TrimSpace(r.URL.Query().Get("user"))
+	// Parse comma-separated user emails for multi-user filtering.
+	var userEmails []string
+	if raw := strings.TrimSpace(r.URL.Query().Get("user")); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			if e := strings.TrimSpace(part); e != "" {
+				userEmails = append(userEmails, e)
+			}
+		}
+	}
 
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
@@ -799,8 +809,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 
 	// Compute filtered total for pagination when an author filter is active.
 	filteredTotal := total
-	if userFilter != "" {
-		filteredTotal, err = db.CountCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, allHashes, userFilter)
+	if len(userEmails) > 0 {
+		filteredTotal, err = db.CountCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, allHashes, userEmails)
 		if err != nil {
 			log.Printf("error counting filtered commits for %s: %v", repoProject.Path, err)
 			writeError(w, http.StatusInternalServerError, "failed to count commits")
@@ -821,7 +831,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	// Query the page of commits using hash-based query.
-	dbCommits, err := db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, allHashes, userFilter, pageSize, offset)
+	dbCommits, err := db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, allHashes, userEmails, pageSize, offset)
 	if err != nil {
 		log.Printf("error listing commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -843,11 +853,17 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		hashSet[h] = true
 	}
 
+	// Build a set for fast user email lookup.
+	userEmailSet := make(map[string]bool, len(userEmails))
+	for _, e := range userEmails {
+		userEmailSet[strings.ToLower(e)] = true
+	}
+
 	// Filter to only commits on this branch.
 	var branchCommits []db.Commit
 	for _, c := range allProjectCommits {
 		if hashSet[c.CommitHash] {
-			if userFilter == "" || strings.EqualFold(c.UserEmail, userFilter) {
+			if len(userEmails) == 0 || userEmailSet[strings.ToLower(c.UserEmail)] {
 				branchCommits = append(branchCommits, c)
 			}
 		}
@@ -890,8 +906,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		allCoverage = append(allCoverage, cov)
 	}
 
-	// Add working copy on page 1 when no author filter or filter matches current identity.
-	if page == 1 && (userFilter == "" || strings.EqualFold(userFilter, identity.Email)) {
+	// Add working copy on page 1 when no author filter or filter includes current identity.
+	if page == 1 && (len(userEmails) == 0 || userEmailSet[strings.ToLower(identity.Email)]) {
 		if wc, ok := hasWorkingCopyChanges(r.Context(), repoProject); ok {
 			paged = append([]projectCommitCoverage{wc}, paged...)
 		}
@@ -914,7 +930,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		Branch:       branch,
 		Branches:     branches,
 		Users:        users,
-		UserFilter:   userFilter,
+		UserFilter:   strings.Join(userEmails, ","),
 		CurrentUser:  identity.Name,
 		CurrentEmail: identity.Email,
 		Project:      *project,
@@ -939,6 +955,8 @@ func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCover
 		ProjectGitID:     repoProject.GitID,
 		CommitHash:       c.CommitHash,
 		Subject:          c.Subject,
+		UserName:         c.UserName,
+		UserEmail:        c.UserEmail,
 		AuthoredAtUnixMs: c.AuthoredAt * 1000,
 		LinesTotal:       c.LinesTotal,
 		LinesFromAgent:   c.LinesFromAgent,

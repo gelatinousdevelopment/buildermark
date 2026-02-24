@@ -314,6 +314,9 @@
 	.conversation-link {
 		margin-top: 0.3rem;
 		font-size: 0.85rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.message-content {

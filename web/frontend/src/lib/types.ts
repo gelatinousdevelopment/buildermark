@@ -272,6 +272,8 @@ export interface ProjectCommitCoverage {
 	projectGitId: string;
 	commitHash: string;
 	subject: string;
+	userName?: string;
+	userEmail?: string;
 	authoredAtUnixMs: number;
 	linesTotal: number;
 	linesFromAgent: number;
