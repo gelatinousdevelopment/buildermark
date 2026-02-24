@@ -8,6 +8,7 @@
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
+	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 
 	let { children } = $props();
 
@@ -121,11 +122,7 @@
 		</section>
 		<hr class="divider" />
 		<section>
-			<nav class="right">
-				<button class="item" title="Server: {websocketStore.connectionState}"
-					><div class="status-dot {websocketStore.connectionState}"></div></button
-				>
-			</nav>
+			<ServerStatusIndicator />
 		</section>
 	</header>
 
@@ -161,11 +158,6 @@
 	header section {
 		align-items: center;
 		display: flex;
-	}
-
-	header section button {
-		background: none;
-		border: none;
 	}
 
 	header section .item {
@@ -296,36 +288,5 @@
 		width: 100vw;
 		max-width: 100vw;
 		box-sizing: border-box;
-	}
-
-	.status-dot {
-		border-radius: 99px;
-		width: 1rem;
-		height: 1rem;
-		background: #999;
-		transition: background 300ms ease;
-	}
-
-	.status-dot.connected {
-		background: var(--color-status-green);
-	}
-
-	.status-dot.connecting {
-		background: #e0a020;
-		animation: pulse 1.5s ease-in-out infinite;
-	}
-
-	.status-dot.disconnected {
-		background: #999;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.4;
-		}
 	}
 </style>

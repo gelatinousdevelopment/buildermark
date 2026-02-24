@@ -29,7 +29,7 @@ type ImportResolver = {
 };
 let _importWaiters: ImportResolver[] = [];
 
-function getWsUrl(): string {
+export function getWsUrl(): string {
 	if (PUBLIC_API_URL) {
 		return PUBLIC_API_URL.replace(/^http/, 'ws') + '/api/v1/ws';
 	}
