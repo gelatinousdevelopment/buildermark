@@ -1241,7 +1241,7 @@ func TestReadSessionTitleFallbackTruncatesLongPrompt(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	longText := strings.Repeat("x", 200)
+	longText := strings.Repeat("x", 1200)
 	convLines := []string{
 		fmt.Sprintf(`{"type":"user","timestamp":"2026-02-11T10:00:00.000Z","message":{"content":[{"type":"text","text":"%s"}]}}`, longText),
 	}
@@ -1258,7 +1258,7 @@ func TestReadSessionTitleFallbackTruncatesLongPrompt(t *testing.T) {
 	}
 }
 
-func TestReadSessionTitleFallbackUsesMarkdownHeading(t *testing.T) {
+func TestReadSessionTitleFallbackUsesFullPrompt(t *testing.T) {
 	tmpDir := t.TempDir()
 	projectPath := "/proj/a"
 	dirName := "-proj-a"
@@ -1275,12 +1275,13 @@ func TestReadSessionTitleFallbackUsesMarkdownHeading(t *testing.T) {
 	}
 
 	title := readSessionTitle(tmpDir, projectPath, "sess-heading")
-	if title != "Add conversation title from Claude's sessions-index.json" {
-		t.Errorf("title = %q, want %q", title, "Add conversation title from Claude's sessions-index.json")
+	want := "Implement the following plan:\n\n# Add conversation title from Claude's sessions-index.json\n\n## Context\nMore details here"
+	if title != want {
+		t.Errorf("title = %q, want %q", title, want)
 	}
 }
 
-func TestReadSessionTitleFallbackFirstLineWhenNoHeading(t *testing.T) {
+func TestReadSessionTitleFallbackPreservesNewLines(t *testing.T) {
 	tmpDir := t.TempDir()
 	projectPath := "/proj/a"
 	dirName := "-proj-a"
@@ -1297,8 +1298,8 @@ func TestReadSessionTitleFallbackFirstLineWhenNoHeading(t *testing.T) {
 	}
 
 	title := readSessionTitle(tmpDir, projectPath, "sess-multi")
-	if title != "First line" {
-		t.Errorf("title = %q, want %q", title, "First line")
+	if title != "First line\nSecond line\nThird line" {
+		t.Errorf("title = %q, want %q", title, "First line\\nSecond line\\nThird line")
 	}
 }
 
@@ -1308,12 +1309,10 @@ func TestTitleFromPrompt(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"heading after preamble", "Implement the following plan:\n\n# Fix the bug\n\nDetails...", "Fix the bug"},
-		{"heading on first line", "# Quick fix", "Quick fix"},
-		{"no heading", "Just do this thing\nmore details", "Just do this thing"},
-		{"ignores h2", "Do this:\n\n## Not a title\nstuff", "Do this:"},
-		{"long title truncated", "# " + strings.Repeat("a", 200), strings.Repeat("a", 100) + "..."},
-		{"empty heading falls back", "# \nreal content", "#"},
+		{"keeps multiline text", "Implement the following plan:\n\n# Fix the bug\n\nDetails...", "Implement the following plan:\n\n# Fix the bug\n\nDetails..."},
+		{"trims outer spaces", "   hello world   ", "hello world"},
+		{"long title truncated", strings.Repeat("a", 1001), strings.Repeat("a", 1000) + "..."},
+		{"empty after trim", "   ", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

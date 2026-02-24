@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { listProjects, getProject } from '$lib/api';
 	import AgentTag from '$lib/components/AgentTag.svelte';
-	import { fmtTimeWithSeconds, stars, shortId } from '$lib/utils';
+	import { fmtTimeWithSeconds, stars, shortId, singleLineTitle } from '$lib/utils';
 	import type { ProjectDetail } from '$lib/types';
 
 	let projects: ProjectDetail[] = $state([]);
@@ -117,7 +117,7 @@
 											id: conv.id
 										})}
 									>
-										{conv.title || shortId(conv.id)}
+										{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
 									</a>
 								</td>
 								<td><AgentTag agent={conv.agent} /></td>

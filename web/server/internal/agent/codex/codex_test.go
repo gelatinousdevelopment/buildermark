@@ -781,8 +781,8 @@ func TestReadSessionTitleMarkdownHeading(t *testing.T) {
 	writeRolloutFile(t, rolloutPath, events)
 
 	title := readSessionTitle(sessionsDir, "thread-md")
-	if title != "Refactor Auth" {
-		t.Errorf("title = %q, want %q", title, "Refactor Auth")
+	if title != "# Refactor Auth\n\nPlease help me." {
+		t.Errorf("title = %q, want %q", title, "# Refactor Auth\n\nPlease help me.")
 	}
 }
 
@@ -814,8 +814,8 @@ func TestReadSessionTitleCurrentSchema(t *testing.T) {
 	})
 
 	title := readSessionTitle(sessionsDir, "thread-title-new")
-	if title != "Improve Session Parsing" {
-		t.Errorf("title = %q, want %q", title, "Improve Session Parsing")
+	if title != "# Improve Session Parsing\n\nNeed to update codex parser." {
+		t.Errorf("title = %q, want %q", title, "# Improve Session Parsing\n\nNeed to update codex parser.")
 	}
 }
 
@@ -855,8 +855,8 @@ func TestReadSessionTitlePrefersEventMsgUser(t *testing.T) {
 	})
 
 	title := readSessionTitle(sessionsDir, "thread-title-event-msg")
-	if title != "Real User Prompt" {
-		t.Errorf("title = %q, want %q", title, "Real User Prompt")
+	if title != "# Real User Prompt\n\nDo the actual task." {
+		t.Errorf("title = %q, want %q", title, "# Real User Prompt\n\nDo the actual task.")
 	}
 }
 
@@ -873,9 +873,9 @@ func TestTitleFromPrompt(t *testing.T) {
 		want  string
 	}{
 		{"simple prompt", "simple prompt"},
-		{"# Heading\nrest of prompt", "Heading"},
-		{"line one\n# Heading in line two\nmore", "Heading in line two"},
-		{strings.Repeat("a", 200), strings.Repeat("a", 100) + "..."},
+		{"# Heading\nrest of prompt", "# Heading\nrest of prompt"},
+		{"line one\n# Heading in line two\nmore", "line one\n# Heading in line two\nmore"},
+		{strings.Repeat("a", 1001), strings.Repeat("a", 1000) + "..."},
 	}
 
 	for _, tt := range tests {
