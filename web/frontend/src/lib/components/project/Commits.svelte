@@ -11,7 +11,6 @@
 	} from '$lib/types';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
-	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
@@ -40,7 +39,6 @@
 		headerLink?: string;
 		showBranchPicker?: boolean;
 		showUserPicker?: boolean;
-		showCoverageBar?: boolean;
 		showPagination?: boolean;
 		showLoadMore?: boolean;
 		showDate?: boolean;
@@ -71,7 +69,6 @@
 		headerLink = undefined,
 		showBranchPicker = false,
 		showUserPicker = false,
-		showCoverageBar = false,
 		showPagination = false,
 		showLoadMore = false,
 		showDate = false,
@@ -326,7 +323,7 @@
 {:else if !data || visibleCommits.length === 0}
 	<p class="message">No commits found for this project and current git user.</p>
 {:else}
-	{#if showBranchPicker || showCoverageBar}
+	{#if showBranchPicker || showUserPicker}
 		<div class="top-row">
 			<div class="filters">
 				{#if showBranchPicker}
@@ -346,7 +343,7 @@
 						<select id="user-{projectId}" value={selectedUser} onchange={handleUserChange}>
 							<option value="">All</option>
 							<hr />
-							<option value={USER_AND_AGENTS}>Current user and agents</option>
+							<option value={USER_AND_AGENTS}>Current user and cloud agents</option>
 							<hr />
 							{#each data.users as a (a.email)}
 								<option value={a.email}>{a.name} ({a.email})</option>
@@ -355,25 +352,6 @@
 					</div>
 				{/if}
 			</div>
-
-			{#if showCoverageBar}
-				{#if data.dailySummary && data.dailySummary.length > 0}
-					<div class="summary-chart">
-						<DailyCommitsChart
-							dailySummary={data.dailySummary}
-							branch={selectedBranch || data.branch || ''}
-						/>
-					</div>
-				{:else}
-					<div class="summary-bar">
-						<AgentPercentageBar
-							agentPercent={data.summary.linePercent}
-							segments={toBarSegments(data.summary.agentSegments)}
-							showManual={true}
-						/>
-					</div>
-				{/if}
-			{/if}
 		</div>
 	{/if}
 
@@ -618,20 +596,10 @@
 		align-items: flex-start;
 		border-bottom: 0.5px solid var(--color-divider);
 		display: flex;
-		flex-direction: row-reverse;
+		flex-direction: row;
 		gap: 1rem;
 		justify-content: space-between;
 		padding: 1rem 1rem 1rem 1rem;
-	}
-
-	@media (max-width: 1100px) {
-		.top-row {
-			flex-direction: column-reverse;
-		}
-	}
-
-	.summary-chart {
-		margin-bottom: -0.5rem;
 	}
 
 	.link-button {
@@ -757,7 +725,7 @@
 	}
 
 	.hash-col {
-		width: 96px;
+		width: 80px;
 	}
 
 	.branch-col {
@@ -857,6 +825,7 @@
 		font-size: 0.9em;
 		gap: 0.25rem;
 		justify-content: center;
+		padding-right: 0rem;
 	}
 
 	.hash-link {
@@ -869,13 +838,17 @@
 		opacity: 1;
 	}
 
+	.user {
+		text-align: center;
+	}
+
 	.bar {
 		padding-right: 1rem;
 	}
 
 	.filters {
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 		gap: 0.5rem;
 	}
 
@@ -886,15 +859,18 @@
 		gap: 0.5rem;
 	}
 
-	.branch-picker select,
-	.user-picker select {
+	.branch-picker select {
 		width: 200px;
+	}
+
+	.user-picker select {
+		width: 280px;
 	}
 
 	.branch-picker label,
 	.user-picker label {
 		text-align: right;
-		width: 60px;
+		width: 54px;
 	}
 
 	tr.relationship-highlight {

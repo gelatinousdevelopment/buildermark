@@ -163,6 +163,18 @@ table.data td a:hover {
 
 /* Shared utility */
 
+.info-box {
+	background: #fbfbfb;
+	border-radius: 5px;
+	border: 0.5px solid var(--color-divider);
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	gap: 0.4rem;
+	min-width: 130px;
+	padding: 0.7rem;
+}
+
 .loading {
 	color: #888;
 }

@@ -11,11 +11,13 @@
 	interface Props {
 		dailySummary: DailyCommitSummary[];
 		branch: string;
+		projectId?: string;
 		compact?: boolean;
 	}
 
-	let { dailySummary, branch, compact = false }: Props = $props();
+	let { dailySummary, branch, projectId, compact = false }: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
+	const popoverId = `dc-menu-${Math.random().toString(36).slice(2, 8)}`;
 	let menuBtn: HTMLButtonElement | undefined;
 	let menuBody: HTMLDivElement | undefined;
 	let scrollWrap: HTMLDivElement | undefined;
@@ -204,23 +206,33 @@
 		});
 	});
 
-	function toggleMenu() {
+	function positionMenu() {
 		if (!menuBtn || !menuBody) return;
-		if (!menuBody.matches(':popover-open')) {
-			const rect = menuBtn.getBoundingClientRect();
-			menuBody.style.top = `${rect.bottom + 4}px`;
-			menuBody.style.left = `${rect.left}px`;
-		}
-		menuBody.togglePopover();
+		const rect = menuBtn.getBoundingClientRect();
+		menuBody.style.top = `${rect.bottom + 4}px`;
+		menuBody.style.left = `${rect.left}px`;
 	}
 </script>
 
 <div class="dc-layout" class:compact>
 	<div class="dc-chart-area">
-		<button class="dc-menu-btn" bind:this={menuBtn} onclick={toggleMenu} aria-label="Chart options">
+		<button
+			class="dc-menu-btn"
+			bind:this={menuBtn}
+			popovertarget={popoverId}
+			aria-label="Chart options"
+		>
 			<Icon name="chevronRight" width="12px" />
 		</button>
-		<div class="dc-menu-body" bind:this={menuBody} popover="auto">
+		<div
+			id={popoverId}
+			class="dc-menu-body"
+			bind:this={menuBody}
+			popover="auto"
+			onbeforetoggle={(e: ToggleEvent) => {
+				if (e.newState === 'open') positionMenu();
+			}}
+		>
 			<label class="dc-menu-option">
 				<input
 					type="checkbox"
@@ -239,7 +251,7 @@
 					<div class="dc-col">
 						<div class="dc-bar-area">
 							{#if col.total > 0}
-								<Popover position="below" width="250px" padding="0" fixed={true}>
+								<Popover position="below" width="200px" padding="0" fixed={true}>
 									<div class="dc-bar">
 										{#each col.segments as seg (seg.key)}
 											<div
@@ -296,7 +308,7 @@
 	</div>
 	<div class="dc-side">
 		{#if historyKeySegments.length > 0}
-			<div class="dc-key">
+			<div class="dc-key info-box">
 				{#each historyKeySegments as seg (seg.key)}
 					<span class="dc-key-item">
 						<span class="dc-swatch" style="background:{seg.color}"></span>
@@ -306,9 +318,20 @@
 				{/each}
 			</div>
 		{/if}
-		<div class="dc-history-agent">
+		<div class="dc-history-agent info-box">
 			<div class="title">{Math.round(historyAgentPercent)}% by agents</div>
+			<div class="title" style:font-size="0.9rem">
+				{Math.round(historyTotalLines * (historyAgentPercent / 100)).toLocaleString()} lines by agents
+			</div>
 			<div class="subtitle">last {columns.length} day{columns.length === 1 ? '' : 's'}</div>
+			{#if projectId}
+				<div class="subtitle">
+					<a
+						class="dc-more-link"
+						href={resolve(`/local/projects/${encodeURIComponent(projectId)}/insights`)}>more...</a
+					>
+				</div>
+			{/if}
 		</div>
 	</div>
 </div>
@@ -393,19 +416,6 @@
 		padding-bottom: 0.5rem;
 	}
 
-	.dc-side > div {
-		background: #fbfbfb;
-		border-radius: 5px;
-		border: 0.5px solid var(--color-divider);
-		display: flex;
-		flex-direction: column;
-		flex-shrink: 0;
-		gap: 0.4rem;
-		min-width: 130px;
-		padding-top: 0.1rem;
-		padding: 0.7rem;
-	}
-
 	.dc-key {
 		display: flex;
 		flex-direction: column;
@@ -446,6 +456,15 @@
 	.dc-history-agent .subtitle {
 		font-size: 1em;
 		opacity: 0.8;
+	}
+
+	.dc-more-link {
+		text-decoration: none;
+		color: var(--link-color, #1f4cd1);
+	}
+
+	.dc-more-link:hover {
+		text-decoration: underline;
 	}
 
 	.dc-chart {

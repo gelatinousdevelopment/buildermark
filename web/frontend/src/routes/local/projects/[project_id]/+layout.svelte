@@ -39,15 +39,6 @@
 	onDestroy(() => {
 		navStore.projectName = null;
 	});
-
-	function getDomain(url: string): string {
-		try {
-			const parsedUrl = new URL(url);
-			return parsedUrl.hostname;
-		} catch {
-			return url;
-		}
-	}
 </script>
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
@@ -56,46 +47,57 @@
 	class="project-header"
 	style:display={page.url.pathname.endsWith(page.params.project_id || '') ? 'flex' : 'none'}
 >
-	{#if loading}
-		<p class="loading">Loading project...</p>
-	{:else if error}
-		<p class="error">{error}</p>
-	{:else if project}
-		<div class="chart-area">
-			{#if dailySummary.length > 0}
-				<DailyCommitsChart {dailySummary} {branch} compact={false} />
-			{/if}
-		</div>
-		<div class="details">
-			<div class="project-path">
-				<div class="value">{project.path}</div>
+	<div class="inner">
+		{#if loading}
+			<p class="loading">Loading project...</p>
+		{:else if error}
+			<p class="error">{error}</p>
+		{:else if project}
+			<div class="chart-area">
+				{#if dailySummary.length > 0}
+					<DailyCommitsChart
+						{dailySummary}
+						{branch}
+						projectId={page.params.project_id}
+						compact={false}
+					/>
+				{/if}
 			</div>
-			{#if project.localUser || project.localEmail}
+			<div class="details info-box">
+				<h3>{project.label}</h3>
 				<div class="project-path">
-					<div class="value">
-						{#if project.localUser && project.localEmail}
-							{project.localUser} &lt;{project.localEmail}&gt;
-						{:else}
-							{project.localUser || project.localEmail}
-						{/if}
-					</div>
+					<div class="value">{project.path}</div>
 				</div>
-			{/if}
-			{#if project.remoteUrl || project.remote}
-				<div class="project-path">
-					<div class="value">
-						{#if project.remoteUrl}
-							<a href={project.remoteUrl} target="_blank" rel="noopener noreferrer" class="bordered"
-								>{getDomain(project.remoteUrl)}</a
-							>
-						{:else}
-							{project.remote}
-						{/if}
+				{#if project.localUser || project.localEmail}
+					<div class="project-path">
+						<div class="value">
+							{#if project.localUser && project.localEmail}
+								{project.localUser} &lt;{project.localEmail}&gt;
+							{:else}
+								{project.localUser || project.localEmail}
+							{/if}
+						</div>
 					</div>
-				</div>
-			{/if}
-		</div>
-	{/if}
+				{/if}
+				{#if project.remoteUrl || project.remote}
+					<div class="project-path">
+						<div class="value">
+							{#if project.remoteUrl}
+								<a
+									href={project.remoteUrl}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="remote-link">{project.remoteUrl}</a
+								>
+							{:else}
+								{project.remote}
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
 </div>
 
 <div
@@ -107,13 +109,26 @@
 
 <style>
 	.project-header {
+		align-items: stretch;
 		background: var(--color-background-project-header);
 		border-bottom: 0.5px solid var(--color-divider);
 		display: flex;
-		gap: 1rem;
-		padding: 1rem;
-		align-items: center;
 		flex-direction: row;
+		gap: 1rem;
+		justify-content: center;
+		padding: 1rem;
+	}
+
+	.inner {
+		display: flex;
+		gap: 1rem;
+		flex: 1;
+		flex-wrap: wrap;
+		max-width: var(--content-width);
+	}
+
+	.inner > * {
+		height: calc(108px + 2rem);
 	}
 
 	.chart-area {
@@ -122,10 +137,17 @@
 	}
 
 	.project-header .details {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		flex-shrink: 0;
+		align-items: flex-start;
+		min-width: 20rem;
+		flex: 1;
+		height: 108px;
+	}
+
+	h3 {
+		font-size: 1.8rem;
+		font-weight: 300;
+		letter-spacing: 0.03rem;
+		margin: 0;
 	}
 
 	.project-path {
@@ -133,6 +155,15 @@
 		gap: 0.3rem;
 		font-size: 0.9rem;
 		margin: 0.3rem 0 0 0;
+	}
+
+	.remote-link {
+		text-decoration: none;
+		color: var(--link-color, #1f4cd1);
+	}
+
+	.remote-link:hover {
+		text-decoration: underline;
 	}
 
 	.content {
