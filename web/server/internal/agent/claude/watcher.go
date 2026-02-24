@@ -901,6 +901,8 @@ func parseZrateDisplay(display string) (int, string) {
 	switch {
 	case strings.HasPrefix(rest, "/bb:rate "):
 		rest = strings.TrimPrefix(rest, "/bb:rate ")
+	case strings.HasPrefix(rest, "/bbrate "):
+		rest = strings.TrimPrefix(rest, "/bbrate ")
 	case strings.HasPrefix(rest, "/bb "):
 		rest = strings.TrimPrefix(rest, "/bb ")
 	default:

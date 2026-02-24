@@ -1418,6 +1418,34 @@ func TestBackfillTitles(t *testing.T) {
 	}
 }
 
+// --- isZrateDisplay tests ---
+
+func TestIsZrateDisplay(t *testing.T) {
+	tests := []struct {
+		display string
+		want    bool
+	}{
+		{"/bb", true},
+		{"/bb 4", true},
+		{"/bb 4 great work", true},
+		{"/bb:rate", true},
+		{"/bb:rate 3 note", true},
+		{"/bbrate", true},
+		{"/bbrate 4", true},
+		{"/bbrate 3 some note", true},
+		{"/bbrate ", true},
+		{"hello", false},
+		{"/bbb", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := isZrateDisplay(tt.display)
+		if got != tt.want {
+			t.Errorf("isZrateDisplay(%q) = %v, want %v", tt.display, got, tt.want)
+		}
+	}
+}
+
 // --- parseZrateDisplay tests ---
 
 func TestParseZrateDisplay(t *testing.T) {
@@ -1433,6 +1461,10 @@ func TestParseZrateDisplay(t *testing.T) {
 		{"/bb abc", -1, ""},
 		{"/bb 6", -1, ""},
 		{"/bb -1", -1, ""},
+		{"/bbrate 4", 4, ""},
+		{"/bbrate 3 some note", 3, "some note"},
+		{"/bbrate ", -1, ""},
+		{"/bb:rate 4 nice", 4, "nice"},
 	}
 	for _, tt := range tests {
 		rating, note := parseZrateDisplay(tt.display)

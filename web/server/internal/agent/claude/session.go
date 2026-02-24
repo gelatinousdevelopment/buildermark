@@ -90,8 +90,8 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 // command invocation. Matches "/bb", "/bb 4", "/bb:rate", etc.
 func isZrateDisplay(display string) bool {
 	d := strings.TrimSpace(display)
-	return d == "/bb" || d == "/bb:rate" ||
-		strings.HasPrefix(d, "/bb ") || strings.HasPrefix(d, "/bb:rate ")
+	return d == "/bb" || d == "/bb:rate" || d == "/bbrate" ||
+		strings.HasPrefix(d, "/bb ") || strings.HasPrefix(d, "/bb:rate ") || strings.HasPrefix(d, "/bbrate ")
 }
 
 // searchHistory reads the last tailBytes of the history file and searches
