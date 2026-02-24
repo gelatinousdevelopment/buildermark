@@ -11,9 +11,10 @@
 	interface Props {
 		dailySummary: DailyCommitSummary[];
 		branch: string;
+		compact?: boolean;
 	}
 
-	let { dailySummary, branch }: Props = $props();
+	let { dailySummary, branch, compact = false }: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
 	let menuBtn: HTMLButtonElement | undefined;
 	let menuBody: HTMLDivElement | undefined;
@@ -214,7 +215,7 @@
 	}
 </script>
 
-<div class="dc-layout">
+<div class="dc-layout" class:compact>
 	<div class="dc-chart-area">
 		<button class="dc-menu-btn" bind:this={menuBtn} onclick={toggleMenu} aria-label="Chart options">
 			<Icon name="chevronRight" width="12px" />
@@ -389,7 +390,7 @@
 		flex-direction: row;
 		gap: 1rem;
 		align-items: stretch;
-		padding-bottom: 1.4rem;
+		padding-bottom: 0.5rem;
 	}
 
 	.dc-side > div {
@@ -596,5 +597,26 @@
 			flex-wrap: wrap;
 			gap: 0.5rem 0.75rem;
 		}
+	}
+
+	/* Compact mode overrides */
+	.dc-layout.compact .dc-bar-area {
+		height: 60px;
+	}
+
+	.dc-layout.compact .dc-side {
+		display: none;
+	}
+
+	.dc-layout.compact .dc-date {
+		display: none;
+	}
+
+	.dc-layout.compact .dc-menu-btn {
+		display: none;
+	}
+
+	.dc-layout.compact .dc-wrap {
+		padding-bottom: 0;
 	}
 </style>

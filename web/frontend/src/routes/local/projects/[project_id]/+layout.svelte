@@ -1,16 +1,19 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/state';
-	import { getProject } from '$lib/api';
-	import type { ProjectDetail } from '$lib/types';
+	import { getProject, listProjectCommitsPage } from '$lib/api';
+	import type { ProjectDetail, DailyCommitSummary } from '$lib/types';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
+	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 
 	let { children } = $props();
 
 	let project: ProjectDetail | null = $state(null);
 	let loading = $state(true);
 	let error: string | null = $state(null);
+	let dailySummary: DailyCommitSummary[] = $state([]);
+	let branch: string = $state('');
 
 	onMount(async () => {
 		try {
@@ -18,6 +21,14 @@
 			if (!projectId) throw new Error('Missing project ID');
 			project = await getProject(projectId);
 			navStore.projectName = project.label || project.path;
+
+			try {
+				const resp = await listProjectCommitsPage(projectId, 1, '', 1);
+				dailySummary = resp.dailySummary ?? [];
+				branch = resp.branch;
+			} catch {
+				// chart data is non-critical
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load project';
 		} finally {
@@ -50,31 +61,17 @@
 	{:else if error}
 		<p class="error">{error}</p>
 	{:else if project}
-		<!-- <div class="nav">
-			<h2>{project.label || project.path}</h2>
-			<a
-				href={'/local/projects/' + page.params.project_id + '/commits'}
-				class="link"
-				class:selected={page.url.pathname.includes('/commits')}>Commits</a
-			>
-			<a
-				href={'/local/projects/' + page.params.project_id + '/conversations'}
-				class="link"
-				class:selected={page.url.pathname.includes('/conversations')}>Conversations</a
-			>
+		<div class="chart-area">
+			{#if dailySummary.length > 0}
+				<DailyCommitsChart {dailySummary} {branch} compact={false} />
+			{/if}
 		</div>
-		{#if project.label}
-			<p class="project-path">{project.path}</p>
-		{/if} -->
-		<div class="title">
-			<h2>{project.label || project.path}</h2>
+		<div class="details">
 			<div class="project-path">
-				<!-- <div class="label">Local:</div> -->
 				<div class="value">{project.path}</div>
 			</div>
 			{#if project.localUser || project.localEmail}
 				<div class="project-path">
-					<!-- <div class="label">User:</div> -->
 					<div class="value">
 						{#if project.localUser && project.localEmail}
 							{project.localUser} &lt;{project.localEmail}&gt;
@@ -84,20 +81,19 @@
 					</div>
 				</div>
 			{/if}
-		</div>
-		<div class="details">
-			<div class="project-path">
-				<!-- <div class="label">Remote:</div> -->
-				<div class="value">
-					{#if project.remoteUrl}
-						<a href={project.remoteUrl} target="_blank" rel="noopener noreferrer" class="bordered"
-							>{getDomain(project.remoteUrl)}</a
-						>
-					{:else}
-						{project.remote}
-					{/if}
+			{#if project.remoteUrl || project.remote}
+				<div class="project-path">
+					<div class="value">
+						{#if project.remoteUrl}
+							<a href={project.remoteUrl} target="_blank" rel="noopener noreferrer" class="bordered"
+								>{getDomain(project.remoteUrl)}</a
+							>
+						{:else}
+							{project.remote}
+						{/if}
+					</div>
 				</div>
-			</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -114,23 +110,22 @@
 		background: var(--color-background-project-header);
 		border-bottom: 0.5px solid var(--color-divider);
 		display: flex;
-		flex-direction: column;
-		gap: 0rem;
+		gap: 1rem;
 		padding: 1rem;
 		align-items: center;
 		flex-direction: row;
 	}
 
-	.project-header .title {
-		flex: 1;
+	.chart-area {
+		margin-bottom: -0.5rem;
+		min-width: 0;
 	}
 
 	.project-header .details {
-	}
-
-	h2 {
-		line-height: 1;
-		margin: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		flex-shrink: 0;
 	}
 
 	.project-path {
@@ -138,10 +133,6 @@
 		gap: 0.3rem;
 		font-size: 0.9rem;
 		margin: 0.3rem 0 0 0;
-	}
-
-	.project-path .label {
-		font-weight: bold;
 	}
 
 	.content {

@@ -94,6 +94,7 @@
 	let internalPage = $state(1);
 	let internalBranch = $state('');
 	let internalUser = $state('');
+	let userDefaultApplied = false;
 	let initialized = $state(false);
 	let requestToken = 0;
 	let lastLoadKey = '';
@@ -110,7 +111,11 @@
 		if (syncPaginationWithUrl && browser) {
 			const params = new URLSearchParams(window.location.search);
 			internalPage = page ?? parsePositivePage(params.get('page'));
-			internalUser = params.get('user') ?? '';
+			const urlUser = params.get('user');
+			if (urlUser !== null) {
+				internalUser = urlUser;
+				userDefaultApplied = true;
+			}
 		} else {
 			internalPage = page ?? 1;
 		}
@@ -172,6 +177,19 @@
 			if (branch === undefined && !internalBranch && loaded.branch) {
 				internalBranch = loaded.branch;
 			}
+			// Default to the current git user on first load.
+			if (!userDefaultApplied && loaded.currentEmail) {
+				userDefaultApplied = true;
+				if (!internalUser) {
+					internalUser = loaded.currentEmail;
+					if (syncPaginationWithUrl && browser) {
+						const url = new URL(window.location.href);
+						url.searchParams.set('user', loaded.currentEmail);
+						window.history.replaceState(window.history.state, '', url);
+					}
+					return; // effect will re-fire with user filter
+				}
+			}
 			void loadIngestionStatus(branch ?? internalBranch);
 			if (onCommitsLoaded) {
 				onCommitsLoaded(loaded.commits.map((c) => c.commitHash));
@@ -220,11 +238,15 @@
 		if (branch === undefined) {
 			internalBranch = value;
 		}
-		// Reset author filter when branch changes (author may not exist on new branch).
-		internalUser = '';
+		// Reset author filter to current user when branch changes.
+		internalUser = data?.currentEmail ?? '';
 		if (syncPaginationWithUrl && browser) {
 			const url = new URL(window.location.href);
-			url.searchParams.delete('user');
+			if (internalUser) {
+				url.searchParams.set('user', internalUser);
+			} else {
+				url.searchParams.delete('user');
+			}
 			window.history.replaceState(window.history.state, '', url);
 		}
 		if (onBranchChange) {
@@ -236,6 +258,7 @@
 
 	function handleUserChange(event: Event) {
 		const value = (event.currentTarget as HTMLSelectElement).value;
+		userDefaultApplied = true;
 		internalUser = value;
 		if (syncPaginationWithUrl && browser) {
 			const url = new URL(window.location.href);
@@ -377,12 +400,20 @@
 				</tr>
 			</thead>
 		{/if}
-		<tbody onmouseleave={() => { if (enableRelationshipHover) relationshipCache.clearHover(); }}>
+		<tbody
+			onmouseleave={() => {
+				if (enableRelationshipHover) relationshipCache.clearHover();
+			}}
+		>
 			{#each visibleCommits as c (c.commitHash)}
 				<tr
-					class:relationship-highlight={enableRelationshipHover && relationshipCache.highlightedCommitHashes.has(c.commitHash)}
-					class:relationship-source={enableRelationshipHover && relationshipCache.hoveredCommitHash === c.commitHash}
-					onmouseenter={() => { if (enableRelationshipHover) relationshipCache.hoverCommit(projectId, c.commitHash); }}
+					class:relationship-highlight={enableRelationshipHover &&
+						relationshipCache.highlightedCommitHashes.has(c.commitHash)}
+					class:relationship-source={enableRelationshipHover &&
+						relationshipCache.hoveredCommitHash === c.commitHash}
+					onmouseenter={() => {
+						if (enableRelationshipHover) relationshipCache.hoverCommit(projectId, c.commitHash);
+					}}
 				>
 					{#if !compact}
 						<td class="timeline">
