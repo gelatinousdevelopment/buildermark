@@ -732,7 +732,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 
 		for _, e := range g.entries {
 			role := "user"
-			if e.Type == "assistant" || e.Type == "summary" || strings.TrimSpace(e.SourceToolAssistantUUID) != "" {
+			if isAssistantAuthoredHistoryEntry(e) {
 				role = "agent"
 			}
 

@@ -1585,6 +1585,43 @@ func TestConversationLogDedupDoesNotDropDuplicateContent(t *testing.T) {
 	}
 }
 
+func TestConversationLogSidechainUserEntryStoredAsAgent(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	projectPath := "/proj/sidechain"
+	sessionID := "sess-sidechain-role"
+
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "normal user prompt", Timestamp: 1000, SessionID: sessionID, Project: projectPath, Type: "user"},
+	})
+
+	dirName := "-proj-sidechain"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0o755); err != nil {
+		t.Fatalf("mkdir conv dir: %v", err)
+	}
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	sidechainLine := fmt.Sprintf(`{"type":"user","isSidechain":true,"userType":"external","agentId":"agent-123","timestamp":"2026-02-23T06:34:49.335Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"delegate this subtask"}}`, sessionID, projectPath)
+	if err := os.WriteFile(convPath, []byte(sidechainLine+"\n"), 0o644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	var role string
+	if err := database.QueryRow("SELECT role FROM messages WHERE conversation_id = ? AND content = ? LIMIT 1", sessionID, "delegate this subtask").Scan(&role); err != nil {
+		t.Fatalf("query sidechain role: %v", err)
+	}
+	if role != "agent" {
+		t.Errorf("role = %q, want %q", role, "agent")
+	}
+}
+
 // --- Summary entry tests ---
 
 func TestReadSummaryFromConversationFile(t *testing.T) {

@@ -28,6 +28,9 @@ type historyEntry struct {
 	Model                   string                   `json:"model"`
 	Summary                 string                   `json:"summary"`
 	SourceToolAssistantUUID string                   `json:"sourceToolAssistantUUID"`
+	IsSidechain             bool                     `json:"isSidechain"`
+	UserType                string                   `json:"userType"`
+	AgentID                 string                   `json:"agentId"`
 	Message                 historyEntryMessage      `json:"message"`
 	PastedContents          map[string]pastedContent `json:"pastedContents"`
 	RawJSON                 string                   `json:"-"`
@@ -172,7 +175,7 @@ func collectSessionEntries(home, path, sessionID string) []agent.Entry {
 		}
 
 		role := "user"
-		if entry.Type == "assistant" || entry.Type == "summary" || strings.TrimSpace(entry.SourceToolAssistantUUID) != "" {
+		if isAssistantAuthoredHistoryEntry(entry) {
 			role = "agent"
 		}
 
@@ -212,6 +215,18 @@ func historyEntryModel(e historyEntry) string {
 		return model
 	}
 	return ""
+}
+
+func isAssistantAuthoredHistoryEntry(entry historyEntry) bool {
+	if entry.Type == "assistant" || entry.Type == "summary" || strings.TrimSpace(entry.SourceToolAssistantUUID) != "" {
+		return true
+	}
+	// Claude can log assistant-generated subagent prompts as type=user entries.
+	// Treat these as agent turns to avoid misattribution in the UI.
+	return entry.Type == "user" &&
+		entry.IsSidechain &&
+		strings.EqualFold(strings.TrimSpace(entry.UserType), "external") &&
+		strings.TrimSpace(entry.AgentID) != ""
 }
 
 func extractModelFromJSONLine(line string) string {

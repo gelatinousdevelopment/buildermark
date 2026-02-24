@@ -20,6 +20,9 @@ type conversationEntry struct {
 	Cwd                     string `json:"cwd"`
 	Summary                 string `json:"summary"`
 	SourceToolAssistantUUID string `json:"sourceToolAssistantUUID"`
+	IsSidechain             bool   `json:"isSidechain"`
+	UserType                string `json:"userType"`
+	AgentID                 string `json:"agentId"`
 	PlanContent             string `json:"planContent"`
 	ToolUseResult           struct {
 		Content any `json:"content"`
@@ -273,6 +276,9 @@ func parseProjectConversationLine(line string) (historyEntry, bool) {
 		Model:                   strings.TrimSpace(entry.Message.Model),
 		Summary:                 strings.TrimSpace(entry.Summary),
 		SourceToolAssistantUUID: strings.TrimSpace(entry.SourceToolAssistantUUID),
+		IsSidechain:             entry.IsSidechain,
+		UserType:                strings.TrimSpace(entry.UserType),
+		AgentID:                 strings.TrimSpace(entry.AgentID),
 		RawJSON:                 line,
 	}, true
 }
@@ -310,7 +316,7 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 		role := "agent"
 		if entry.Type == "user" {
 			role = "user"
-			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" {
+			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" || isAssistantAuthoredConversationEntry(entry) {
 				// Claude logs tool_result as type=user; this is assistant-produced output.
 				role = "agent"
 			}
@@ -326,6 +332,13 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 	})
 
 	return result
+}
+
+func isAssistantAuthoredConversationEntry(entry conversationEntry) bool {
+	return strings.TrimSpace(entry.Type) == "user" &&
+		entry.IsSidechain &&
+		strings.EqualFold(strings.TrimSpace(entry.UserType), "external") &&
+		strings.TrimSpace(entry.AgentID) != ""
 }
 
 func listProjectConversationFiles(home string) []string {
