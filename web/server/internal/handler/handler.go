@@ -39,6 +39,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/commits", s.handleListProjectCommits)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commits", s.handleListProjectCommitsForProject)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commits/{commitHash}", s.handleGetProjectCommit)
+	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignored", s.handleSetProjectIgnored)
 	mux.HandleFunc("POST /api/v1/projects/{id}/label", s.handleSetProjectLabel)
 	mux.HandleFunc("POST /api/v1/projects/{id}/old-paths", s.handleSetProjectOldPaths)
@@ -100,7 +101,7 @@ func writeSuccess(w http.ResponseWriter, status int, data any) {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		if r.Method == http.MethodOptions {

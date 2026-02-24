@@ -536,6 +536,57 @@ func UpdateProjectLocalUser(ctx context.Context, db *sql.DB, projectID, localUse
 	return nil
 }
 
+// DeleteProject removes a project and all its associated data (conversations,
+// messages, ratings, commits, commit_agent_coverage, commit_sync_state).
+func DeleteProject(ctx context.Context, database *sql.DB, projectID string) error {
+	// Verify project exists.
+	var exists int
+	err := database.QueryRowContext(ctx, "SELECT 1 FROM projects WHERE id = ?", projectID).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("check project exists: %w", err)
+	}
+
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete ratings via conversation subquery.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM ratings WHERE conversation_id IN (SELECT id FROM conversations WHERE project_id = ?)", projectID); err != nil {
+		return fmt.Errorf("delete ratings: %w", err)
+	}
+	// Delete messages.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM messages WHERE project_id = ?", projectID); err != nil {
+		return fmt.Errorf("delete messages: %w", err)
+	}
+	// Delete conversations.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM conversations WHERE project_id = ?", projectID); err != nil {
+		return fmt.Errorf("delete conversations: %w", err)
+	}
+	// Delete commit_agent_coverage via commit subquery.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM commit_agent_coverage WHERE commit_id IN (SELECT id FROM commits WHERE project_id = ?)", projectID); err != nil {
+		return fmt.Errorf("delete commit_agent_coverage: %w", err)
+	}
+	// Delete commits.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM commits WHERE project_id = ?", projectID); err != nil {
+		return fmt.Errorf("delete commits: %w", err)
+	}
+	// Delete commit_sync_state.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM commit_sync_state WHERE project_id = ?", projectID); err != nil {
+		return fmt.Errorf("delete commit_sync_state: %w", err)
+	}
+	// Delete the project itself.
+	if _, err := tx.ExecContext(ctx, "DELETE FROM projects WHERE id = ?", projectID); err != nil {
+		return fmt.Errorf("delete project: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // UpdateProjectRemote sets the remote URL on a project.
 func UpdateProjectRemote(ctx context.Context, db *sql.DB, projectID, remote string) error {
 	res, err := db.ExecContext(ctx, "UPDATE projects SET remote = ? WHERE id = ?", remote, projectID)

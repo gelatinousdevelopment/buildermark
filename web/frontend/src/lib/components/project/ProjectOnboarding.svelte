@@ -33,16 +33,24 @@
 	}: Props = $props();
 
 	const trackingOptions = $derived(
-		detectedProjects.map(
-			(project): ProjectTrackingOption => ({
-				path: project.path,
-				label: project.label,
-				projectId: project.projectId,
-				tracked: project.tracked,
-				importable: true,
-				missingOnDisk: false
-			})
-		)
+		detectedProjects
+			.filter((project) => !project.tracked)
+			.map(
+				(project): ProjectTrackingOption => ({
+					path: project.path,
+					label: project.label,
+					projectId: project.projectId,
+					tracked: project.tracked,
+					importable: true,
+					missingOnDisk: false
+				})
+			)
+	);
+
+	const emptyMessage = $derived(
+		detectedProjects.length > 0 && trackingOptions.length === 0
+			? 'All detected projects are already tracked.'
+			: 'No detected projects found yet.'
 	);
 </script>
 
@@ -64,7 +72,7 @@
 			projects={trackingOptions}
 			loading={detectedLoading}
 			error={detectedError}
-			emptyMessage="No detected projects found yet."
+			{emptyMessage}
 			checkedPaths={selectedProjectPaths}
 			{selectedHistoryDays}
 			{historyDayOptions}

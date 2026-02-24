@@ -548,3 +548,77 @@ func TestGetProjectDetailNoConversations(t *testing.T) {
 		t.Errorf("expected 0 conversations, got %d", len(detail.Conversations))
 	}
 }
+
+func TestDeleteProject(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+	if _, err := InsertRating(ctx, db, "conv-1", 4, "good", ""); err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	if err := DeleteProject(ctx, db, pid); err != nil {
+		t.Fatalf("DeleteProject: %v", err)
+	}
+
+	// Verify project is gone.
+	detail, err := GetProjectDetail(ctx, db, pid)
+	if err != nil {
+		t.Fatalf("GetProjectDetail after delete: %v", err)
+	}
+	if detail != nil {
+		t.Error("expected nil project detail after delete")
+	}
+
+	// Verify conversations are gone.
+	var convCount int
+	if err := db.QueryRow("SELECT COUNT(*) FROM conversations WHERE project_id = ?", pid).Scan(&convCount); err != nil {
+		t.Fatalf("count conversations: %v", err)
+	}
+	if convCount != 0 {
+		t.Errorf("expected 0 conversations, got %d", convCount)
+	}
+
+	// Verify messages are gone.
+	var msgCount int
+	if err := db.QueryRow("SELECT COUNT(*) FROM messages WHERE project_id = ?", pid).Scan(&msgCount); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if msgCount != 0 {
+		t.Errorf("expected 0 messages, got %d", msgCount)
+	}
+
+	// Verify ratings are gone.
+	var ratCount int
+	if err := db.QueryRow("SELECT COUNT(*) FROM ratings WHERE conversation_id = 'conv-1'").Scan(&ratCount); err != nil {
+		t.Fatalf("count ratings: %v", err)
+	}
+	if ratCount != 0 {
+		t.Errorf("expected 0 ratings, got %d", ratCount)
+	}
+}
+
+func TestDeleteProjectNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	err := DeleteProject(ctx, db, "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent project")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}

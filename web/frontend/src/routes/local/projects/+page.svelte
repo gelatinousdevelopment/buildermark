@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { discoverImportableProjects, getProject, importProjects, listProjects } from '$lib/api';
+	import { getProject, listProjects } from '$lib/api';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
-	import ProjectOnboarding from '$lib/components/project/ProjectOnboarding.svelte';
-	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import type { ImportableProject, Project, ProjectDetail } from '$lib/types';
+	import type { Project, ProjectDetail } from '$lib/types';
 
 	type ProjectRow = {
 		project: Project;
@@ -20,20 +19,7 @@
 	let rows: ProjectRow[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
-	let detectedProjects: ImportableProject[] = $state([]);
-	let detectedLoading = $state(false);
-	let detectedError: string | null = $state(null);
-	let selectedProjectPaths: string[] = $state([]);
-	let historyImportDays = $state('90');
-	let savingSelection = $state(false);
-	let saveSelectionError: string | null = $state(null);
-	const historyDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
 
-	let importStatusMessage = $derived(
-		websocketStore.importStatus?.state === 'running'
-			? websocketStore.importStatus.message
-			: null
-	);
 	// Per-project relationship tracking for hover highlights.
 	const projectCommitHashes = new SvelteMap<string, string[]>();
 	const projectConversationIds = new SvelteMap<string, string[]>();
@@ -66,63 +52,15 @@
 		return projectName(a.project).localeCompare(projectName(b.project));
 	}
 
-	function toggleSelection(projectPath: string, checked: boolean) {
-		if (checked) {
-			selectedProjectPaths = selectedProjectPaths.includes(projectPath)
-				? selectedProjectPaths
-				: [...selectedProjectPaths, projectPath];
-		} else {
-			selectedProjectPaths = selectedProjectPaths.filter((path) => path !== projectPath);
-		}
-	}
-
-	function setHistoryImportDays(days: string) {
-		historyImportDays = days;
-	}
-
-	async function loadDetectedProjects() {
-		detectedLoading = true;
-		detectedError = null;
-		try {
-			const response = await discoverImportableProjects(30);
-			detectedProjects = response.projects.sort((a, b) =>
-				projectName(a).localeCompare(projectName(b))
-			);
-		} catch (e) {
-			detectedError = e instanceof Error ? e.message : 'Failed to load detected projects';
-		} finally {
-			detectedLoading = false;
-		}
-	}
-
-	async function startTrackingSelected() {
-		if (selectedProjectPaths.length === 0) return;
-		savingSelection = true;
-		saveSelectionError = null;
-		websocketStore.clearImportStatus();
-		try {
-			await importProjects(selectedProjectPaths, historyImportDays);
-			// Import runs async on the server; wait for completion via WebSocket.
-			const result = await websocketStore.waitForImportComplete();
-			if (result.state === 'error') {
-				saveSelectionError = result.message;
-			} else {
-				selectedProjectPaths = [];
-				await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
-			}
-		} catch (e) {
-			saveSelectionError = e instanceof Error ? e.message : 'Failed to import selected projects';
-		} finally {
-			savingSelection = false;
-			websocketStore.clearImportStatus();
-		}
-	}
-
 	async function loadTrackedRows() {
 		loading = true;
 		error = null;
 		try {
 			const projects = (await listProjects(false)).filter((project) => project.gitId);
+			if (projects.length === 0) {
+				goto(resolve('/local/projects/add'));
+				return;
+			}
 			const loadedRows = await Promise.all(
 				projects.map(async (project): Promise<ProjectRow> => {
 					try {
@@ -154,8 +92,8 @@
 		}
 	}
 
-	onMount(async () => {
-		await Promise.all([loadTrackedRows(), loadDetectedProjects()]);
+	onMount(() => {
+		loadTrackedRows();
 	});
 </script>
 
@@ -164,21 +102,6 @@
 		<p class="loading">Loading projects...</p>
 	{:else if error}
 		<p class="error">{error}</p>
-	{:else if rows.length === 0}
-		<ProjectOnboarding
-			{detectedProjects}
-			{detectedLoading}
-			{detectedError}
-			{selectedProjectPaths}
-			selectedHistoryDays={historyImportDays}
-			{historyDayOptions}
-			{savingSelection}
-			{saveSelectionError}
-			{importStatusMessage}
-			onToggleSelection={toggleSelection}
-			onHistoryDaysChange={setHistoryImportDays}
-			onStartTrackingSelected={startTrackingSelected}
-		/>
 	{:else}
 		<div class="projects">
 			{#each rows as row, index (row.project.id)}
@@ -191,11 +114,6 @@
 						</div>
 						<div class="right">
 							<div class="path">{row.project.path}</div>
-							<!-- <a
-								href={resolve('/local/projects/[project_id]/settings', {
-									project_id: row.project.id
-								})}><Icon name="gear" width="14px" /></a
-							> -->
 						</div>
 					</div>
 					<div class="content">
@@ -291,11 +209,6 @@
 		gap: 0.5rem;
 	}
 
-	/*.project .meta .right a:not(:hover) {
-		color: var(--color-text);
-		text-decoration: none;
-	}*/
-
 	.project:has(.content:hover) {
 		.meta .label {
 			opacity: 1;
@@ -326,14 +239,11 @@
 	}
 
 	.project:has(.content:hover) .meta .label::before {
-		/*border: 0.5px solid var(--accent-color);*/
 		width: 100%;
 	}
 
 	.project .content:hover {
-		/*background: #f8f8f8;*/
 		border-color: var(--accent-color-divider);
-		/*box-shadow: 1px 2px 0px var(--accent-color-divider);*/
 		box-shadow: 1px 1px 7px rgb(0, 0, 0, 0.1);
 	}
 

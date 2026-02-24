@@ -6,6 +6,7 @@
 	import gearSvg from '$lib/icons/gear.svg?raw';
 	import branchSvg from '$lib/icons/branch.svg?raw';
 	import externalLinkSvg from '$lib/icons/externalLink.svg?raw';
+	import plusSvg from '$lib/icons/plus.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -19,7 +20,8 @@
 		wrench: wrenchSvg,
 		gear: gearSvg,
 		branch: branchSvg,
-		externalLink: externalLinkSvg
+		externalLink: externalLinkSvg,
+		plus: plusSvg
 	};
 </script>
 

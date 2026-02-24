@@ -8,5 +8,6 @@ declare global {
 		| 'wrench'
 		| 'gear'
 		| 'branch'
-		| 'externalLink';
+		| 'externalLink'
+		| 'plus';
 }

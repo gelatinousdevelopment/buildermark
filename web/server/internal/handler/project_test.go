@@ -709,3 +709,63 @@ func TestSetProjectIgnoreDiffPathsNotFound(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
+
+func TestDeleteProject(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-1", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	req := httptest.NewRequest("DELETE", "/api/v1/projects/"+pid, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !env.OK {
+		t.Error("ok = false, want true")
+	}
+
+	// Verify project is gone.
+	projects, err := db.ListProjects(ctx, s.DB, false)
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Errorf("expected 0 projects after delete, got %d", len(projects))
+	}
+}
+
+func TestDeleteProjectNotFound(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	req := httptest.NewRequest("DELETE", "/api/v1/projects/nonexistent", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if env.OK {
+		t.Error("ok = true, want false for not found project")
+	}
+}

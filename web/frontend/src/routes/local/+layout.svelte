@@ -65,11 +65,6 @@
 		<hr class="divider" />
 		<section>
 			<nav class="breadcrumbs">
-				<!-- <a
-					href={resolve('/local/projects')}
-					class="item"
-					class:selected={page.route.id === '/local/projects'}>Projects</a
-				> -->
 				{#if projectId}
 					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<!-- <a
@@ -93,6 +88,18 @@
 							class:selected={isTabSelected(tab.segment)}>{tab.label}</a
 						>
 					{/each}
+				{:else}
+					<a
+						href={resolve('/local/projects')}
+						class="item"
+						class:selected={page.route.id === '/local/projects'}>Projects</a
+					>
+					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
+					<a
+						href={resolve('/local/projects/add')}
+						class="item"
+						class:selected={page.route.id === '/local/projects/add'}>Import</a
+					>
 				{/if}
 			</nav>
 		</section>
@@ -116,8 +123,8 @@
 		<section>
 			<nav class="right">
 				<button class="item" title="Server: {websocketStore.connectionState}"
-				><div class="status-dot {websocketStore.connectionState}"></div></button
-			>
+					><div class="status-dot {websocketStore.connectionState}"></div></button
+				>
 			</nav>
 		</section>
 	</header>

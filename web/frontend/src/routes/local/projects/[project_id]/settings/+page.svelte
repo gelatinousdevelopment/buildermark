@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
+		deleteProject,
 		getProject,
 		setProjectOldPaths,
 		setProjectIgnoreDiffPaths,
@@ -44,6 +47,18 @@
 	let error: string | null = $state(null);
 	let notice: string | null = $state(null);
 
+	let showDeleteModal = $state(false);
+	let deleteConfirmName = $state('');
+	let deleting = $state(false);
+	let deleteError: string | null = $state(null);
+
+	function getProjectDisplayName(): string {
+		if (!project) return '';
+		return project.label || project.path;
+	}
+
+	let projectDisplayName = $derived(getProjectDisplayName());
+
 	async function load() {
 		const id = page.params.project_id;
 		if (!id) throw new Error('Missing project ID');
@@ -67,6 +82,20 @@
 			error = e instanceof Error ? e.message : 'Failed to save settings';
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function confirmDeleteProject() {
+		if (!project) return;
+		deleting = true;
+		deleteError = null;
+		try {
+			await deleteProject(project.id);
+			goto(resolve('/local/projects'));
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : 'Failed to delete project';
+		} finally {
+			deleting = false;
 		}
 	}
 
@@ -144,8 +173,55 @@
 		{#if error}
 			<p class="error">{error}</p>
 		{/if}
+
+		<div class="danger-zone">
+			<h2>Danger Zone</h2>
+			<p class="danger-description">
+				Permanently delete this project and all its data, including conversations, messages,
+				ratings, and commits.
+			</p>
+			<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button>
+		</div>
 	{/if}
 </div>
+
+{#if showDeleteModal}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="modal-overlay" onkeydown={(e) => e.key === 'Escape' && (showDeleteModal = false)}>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="modal-backdrop" onclick={() => (showDeleteModal = false)}></div>
+		<div class="modal-dialog">
+			<h3>Delete Project</h3>
+			<p>
+				This will permanently delete <strong>{projectDisplayName}</strong> and all associated data. This
+				action cannot be undone.
+			</p>
+			<label class="field-label" for="delete-confirm">
+				Type <strong>{projectDisplayName}</strong> to confirm:
+			</label>
+			<input
+				id="delete-confirm"
+				type="text"
+				bind:value={deleteConfirmName}
+				placeholder={projectDisplayName}
+				autocomplete="off"
+			/>
+			{#if deleteError}
+				<p class="error">{deleteError}</p>
+			{/if}
+			<div class="modal-actions">
+				<button class="btn-sm" onclick={() => (showDeleteModal = false)}>Cancel</button>
+				<button
+					class="btn-danger"
+					disabled={deleteConfirmName !== projectDisplayName || deleting}
+					onclick={confirmDeleteProject}
+				>
+					{deleting ? 'Deleting...' : 'Delete Project'}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.page {
@@ -269,5 +345,96 @@
 	.notice {
 		font-size: 0.85rem;
 		color: #1d6d1d;
+	}
+
+	.danger-zone {
+		margin-top: 2.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid #e5c0c0;
+	}
+
+	.danger-zone h2 {
+		margin: 0 0 0.5rem;
+		font-size: 1rem;
+		color: #b91c1c;
+	}
+
+	.danger-description {
+		margin: 0 0 0.75rem;
+		font-size: 0.85rem;
+		color: #777;
+	}
+
+	.btn-danger {
+		padding: 0.35rem 0.8rem;
+		font-size: 0.8rem;
+		line-height: 1.4;
+		border: 1px solid #dc2626;
+		border-radius: 3px;
+		background: #dc2626;
+		color: #fff;
+		cursor: pointer;
+	}
+
+	.btn-danger:hover {
+		background: #b91c1c;
+		border-color: #b91c1c;
+	}
+
+	.btn-danger:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+
+	.modal-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 1000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.modal-backdrop {
+		position: absolute;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.4);
+	}
+
+	.modal-dialog {
+		position: relative;
+		background: #fff;
+		border-radius: 8px;
+		padding: 1.5rem;
+		max-width: 440px;
+		width: 90%;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+	}
+
+	.modal-dialog h3 {
+		margin: 0 0 0.75rem;
+		font-size: 1.1rem;
+	}
+
+	.modal-dialog p {
+		margin: 0 0 0.75rem;
+		font-size: 0.9rem;
+		line-height: 1.45;
+	}
+
+	.modal-dialog input {
+		width: 100%;
+		padding: 0.4rem 0.6rem;
+		font-size: 0.85rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		box-sizing: border-box;
+	}
+
+	.modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		margin-top: 1rem;
 	}
 </style>

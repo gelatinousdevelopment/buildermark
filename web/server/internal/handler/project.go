@@ -324,6 +324,26 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "project id is required")
+		return
+	}
+
+	if err := db.DeleteProject(r.Context(), s.DB, id); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		log.Printf("error deleting project: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete project")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, nil)
+}
+
 func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.Request) {
 	if !requireJSON(w, r) {
 		return

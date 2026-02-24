@@ -50,6 +50,10 @@ export function getLocalSettings(): Promise<LocalSettings> {
 	return api('/api/v1/local/settings');
 }
 
+export function deleteProject(id: string): Promise<void> {
+	return api(`/api/v1/projects/${id}`, { method: 'DELETE' });
+}
+
 export function setProjectIgnored(id: string, ignored: boolean): Promise<void> {
 	return api(`/api/v1/projects/${id}/ignored`, {
 		method: 'POST',
