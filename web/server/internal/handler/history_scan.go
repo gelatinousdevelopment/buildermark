@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/davidcann/zrate/web/server/internal/agent"
@@ -111,6 +112,29 @@ func (s *Server) runHistoryScanJob(since time.Time, agentName string) {
 
 	broadcast("running", "Scanning conversation history...", 0)
 
+	// Only scan conversations belonging to existing projects.
+	projectsByPath, err := listProjectsByPath(ctx, s.DB)
+	if err != nil {
+		broadcast("error", "Failed to list projects", 0)
+		return
+	}
+	if len(projectsByPath) == 0 {
+		broadcast("complete", "Imported 0 conversation entries", 0)
+		return
+	}
+
+	// Collect all known paths: current paths plus old_paths aliases.
+	paths := make([]string, 0, len(projectsByPath))
+	for p, proj := range projectsByPath {
+		paths = append(paths, p)
+		for _, op := range strings.Split(proj.OldPaths, "\n") {
+			op = strings.TrimSpace(op)
+			if op != "" {
+				paths = append(paths, op)
+			}
+		}
+	}
+
 	// Rate-limited progress: report file names no faster than every 50ms.
 	var lastProgress time.Time
 	progress := func(filename string) {
@@ -122,7 +146,7 @@ func (s *Server) runHistoryScanJob(since time.Time, agentName string) {
 		broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)), 0)
 	}
 
-	count := s.scanWatchersSincePaths(ctx, since, agentName, nil, progress)
+	count := s.scanWatchersSincePaths(ctx, since, agentName, paths, progress)
 
 	broadcast("complete", fmt.Sprintf("Imported %d conversation entries", count), count)
 }

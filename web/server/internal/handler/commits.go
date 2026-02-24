@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"net/http"
 	"os"
@@ -41,7 +42,7 @@ var defaultMessageWindowMs = func() int64 {
 }()
 
 // commitDetailCache caches the attribution result for commit detail pages.
-// Key: "projectID:commitHash:coverageVersion"
+// Key includes project, commit, coverage version, and active ignore patterns.
 type commitDetailCacheEntry struct {
 	files         []commitFileCoverage
 	agentSegments []agentCoverageSegment
@@ -61,6 +62,26 @@ var (
 	commitDetailCache    = make(map[string]*commitDetailCacheEntry)
 	commitDetailCacheTTL = 5 * time.Minute
 )
+
+func commitDetailCacheKey(projectID, commitHash string, ignorePatterns []string) string {
+	h := fnv.New64a()
+	for _, p := range ignorePatterns {
+		h.Write([]byte(p))
+		h.Write([]byte{0})
+	}
+	return fmt.Sprintf("%s:%s:%d:%x", projectID, commitHash, currentCommitCoverageVersion, h.Sum64())
+}
+
+func clearCommitDetailCacheForProject(projectID string) {
+	commitDetailCacheMu.Lock()
+	defer commitDetailCacheMu.Unlock()
+	prefix := projectID + ":"
+	for key := range commitDetailCache {
+		if strings.HasPrefix(key, prefix) {
+			delete(commitDetailCache, key)
+		}
+	}
+}
 
 type projectCommitsResponse struct {
 	Branch       string                  `json:"branch"`
@@ -543,7 +564,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	detailAdded, detailRemoved := countDiffAddedRemoved(commitDiff)
 
 	// Check attribution cache for immutable commits.
-	detailCacheKey := fmt.Sprintf("%s:%s:%d", project.ID, commit.Hash, currentCommitCoverageVersion)
+	detailCacheKey := commitDetailCacheKey(project.ID, commit.Hash, ignorePatterns)
 	var files []commitFileCoverage
 	var agentSegments []agentCoverageSegment
 	var contribMessages []commitContributionMessage

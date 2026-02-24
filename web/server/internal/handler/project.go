@@ -425,6 +425,7 @@ func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.
 	}
 
 	if changed {
+		clearCommitDetailCacheForProject(id)
 		s.enqueueProjectCoverageRecompute(id, "ignore_diff_paths_changed", changedPatterns)
 	}
 
@@ -486,6 +487,7 @@ func (s *Server) handleSetProjectIgnoreDefaultDiffPaths(w http.ResponseWriter, r
 	}
 
 	if changed {
+		clearCommitDetailCacheForProject(id)
 		s.enqueueProjectCoverageRecompute(id, "ignore_default_diff_paths_changed", changedPatterns)
 	}
 

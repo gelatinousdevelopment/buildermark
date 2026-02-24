@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/davidcann/zrate/web/server/internal/agent"
+	"github.com/davidcann/zrate/web/server/internal/db"
 )
 
 // mockWatcher implements agent.Watcher for testing.
@@ -56,6 +57,15 @@ func setupTestServerWithWatcher(t *testing.T, watchers ...*mockWatcher) *Server 
 	}
 	s.Agents = reg
 	return s
+}
+
+// addTestProject inserts a project into the test DB so that history scan has paths to scan.
+func addTestProject(t *testing.T, s *Server, path string) {
+	t.Helper()
+	_, err := db.EnsureProject(context.Background(), s.DB, path)
+	if err != nil {
+		t.Fatalf("ensure test project %q: %v", path, err)
+	}
 }
 
 // waitForImportUnlock waits until the server's importMu is available, indicating
@@ -108,6 +118,7 @@ func TestHistoryScan(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			w := &mockWatcher{name: "claude"}
 			s := setupTestServerWithWatcher(t, w)
+			addTestProject(t, s, "/tmp/test-project")
 			handler := s.Routes()
 
 			contentType := "application/json"
@@ -162,6 +173,7 @@ func TestHistoryScanNoAgents(t *testing.T) {
 func TestHistoryScanStartedResponse(t *testing.T) {
 	w := &mockWatcher{name: "claude"}
 	s := setupTestServerWithWatcher(t, w)
+	addTestProject(t, s, "/tmp/test-project")
 	handler := s.Routes()
 
 	body, _ := json.Marshal(map[string]any{"timeframe": "168h"})
@@ -188,11 +200,11 @@ func TestHistoryScanStartedResponse(t *testing.T) {
 		t.Error("started should be true")
 	}
 
-	// Wait for the background scan to finish and verify watcher was called.
+	// Wait for the background scan to finish and verify watcher was called via ScanPathsSince.
 	waitForImportUnlock(s)
-	scanCount, _, _, _ := w.snapshot()
-	if scanCount != 1 {
-		t.Errorf("watcher scanCount = %d, want 1", scanCount)
+	_, scanPathsCount, _, _ := w.snapshot()
+	if scanPathsCount != 1 {
+		t.Errorf("watcher scanPathsCount = %d, want 1", scanPathsCount)
 	}
 }
 
@@ -200,6 +212,7 @@ func TestHistoryScanMultipleWatchers(t *testing.T) {
 	w1 := &mockWatcher{name: "claude"}
 	w2 := &mockWatcher{name: "codex"}
 	s := setupTestServerWithWatcher(t, w1, w2)
+	addTestProject(t, s, "/tmp/test-project")
 	handler := s.Routes()
 
 	// No agent filter — should scan all.
@@ -216,13 +229,13 @@ func TestHistoryScanMultipleWatchers(t *testing.T) {
 	// Wait for the background scan to complete.
 	waitForImportUnlock(s)
 
-	scanCount1, _, _, _ := w1.snapshot()
-	scanCount2, _, _, _ := w2.snapshot()
-	if scanCount1 != 1 {
-		t.Errorf("w1 scanCount = %d, want 1", scanCount1)
+	_, pathsCount1, _, _ := w1.snapshot()
+	_, pathsCount2, _, _ := w2.snapshot()
+	if pathsCount1 != 1 {
+		t.Errorf("w1 scanPathsCount = %d, want 1", pathsCount1)
 	}
-	if scanCount2 != 1 {
-		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
+	if pathsCount2 != 1 {
+		t.Errorf("w2 scanPathsCount = %d, want 1", pathsCount2)
 	}
 }
 
@@ -230,6 +243,7 @@ func TestHistoryScanSpecificAgent(t *testing.T) {
 	w1 := &mockWatcher{name: "claude"}
 	w2 := &mockWatcher{name: "codex"}
 	s := setupTestServerWithWatcher(t, w1, w2)
+	addTestProject(t, s, "/tmp/test-project")
 	handler := s.Routes()
 
 	body, _ := json.Marshal(map[string]any{"agent": "codex"})
@@ -245,13 +259,40 @@ func TestHistoryScanSpecificAgent(t *testing.T) {
 	// Wait for the background scan to complete.
 	waitForImportUnlock(s)
 
-	scanCount1, _, _, _ := w1.snapshot()
-	scanCount2, _, _, _ := w2.snapshot()
-	if scanCount1 != 0 {
-		t.Errorf("w1 scanCount = %d, want 0 (should not be scanned)", scanCount1)
+	_, pathsCount1, _, _ := w1.snapshot()
+	_, pathsCount2, _, _ := w2.snapshot()
+	if pathsCount1 != 0 {
+		t.Errorf("w1 scanPathsCount = %d, want 0 (should not be scanned)", pathsCount1)
 	}
-	if scanCount2 != 1 {
-		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
+	if pathsCount2 != 1 {
+		t.Errorf("w2 scanPathsCount = %d, want 1", pathsCount2)
+	}
+}
+
+func TestHistoryScanNoProjects(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	// No projects added — scan should complete immediately with 0 entries.
+	handler := s.Routes()
+
+	body, _ := json.Marshal(map[string]any{})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+
+	waitForImportUnlock(s)
+
+	scanCount, scanPathsCount, _, _ := w.snapshot()
+	if scanCount != 0 {
+		t.Errorf("watcher scanCount = %d, want 0 (no projects to scan)", scanCount)
+	}
+	if scanPathsCount != 0 {
+		t.Errorf("watcher scanPathsCount = %d, want 0 (no projects to scan)", scanPathsCount)
 	}
 }
 

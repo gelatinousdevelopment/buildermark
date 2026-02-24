@@ -655,6 +655,53 @@ func TestProjectCoverageRecomputeCoalescesPerProject(t *testing.T) {
 	}
 }
 
+func TestCommitDetailCacheKeyIncludesIgnorePatterns(t *testing.T) {
+	k1 := commitDetailCacheKey("p1", "abc", []string{"CHANGELOG.md"})
+	k2 := commitDetailCacheKey("p1", "abc", []string{"README.md"})
+	if k1 == k2 {
+		t.Fatalf("cache keys should differ when ignore patterns differ: %q == %q", k1, k2)
+	}
+}
+
+func TestSetProjectIgnoreDiffPathsClearsCommitDetailCacheForProject(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/cache-clear-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	otherProjectID, err := db.EnsureProject(ctx, s.DB, "/tmp/cache-clear-other")
+	if err != nil {
+		t.Fatalf("EnsureProject other: %v", err)
+	}
+
+	commitDetailCacheMu.Lock()
+	commitDetailCache = map[string]*commitDetailCacheEntry{
+		commitDetailCacheKey(projectID, "h1", []string{"README.md"}):      {fetchedAt: time.Now()},
+		commitDetailCacheKey(otherProjectID, "h2", []string{"README.md"}): {fetchedAt: time.Now()},
+	}
+	commitDetailCacheMu.Unlock()
+
+	body, _ := json.Marshal(map[string]string{"ignoreDiffPaths": "CHANGELOG.md"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ignore-diff-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	commitDetailCacheMu.RLock()
+	defer commitDetailCacheMu.RUnlock()
+	for key := range commitDetailCache {
+		if strings.HasPrefix(key, projectID+":") {
+			t.Fatalf("cache key %q should have been cleared for project %s", key, projectID)
+		}
+	}
+}
+
 func TestSetProjectOldPaths(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
