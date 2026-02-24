@@ -6,6 +6,10 @@ export function shortId(id: string, len = 12): string {
 	return id.length > len ? id.slice(0, len) + '…' : id;
 }
 
+export function singleLineTitle(title: string): string {
+	return title.replace(/\r?\n/g, ' ').trim();
+}
+
 export function fmtTime(t: string | number): string {
 	const d = new Date(t);
 	return d.toLocaleString();

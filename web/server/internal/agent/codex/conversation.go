@@ -10,7 +10,7 @@ import (
 )
 
 // maxTitleLen is the maximum character length for a title derived from the first prompt.
-const maxTitleLen = 100
+const maxTitleLen = 1000
 
 // readSessionTitle returns a title for the given session by finding the rollout
 // file and extracting the first user prompt. Codex doesn't have a
@@ -94,32 +94,11 @@ func readSessionTitle(sessionsDir, threadID string) string {
 	return ""
 }
 
-// maxHeadingScanLines is how many lines into the prompt we look for a markdown heading.
-const maxHeadingScanLines = 10
-
-// titleFromPrompt extracts a title from a user prompt. If a first-level
-// markdown heading (# Heading) appears in the first few lines, that heading
-// text is used. Otherwise the first line is used. The result is truncated to
-// maxTitleLen characters.
+// titleFromPrompt extracts a title from a user prompt by taking the first
+// maxTitleLen characters from the prompt (including new lines), appending an
+// ellipsis when truncated.
 func titleFromPrompt(text string) string {
-	lines := strings.SplitN(text, "\n", maxHeadingScanLines+1)
-	limit := len(lines)
-	if limit > maxHeadingScanLines {
-		limit = maxHeadingScanLines
-	}
-
-	for _, line := range lines[:limit] {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "# ") {
-			title := strings.TrimSpace(trimmed[2:])
-			if title != "" {
-				return truncateTitle(title)
-			}
-		}
-	}
-
-	first := strings.TrimSpace(lines[0])
-	return truncateTitle(first)
+	return truncateTitle(strings.TrimSpace(text))
 }
 
 func truncateTitle(s string) string {

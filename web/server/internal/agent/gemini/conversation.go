@@ -11,7 +11,7 @@ import (
 )
 
 // maxTitleLen is the maximum character length for a title derived from the first prompt.
-const maxTitleLen = 100
+const maxTitleLen = 1000
 
 // readSessionTitle returns a title for the given session by extracting the
 // first user prompt from the session file.
@@ -31,28 +31,8 @@ func readSessionTitle(path string) string {
 	return ""
 }
 
-// maxHeadingScanLines is how many lines into the prompt we look for a markdown heading.
-const maxHeadingScanLines = 10
-
 func titleFromPrompt(text string) string {
-	lines := strings.SplitN(text, "\n", maxHeadingScanLines+1)
-	limit := len(lines)
-	if limit > maxHeadingScanLines {
-		limit = maxHeadingScanLines
-	}
-
-	for _, line := range lines[:limit] {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "# ") {
-			title := strings.TrimSpace(trimmed[2:])
-			if title != "" {
-				return truncateTitle(title)
-			}
-		}
-	}
-
-	first := strings.TrimSpace(lines[0])
-	return truncateTitle(first)
+	return truncateTitle(strings.TrimSpace(text))
 }
 
 func truncateTitle(s string) string {

@@ -327,8 +327,8 @@ func TestReadSessionTitle(t *testing.T) {
 	})
 
 	title := readSessionTitle(path)
-	if title != "Fix Build" {
-		t.Errorf("title = %q, want %q", title, "Fix Build")
+	if title != "# Fix Build\n\nPlease help" {
+		t.Errorf("title = %q, want %q", title, "# Fix Build\n\nPlease help")
 	}
 }
 

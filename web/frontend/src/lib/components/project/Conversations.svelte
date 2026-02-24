@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { getProject, getConversationsBatchDetail } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
-	import { shortId, formatRelativeOrShortDate, formatFullDateTitle } from '$lib/utils';
+	import {
+		shortId,
+		formatRelativeOrShortDate,
+		formatFullDateTitle,
+		singleLineTitle
+	} from '$lib/utils';
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import RatingStars from '$lib/components/RatingStars.svelte';
 	import Popover from '$lib/components/Popover.svelte';
@@ -305,13 +310,21 @@
 				</tr>
 			</thead>
 		{/if}
-		<tbody onmouseleave={() => { if (enableRelationshipHover) relationshipCache.clearHover(); }}>
+		<tbody
+			onmouseleave={() => {
+				if (enableRelationshipHover) relationshipCache.clearHover();
+			}}
+		>
 			{#each visibleConversations as conv (conv.id)}
 				{@const detail = detailData.get(conv.id)}
 				<tr
-					class:relationship-highlight={enableRelationshipHover && relationshipCache.highlightedConversationIds.has(conv.id)}
-					class:relationship-source={enableRelationshipHover && relationshipCache.hoveredConversationId === conv.id}
-					onmouseenter={() => { if (enableRelationshipHover) relationshipCache.hoverConversation(projectId, conv.id); }}
+					class:relationship-highlight={enableRelationshipHover &&
+						relationshipCache.highlightedConversationIds.has(conv.id)}
+					class:relationship-source={enableRelationshipHover &&
+						relationshipCache.hoveredConversationId === conv.id}
+					onmouseenter={() => {
+						if (enableRelationshipHover) relationshipCache.hoverConversation(projectId, conv.id);
+					}}
 				>
 					{#if !compact}
 						<td class="date" title={formatFullDateTitle(conv.lastMessageTimestamp)}
@@ -325,7 +338,7 @@
 								id: conv.id
 							})}
 						>
-							{conv.title || shortId(conv.id)}
+							{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
 						</a>
 						{#if detailed && detail}
 							<div class="detail-messages">

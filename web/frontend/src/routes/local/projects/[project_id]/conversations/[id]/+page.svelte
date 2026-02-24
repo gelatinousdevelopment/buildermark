@@ -12,6 +12,7 @@
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
 	import AgentTag from '$lib/components/AgentTag.svelte';
+	import { singleLineTitle } from '$lib/utils';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -211,7 +212,7 @@
 		{:else if error}
 			<p class="error">{error}</p>
 		{:else if conversation}
-			<h2>{conversation.title || conversation.id}</h2>
+			<h2>{(conversation.title && singleLineTitle(conversation.title)) || conversation.id}</h2>
 			<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
 			{#if conversationModels.length > 0}
 				<div class="models-summary">

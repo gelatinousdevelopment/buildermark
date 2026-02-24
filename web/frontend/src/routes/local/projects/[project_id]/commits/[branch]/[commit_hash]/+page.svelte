@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import { getProjectCommitDetail } from '$lib/api';
-	import { fmtTime } from '$lib/utils';
+	import { fmtTime, singleLineTitle } from '$lib/utils';
 	import type { ProjectCommitDetailResponse, AgentCoverageSegment } from '$lib/types';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
@@ -281,7 +281,8 @@
 		</div>
 		{#if detail.attribution?.hasFallbackAttribution}
 			<p class="fallback-note">
-				Attribution includes fallback copied-line matching ({detail.attribution.fallbackMatchedLines}
+				Attribution includes fallback copied-line matching ({detail.attribution
+					.fallbackMatchedLines}
 				lines). Exact matched-message lines: {detail.attribution.exactMatchedLines}.
 			</p>
 		{/if}
@@ -317,7 +318,7 @@
 							project_id: detail.commit.projectId,
 							id: message.conversationId
 						})}
-						linkLabel={`Conversation: ${message.conversationTitle || message.conversationId}`}
+						linkLabel={`Conversation: ${(message.conversationTitle && singleLineTitle(message.conversationTitle)) || message.conversationId}`}
 						onToggle={msgExpanded ? () => toggleExpanded(message.id) : undefined}
 					/>
 				</div>
