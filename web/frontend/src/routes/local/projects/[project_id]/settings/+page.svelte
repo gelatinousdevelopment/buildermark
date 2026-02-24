@@ -10,6 +10,7 @@
 		setProjectIgnoreDiffPaths,
 		setProjectIgnoreDefaultDiffPaths
 	} from '$lib/api';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import type { ProjectDetail } from '$lib/types';
 
 	const defaultPaths = [
@@ -57,7 +58,17 @@
 		return project.label || project.path;
 	}
 
+	function getProjectID(): string {
+		return project ? project.id : '';
+	}
+
 	let projectDisplayName = $derived(getProjectDisplayName());
+	let projectID = $derived(getProjectID());
+	let recomputeStatusMessage = $derived(
+		projectID && websocketStore.importStatus?.message?.includes(projectID)
+			? websocketStore.importStatus.message
+			: null
+	);
 
 	async function load() {
 		const id = page.params.project_id;
@@ -73,11 +84,12 @@
 		saving = true;
 		error = null;
 		notice = null;
+		websocketStore.clearImportStatus();
 		try {
 			await setProjectOldPaths(project.id, oldPaths);
 			await setProjectIgnoreDiffPaths(project.id, ignoreDiffPaths);
 			await setProjectIgnoreDefaultDiffPaths(project.id, ignoreDefaultDiffPaths);
-			notice = 'Saved';
+			notice = 'Saved. Diff recompute started.';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to save settings';
 		} finally {
@@ -168,6 +180,9 @@
 			>
 			{#if notice}
 				<span class="notice">{notice}</span>
+			{/if}
+			{#if recomputeStatusMessage}
+				<span class="notice">{recomputeStatusMessage}</span>
 			{/if}
 		</div>
 		{#if error}

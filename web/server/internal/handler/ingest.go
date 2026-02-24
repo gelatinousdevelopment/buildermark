@@ -465,6 +465,17 @@ func recomputeCommitCoverageForProject(
 	group projectGroup,
 	branch string,
 ) (int, error) {
+	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, nil)
+}
+
+func recomputeCommitCoverageForProjectWithChangedPatterns(
+	ctx context.Context,
+	database *sql.DB,
+	repoProject *db.Project,
+	group projectGroup,
+	branch string,
+	changedPatterns []string,
+) (int, error) {
 	// Get branch hashes and query DB by hash list so recompute works across branches.
 	branchHashes, err := listBranchCommitHashes(ctx, repoProject.Path, branch)
 	if err != nil {
@@ -486,6 +497,22 @@ func recomputeCommitCoverageForProject(
 	}
 	if len(commits) == 0 {
 		return 0, nil
+	}
+	if len(changedPatterns) > 0 {
+		filtered := make([]db.Commit, 0, len(commits))
+		for _, c := range commits {
+			existing, err := db.GetCommitByProjectAndHash(ctx, database, c.ProjectID, c.CommitHash)
+			if err != nil || existing == nil {
+				continue
+			}
+			if commitDiffTouchesChangedPatterns(existing.DiffContent, changedPatterns) {
+				filtered = append(filtered, c)
+			}
+		}
+		commits = filtered
+		if len(commits) == 0 {
+			return 0, nil
+		}
 	}
 
 	minTs := commits[0].AuthoredAt * 1000
@@ -598,6 +625,52 @@ func recomputeCommitCoverageForProject(
 		}
 	}
 	return len(updatedCommits), nil
+}
+
+func commitDiffTouchesChangedPatterns(diffText string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return true
+	}
+
+	diffText = strings.ReplaceAll(diffText, "\r\n", "\n")
+	lines := strings.Split(diffText, "\n")
+
+	checkPath := func(p string) bool {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return false
+		}
+		return shouldIgnoreDiffPath(p, patterns)
+	}
+
+	for _, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "diff --git "):
+			parts := strings.Fields(line)
+			if len(parts) >= 4 {
+				if checkPath(parseDiffPath(parts[2])) || checkPath(parseDiffPath(parts[3])) {
+					return true
+				}
+			}
+		case strings.HasPrefix(line, "rename from "):
+			if checkPath(parseDiffPath(strings.TrimPrefix(line, "rename from "))) {
+				return true
+			}
+		case strings.HasPrefix(line, "rename to "):
+			if checkPath(parseDiffPath(strings.TrimPrefix(line, "rename to "))) {
+				return true
+			}
+		case strings.HasPrefix(line, "--- "):
+			if checkPath(parseDiffPath(strings.TrimPrefix(line, "--- "))) {
+				return true
+			}
+		case strings.HasPrefix(line, "+++ "):
+			if checkPath(parseDiffPath(strings.TrimPrefix(line, "+++ "))) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // listAllCommitsByIdentity is like listCommitsByIdentity but without the max-count limit,

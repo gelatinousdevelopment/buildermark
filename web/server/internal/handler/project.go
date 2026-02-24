@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -181,25 +182,35 @@ func (s *Server) backfillProjectForOldPaths(projectID string, paths []string) {
 }
 
 func (s *Server) recomputeProjectCoverageAllBranches(ctx context.Context, projectID string) (int, error) {
+	recomputedBranches, _, err := s.recomputeProjectCoverageAllBranchesWithChangedPatterns(ctx, projectID, nil, nil)
+	return recomputedBranches, err
+}
+
+func (s *Server) recomputeProjectCoverageAllBranchesWithChangedPatterns(
+	ctx context.Context,
+	projectID string,
+	changedPatterns []string,
+	progress func(string),
+) (int, int, error) {
 	project, err := getProjectByID(ctx, s.DB, projectID)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if project == nil {
-		return 0, db.ErrNotFound
+		return 0, 0, db.ErrNotFound
 	}
 
 	groups, err := listAllProjectGroups(ctx, s.DB)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	group, ok := findProjectGroupByProjectID(groups, project.ID)
 	if !ok {
-		return 0, nil
+		return 0, 0, nil
 	}
 	repoProject, err := resolveRepoProject(ctx, group)
 	if err != nil {
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	branches := make(map[string]struct{})
@@ -235,15 +246,30 @@ func (s *Server) recomputeProjectCoverageAllBranches(ctx context.Context, projec
 	}
 	sort.Strings(branchList)
 
-	recomputed := 0
+	recomputedBranches := 0
+	recomputedCommits := 0
 	for _, branch := range branchList {
-		if _, err := recomputeCommitCoverageForProject(ctx, s.DB, repoProject, group, branch); err != nil {
+		if progress != nil {
+			progress(fmt.Sprintf("Recomputing branch %s...", branch))
+		}
+		n, err := recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, repoProject, group, branch, changedPatterns)
+		if err != nil {
 			log.Printf("warning: recompute commit coverage failed for project=%s branch=%s: %v", projectID, branch, err)
 			continue
 		}
-		recomputed++
+		if n == 0 {
+			if progress != nil {
+				progress(fmt.Sprintf("Branch %s has no matching commits", branch))
+			}
+			continue
+		}
+		recomputedBranches++
+		recomputedCommits += n
+		if progress != nil {
+			progress(fmt.Sprintf("Branch %s recomputed %d commit(s)", branch, n))
+		}
 	}
-	return recomputed, nil
+	return recomputedBranches, recomputedCommits, nil
 }
 
 func splitLines(s string) []string {
@@ -365,6 +391,29 @@ func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.
 		return
 	}
 
+	project, err := getProjectByID(r.Context(), s.DB, id)
+	if err != nil {
+		log.Printf("error loading project for ignore_diff_paths update: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to update project")
+		return
+	}
+	if project == nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	changed := project.IgnoreDiffPaths != body.IgnoreDiffPaths
+	changedPatterns, changedPatternErr := s.changedEffectiveIgnorePatternsForProject(
+		r.Context(),
+		id,
+		project.IgnoreDiffPaths,
+		project.IgnoreDefaultDiffPaths,
+		body.IgnoreDiffPaths,
+		project.IgnoreDefaultDiffPaths,
+	)
+	if changedPatternErr != nil {
+		log.Printf("warning: could not compute changed effective ignore patterns for project %s: %v", id, changedPatternErr)
+	}
+
 	if err := db.SetProjectIgnoreDiffPaths(r.Context(), s.DB, id, body.IgnoreDiffPaths); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "project not found")
@@ -373,6 +422,10 @@ func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.
 		log.Printf("error setting project ignore_diff_paths: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to update project")
 		return
+	}
+
+	if changed {
+		s.enqueueProjectCoverageRecompute(id, "ignore_diff_paths_changed", changedPatterns)
 	}
 
 	writeSuccess(w, http.StatusOK, nil)
@@ -399,6 +452,29 @@ func (s *Server) handleSetProjectIgnoreDefaultDiffPaths(w http.ResponseWriter, r
 		return
 	}
 
+	project, err := getProjectByID(r.Context(), s.DB, id)
+	if err != nil {
+		log.Printf("error loading project for ignore_default_diff_paths update: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to update project")
+		return
+	}
+	if project == nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	changed := project.IgnoreDefaultDiffPaths != body.IgnoreDefaultDiffPaths
+	changedPatterns, changedPatternErr := s.changedEffectiveIgnorePatternsForProject(
+		r.Context(),
+		id,
+		project.IgnoreDiffPaths,
+		project.IgnoreDefaultDiffPaths,
+		project.IgnoreDiffPaths,
+		body.IgnoreDefaultDiffPaths,
+	)
+	if changedPatternErr != nil {
+		log.Printf("warning: could not compute changed effective ignore patterns for project %s: %v", id, changedPatternErr)
+	}
+
 	if err := db.SetProjectIgnoreDefaultDiffPaths(r.Context(), s.DB, id, body.IgnoreDefaultDiffPaths); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "project not found")
@@ -409,5 +485,170 @@ func (s *Server) handleSetProjectIgnoreDefaultDiffPaths(w http.ResponseWriter, r
 		return
 	}
 
+	if changed {
+		s.enqueueProjectCoverageRecompute(id, "ignore_default_diff_paths_changed", changedPatterns)
+	}
+
 	writeSuccess(w, http.StatusOK, nil)
+}
+
+func (s *Server) tryStartProjectCoverageRecompute(projectID string) bool {
+	s.coverageRecomputeMu.Lock()
+	defer s.coverageRecomputeMu.Unlock()
+	if s.coverageRecomputeRunning == nil {
+		s.coverageRecomputeRunning = make(map[string]bool)
+	}
+	if s.coverageRecomputeRunning[projectID] {
+		return false
+	}
+	s.coverageRecomputeRunning[projectID] = true
+	return true
+}
+
+func (s *Server) finishProjectCoverageRecompute(projectID string) {
+	s.coverageRecomputeMu.Lock()
+	defer s.coverageRecomputeMu.Unlock()
+	if s.coverageRecomputeRunning == nil {
+		return
+	}
+	delete(s.coverageRecomputeRunning, projectID)
+}
+
+func (s *Server) enqueueProjectCoverageRecompute(projectID, reason string, changedPatterns []string) {
+	if len(changedPatterns) == 0 {
+		log.Printf("project %s settings changed (%s); no effective ignore-pattern changes, skipping recompute", projectID, reason)
+		return
+	}
+	if !s.tryStartProjectCoverageRecompute(projectID) {
+		log.Printf("project %s settings changed (%s); coverage recompute already in progress", projectID, reason)
+		return
+	}
+
+	go func() {
+		defer s.finishProjectCoverageRecompute(projectID)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		defer cancel()
+
+		status := func(state, message string, recomputedCommits int) {
+			if s.ws == nil {
+				return
+			}
+			s.ws.broadcastEvent("import_status", importStatusEvent{
+				State:            state,
+				Message:          message,
+				ProjectsImported: 0,
+				EntriesProcessed: 0,
+				CommitsIngested:  recomputedCommits,
+			})
+		}
+
+		preview := changedPatterns[0]
+		if len(changedPatterns) > 1 {
+			preview = fmt.Sprintf("%s (+%d more)", changedPatterns[0], len(changedPatterns)-1)
+		}
+		status("running", fmt.Sprintf("Recomputing diffs for project %s: %s", projectID, preview), 0)
+		lastProgress := time.Time{}
+		progress := func(message string) {
+			now := time.Now()
+			if now.Sub(lastProgress) < 50*time.Millisecond {
+				return
+			}
+			lastProgress = now
+			status("running", message, 0)
+		}
+
+		recomputedBranches, recomputedCommits, err := s.recomputeProjectCoverageAllBranchesWithChangedPatterns(ctx, projectID, changedPatterns, progress)
+		if err != nil {
+			status("error", fmt.Sprintf("Diff recompute failed for project %s", projectID), recomputedCommits)
+			log.Printf("project %s settings changed (%s); coverage recompute failed: %v", projectID, reason, err)
+		} else {
+			status("complete", fmt.Sprintf("Recomputed %d commit(s) across %d branch(es) for project %s", recomputedCommits, recomputedBranches, projectID), recomputedCommits)
+			log.Printf("project %s settings changed (%s); recomputed coverage on %d branch(es), %d commits", projectID, reason, recomputedBranches, recomputedCommits)
+		}
+	}()
+}
+
+func (s *Server) changedEffectiveIgnorePatternsForProject(
+	ctx context.Context,
+	projectID string,
+	oldIgnoreDiffPaths string,
+	oldIgnoreDefault bool,
+	newIgnoreDiffPaths string,
+	newIgnoreDefault bool,
+) ([]string, error) {
+	groups, err := listAllProjectGroups(ctx, s.DB)
+	if err != nil {
+		return nil, err
+	}
+	group, ok := findProjectGroupByProjectID(groups, projectID)
+	if !ok {
+		oldSet := make(map[string]struct{})
+		newSet := make(map[string]struct{})
+		for _, p := range splitIgnoreDiffPatterns(oldIgnoreDiffPaths) {
+			oldSet[p] = struct{}{}
+		}
+		if oldIgnoreDefault {
+			for _, p := range DefaultIgnoreDiffPaths {
+				oldSet[p] = struct{}{}
+			}
+		}
+		for _, p := range splitIgnoreDiffPatterns(newIgnoreDiffPaths) {
+			newSet[p] = struct{}{}
+		}
+		if newIgnoreDefault {
+			for _, p := range DefaultIgnoreDiffPaths {
+				newSet[p] = struct{}{}
+			}
+		}
+		return symmetricPatternDiff(oldSet, newSet), nil
+	}
+
+	oldGroup := cloneProjectGroupWithOverride(group, projectID, oldIgnoreDiffPaths, oldIgnoreDefault)
+	newGroup := cloneProjectGroupWithOverride(group, projectID, newIgnoreDiffPaths, newIgnoreDefault)
+
+	oldSet := make(map[string]struct{})
+	newSet := make(map[string]struct{})
+	for _, p := range groupIgnoreDiffPatterns(oldGroup) {
+		oldSet[p] = struct{}{}
+	}
+	for _, p := range groupIgnoreDiffPatterns(newGroup) {
+		newSet[p] = struct{}{}
+	}
+	return symmetricPatternDiff(oldSet, newSet), nil
+}
+
+func cloneProjectGroupWithOverride(group projectGroup, projectID, ignoreDiffPaths string, ignoreDefault bool) projectGroup {
+	cloned := projectGroup{
+		GitID:    group.GitID,
+		Projects: make([]db.Project, len(group.Projects)),
+	}
+	copy(cloned.Projects, group.Projects)
+	for i := range cloned.Projects {
+		if cloned.Projects[i].ID != projectID {
+			continue
+		}
+		cloned.Projects[i].IgnoreDiffPaths = ignoreDiffPaths
+		cloned.Projects[i].IgnoreDefaultDiffPaths = ignoreDefault
+		break
+	}
+	return cloned
+}
+
+func symmetricPatternDiff(a, b map[string]struct{}) []string {
+	out := make([]string, 0, len(a)+len(b))
+	for p := range a {
+		if _, ok := b[p]; ok {
+			continue
+		}
+		out = append(out, p)
+	}
+	for p := range b {
+		if _, ok := a[p]; ok {
+			continue
+		}
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
 }

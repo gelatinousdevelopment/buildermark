@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -544,6 +547,114 @@ func TestSetProjectIgnoreDiffPaths(t *testing.T) {
 	}
 }
 
+func TestSetProjectIgnoreDiffPathsTriggersCoverageRecomputeWhenChanged(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, commitHash := setupSingleCommitProjectAndIngest(t, s, handler)
+	setCommitCoverageVersion(t, s, projectID, commitHash, 0)
+
+	body, _ := json.Marshal(map[string]string{"ignoreDiffPaths": "app.txt"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ignore-diff-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	waitForCommitCoverageVersion(t, ctx, s, projectID, commitHash, currentCommitCoverageVersion, 3*time.Second)
+}
+
+func TestSetProjectIgnoreDiffPathsDoesNotRecomputeWhenUnchanged(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, commitHash := setupSingleCommitProjectAndIngest(t, s, handler)
+	paths := "app.txt"
+	if err := db.SetProjectIgnoreDiffPaths(ctx, s.DB, projectID, paths); err != nil {
+		t.Fatalf("SetProjectIgnoreDiffPaths: %v", err)
+	}
+	setCommitCoverageVersion(t, s, projectID, commitHash, 0)
+
+	body, _ := json.Marshal(map[string]string{"ignoreDiffPaths": paths})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ignore-diff-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	if got := getCommitCoverageVersion(t, ctx, s, projectID, commitHash); got != 0 {
+		t.Fatalf("coverage_version = %d, want 0", got)
+	}
+}
+
+func TestSetProjectIgnoreDiffPathsChangedWithoutMatchingDiffSkipsRecompute(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, commitHash := setupSingleCommitProjectAndIngest(t, s, handler)
+	setCommitCoverageVersion(t, s, projectID, commitHash, 0)
+
+	body, _ := json.Marshal(map[string]string{"ignoreDiffPaths": "docs/**"})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ignore-diff-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	if got := getCommitCoverageVersion(t, ctx, s, projectID, commitHash); got != 0 {
+		t.Fatalf("coverage_version = %d, want 0", got)
+	}
+}
+
+func TestSetProjectIgnoreDefaultDiffPathsTriggersCoverageRecomputeWhenChanged(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, commitHash := setupSingleCommitProjectAndIngestFile(t, s, handler, "go.sum")
+	setCommitCoverageVersion(t, s, projectID, commitHash, 0)
+
+	body, _ := json.Marshal(map[string]bool{"ignoreDefaultDiffPaths": false})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ignore-default-diff-paths", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	waitForCommitCoverageVersion(t, ctx, s, projectID, commitHash, currentCommitCoverageVersion, 3*time.Second)
+}
+
+func TestProjectCoverageRecomputeCoalescesPerProject(t *testing.T) {
+	s := setupTestServer(t)
+
+	if !s.tryStartProjectCoverageRecompute("p1") {
+		t.Fatal("first tryStartProjectCoverageRecompute returned false, want true")
+	}
+	if s.tryStartProjectCoverageRecompute("p1") {
+		t.Fatal("second tryStartProjectCoverageRecompute returned true, want false")
+	}
+	if !s.tryStartProjectCoverageRecompute("p2") {
+		t.Fatal("different project should be allowed to start")
+	}
+	s.finishProjectCoverageRecompute("p1")
+	if !s.tryStartProjectCoverageRecompute("p1") {
+		t.Fatal("project should be allowed after finish")
+	}
+}
+
 func TestSetProjectOldPaths(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
@@ -768,4 +879,91 @@ func TestDeleteProjectNotFound(t *testing.T) {
 	if env.OK {
 		t.Error("ok = true, want false for not found project")
 	}
+}
+
+func setupSingleCommitProjectAndIngest(t *testing.T, s *Server, handler http.Handler) (string, string) {
+	return setupSingleCommitProjectAndIngestFile(t, s, handler, "app.txt")
+}
+
+func setupSingleCommitProjectAndIngestFile(t *testing.T, s *Server, handler http.Handler, relPath string) (string, string) {
+	t.Helper()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	filePath := filepath.Join(repo, relPath)
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	mustWriteFile(t, filePath, "hello\n")
+	gitRun(t, repo, nil, "add", relPath)
+	gitRun(t, repo, nil, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+	head := strings.TrimSpace(gitRun(t, repo, nil, "rev-parse", "HEAD"))
+
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{"count": 1})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ingest-commits", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ingest status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	return projectID, head
+}
+
+func setCommitCoverageVersion(t *testing.T, s *Server, projectID, commitHash string, version int) {
+	t.Helper()
+	if _, err := s.DB.Exec(
+		`UPDATE commits SET coverage_version = ? WHERE project_id = ? AND commit_hash = ?`,
+		version, projectID, commitHash,
+	); err != nil {
+		t.Fatalf("set commit coverage version: %v", err)
+	}
+}
+
+func getCommitCoverageVersion(t *testing.T, ctx context.Context, s *Server, projectID, commitHash string) int {
+	t.Helper()
+	var got int
+	if err := s.DB.QueryRowContext(
+		ctx,
+		`SELECT coverage_version FROM commits WHERE project_id = ? AND commit_hash = ?`,
+		projectID,
+		commitHash,
+	).Scan(&got); err != nil {
+		t.Fatalf("query coverage version: %v", err)
+	}
+	return got
+}
+
+func waitForCommitCoverageVersion(
+	t *testing.T,
+	ctx context.Context,
+	s *Server,
+	projectID, commitHash string,
+	want int,
+	timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if got := getCommitCoverageVersion(t, ctx, s, projectID, commitHash); got == want {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	got := getCommitCoverageVersion(t, ctx, s, projectID, commitHash)
+	t.Fatalf("coverage_version = %d, want %d (timeout %s)", got, want, timeout)
 }

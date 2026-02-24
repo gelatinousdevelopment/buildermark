@@ -19,6 +19,9 @@ type Server struct {
 	refreshMu sync.Mutex
 	refresher *commitRefreshManager
 
+	coverageRecomputeMu      sync.Mutex
+	coverageRecomputeRunning map[string]bool
+
 	ws       *wsHub
 	importMu sync.Mutex // guards against concurrent imports
 }
