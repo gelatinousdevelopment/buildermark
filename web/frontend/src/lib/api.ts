@@ -12,7 +12,6 @@ import type {
 	ProjectCommitPageResponse,
 	IngestCommitsResponse,
 	CommitIngestionStatusResponse,
-	HistoryScanResponse,
 	DiscoverImportableProjectsResponse,
 	ImportProjectsResponse,
 	CommitConversationLinks
@@ -201,7 +200,7 @@ export function refreshProjectCommits(
 	});
 }
 
-export function scanHistory(timeframe: string, agent = ''): Promise<HistoryScanResponse> {
+export function scanHistory(timeframe: string, agent = ''): Promise<ImportProjectsResponse> {
 	return api('/api/v1/history/scan', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

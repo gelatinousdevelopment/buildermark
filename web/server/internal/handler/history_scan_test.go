@@ -58,6 +58,13 @@ func setupTestServerWithWatcher(t *testing.T, watchers ...*mockWatcher) *Server 
 	return s
 }
 
+// waitForImportUnlock waits until the server's importMu is available, indicating
+// the background scan job has completed. It does this by acquiring and releasing the lock.
+func waitForImportUnlock(s *Server) {
+	s.importMu.Lock()
+	s.importMu.Unlock()
+}
+
 func TestHistoryScan(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -68,19 +75,19 @@ func TestHistoryScan(t *testing.T) {
 		{
 			name:       "default timeframe",
 			body:       map[string]any{},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusAccepted,
 			wantOK:     true,
 		},
 		{
 			name:       "custom timeframe",
 			body:       map[string]any{"timeframe": "720h"},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusAccepted,
 			wantOK:     true,
 		},
 		{
 			name:       "specific agent",
 			body:       map[string]any{"agent": "claude"},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusAccepted,
 			wantOK:     true,
 		},
 		{
@@ -128,6 +135,11 @@ func TestHistoryScan(t *testing.T) {
 			if env.OK != tt.wantOK {
 				t.Errorf("ok = %v, want %v", env.OK, tt.wantOK)
 			}
+
+			// Wait for any background job to complete before the next test.
+			if tt.wantOK {
+				waitForImportUnlock(s)
+			}
 		})
 	}
 }
@@ -147,7 +159,7 @@ func TestHistoryScanNoAgents(t *testing.T) {
 	}
 }
 
-func TestHistoryScanResponseFields(t *testing.T) {
+func TestHistoryScanStartedResponse(t *testing.T) {
 	w := &mockWatcher{name: "claude"}
 	s := setupTestServerWithWatcher(t, w)
 	handler := s.Routes()
@@ -158,29 +170,29 @@ func TestHistoryScanResponseFields(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
 	}
 
 	var env struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			EntriesProcessed int    `json:"entriesProcessed"`
-			Since            string `json:"since"`
+			Started bool `json:"started"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if env.Data.EntriesProcessed != 10 {
-		t.Errorf("entriesProcessed = %d, want 10", env.Data.EntriesProcessed)
+	if !env.Data.Started {
+		t.Error("started should be true")
 	}
-	if env.Data.Since == "" {
-		t.Error("since should not be empty")
-	}
-	if w.scanCount != 1 {
-		t.Errorf("watcher scanCount = %d, want 1", w.scanCount)
+
+	// Wait for the background scan to finish and verify watcher was called.
+	waitForImportUnlock(s)
+	scanCount, _, _, _ := w.snapshot()
+	if scanCount != 1 {
+		t.Errorf("watcher scanCount = %d, want 1", scanCount)
 	}
 }
 
@@ -197,27 +209,20 @@ func TestHistoryScanMultipleWatchers(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if w1.scanCount != 1 {
-		t.Errorf("w1 scanCount = %d, want 1", w1.scanCount)
-	}
-	if w2.scanCount != 1 {
-		t.Errorf("w2 scanCount = %d, want 1", w2.scanCount)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
 	}
 
-	var env struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			EntriesProcessed int `json:"entriesProcessed"`
-		} `json:"data"`
+	// Wait for the background scan to complete.
+	waitForImportUnlock(s)
+
+	scanCount1, _, _, _ := w1.snapshot()
+	scanCount2, _, _, _ := w2.snapshot()
+	if scanCount1 != 1 {
+		t.Errorf("w1 scanCount = %d, want 1", scanCount1)
 	}
-	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if env.Data.EntriesProcessed != 20 {
-		t.Errorf("entriesProcessed = %d, want 20 (10 per watcher)", env.Data.EntriesProcessed)
+	if scanCount2 != 1 {
+		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
 	}
 }
 
@@ -233,13 +238,40 @@ func TestHistoryScanSpecificAgent(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
 	}
-	if w1.scanCount != 0 {
-		t.Errorf("w1 scanCount = %d, want 0 (should not be scanned)", w1.scanCount)
+
+	// Wait for the background scan to complete.
+	waitForImportUnlock(s)
+
+	scanCount1, _, _, _ := w1.snapshot()
+	scanCount2, _, _, _ := w2.snapshot()
+	if scanCount1 != 0 {
+		t.Errorf("w1 scanCount = %d, want 0 (should not be scanned)", scanCount1)
 	}
-	if w2.scanCount != 1 {
-		t.Errorf("w2 scanCount = %d, want 1", w2.scanCount)
+	if scanCount2 != 1 {
+		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
 	}
+}
+
+func TestHistoryScanConflict(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+
+	// Acquire the import lock to simulate an already-running import.
+	s.importMu.Lock()
+
+	body, _ := json.Marshal(map[string]any{})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+
+	s.importMu.Unlock()
 }

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { getLocalSettings, listProjects, scanHistory } from '$lib/api';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import type { LocalSettings, Project } from '$lib/types';
 
 	let projects: Project[] = $state([]);
@@ -17,6 +18,10 @@
 	let historyImportResult: string | null = $state(null);
 
 	const historyImportDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
+
+	let importStatusMessage = $derived(
+		websocketStore.importStatus?.state === 'running' ? websocketStore.importStatus.message : null
+	);
 
 	function projectName(project: { label: string; path: string }): string {
 		return project.label || project.path;
@@ -69,13 +74,20 @@
 		importingHistory = true;
 		historyImportError = null;
 		historyImportResult = null;
+		websocketStore.clearImportStatus();
 		try {
-			const response = await scanHistory(historyImportTimeframe(historyImportDays));
-			historyImportResult = `Imported ${response.entriesProcessed.toLocaleString()} entries.`;
+			await scanHistory(historyImportTimeframe(historyImportDays));
+			const result = await websocketStore.waitForImportComplete();
+			if (result.state === 'error') {
+				historyImportError = result.message;
+				return;
+			}
+			historyImportResult = `Imported ${result.entriesProcessed.toLocaleString()} entries.`;
 		} catch (e) {
 			historyImportError = e instanceof Error ? e.message : 'Failed to import history';
 		} finally {
 			importingHistory = false;
+			websocketStore.clearImportStatus();
 		}
 	}
 </script>
@@ -128,6 +140,9 @@
 				{/if}
 			</button>
 		</div>
+		{#if importingHistory && importStatusMessage}
+			<p class="import-status">{importStatusMessage}</p>
+		{/if}
 		{#if historyImportError}
 			<p class="error">{historyImportError}</p>
 		{:else if historyImportResult}
@@ -293,6 +308,22 @@
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
+		}
+	}
+
+	.import-status {
+		color: #666;
+		font-size: 0.85rem;
+		margin: 0.3rem 0 0 0;
+		animation: fade-in 200ms ease;
+	}
+
+	@keyframes fade-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
 		}
 	}
 

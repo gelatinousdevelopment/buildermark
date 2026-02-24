@@ -3,7 +3,9 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/davidcann/zrate/web/server/internal/agent"
@@ -16,9 +18,8 @@ type historyScanRequest struct {
 	Agent string `json:"agent"`
 }
 
-type historyScanResponse struct {
-	EntriesProcessed int    `json:"entriesProcessed"`
-	Since            string `json:"since"`
+type historyScanStartedResponse struct {
+	Started bool `json:"started"`
 }
 
 func (s *Server) scanWatchersSince(ctx context.Context, since time.Time, agentName string) int {
@@ -79,10 +80,49 @@ func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	since := time.Now().Add(-dur)
-	count := s.scanWatchersSince(r.Context(), since, req.Agent)
 
-	writeSuccess(w, http.StatusOK, historyScanResponse{
-		EntriesProcessed: count,
-		Since:            since.Format(time.RFC3339),
-	})
+	// Try to acquire the import lock; reject if another import/scan is already running.
+	if !s.importMu.TryLock() {
+		writeError(w, http.StatusConflict, "an import is already in progress")
+		return
+	}
+
+	// Return immediately — the scan runs in the background.
+	writeSuccess(w, http.StatusAccepted, historyScanStartedResponse{Started: true})
+
+	// Run the scan job asynchronously.
+	go s.runHistoryScanJob(since, req.Agent)
+}
+
+// runHistoryScanJob performs a history scan in the background, broadcasting
+// progress over WebSocket. The caller must hold s.importMu.
+func (s *Server) runHistoryScanJob(since time.Time, agentName string) {
+	defer s.importMu.Unlock()
+
+	ctx := context.Background()
+
+	broadcast := func(state, message string, entries int) {
+		s.ws.broadcastEvent("import_status", importStatusEvent{
+			State:            state,
+			Message:          message,
+			EntriesProcessed: entries,
+		})
+	}
+
+	broadcast("running", "Scanning conversation history...", 0)
+
+	// Rate-limited progress: report file names no faster than every 50ms.
+	var lastProgress time.Time
+	progress := func(filename string) {
+		now := time.Now()
+		if now.Sub(lastProgress) < 50*time.Millisecond {
+			return
+		}
+		lastProgress = now
+		broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)), 0)
+	}
+
+	count := s.scanWatchersSincePaths(ctx, since, agentName, nil, progress)
+
+	broadcast("complete", fmt.Sprintf("Imported %d conversation entries", count), count)
 }

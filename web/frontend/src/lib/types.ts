@@ -239,11 +239,6 @@ export interface CommitIngestionStatusResponse {
 	lastError?: string;
 }
 
-export interface HistoryScanResponse {
-	entriesProcessed: number;
-	since: string;
-}
-
 export interface ImportableProject {
 	path: string;
 	label: string;
