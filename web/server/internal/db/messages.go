@@ -235,6 +235,11 @@ func shouldSkipMessageOnIngest(m Message) bool {
 	if trimmed == "" {
 		return false
 	}
+	// Keep short bracketed placeholders when raw JSON exists; downstream
+	// attribution and parsing can still extract structured data from raw_json.
+	if strings.TrimSpace(m.RawJSON) != "" {
+		return false
+	}
 	if utf8.RuneCountInString(trimmed) >= hiddenIngestMessageMaxLen {
 		return false
 	}

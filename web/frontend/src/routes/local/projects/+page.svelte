@@ -59,7 +59,7 @@
 		try {
 			const projects = (await listProjects(false)).filter((project) => project.gitId);
 			if (projects.length === 0) {
-				goto(resolve('/local/projects/add'));
+				goto(resolve('/local/projects/import'));
 				return;
 			}
 			const loadedRows = await Promise.all(

@@ -79,19 +79,55 @@
 	});
 </script>
 
-<div class="limited-content-width">
-	<ProjectOnboarding
-		{detectedProjects}
-		{detectedLoading}
-		{detectedError}
-		{selectedProjectPaths}
-		selectedHistoryDays={historyImportDays}
-		{historyDayOptions}
-		{savingSelection}
-		{saveSelectionError}
-		{importStatusMessage}
-		onToggleSelection={toggleSelection}
-		onHistoryDaysChange={setHistoryImportDays}
-		onStartTrackingSelected={startTrackingSelected}
-	/>
+<div class="outer">
+	<div class="onboarding">
+		<ProjectOnboarding
+			{detectedProjects}
+			{detectedLoading}
+			{detectedError}
+			{selectedProjectPaths}
+			selectedHistoryDays={historyImportDays}
+			{historyDayOptions}
+			{savingSelection}
+			{saveSelectionError}
+			{importStatusMessage}
+			onToggleSelection={toggleSelection}
+			onHistoryDaysChange={setHistoryImportDays}
+			onStartTrackingSelected={startTrackingSelected}
+		/>
+	</div>
 </div>
+
+<style>
+	.outer {
+		flex: 1;
+		/*background: white;*/
+	}
+
+	.onboarding {
+		background: var(--color-background-content);
+		padding: 1rem;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+
+		max-width: 900px;
+		margin: 0 auto;
+
+		background: var(--color-background-content);
+		border-radius: 10px;
+		border: 0.5px solid var(--color-divider);
+		box-sizing: border-box;
+		margin: 1.5rem auto;
+		width: 100%;
+	}
+
+	@media (max-width: 900px) {
+		.onboarding {
+			border-width: 0 0 0.5px 0;
+			margin: 0 auto;
+			border-radius: 0;
+		}
+	}
+</style>

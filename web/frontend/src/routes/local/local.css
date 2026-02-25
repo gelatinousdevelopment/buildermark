@@ -1,9 +1,11 @@
 :root {
 	--accent-color: #0066cc;
 	--accent-color-darker: #0055aa;
+	--accent-color-darkest: #003377;
 	--accent-color-ultralight: #eff7ff;
 	--accent-color-divider: #9fbbd6;
 	--color-text: #444;
+	--color-text-faded: #999;
 	--color-divider: #bbb;
 	--color-status-green: #55bb33;
 	--color-status-yellow: #f8d233;
@@ -14,6 +16,10 @@
 	--color-background-empty: #f0f0f0;
 	--color-background-project-header: #fff;
 	--color-alternate-table-row-background: #fcfcfc;
+
+	--color-link: #0066cc;
+	--color-link-hover: #aa6600;
+	--color-link-active: #662200;
 
 	--content-width: 1540px;
 
@@ -65,6 +71,21 @@ body {
 	padding: 0;
 }
 
+a {
+	color: var(--color-link);
+	text-decoration: underline;
+}
+
+a:hover {
+	color: var(--color-link-hover);
+	text-decoration: underline;
+}
+
+a:active {
+	color: var(--color-link-active);
+	text-decoration: underline;
+}
+
 .limited-content-width {
 	max-width: var(--content-width);
 	margin: 0 auto;
@@ -76,7 +97,6 @@ body {
 	border: 0.5px solid var(--color-divider);
 	box-sizing: border-box;
 	margin: 1.5rem auto;
-	/*transition: all 200ms;*/
 	width: 100%;
 }
 
@@ -88,7 +108,7 @@ body {
 	}
 }
 
-/* Reusable button */
+/* Bordered Button */
 
 a.bordered,
 button.bordered {
@@ -102,6 +122,11 @@ button.bordered {
 	line-height: 1.4;
 	padding: 0.5rem 1em;
 	text-decoration: none;
+}
+
+a.bordered.small,
+button.bordered.small {
+	padding: 0.2rem 0.7em;
 }
 
 a.bordered:disabled,
@@ -144,24 +169,7 @@ button.bordered.prominent:active {
 	background: var(--accent-color);
 }
 
-.btn-sm {
-	padding: 0.2rem 0.6rem;
-	font-size: 0.75rem;
-	line-height: 1.4;
-	border: 1px solid #ccc;
-	border-radius: 3px;
-	background: #fafafa;
-	color: #555;
-	cursor: pointer;
-}
-
-.btn-sm:hover {
-	background: #eee;
-	border-color: #bbb;
-	color: #333;
-}
-
-/* Tables */
+/* Data Table */
 
 table.data {
 	width: 100%;
@@ -193,7 +201,7 @@ table.data td a:hover {
 	text-decoration: underline;
 }
 
-/* Shared utility */
+/* Utilities */
 
 .info-box {
 	background: #fbfbfb;

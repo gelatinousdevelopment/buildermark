@@ -12,5 +12,6 @@ declare global {
 		| 'plus'
 		| 'document'
 		| 'user'
-		| 'search';
+		| 'search'
+		| 'info';
 }

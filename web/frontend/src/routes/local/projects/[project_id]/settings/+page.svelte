@@ -14,6 +14,7 @@
 	} from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import type { ProjectDetail } from '$lib/types';
+	import Icon from '$lib/Icon.svelte';
 
 	const defaultPaths = [
 		'**/.git/**',
@@ -139,7 +140,13 @@
 		<h1>Project Settings</h1>
 
 		<label class="field-label" for="project-label">Label</label>
-		<input id="project-label" type="text" bind:value={label} placeholder="Project label" />
+		<input
+			id="project-label"
+			class="project-label"
+			type="text"
+			bind:value={label}
+			placeholder="Project label"
+		/>
 
 		<label class="field-label" for="project-path">Path</label>
 		<input
@@ -163,7 +170,7 @@
 				title="Show default paths"
 				onclick={() => (showDefaultPaths = !showDefaultPaths)}
 			>
-				{showDefaultPaths ? 'hide' : 'info'}
+				<Icon name="info" width="15px" />
 			</button>
 		</div>
 		{#if showDefaultPaths}
@@ -199,7 +206,7 @@
 
 		<div class="actions">
 			<button class="bordered prominent" disabled={saving} onclick={save}
-				>{saving ? 'Saving...' : 'Save'}</button
+				>{saving ? 'Saving...' : 'Save Settings'}</button
 			>
 			{#if notice}
 				<span class="notice">{notice}</span>
@@ -248,7 +255,7 @@
 				<p class="error">{deleteError}</p>
 			{/if}
 			<div class="modal-actions">
-				<button class="btn-sm" onclick={() => (showDeleteModal = false)}>Cancel</button>
+				<button class="bordered small" onclick={() => (showDeleteModal = false)}>Cancel</button>
 				<button
 					class="btn-danger"
 					disabled={deleteConfirmName !== projectDisplayName || deleting}
@@ -288,20 +295,12 @@
 	}
 
 	.info-btn {
-		padding: 0.1rem 0.4rem;
-		font-size: 0.7rem;
-		line-height: 1.4;
-		border: 1px solid #ccc;
-		border-radius: 3px;
-		background: #fafafa;
-		color: #777;
-		cursor: pointer;
+		all: unset;
+		color: var(--color-text);
 	}
 
 	.info-btn:hover {
-		background: #eee;
-		border-color: #bbb;
-		color: #333;
+		color: var(--accent-color);
 	}
 
 	.default-paths-list {
@@ -329,22 +328,27 @@
 	input[type='text'] {
 		width: 100%;
 		padding: 0.4rem 0.6rem;
-		font-size: 0.85rem;
+		font-size: 1rem;
 		border: 1px solid #ccc;
 		border-radius: 4px;
 		box-sizing: border-box;
 		margin-bottom: 1rem;
 	}
 
+	input[type='text'].project-label {
+		font-size: 1.3rem;
+	}
+
 	.mono-input {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		font-size: 0.9rem;
 	}
 
 	textarea {
 		width: 100%;
 		max-width: 100%;
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-		font-size: 0.85rem;
+		font-size: 0.9rem;
 		line-height: 1.45;
 		padding: 0.65rem;
 		border: 1px solid #ccc;
@@ -365,28 +369,6 @@
 		margin-top: 0.9rem;
 	}
 
-	.btn-sm {
-		padding: 0.3rem 0.7rem;
-		font-size: 0.8rem;
-		line-height: 1.4;
-		border: 1px solid #ccc;
-		border-radius: 3px;
-		background: #fafafa;
-		color: #555;
-		cursor: pointer;
-	}
-
-	.btn-sm:hover {
-		background: #eee;
-		border-color: #bbb;
-		color: #333;
-	}
-
-	.btn-sm:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-
 	.notice {
 		font-size: 0.85rem;
 		color: #1d6d1d;
@@ -395,7 +377,7 @@
 	.danger-zone {
 		margin-top: 2.5rem;
 		padding-top: 1.5rem;
-		border-top: 1px solid var(--color-divider);
+		border-top: 0.5px solid var(--color-divider);
 	}
 
 	.danger-zone h2 {
@@ -412,7 +394,7 @@
 
 	.btn-danger {
 		padding: 0.35rem 0.8rem;
-		font-size: 0.8rem;
+		font-size: 1rem;
 		line-height: 1.4;
 		border: 1px solid #dc2626;
 		border-radius: 3px;
@@ -470,7 +452,7 @@
 	.modal-dialog input {
 		width: 100%;
 		padding: 0.4rem 0.6rem;
-		font-size: 0.85rem;
+		font-size: 1rem;
 		border: 1px solid #ccc;
 		border-radius: 4px;
 		box-sizing: border-box;

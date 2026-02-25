@@ -585,7 +585,7 @@
 	{#if showPagination && data.pagination.totalPages > 1}
 		<div class="pager">
 			<button
-				class="btn-sm"
+				class="bordered small"
 				disabled={loading || currentPage <= 1}
 				onclick={() => goToPage(currentPage - 1)}
 			>
@@ -593,7 +593,7 @@
 			</button>
 			<span>Page {data.pagination.page} of {data.pagination.totalPages}</span>
 			<button
-				class="btn-sm"
+				class="bordered small"
 				disabled={loading || currentPage >= data.pagination.totalPages}
 				onclick={() => goToPage(currentPage + 1)}
 			>
@@ -620,7 +620,7 @@
 					/>
 					more
 				</label>
-				<button class="btn-sm" onclick={handleLoadMore} disabled={loadingMore}>
+				<button class="bordered small" onclick={handleLoadMore} disabled={loadingMore}>
 					{loadingMore ? 'Loading...' : 'Load'}
 				</button>
 			</div>
@@ -737,11 +737,6 @@
 		text-align: center;
 	}
 
-	.summary-bar {
-		margin: 0 1rem 1rem 1rem;
-		max-width: 600px;
-	}
-
 	.message {
 		padding-left: 1rem;
 		padding-right: 1rem;
@@ -769,12 +764,17 @@
 	}
 
 	table.data:not(.compact) td {
-		padding-bottom: 0.7rem;
-		padding-top: 0.7rem;
+		padding-bottom: 0.5rem;
+		padding-top: 0.5rem;
 	}
 
 	table.data td {
 		white-space: nowrap;
+	}
+
+	table.data td a {
+		color: var(--accent-color-darkest);
+		width: fit-content;
 	}
 
 	table.data:not(.compact) .title a {
@@ -784,7 +784,6 @@
 		line-clamp: 3;
 		line-height: 1.3;
 		overflow: hidden;
-		white-space: normal;
 	}
 
 	.time-col {
@@ -870,7 +869,7 @@
 		padding-left: 1rem;
 	}
 
-	.title > div {
+	.title .title-content {
 		overflow: hidden;
 	}
 
@@ -944,9 +943,7 @@
 		width: 200px;
 	}
 
-	.branch-picker label,
-	.user-picker label,
-	.agent-picker label {
+	.branch-picker label {
 		text-align: right;
 		width: 54px;
 	}

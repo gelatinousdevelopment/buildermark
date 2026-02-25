@@ -67,6 +67,7 @@
 </script>
 
 <h3>{heading}</h3>
+<p>Found in your agent data folders:</p>
 {#if loading}
 	<p class="loading">
 		<span class="spinner" aria-hidden="true"></span>
@@ -121,7 +122,7 @@
 		<p class="error">{saveError}</p>
 	{/if}
 	<div class="import-settings">
-		<label for="import-days-select">History to import</label>
+		<label for="import-days-select">History to import:</label>
 		<select
 			id="import-days-select"
 			value={selectedHistoryDays}
@@ -132,8 +133,14 @@
 				<option value={option}>{historyLabel(option)}</option>
 			{/each}
 		</select>
+		<p class="note">(might take a while)</p>
 	</div>
-	<button class="btn-sm" disabled={submitDisabled || saving} onclick={onSubmit}>
+	<button
+		class="bordered prominent"
+		disabled={submitDisabled || saving}
+		onclick={onSubmit}
+		style:max-width="13rem"
+	>
 		{#if saving}
 			<span class="spinner" aria-hidden="true"></span>
 			Importing...
@@ -147,6 +154,19 @@
 {/if}
 
 <style>
+	h3 {
+		margin: 0;
+	}
+
+	p {
+		margin: 0;
+	}
+
+	p.note {
+		font-size: 0.95em;
+		opacity: 0.7;
+	}
+
 	.loading {
 		display: inline-flex;
 		align-items: center;
@@ -159,15 +179,17 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
-		max-height: 30rem;
-		overflow: auto;
+		gap: 0.2rem;
 	}
 
 	.project-options > li {
-		border: 0.5px solid var(--color-divider);
+		border: 0;
 		border-radius: 8px;
 		padding: 0.45rem 0.55rem;
+	}
+
+	.project-options > li:hover {
+		background: var(--accent-color-ultralight);
 	}
 
 	.project-options label {
@@ -188,12 +210,16 @@
 
 	.project-options .subtitle {
 		opacity: 0.7;
-		font-size: 0.85rem;
+		font-size: 0.9rem;
 		font-family: var(--font-family-monospace);
 	}
 
+	button.prominent {
+		margin-top: 0.5rem;
+	}
+
 	.status {
-		font-size: 0.75rem;
+		font-size: 0.9rem;
 		opacity: 0.75;
 	}
 

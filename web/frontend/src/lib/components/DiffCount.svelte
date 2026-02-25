@@ -29,6 +29,7 @@
 
 	.diff-count.compact {
 		font-size: 0.8rem;
+		margin: -3px 0;
 	}
 
 	.files-count {

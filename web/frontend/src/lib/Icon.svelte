@@ -10,6 +10,7 @@
 	import documentSvg from '$lib/icons/document.svg?raw';
 	import userSvg from '$lib/icons/user.svg?raw';
 	import searchSvg from '$lib/icons/search.svg?raw';
+	import infoSvg from '$lib/icons/info.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -27,7 +28,8 @@
 		plus: plusSvg,
 		document: documentSvg,
 		user: userSvg,
-		search: searchSvg
+		search: searchSvg,
+		info: infoSvg
 	};
 </script>
 

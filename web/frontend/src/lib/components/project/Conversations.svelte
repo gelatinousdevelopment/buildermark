@@ -366,16 +366,18 @@
 						>
 					{/if}
 					<td class="title">
-						<a
-							href={resolve('/local/projects/[project_id]/conversations/[id]', {
-								project_id: project.id,
-								id: conv.id
-							})}
-						>
-							{#if conv.parentConversationId}<div class="document-icon">
-									<Icon name="document" width="13px" />
-								</div>{/if}{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
-						</a>
+						<div class="title-content">
+							<a
+								href={resolve('/local/projects/[project_id]/conversations/[id]', {
+									project_id: project.id,
+									id: conv.id
+								})}
+							>
+								{#if conv.parentConversationId}<div class="document-icon">
+										<Icon name="document" width="13px" />
+									</div>{/if}{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
+							</a>
+						</div>
 						{#if detailed && detail}
 							<div class="detail-messages">
 								{#each detail.userMessages as msg (msg.id)}
@@ -430,7 +432,11 @@
 
 	{#if showPagination && (project.conversationPagination.totalPages ?? 0) > 1}
 		<div class="pager">
-			<button class="btn-sm" disabled={currentPage <= 1} onclick={() => goToPage(currentPage - 1)}>
+			<button
+				class="bordered small"
+				disabled={currentPage <= 1}
+				onclick={() => goToPage(currentPage - 1)}
+			>
 				Previous
 			</button>
 			<span
@@ -438,7 +444,7 @@
 					.totalPages}</span
 			>
 			<button
-				class="btn-sm"
+				class="bordered small"
 				disabled={currentPage >= project.conversationPagination.totalPages}
 				onclick={() => goToPage(currentPage + 1)}
 			>
@@ -511,6 +517,16 @@
 
 	table.data {
 		table-layout: fixed;
+	}
+
+	table.data td {
+		white-space: nowrap;
+	}
+
+	table.data td a {
+		color: var(--accent-color-darkest);
+		max-width: 100%;
+		width: fit-content;
 	}
 
 	table.data.compact tr {
@@ -619,12 +635,24 @@
 		padding-left: 1rem;
 	}
 
+	.title .title-content {
+		overflow: hidden;
+	}
+
 	.title a {
 		color: var(--color-text);
 		display: block;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	table.data.detailed td.title {
+		white-space: normal;
+	}
+
+	.title a:hover {
+		color: var(--accent-color);
 	}
 
 	.document-icon {

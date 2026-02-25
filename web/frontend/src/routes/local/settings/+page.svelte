@@ -131,7 +131,7 @@
 					<option value={option}>{historyOptionLabel(option)}</option>
 				{/each}
 			</select>
-			<button class="btn-sm import-btn" onclick={importHistory} disabled={importingHistory}>
+			<button class="bordered small import-btn" onclick={importHistory} disabled={importingHistory}>
 				{#if importingHistory}
 					<span class="spinner" aria-hidden="true"></span>
 					Importing...

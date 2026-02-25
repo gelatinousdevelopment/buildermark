@@ -258,7 +258,7 @@
 				<span>This conversation is hidden.</span>
 				<div class="hidden-banner-actions">
 					<button
-						class="btn-sm hidden-banner-btn"
+						class="bordered small hidden-banner-btn"
 						disabled={hiddenSubmitting}
 						onclick={toggleConversationHidden}
 						>{hiddenSubmitting ? 'Saving...' : 'Mark as not hidden'}</button
@@ -412,7 +412,7 @@
 				/>
 				<div class="inline-actions">
 					<button
-						class="btn-sm"
+						class="bordered small"
 						disabled={bottomSubmitting || bottomRatingValue < 1}
 						onclick={submitBottomRating}
 					>
@@ -427,7 +427,7 @@
 		{#if !localHidden}
 			<div class="conversation-visibility">
 				<button
-					class="btn-sm visibility-btn"
+					class="bordered small visibility-btn"
 					disabled={hiddenSubmitting}
 					onclick={toggleConversationHidden}
 				>
@@ -672,20 +672,6 @@
 	.inline-actions {
 		display: flex;
 		gap: 0.5rem;
-	}
-
-	.btn-sm {
-		padding: 0.25rem 0.75rem;
-		font-size: 0.85rem;
-		border: 1px solid #ccc;
-		border-radius: 4px;
-		background: #f0c040;
-		cursor: pointer;
-	}
-
-	.btn-sm:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 
 	.inline-error {

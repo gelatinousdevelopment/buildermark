@@ -46,7 +46,7 @@
 		/>
 		<div class="more">
 			<a
-				class="btn-sm"
+				class="bordered small"
 				href={resolve('/local/projects/[project_id]/conversations', { project_id: projectId })}
 				>More...</a
 			>
@@ -69,7 +69,7 @@
 		/>
 		<div class="more">
 			<a
-				class="btn-sm"
+				class="bordered small"
 				href={resolve('/local/projects/[project_id]/commits', { project_id: projectId })}>More...</a
 			>
 		</div>

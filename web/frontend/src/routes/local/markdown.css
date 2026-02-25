@@ -36,7 +36,7 @@
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	font-size: 0.8em;
 	border: 1px solid #ddd;
-	background: #fafafa;
+	background: rgb(255 253 193 / 76%);
 	padding: 0.2rem 0.4rem;
 	border-radius: 5px;
 }

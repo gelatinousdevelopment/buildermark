@@ -107,9 +107,9 @@
 					>
 					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<a
-						href={resolve('/local/projects/add')}
+						href={resolve('/local/projects/import')}
 						class="item"
-						class:selected={page.route.id === '/local/projects/add'}>Import</a
+						class:selected={page.route.id === '/local/projects/import'}>Import</a
 					>
 				{/if}
 			</nav>
@@ -150,7 +150,7 @@
 
 	<footer>
 		<div class="content">
-			<a href="https://buildermark.dev" target="_blank">Buildermark</a> brand &copy; 2026
+			<a href="https://buildermark.dev" target="_blank">Buildermark</a> is a trademark of
 			<a href="https://geldev.com" target="_blank">Gelatinous Development Studio</a>
 			&bull; Buildermark Local is
 			<a href="https://github.com/gelatinousdevelopment/buildermark" target="_blank">open source</a>
@@ -326,7 +326,7 @@
 
 	footer .content {
 		font-size: 0.9rem;
-		opacity: 0.5;
+		opacity: 0.6;
 		text-align: center;
 	}
 
