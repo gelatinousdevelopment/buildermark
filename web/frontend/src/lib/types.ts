@@ -298,6 +298,7 @@ export interface ProjectCommitCoverage {
 	linesAdded: number;
 	linesRemoved: number;
 	agentSegments?: AgentCoverageSegment[];
+	overrideLinePercent?: number | null;
 }
 
 export interface CommitConversationLinks {

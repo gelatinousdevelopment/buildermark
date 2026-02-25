@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log"
@@ -111,25 +112,26 @@ type projectCommitSummary struct {
 }
 
 type projectCommitCoverage struct {
-	WorkingCopy      bool                   `json:"workingCopy"`
-	ProjectID        string                 `json:"projectId"`
-	ProjectLabel     string                 `json:"projectLabel"`
-	ProjectPath      string                 `json:"projectPath"`
-	ProjectGitID     string                 `json:"projectGitId"`
-	CommitHash       string                 `json:"commitHash"`
-	Subject          string                 `json:"subject"`
-	UserName         string                 `json:"userName,omitempty"`
-	UserEmail        string                 `json:"userEmail,omitempty"`
-	AuthoredAtUnixMs int64                  `json:"authoredAtUnixMs"`
-	LinesTotal       int                    `json:"linesTotal"`
-	LinesFromAgent   int                    `json:"linesFromAgent"`
-	LinePercent      float64                `json:"linePercent"`
-	CharsTotal       int                    `json:"charsTotal"`
-	CharsFromAgent   int                    `json:"charsFromAgent"`
-	CharacterPercent float64                `json:"characterPercent"`
-	LinesAdded       int                    `json:"linesAdded"`
-	LinesRemoved     int                    `json:"linesRemoved"`
-	AgentSegments    []agentCoverageSegment `json:"agentSegments,omitempty"`
+	WorkingCopy         bool                   `json:"workingCopy"`
+	ProjectID           string                 `json:"projectId"`
+	ProjectLabel        string                 `json:"projectLabel"`
+	ProjectPath         string                 `json:"projectPath"`
+	ProjectGitID        string                 `json:"projectGitId"`
+	CommitHash          string                 `json:"commitHash"`
+	Subject             string                 `json:"subject"`
+	UserName            string                 `json:"userName,omitempty"`
+	UserEmail           string                 `json:"userEmail,omitempty"`
+	AuthoredAtUnixMs    int64                  `json:"authoredAtUnixMs"`
+	LinesTotal          int                    `json:"linesTotal"`
+	LinesFromAgent      int                    `json:"linesFromAgent"`
+	LinePercent         float64                `json:"linePercent"`
+	CharsTotal          int                    `json:"charsTotal"`
+	CharsFromAgent      int                    `json:"charsFromAgent"`
+	CharacterPercent    float64                `json:"characterPercent"`
+	LinesAdded          int                    `json:"linesAdded"`
+	LinesRemoved        int                    `json:"linesRemoved"`
+	AgentSegments       []agentCoverageSegment `json:"agentSegments,omitempty"`
+	OverrideLinePercent *float64               `json:"overrideLinePercent,omitempty"`
 }
 
 type projectCommitDetailResponse struct {
@@ -634,27 +636,35 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		commitDetailCacheMu.Unlock()
 	}
 
+	detailLinePercent := percentage(matchedLines, totalLines)
+	var detailOverride *float64
+	if dbCommit != nil && dbCommit.OverrideLinePercent != nil {
+		detailLinePercent = *dbCommit.OverrideLinePercent
+		detailOverride = dbCommit.OverrideLinePercent
+	}
+
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 		Branch:    branch,
 		Branches:  branches,
 		CommitURL: commitURL(remote, commit.Hash),
 		Commit: projectCommitCoverage{
-			ProjectID:        project.ID,
-			ProjectLabel:     project.Label,
-			ProjectPath:      project.Path,
-			ProjectGitID:     project.GitID,
-			CommitHash:       commit.Hash,
-			Subject:          commit.Subject,
-			AuthoredAtUnixMs: commit.TimestampUnix * 1000,
-			LinesTotal:       totalLines,
-			LinesFromAgent:   matchedLines,
-			LinePercent:      percentage(matchedLines, totalLines),
-			CharsTotal:       totalChars,
-			CharsFromAgent:   matchedChars,
-			CharacterPercent: percentage(matchedChars, totalChars),
-			LinesAdded:       detailAdded,
-			LinesRemoved:     detailRemoved,
-			AgentSegments:    agentSegments,
+			ProjectID:           project.ID,
+			ProjectLabel:        project.Label,
+			ProjectPath:         project.Path,
+			ProjectGitID:        project.GitID,
+			CommitHash:          commit.Hash,
+			Subject:             commit.Subject,
+			AuthoredAtUnixMs:    commit.TimestampUnix * 1000,
+			LinesTotal:          totalLines,
+			LinesFromAgent:      matchedLines,
+			LinePercent:         detailLinePercent,
+			CharsTotal:          totalChars,
+			CharsFromAgent:      matchedChars,
+			CharacterPercent:    percentage(matchedChars, totalChars),
+			LinesAdded:          detailAdded,
+			LinesRemoved:        detailRemoved,
+			AgentSegments:       agentSegments,
+			OverrideLinePercent: detailOverride,
 		},
 		Attribution: commitAttribution{
 			ExactMatchedLines:    exactMatchedLines,
@@ -1015,25 +1025,77 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 }
 
 func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCoverage {
-	return projectCommitCoverage{
-		ProjectID:        repoProject.ID,
-		ProjectLabel:     repoProject.Label,
-		ProjectPath:      repoProject.Path,
-		ProjectGitID:     repoProject.GitID,
-		CommitHash:       c.CommitHash,
-		Subject:          c.Subject,
-		UserName:         c.UserName,
-		UserEmail:        c.UserEmail,
-		AuthoredAtUnixMs: c.AuthoredAt * 1000,
-		LinesTotal:       c.LinesTotal,
-		LinesFromAgent:   c.LinesFromAgent,
-		LinePercent:      percentage(c.LinesFromAgent, c.LinesTotal),
-		CharsTotal:       c.CharsTotal,
-		CharsFromAgent:   c.CharsFromAgent,
-		CharacterPercent: percentage(c.CharsFromAgent, c.CharsTotal),
-		LinesAdded:       c.LinesAdded,
-		LinesRemoved:     c.LinesRemoved,
+	lp := percentage(c.LinesFromAgent, c.LinesTotal)
+	if c.OverrideLinePercent != nil {
+		lp = *c.OverrideLinePercent
 	}
+	return projectCommitCoverage{
+		ProjectID:           repoProject.ID,
+		ProjectLabel:        repoProject.Label,
+		ProjectPath:         repoProject.Path,
+		ProjectGitID:        repoProject.GitID,
+		CommitHash:          c.CommitHash,
+		Subject:             c.Subject,
+		UserName:            c.UserName,
+		UserEmail:           c.UserEmail,
+		AuthoredAtUnixMs:    c.AuthoredAt * 1000,
+		LinesTotal:          c.LinesTotal,
+		LinesFromAgent:      c.LinesFromAgent,
+		LinePercent:         lp,
+		CharsTotal:          c.CharsTotal,
+		CharsFromAgent:      c.CharsFromAgent,
+		CharacterPercent:    percentage(c.CharsFromAgent, c.CharsTotal),
+		LinesAdded:          c.LinesAdded,
+		LinesRemoved:        c.LinesRemoved,
+		OverrideLinePercent: c.OverrideLinePercent,
+	}
+}
+
+func (s *Server) handleSetCommitOverrideLinePercent(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
+
+	projectID := strings.TrimSpace(r.PathValue("projectId"))
+	commitHash := strings.TrimSpace(r.PathValue("commitHash"))
+	if projectID == "" || commitHash == "" {
+		writeError(w, http.StatusBadRequest, "project id and commit hash are required")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var body struct {
+		OverrideLinePercent *float64 `json:"overrideLinePercent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if body.OverrideLinePercent != nil {
+		v := *body.OverrideLinePercent
+		if v < 0 || v > 100 {
+			writeError(w, http.StatusBadRequest, "overrideLinePercent must be between 0 and 100")
+			return
+		}
+	}
+
+	if err := db.SetCommitOverrideLinePercent(r.Context(), s.DB, projectID, commitHash, body.OverrideLinePercent); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "commit not found")
+			return
+		}
+		log.Printf("error setting commit override: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to set override")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, map[string]any{
+		"projectId":           projectID,
+		"commitHash":          commitHash,
+		"overrideLinePercent": body.OverrideLinePercent,
+	})
 }
 
 func listAllProjectGroups(ctx context.Context, database *sql.DB) ([]projectGroup, error) {

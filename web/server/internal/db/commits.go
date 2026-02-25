@@ -30,7 +30,8 @@ type Commit struct {
 	CharsFromAgent  int    `json:"charsFromAgent"`
 	LinesAdded      int    `json:"linesAdded"`
 	LinesRemoved    int    `json:"linesRemoved"`
-	CoverageVersion int    `json:"coverageVersion"`
+	CoverageVersion    int      `json:"coverageVersion"`
+	OverrideLinePercent *float64 `json:"overrideLinePercent,omitempty"`
 }
 
 // UpsertCommit inserts or updates a commit row. On conflict (same project_id + commit_hash),
@@ -121,7 +122,7 @@ func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID, branchName
 	}
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits
 		 WHERE project_id = ? AND branch_name = ?
 		 ORDER BY authored_at DESC
@@ -136,9 +137,13 @@ func ListCommitsByProject(ctx context.Context, db *sql.DB, projectID, branchName
 	commits := []Commit{}
 	for rows.Next() {
 		var c Commit
+		var olp sql.NullFloat64
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		if olp.Valid {
+			c.OverrideLinePercent = &olp.Float64
 		}
 		commits = append(commits, c)
 	}
@@ -191,7 +196,7 @@ func ListCommitsByProjectAndUser(ctx context.Context, db *sql.DB, projectID, bra
 	}
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits
 		 WHERE project_id = ? AND branch_name = ? AND user_email = ?
 		 ORDER BY authored_at DESC
@@ -206,9 +211,13 @@ func ListCommitsByProjectAndUser(ctx context.Context, db *sql.DB, projectID, bra
 	commits := []Commit{}
 	for rows.Next() {
 		var c Commit
+		var olp sql.NullFloat64
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		if olp.Valid {
+			c.OverrideLinePercent = &olp.Float64
 		}
 		commits = append(commits, c)
 	}
@@ -232,18 +241,22 @@ func CountCommitsByProjectAndUser(ctx context.Context, db *sql.DB, projectID, br
 // GetCommitByHash returns a single commit by project ID and commit hash.
 func GetCommitByHash(ctx context.Context, db *sql.DB, projectID, branchName, commitHash string) (*Commit, error) {
 	var c Commit
+	var olp sql.NullFloat64
 	err := db.QueryRowContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
 		projectID, branchName, commitHash,
 	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion)
+		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get commit: %w", err)
+	}
+	if olp.Valid {
+		c.OverrideLinePercent = &olp.Float64
 	}
 	return &c, nil
 }
@@ -251,19 +264,23 @@ func GetCommitByHash(ctx context.Context, db *sql.DB, projectID, branchName, com
 // OldestCommitByProject returns the oldest ingested commit for a project (by authored_at).
 func OldestCommitByProject(ctx context.Context, db *sql.DB, projectID, branchName string) (*Commit, error) {
 	var c Commit
+	var olp sql.NullFloat64
 	err := db.QueryRowContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits WHERE project_id = ? AND branch_name = ?
 		 ORDER BY authored_at ASC LIMIT 1`,
 		projectID, branchName,
 	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion)
+		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("oldest commit: %w", err)
+	}
+	if olp.Valid {
+		c.OverrideLinePercent = &olp.Float64
 	}
 	return &c, nil
 }
@@ -289,7 +306,7 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
 	query := fmt.Sprintf(
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits
 		 WHERE project_id IN (%s) AND branch_name = ?
 		 ORDER BY authored_at ASC`,
@@ -310,9 +327,13 @@ func ListCommitsByProjectIDs(ctx context.Context, db *sql.DB, projectIDs []strin
 	commits := []Commit{}
 	for rows.Next() {
 		var c Commit
+		var olp sql.NullFloat64
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		if olp.Valid {
+			c.OverrideLinePercent = &olp.Float64
 		}
 		commits = append(commits, c)
 	}
@@ -340,7 +361,7 @@ func ListCommitsWithDiffByHashes(ctx context.Context, database *sql.DB, projectI
 		hashPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
 		query := fmt.Sprintf(
 			`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-			        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+			        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 			 FROM commits
 			 WHERE project_id IN (%s) AND commit_hash IN (%s) AND lines_from_agent > 0`,
 			pidPlaceholders, hashPlaceholders,
@@ -359,10 +380,14 @@ func ListCommitsWithDiffByHashes(ctx context.Context, database *sql.DB, projectI
 		}
 		for rows.Next() {
 			var c Commit
+			var olp sql.NullFloat64
 			if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-				&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+				&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp); err != nil {
 				rows.Close()
 				return nil, fmt.Errorf("scan commit with diff: %w", err)
+			}
+			if olp.Valid {
+				c.OverrideLinePercent = &olp.Float64
 			}
 			all = append(all, c)
 		}
@@ -622,18 +647,22 @@ const sqliteBatchSize = 999
 // without filtering by branch.
 func GetCommitByProjectAndHash(ctx context.Context, db *sql.DB, projectID, commitHash string) (*Commit, error) {
 	var c Commit
+	var olp sql.NullFloat64
 	err := db.QueryRowContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits WHERE project_id = ? AND commit_hash = ?`,
 		projectID, commitHash,
 	).Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion)
+		&c.DiffContent, &c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get commit by project and hash: %w", err)
+	}
+	if olp.Valid {
+		c.OverrideLinePercent = &olp.Float64
 	}
 	return &c, nil
 }
@@ -692,7 +721,7 @@ func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string
 	}
 	query := fmt.Sprintf(
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits
 		 WHERE project_id = ? AND commit_hash IN (%s)%s
 		 ORDER BY authored_at DESC
@@ -718,9 +747,13 @@ func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string
 	commits := []Commit{}
 	for rows.Next() {
 		var c Commit
+		var olp sql.NullFloat64
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		if olp.Valid {
+			c.OverrideLinePercent = &olp.Float64
 		}
 		commits = append(commits, c)
 	}
@@ -966,6 +999,30 @@ func HasStaleCommitCoverageByHashes(ctx context.Context, database *sql.DB, proje
 	return false, nil
 }
 
+// SetCommitOverrideLinePercent sets or clears the manual override for agent line
+// percentage on a commit. Pass nil to clear.
+func SetCommitOverrideLinePercent(ctx context.Context, db *sql.DB, projectID, commitHash string, override *float64) error {
+	var val any
+	if override != nil {
+		val = *override
+	}
+	res, err := db.ExecContext(ctx,
+		"UPDATE commits SET override_line_percent = ? WHERE project_id = ? AND commit_hash = ?",
+		val, projectID, commitHash,
+	)
+	if err != nil {
+		return fmt.Errorf("set commit override line percent: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("commit %s in project %s: %w", commitHash, projectID, ErrNotFound)
+	}
+	return nil
+}
+
 // ListAllCommitsByProject returns ALL commits for a project (no branch filter),
 // ordered by authored_at DESC. DiffContent is omitted.
 func ListAllCommitsByProject(ctx context.Context, db *sql.DB, projectID string, limit, offset int) ([]Commit, error) {
@@ -974,7 +1031,7 @@ func ListAllCommitsByProject(ctx context.Context, db *sql.DB, projectID string, 
 	}
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
-		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version
+		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits
 		 WHERE project_id = ?
 		 ORDER BY authored_at DESC
@@ -989,9 +1046,13 @@ func ListAllCommitsByProject(ctx context.Context, db *sql.DB, projectID string, 
 	commits := []Commit{}
 	for rows.Next() {
 		var c Commit
+		var olp sql.NullFloat64
 		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
-			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion); err != nil {
+			&c.LinesTotal, &c.CharsTotal, &c.LinesFromAgent, &c.CharsFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp); err != nil {
 			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		if olp.Valid {
+			c.OverrideLinePercent = &olp.Float64
 		}
 		commits = append(commits, c)
 	}

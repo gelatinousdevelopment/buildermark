@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getProjectCommitDetail } from '$lib/api';
+	import { getProjectCommitDetail, setCommitOverrideLinePercent } from '$lib/api';
 	import { fmtTime, singleLineTitle } from '$lib/utils';
 	import type { ProjectCommitDetailResponse, AgentCoverageSegment } from '$lib/types';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
@@ -37,6 +37,51 @@
 	let agentLinesTotal = $derived.by(() => detail?.commit.linesTotal ?? 0);
 	let agentLinesFromAgent = $derived.by(() => detail?.commit.linesFromAgent ?? 0);
 	let collapsedDiffPaths: string[] = $state([]);
+
+	let editingOverride = $state(false);
+	let overrideInput = $state('');
+	let savingOverride = $state(false);
+
+	let hasOverride = $derived.by(() => detail?.commit?.overrideLinePercent != null);
+	let effectivePercent = $derived.by(() => {
+		if (detail?.commit.overrideLinePercent != null) {
+			return detail.commit.overrideLinePercent;
+		}
+		return percent(agentLinesFromAgent, agentLinesTotal);
+	});
+
+	async function saveOverride() {
+		if (!detail || savingOverride) return;
+		const val = parseFloat(overrideInput);
+		if (isNaN(val) || val < 0 || val > 100) return;
+		savingOverride = true;
+		try {
+			await setCommitOverrideLinePercent(detail.commit.projectId, detail.commit.commitHash, val);
+			detail.commit.overrideLinePercent = val;
+			editingOverride = false;
+		} finally {
+			savingOverride = false;
+		}
+	}
+
+	async function clearOverride() {
+		if (!detail || savingOverride) return;
+		savingOverride = true;
+		try {
+			await setCommitOverrideLinePercent(detail.commit.projectId, detail.commit.commitHash, null);
+			detail.commit.overrideLinePercent = undefined;
+			editingOverride = false;
+		} finally {
+			savingOverride = false;
+		}
+	}
+
+	function startEditOverride() {
+		overrideInput = hasOverride
+			? String(detail!.commit.overrideLinePercent)
+			: String(Math.round(percent(agentLinesFromAgent, agentLinesTotal)));
+		editingOverride = true;
+	}
 
 	let allMessagesExpanded = $derived.by(() => {
 		if (!detail) return false;
@@ -163,6 +208,37 @@
 	{:else if error}
 		<p class="error">{error}</p>
 	{:else if detail}
+		<div class="right">
+			<div class="override-controls">
+				{#if editingOverride}
+					<input
+						type="number"
+						min="0"
+						max="100"
+						step="any"
+						bind:value={overrideInput}
+						class="override-input"
+						disabled={savingOverride}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') saveOverride();
+							if (e.key === 'Escape') editingOverride = false;
+						}}
+					/>
+					<button class="btn-override-action" onclick={saveOverride} disabled={savingOverride}
+						>Save</button
+					>
+					<button
+						class="btn-override-action"
+						onclick={() => (editingOverride = false)}
+						disabled={savingOverride}>Cancel</button
+					>
+				{:else}
+					<button class="btn-override-action" onclick={startEditOverride}>
+						{hasOverride ? 'Edit Override' : 'Override Agent Attribution'}
+					</button>
+				{/if}
+			</div>
+		</div>
 		<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
 		<p>
 			{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}
@@ -178,10 +254,18 @@
 			Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} attributable changed lines
 			({percent(agentLinesFromAgent, agentLinesTotal).toFixed(1)}%) in non-ignored, non-moved files
 		</p>
+		{#if hasOverride}
+			<p class="override-display">
+				Agent Attribution Override: {detail.commit.overrideLinePercent}%
+				<button class="btn-override-action" onclick={clearOverride} disabled={savingOverride}
+					>Remove</button
+				>
+			</p>
+		{/if}
 		<div class="detail-bar">
 			<AgentPercentageBar
-				agentPercent={percent(agentLinesFromAgent, agentLinesTotal)}
-				segments={toBarSegments(detail.commit.agentSegments)}
+				agentPercent={effectivePercent}
+				segments={hasOverride ? [] : toBarSegments(detail.commit.agentSegments)}
 				totalLines={agentLinesTotal}
 				showManual={true}
 			/>
@@ -332,6 +416,15 @@
 		padding: 0 1rem;
 	}
 
+	h2 {
+		font-size: 1.3rem;
+		margin: 1rem 0;
+	}
+
+	.right {
+		float: right;
+	}
+
 	.fallback-note {
 		color: #8a6d1f;
 		font-size: 0.9rem;
@@ -436,6 +529,47 @@
 	.diff-card-collapsed:hover {
 		border-color: var(--accent-color);
 		background: var(--accent-color-ultralight);
+	}
+
+	.override-display {
+		color: var(--color-status-red);
+		font-size: 0.9rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.override-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.override-input {
+		width: 3rem;
+		padding: 0.2rem 0.4rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		font-size: 0.85rem;
+	}
+
+	.btn-override-action {
+		padding: 0.15rem 0.5rem;
+		font-size: 0.8rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		background: #f5f5f5;
+		cursor: pointer;
+		color: #555;
+	}
+
+	.btn-override-action:hover {
+		border-color: var(--accent-color);
+		color: var(--accent-color);
+	}
+
+	.btn-override-action:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	.detail-bar {

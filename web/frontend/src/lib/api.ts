@@ -141,6 +141,21 @@ export function setConversationHidden(
 	});
 }
 
+export function setCommitOverrideLinePercent(
+	projectId: string,
+	commitHash: string,
+	value: number | null
+): Promise<void> {
+	return api(
+		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/override-line-percent`,
+		{
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ overrideLinePercent: value })
+		}
+	);
+}
+
 export function getConversationsBatchDetail(ids: string[]): Promise<ConversationBatchDetail[]> {
 	return api(`/api/v1/conversations/batch-detail?ids=${ids.map(encodeURIComponent).join(',')}`);
 }

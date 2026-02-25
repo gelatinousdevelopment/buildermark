@@ -559,7 +559,7 @@
 					<td class="bar"
 						>{#if !c.workingCopy}<AgentPercentageBar
 								agentPercent={c.linePercent}
-								segments={toBarSegments(c.agentSegments)}
+								segments={c.overrideLinePercent != null ? [] : toBarSegments(c.agentSegments)}
 								totalLines={c.linesTotal}
 								showKey={false}
 							/>{/if}</td
