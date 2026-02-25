@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davidcann/zrate/web/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
 )
 
 // ResolveSession attempts to resolve a rating to a real Codex session.

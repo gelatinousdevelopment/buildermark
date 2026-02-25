@@ -109,7 +109,7 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href="https://github.com/gelatinousdevelopment" class="item"
+				<a href="https://github.com/gelatinousdevelopment/buildermark" class="item"
 					><Icon name="github" width="15px" /></a
 				>
 			</nav>

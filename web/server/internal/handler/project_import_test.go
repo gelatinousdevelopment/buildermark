@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/davidcann/zrate/web/server/internal/agent"
-	"github.com/davidcann/zrate/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
 )
 
 type stubDiscoverer struct {

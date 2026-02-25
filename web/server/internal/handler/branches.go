@@ -8,18 +8,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/davidcann/zrate/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
 )
 
 // branchCacheEntry stores cached branch list results with a TTL.
 type branchCacheEntry struct {
-	branches []string
+	branches  []string
 	fetchedAt time.Time
 }
 
 var (
-	branchCacheMu sync.RWMutex
-	branchCache   = make(map[string]branchCacheEntry)
+	branchCacheMu  sync.RWMutex
+	branchCache    = make(map[string]branchCacheEntry)
 	branchCacheTTL = 30 * time.Second
 )
 

@@ -1,4 +1,4 @@
-module github.com/davidcann/zrate/web/server
+module github.com/gelatinousdevelopment/buildermark/web/server
 
 go 1.25.7
 

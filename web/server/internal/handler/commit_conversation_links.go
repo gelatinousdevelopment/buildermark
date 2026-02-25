@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/davidcann/zrate/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
 )
 
 // CommitConversationLinks holds the bidirectional mapping between commit hashes

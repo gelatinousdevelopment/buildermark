@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davidcann/zrate/web/server/internal/agent"
-	"github.com/davidcann/zrate/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
 )
 
 const (
@@ -328,4 +328,3 @@ func listProjectsByPath(ctx context.Context, database *sql.DB) (map[string]db.Pr
 	}
 	return byPath, nil
 }
-
