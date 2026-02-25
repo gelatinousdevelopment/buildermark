@@ -71,7 +71,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/history/scan", s.handleHistoryScan)
 	mux.HandleFunc("GET /api/v1/local/settings", s.handleGetLocalSettings)
 	mux.HandleFunc("GET /", s.handleDashboard)
-	return corsMiddleware(mux)
+	return corsMiddleware(securityHeadersMiddleware(mux))
 }
 
 type jsonEnvelope struct {

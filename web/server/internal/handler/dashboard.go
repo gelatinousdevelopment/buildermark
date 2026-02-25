@@ -18,6 +18,10 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	rendered := string(html)
+	if nonce, ok := cspNonceFromContext(r.Context()); ok {
+		rendered = injectNonceIntoHTML(rendered, nonce)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(html)
+	_, _ = w.Write([]byte(rendered))
 }
