@@ -128,6 +128,8 @@ export interface ProjectCommitPageResponse {
 	branches: string[];
 	users: UserInfo[];
 	userFilter: string;
+	agents: string[];
+	agentFilter: string;
 	currentUser: string;
 	currentEmail: string;
 	project: Project;

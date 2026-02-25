@@ -28,6 +28,7 @@
 		pageSize={40}
 		showBranchPicker={true}
 		showUserPicker={true}
+		showAgentPicker={true}
 		showCoverageBar={true}
 		showPagination={true}
 		showLoadMore={true}

@@ -455,6 +455,133 @@ func ListCommitAgentCoverageByCommitIDs(ctx context.Context, database *sql.DB, c
 	return result, dbRows.Err()
 }
 
+// ListDistinctAgentsByCommitIDs returns the distinct agent names across the given commit IDs.
+func ListDistinctAgentsByCommitIDs(ctx context.Context, database *sql.DB, commitIDs []string) ([]string, error) {
+	if len(commitIDs) == 0 {
+		return nil, nil
+	}
+	seen := make(map[string]bool)
+	var agents []string
+	for i := 0; i < len(commitIDs); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(commitIDs) {
+			end = len(commitIDs)
+		}
+		batch := commitIDs[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf(
+			`SELECT DISTINCT agent FROM commit_agent_coverage WHERE commit_id IN (%s) ORDER BY agent`,
+			placeholders,
+		)
+		args := make([]any, 0, len(batch))
+		for _, id := range batch {
+			args = append(args, id)
+		}
+		rows, err := database.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("list distinct agents by commit ids: %w", err)
+		}
+		for rows.Next() {
+			var agent string
+			if err := rows.Scan(&agent); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan agent: %w", err)
+			}
+			if !seen[agent] {
+				seen[agent] = true
+				agents = append(agents, agent)
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return agents, nil
+}
+
+// ListCommitIDsByAgent returns commit IDs that have coverage from a specific agent.
+// When agent is "manual", returns commit IDs where lines_from_agent = 0 in the commits table.
+func ListCommitIDsByAgent(ctx context.Context, database *sql.DB, commitIDs []string, agent string) (map[string]bool, error) {
+	if len(commitIDs) == 0 {
+		return nil, nil
+	}
+	result := make(map[string]bool)
+
+	if agent == "manual" {
+		// Return commit IDs where lines_from_agent = 0.
+		for i := 0; i < len(commitIDs); i += sqliteBatchSize {
+			end := i + sqliteBatchSize
+			if end > len(commitIDs) {
+				end = len(commitIDs)
+			}
+			batch := commitIDs[i:end]
+			placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+			query := fmt.Sprintf(
+				`SELECT id FROM commits WHERE id IN (%s) AND lines_from_agent = 0`,
+				placeholders,
+			)
+			args := make([]any, 0, len(batch))
+			for _, id := range batch {
+				args = append(args, id)
+			}
+			rows, err := database.QueryContext(ctx, query, args...)
+			if err != nil {
+				return nil, fmt.Errorf("list manual commit ids: %w", err)
+			}
+			for rows.Next() {
+				var id string
+				if err := rows.Scan(&id); err != nil {
+					rows.Close()
+					return nil, fmt.Errorf("scan commit id: %w", err)
+				}
+				result[id] = true
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
+	}
+
+	// Return commit IDs that have a matching agent in commit_agent_coverage.
+	for i := 0; i < len(commitIDs); i += sqliteBatchSize - 1 {
+		end := i + sqliteBatchSize - 1
+		if end > len(commitIDs) {
+			end = len(commitIDs)
+		}
+		batch := commitIDs[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf(
+			`SELECT DISTINCT commit_id FROM commit_agent_coverage WHERE commit_id IN (%s) AND agent = ?`,
+			placeholders,
+		)
+		args := make([]any, 0, len(batch)+1)
+		for _, id := range batch {
+			args = append(args, id)
+		}
+		args = append(args, agent)
+		rows, err := database.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("list commit ids by agent: %w", err)
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan commit id: %w", err)
+			}
+			result[id] = true
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
 // DeleteCommitAgentCoverageByCommitID removes all per-agent coverage rows for a commit.
 func DeleteCommitAgentCoverageByCommitID(ctx context.Context, database *sql.DB, commitID string) error {
 	if strings.TrimSpace(commitID) == "" {

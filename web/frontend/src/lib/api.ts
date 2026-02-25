@@ -151,11 +151,13 @@ export function listProjectCommitsPage(
 	page = 1,
 	branch = '',
 	pageSize = 10,
-	user = ''
+	user = '',
+	agent = ''
 ): Promise<ProjectCommitPageResponse> {
 	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 	if (branch) params.set('branch', branch);
 	if (user) params.set('user', user);
+	if (agent) params.set('agent', agent);
 	params.set('tzOffset', String(new Date().getTimezoneOffset()));
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }

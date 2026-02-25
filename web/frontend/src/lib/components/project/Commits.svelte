@@ -39,6 +39,7 @@
 		headerLink?: string;
 		showBranchPicker?: boolean;
 		showUserPicker?: boolean;
+		showAgentPicker?: boolean;
 		showPagination?: boolean;
 		showLoadMore?: boolean;
 		showDate?: boolean;
@@ -69,6 +70,7 @@
 		headerLink = undefined,
 		showBranchPicker = false,
 		showUserPicker = false,
+		showAgentPicker = false,
 		showPagination = false,
 		showLoadMore = false,
 		showDate = false,
@@ -97,6 +99,7 @@
 	let internalPage = $state(1);
 	let internalBranch = $state('');
 	let internalUser = $state('');
+	let internalAgent = $state('');
 	let userDefaultApplied = false;
 	let initialized = $state(false);
 	let requestToken = 0;
@@ -119,6 +122,10 @@
 				internalUser = urlUser;
 				userDefaultApplied = true;
 			}
+			const urlAgent = params.get('agent');
+			if (urlAgent !== null) {
+				internalAgent = urlAgent;
+			}
 		} else {
 			internalPage = page ?? 1;
 		}
@@ -137,6 +144,7 @@
 	const currentPage = $derived(page ?? internalPage);
 	const selectedBranch = $derived(branch ?? internalBranch);
 	const selectedUser = $derived(internalUser);
+	const selectedAgent = $derived(internalAgent);
 	const selectedUserDisplay = $derived.by(() => {
 		if (!selectedUser) return '';
 		if (selectedUser === USER_AND_AGENTS) return 'Me + agents';
@@ -186,7 +194,14 @@
 			const pageNum = Math.max(1, currentPage);
 			const resolvedUser = resolveUserFilter(selectedUser, data?.currentEmail);
 			const loaded = await withOptionalQueue(() =>
-				listProjectCommitsPage(projectId, pageNum, selectedBranch, pageSize, resolvedUser)
+				listProjectCommitsPage(
+					projectId,
+					pageNum,
+					selectedBranch,
+					pageSize,
+					resolvedUser,
+					selectedAgent
+				)
 			);
 			if (myToken !== requestToken) return;
 			data = loaded;
@@ -225,7 +240,7 @@
 	$effect(() => {
 		if (!autoload) return;
 		const resolved = resolveUserFilter(selectedUser, data?.currentEmail);
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();
@@ -294,6 +309,22 @@
 		internalPage = 1;
 	}
 
+	function handleAgentChange(event: Event) {
+		const value = (event.currentTarget as HTMLSelectElement).value;
+		internalAgent = value;
+		if (syncPaginationWithUrl && browser) {
+			const url = new URL(window.location.href);
+			if (value) {
+				url.searchParams.set('agent', value);
+			} else {
+				url.searchParams.delete('agent');
+			}
+			url.searchParams.delete('page');
+			window.history.replaceState(window.history.state, '', url);
+		}
+		internalPage = 1;
+	}
+
 	async function handleLoadMore() {
 		if (!projectId || loadingMore) return;
 		loadingMore = true;
@@ -334,7 +365,7 @@
 {:else if !data || visibleCommits.length === 0}
 	<p class="message">No commits found for this project and current git user.</p>
 {:else}
-	{#if showBranchPicker || showUserPicker}
+	{#if showBranchPicker || showUserPicker || showAgentPicker}
 		<div class="top-row">
 			<div class="filters">
 				{#if showBranchPicker}
@@ -358,6 +389,20 @@
 							<hr />
 							{#each data.users as a (a.email)}
 								<option value={a.email}>{a.name} ({a.email})</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+
+				{#if showAgentPicker && data.agents && data.agents.length > 0}
+					<div class="agent-picker">
+						<label for="agent-{projectId}">Agent:</label>
+						<select id="agent-{projectId}" value={selectedAgent} onchange={handleAgentChange}>
+							<option value="">All</option>
+							<option value="manual">Manual</option>
+							<hr />
+							{#each data.agents as a (a)}
+								<option value={a}>{a}</option>
 							{/each}
 						</select>
 					</div>
@@ -866,7 +911,8 @@
 	}
 
 	.branch-picker,
-	.user-picker {
+	.user-picker,
+	.agent-picker {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -880,8 +926,13 @@
 		width: 280px;
 	}
 
+	.agent-picker select {
+		width: 200px;
+	}
+
 	.branch-picker label,
-	.user-picker label {
+	.user-picker label,
+	.agent-picker label {
 		text-align: right;
 		width: 54px;
 	}

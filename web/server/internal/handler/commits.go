@@ -155,6 +155,8 @@ type projectCommitPageResponse struct {
 	Branches     []string                `json:"branches"`
 	Users        []db.UserInfo           `json:"users"`
 	UserFilter   string                  `json:"userFilter"`
+	Agents       []string                `json:"agents"`
+	AgentFilter  string                  `json:"agentFilter"`
 	CurrentUser  string                  `json:"currentUser"`
 	CurrentEmail string                  `json:"currentEmail"`
 	Project      db.Project              `json:"project"`
@@ -697,6 +699,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		}
 	}
 
+	agentFilter := strings.TrimSpace(r.URL.Query().Get("agent"))
+
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
 		log.Printf("error loading project %s: %v", projectID, err)
@@ -766,33 +770,42 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		log.Printf("error checking existing hashes for %s: %v", repoProject.Path, err)
 	}
 
-	// If recent commits are missing, trigger default ingestion.
-	recentMissing := 0
+	// Collect specific missing hashes from recent commits.
+	var missingHashes []string
 	checkLimit := defaultIngestCount
 	if checkLimit > len(allHashes) {
 		checkLimit = len(allHashes)
 	}
 	for _, h := range allHashes[:checkLimit] {
 		if !existing[h] {
-			recentMissing++
+			missingHashes = append(missingHashes, h)
 		}
-	}
-	if recentMissing > 0 {
-		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
-			log.Printf("warning: seed commit ingestion failed for %s: %v", repoProject.Path, err)
-		}
-		// Refresh existing set after ingestion.
-		existing, _ = db.ExistingCommitHashes(r.Context(), s.DB, repoProject.ID, allHashes)
 	}
 
 	// Also check if the current user's latest commit is ingested (for auto-refresh).
 	if head, headErr := latestCommitByIdentity(r.Context(), repoProject.Path, branch, identity); headErr == nil && head != nil {
 		if !existing[head.Hash] {
-			if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
-				log.Printf("warning: latest-head ingestion failed for %s: %v", repoProject.Path, err)
+			// Avoid duplicates if already in missingHashes.
+			found := false
+			for _, h := range missingHashes {
+				if h == head.Hash {
+					found = true
+					break
+				}
 			}
-			existing, _ = db.ExistingCommitHashes(r.Context(), s.DB, repoProject.ID, allHashes)
+			if !found {
+				missingHashes = append(missingHashes, head.Hash)
+			}
 		}
+	}
+
+	// Ingest only the missing commits.
+	if len(missingHashes) > 0 {
+		if _, err := ingestMissingCommits(r.Context(), s.DB, repoProject, group, branch, missingHashes); err != nil {
+			log.Printf("warning: missing commit ingestion failed for %s: %v", repoProject.Path, err)
+		}
+		// Refresh existing set after ingestion.
+		existing, _ = db.ExistingCommitHashes(r.Context(), s.DB, repoProject.ID, allHashes)
 	}
 
 	// Check for stale coverage using hash-based query.
@@ -876,6 +889,58 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 	agentCovMap, _ := db.ListCommitAgentCoverageByCommitIDs(r.Context(), s.DB, allCommitIDs)
 
+	// Get distinct agents for the filter dropdown.
+	agents, _ := db.ListDistinctAgentsByCommitIDs(r.Context(), s.DB, allCommitIDs)
+
+	// Apply agent filter: narrow branchCommits and recompute pagination.
+	if agentFilter != "" {
+		matchingIDs, agentErr := db.ListCommitIDsByAgent(r.Context(), s.DB, allCommitIDs, agentFilter)
+		if agentErr != nil {
+			log.Printf("error filtering by agent %s: %v", agentFilter, agentErr)
+			writeError(w, http.StatusInternalServerError, "failed to filter by agent")
+			return
+		}
+		var filtered []db.Commit
+		for _, c := range branchCommits {
+			if matchingIDs[c.ID] {
+				filtered = append(filtered, c)
+			}
+		}
+		branchCommits = filtered
+
+		// Rebuild allHashes from filtered commits for hash-based queries below.
+		filteredHashSet := make(map[string]bool, len(branchCommits))
+		for _, c := range branchCommits {
+			filteredHashSet[c.CommitHash] = true
+		}
+		var filteredHashes []string
+		for _, h := range allHashes {
+			if filteredHashSet[h] {
+				filteredHashes = append(filteredHashes, h)
+			}
+		}
+
+		// Recompute filtered total and re-query page.
+		filteredTotal = len(branchCommits)
+		totalPages = 0
+		if filteredTotal > 0 {
+			totalPages = (filteredTotal + pageSize - 1) / pageSize
+		}
+		if totalPages > 0 && page > totalPages {
+			page = totalPages
+		}
+		offset = (page - 1) * pageSize
+		if offset < 0 {
+			offset = 0
+		}
+		dbCommits, err = db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, filteredHashes, userEmails, pageSize, offset)
+		if err != nil {
+			log.Printf("error listing agent-filtered commits for %s: %v", repoProject.Path, err)
+			writeError(w, http.StatusInternalServerError, "failed to list commits")
+			return
+		}
+	}
+
 	// Convert DB commits to coverage structs for the current page.
 	paged := make([]projectCommitCoverage, 0, len(dbCommits))
 	for _, c := range dbCommits {
@@ -931,6 +996,8 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		Branches:     branches,
 		Users:        users,
 		UserFilter:   strings.Join(userEmails, ","),
+		Agents:       agents,
+		AgentFilter:  agentFilter,
 		CurrentUser:  identity.Name,
 		CurrentEmail: identity.Email,
 		Project:      *project,
