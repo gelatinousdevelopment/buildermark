@@ -627,6 +627,7 @@
 		align-items: center;
 		gap: 0.75rem;
 		margin-top: 1rem;
+		padding: 0 1rem;
 	}
 
 	.load-more {

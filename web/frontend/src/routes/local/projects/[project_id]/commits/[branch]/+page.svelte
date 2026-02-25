@@ -21,17 +21,25 @@
 	}
 </script>
 
-<Commits
-	{projectId}
-	{branch}
-	pageSize={40}
-	showBranchPicker={true}
-	showUserPicker={true}
-	showCoverageBar={true}
-	showPagination={true}
-	showLoadMore={true}
-	syncPaginationWithUrl={true}
-	showBranch={true}
-	showUser={true}
-	onBranchChange={handleBranchChange}
-/>
+<div class="project-section">
+	<Commits
+		{projectId}
+		{branch}
+		pageSize={40}
+		showBranchPicker={true}
+		showUserPicker={true}
+		showCoverageBar={true}
+		showPagination={true}
+		showLoadMore={true}
+		syncPaginationWithUrl={true}
+		showBranch={true}
+		showUser={true}
+		onBranchChange={handleBranchChange}
+	/>
+</div>
+
+<style>
+	.project-section {
+		margin: 0.5rem 0 1rem 0;
+	}
+</style>

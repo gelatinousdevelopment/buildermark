@@ -129,6 +129,17 @@
 	<div class="dashboard-content">
 		{@render children()}
 	</div>
+
+	<footer>
+		<div class="content">
+			<a href="https://buildermark.dev" target="_blank">Buildermark</a> brand &copy; 2026
+			<a href="https://geldev.com" target="_blank">Gelatinous Development Studio</a>
+			&bull; Buildermark Local is
+			<a href="https://github.com/gelatinousdevelopment/buildermark" target="_blank">open source</a>
+			&bull; Support with a
+			<a href="https://buildermark.dev" target="_blank">team server license</a>
+		</div>
+	</footer>
 </div>
 
 <style>
@@ -288,5 +299,20 @@
 		width: 100vw;
 		max-width: 100vw;
 		box-sizing: border-box;
+	}
+
+	footer {
+		background: var(--color-background-page);
+		padding: 1rem;
+	}
+
+	footer .content {
+		font-size: 0.9rem;
+		opacity: 0.5;
+		text-align: center;
+	}
+
+	footer:hover .content {
+		opacity: 1;
 	}
 </style>

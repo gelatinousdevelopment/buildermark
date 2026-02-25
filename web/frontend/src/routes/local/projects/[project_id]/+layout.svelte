@@ -147,7 +147,7 @@
 	}
 
 	h3 {
-		font-size: 2.3rem;
+		font-size: 2rem;
 		font-weight: 300;
 		letter-spacing: 0.03rem;
 		margin: 0;
