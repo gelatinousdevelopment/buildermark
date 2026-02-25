@@ -1,4 +1,4 @@
-# zrate – rate coding agent developer workflows
+# Buildermark Local – rate coding agent developer workflows
 
 ## Architecture
 

@@ -196,7 +196,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 	}
 
 	messages := make([]db.Message, 0, len(conv.Messages))
-	var zrateEntries []struct {
+	var ratingEntries []struct {
 		rating    int
 		note      string
 		timestamp int64
@@ -234,8 +234,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		})
 
 		if role == "user" {
-			if rating, note := parseZrateDisplay(content); rating >= 0 {
-				zrateEntries = append(zrateEntries, struct {
+			if rating, note := parseRatingDisplay(content); rating >= 0 {
+				ratingEntries = append(ratingEntries, struct {
 					rating    int
 					note      string
 					timestamp int64
@@ -279,8 +279,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		})
 
 		if role == "user" {
-			if rating, note := parseZrateDisplay(content); rating >= 0 {
-				zrateEntries = append(zrateEntries, struct {
+			if rating, note := parseRatingDisplay(content); rating >= 0 {
+				ratingEntries = append(ratingEntries, struct {
 					rating    int
 					note      string
 					timestamp int64
@@ -296,7 +296,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		}
 	}
 
-	for _, z := range zrateEntries {
+	for _, z := range ratingEntries {
 		if err := db.ReconcileOrphanedRating(ctx, a.db, z.rating, z.note, z.timestamp, conv.SessionID); err != nil {
 			log.Printf("gemini watcher: reconcile rating for session %s: %v", conv.SessionID, err)
 		}

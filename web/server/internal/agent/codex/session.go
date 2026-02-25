@@ -120,7 +120,7 @@ func (a *Agent) searchRecentFiles(rating int, note string, maxAge time.Duration)
 				if err := json.Unmarshal(event.Payload, &item); err != nil || item.Type != "message" || item.Role != "user" {
 					continue
 				}
-				if r, n := parseZrateDisplay(extractResponseItemText(item.Content)); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
+				if r, n := parseRatingDisplay(extractResponseItemText(item.Content)); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
 					matchPath = path
 					matchThreadID = threadID
 					return filepath.SkipAll
@@ -131,7 +131,7 @@ func (a *Agent) searchRecentFiles(rating int, note string, maxAge time.Duration)
 				if err := json.Unmarshal(event.Payload, &msg); err != nil || msg.Type != "user_message" {
 					continue
 				}
-				if r, n := parseZrateDisplay(msg.Message); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
+				if r, n := parseRatingDisplay(msg.Message); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
 					matchPath = path
 					matchThreadID = threadID
 					return filepath.SkipAll
@@ -142,7 +142,7 @@ func (a *Agent) searchRecentFiles(rating int, note string, maxAge time.Duration)
 				if event.ThreadID != "" && threadID == "" {
 					threadID = event.ThreadID
 				}
-				if r, n := parseZrateDisplay(event.Content); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
+				if r, n := parseRatingDisplay(event.Content); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
 					matchPath = path
 					matchThreadID = threadID
 					return filepath.SkipAll
@@ -155,7 +155,7 @@ func (a *Agent) searchRecentFiles(rating int, note string, maxAge time.Duration)
 				}
 				for _, c := range event.Item.Content {
 					if (c.Type == "text" || c.Type == "input_text") && c.Text != "" {
-						if r, n := parseZrateDisplay(c.Text); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
+						if r, n := parseRatingDisplay(c.Text); r == rating && strings.TrimSpace(n) == strings.TrimSpace(note) {
 							matchPath = path
 							matchThreadID = threadID
 							return filepath.SkipAll

@@ -852,10 +852,10 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		// Reconcile orphaned ratings: if any entry in this session is a /bb
 		// command, find the corresponding orphaned rating and re-link it.
 		for _, e := range g.entries {
-			if !isZrateDisplay(e.Display) {
+			if !isRatingDisplay(e.Display) {
 				continue
 			}
-			rating, note := parseZrateDisplay(e.Display)
+			rating, note := parseRatingDisplay(e.Display)
 			if rating < 0 {
 				continue
 			}
@@ -928,9 +928,9 @@ func mapRoleModel(role, model string) string {
 	return strings.TrimSpace(model)
 }
 
-// parseZrateDisplay parses "/bb 4 optional note" or "/bb:rate 4 optional note"
+// parseRatingDisplay parses "/bb 4 optional note" or "/bb:rate 4 optional note"
 // into (4, "optional note"). Returns (-1, "") if the format is invalid or has no args.
-func parseZrateDisplay(display string) (int, string) {
+func parseRatingDisplay(display string) (int, string) {
 	rest := display
 	switch {
 	case strings.HasPrefix(rest, "/bb:rate "):

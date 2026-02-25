@@ -362,7 +362,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 	var firstResponseItemUser string
 	var firstLegacyUser string
 	var latestReasoningSummary string
-	var zrateEntries []struct {
+	var ratingEntries []struct {
 		rating    int
 		note      string
 		timestamp int64
@@ -475,8 +475,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 			}
 
 			if role == "user" {
-				if rating, note := parseZrateDisplay(content); rating >= 0 {
-					zrateEntries = append(zrateEntries, struct {
+				if rating, note := parseRatingDisplay(content); rating >= 0 {
+					ratingEntries = append(ratingEntries, struct {
 						rating    int
 						note      string
 						timestamp int64
@@ -509,8 +509,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 				RawJSON:   line,
 			})
 			if role == "user" {
-				if rating, note := parseZrateDisplay(msg.Message); rating >= 0 {
-					zrateEntries = append(zrateEntries, struct {
+				if rating, note := parseRatingDisplay(msg.Message); rating >= 0 {
+					ratingEntries = append(ratingEntries, struct {
 						rating    int
 						note      string
 						timestamp int64
@@ -540,8 +540,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 			})
 			// Check for $bb command.
 			if strings.HasPrefix(content, "$bb ") {
-				if rating, note := parseZrateDisplay(content); rating >= 0 {
-					zrateEntries = append(zrateEntries, struct {
+				if rating, note := parseRatingDisplay(content); rating >= 0 {
+					ratingEntries = append(ratingEntries, struct {
 						rating    int
 						note      string
 						timestamp int64
@@ -591,8 +591,8 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 
 			// Check user messages for $bb.
 			if role == "user" && strings.HasPrefix(content, "$bb ") {
-				if rating, note := parseZrateDisplay(content); rating >= 0 {
-					zrateEntries = append(zrateEntries, struct {
+				if rating, note := parseRatingDisplay(content); rating >= 0 {
+					ratingEntries = append(ratingEntries, struct {
 						rating    int
 						note      string
 						timestamp int64
@@ -687,7 +687,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 	}
 
 	// Reconcile orphaned ratings.
-	for _, z := range zrateEntries {
+	for _, z := range ratingEntries {
 		if err := db.ReconcileOrphanedRating(ctx, a.db, z.rating, z.note, z.timestamp, threadID); err != nil {
 			log.Printf("codex watcher: reconcile rating for session %s: %v", threadID, err)
 		}
@@ -804,9 +804,9 @@ func (a *Agent) backfillGitIDs(ctx context.Context) {
 	}
 }
 
-// parseZrateDisplay parses "$bb 4 optional note" into (4, "optional note").
+// parseRatingDisplay parses "$bb 4 optional note" into (4, "optional note").
 // Returns (-1, "") if the format is invalid.
-func parseZrateDisplay(display string) (int, string) {
+func parseRatingDisplay(display string) (int, string) {
 	display = strings.TrimSpace(display)
 
 	// Codex can render the command as markdown link: [$bb](...) 4 note

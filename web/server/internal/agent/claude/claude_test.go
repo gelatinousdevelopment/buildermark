@@ -1418,9 +1418,9 @@ func TestBackfillTitles(t *testing.T) {
 	}
 }
 
-// --- isZrateDisplay tests ---
+// --- isRatingDisplay tests ---
 
-func TestIsZrateDisplay(t *testing.T) {
+func TestIsRatingDisplay(t *testing.T) {
 	tests := []struct {
 		display string
 		want    bool
@@ -1439,16 +1439,16 @@ func TestIsZrateDisplay(t *testing.T) {
 		{"", false},
 	}
 	for _, tt := range tests {
-		got := isZrateDisplay(tt.display)
+		got := isRatingDisplay(tt.display)
 		if got != tt.want {
-			t.Errorf("isZrateDisplay(%q) = %v, want %v", tt.display, got, tt.want)
+			t.Errorf("isRatingDisplay(%q) = %v, want %v", tt.display, got, tt.want)
 		}
 	}
 }
 
-// --- parseZrateDisplay tests ---
+// --- parseRatingDisplay tests ---
 
-func TestParseZrateDisplay(t *testing.T) {
+func TestParseRatingDisplay(t *testing.T) {
 	tests := []struct {
 		display    string
 		wantRating int
@@ -1467,9 +1467,9 @@ func TestParseZrateDisplay(t *testing.T) {
 		{"/bb:rate 4 nice", 4, "nice"},
 	}
 	for _, tt := range tests {
-		rating, note := parseZrateDisplay(tt.display)
+		rating, note := parseRatingDisplay(tt.display)
 		if rating != tt.wantRating || note != tt.wantNote {
-			t.Errorf("parseZrateDisplay(%q) = (%d, %q), want (%d, %q)",
+			t.Errorf("parseRatingDisplay(%q) = (%d, %q), want (%d, %q)",
 				tt.display, rating, note, tt.wantRating, tt.wantNote)
 		}
 	}
@@ -1970,7 +1970,7 @@ func TestExtractParentSessionID(t *testing.T) {
 		{
 			name: "user message with jsonl reference",
 			entries: []conversationLogEntry{
-				{Role: "user", Content: "Implement the plan.\n\nread the full transcript at: /Users/david/.claude/projects/-Users-david-github-zrate/8baafe77-1234-5678-9abc-def012345678.jsonl"},
+				{Role: "user", Content: "Implement the plan.\n\nread the full transcript at: /Users/david/.claude/projects/-Users-david-github-buildermark/8baafe77-1234-5678-9abc-def012345678.jsonl"},
 			},
 			want: "8baafe77-1234-5678-9abc-def012345678",
 		},

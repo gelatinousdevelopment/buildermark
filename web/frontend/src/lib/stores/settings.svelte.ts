@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 
-const STORAGE_KEY = 'zrate_settings';
+const STORAGE_KEY = 'buildermark_local_settings';
 
 interface Settings {
 	commits_chart_scale_by_lines: boolean;

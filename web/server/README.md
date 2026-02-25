@@ -1,4 +1,4 @@
-# zrate server
+# Buildermark Local Server
 
 A Go HTTP server that stores conversation ratings in SQLite.
 
@@ -6,7 +6,7 @@ A Go HTTP server that stores conversation ratings in SQLite.
 
 ```bash
 cd web/server
-go run ./cmd/zrate
+go run ./cmd/buildermark
 ```
 
 Server starts on [http://localhost:7022](http://localhost:7022).
@@ -16,7 +16,7 @@ Server starts on [http://localhost:7022](http://localhost:7022).
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
 | `-addr` | — | `:7022` | Listen address |
-| `-db` | `ZRATE_DB_PATH` | `../../.data/local.db` | SQLite database path |
+| `-db` | `BUILDERMARK_LOCAL_DB_PATH` | `../../.data/local.db` | SQLite database path |
 
 ## API
 
@@ -52,8 +52,8 @@ HTML dashboard showing recent ratings. Auto-refreshes every 30s.
 ## Build
 
 ```bash
-go build -o zrate-server ./cmd/zrate
-./zrate-server
+go build -o buildermark-local-server ./cmd/buildermark
+./buildermark-local-server
 ```
 
 ## Test

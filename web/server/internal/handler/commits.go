@@ -32,7 +32,7 @@ const (
 )
 
 var defaultMessageWindowMs = func() int64 {
-	if v := os.Getenv("ZRATE_MESSAGE_WINDOW_HOURS"); v != "" {
+	if v := os.Getenv("BUILDERMARK_LOCAL_MESSAGE_WINDOW_HOURS"); v != "" {
 		if hours, err := strconv.ParseInt(v, 10, 64); err == nil && hours > 0 {
 			log.Printf("using custom message window: %d hours", hours)
 			return hours * 60 * 60 * 1000

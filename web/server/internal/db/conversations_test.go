@@ -185,11 +185,11 @@ func TestGetConversationDetailRatingMatching(t *testing.T) {
 
 	// The /bb message timestamp and rating createdAt are within 120s.
 	ratingCreatedAt := time.Now().UTC().UnixMilli()
-	zrateTimestamp := ratingCreatedAt + 500 // 500ms after rating
+	ratingTimestamp := ratingCreatedAt + 500 // 500ms after rating
 
 	messages := []Message{
 		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "do something"},
-		{Timestamp: zrateTimestamp, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "/bb 5"},
+		{Timestamp: ratingTimestamp, ProjectID: pid, ConversationID: "conv-rate", Role: "user", Content: "/bb 5"},
 	}
 	if err := InsertMessages(ctx, db, messages); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
@@ -207,7 +207,7 @@ func TestGetConversationDetailRatingMatching(t *testing.T) {
 
 	// The /bb message should be removed from messages.
 	if len(detail.Messages) != 1 {
-		t.Fatalf("got %d messages, want 1 (zrate message should be removed)", len(detail.Messages))
+		t.Fatalf("got %d messages, want 1 (rating message should be removed)", len(detail.Messages))
 	}
 	if detail.Messages[0].Content != "do something" {
 		t.Errorf("remaining message = %q, want %q", detail.Messages[0].Content, "do something")
@@ -221,8 +221,8 @@ func TestGetConversationDetailRatingMatching(t *testing.T) {
 	if detail.Ratings[0].MatchedTimestamp == nil {
 		t.Fatal("expected MatchedTimestamp to be set")
 	}
-	if *detail.Ratings[0].MatchedTimestamp != zrateTimestamp {
-		t.Errorf("MatchedTimestamp = %d, want %d", *detail.Ratings[0].MatchedTimestamp, zrateTimestamp)
+	if *detail.Ratings[0].MatchedTimestamp != ratingTimestamp {
+		t.Errorf("MatchedTimestamp = %d, want %d", *detail.Ratings[0].MatchedTimestamp, ratingTimestamp)
 	}
 }
 

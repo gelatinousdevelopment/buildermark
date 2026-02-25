@@ -100,7 +100,7 @@ func searchRecentLogs(tmpDir string, rating int, note string, maxAge time.Durati
 				break
 			}
 
-			r, n := parseZrateDisplay(e.Message)
+			r, n := parseRatingDisplay(e.Message)
 			if r == rating && strings.TrimSpace(n) == wantedNote && e.SessionID != "" {
 				matchSID = e.SessionID
 				matchHash = filepath.Base(filepath.Dir(path))

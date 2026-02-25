@@ -104,7 +104,7 @@ func extractContentText(raw json.RawMessage) string {
 	return ""
 }
 
-func parseZrateDisplay(display string) (int, string) {
+func parseRatingDisplay(display string) (int, string) {
 	display = strings.TrimSpace(display)
 
 	if strings.HasPrefix(display, "[/bb](") {

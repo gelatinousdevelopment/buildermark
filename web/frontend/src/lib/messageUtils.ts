@@ -29,7 +29,7 @@ export function normalizeEscapedNewlines(content: string): string {
 export function isUserPromptMessage(message: MessageRead): boolean {
 	if (message.role !== 'user') return false;
 	const trimmed = message.content.trimStart();
-	if (trimmed.startsWith('/zrate') || trimmed.startsWith('$zrate')) return false;
+	if (trimmed.startsWith('/bbrate') || trimmed.startsWith('$bbrate')) return false;
 	return true;
 }
 

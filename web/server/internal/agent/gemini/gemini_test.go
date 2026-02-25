@@ -296,7 +296,7 @@ func TestSessionResolverFallback(t *testing.T) {
 	}
 }
 
-func TestParseZrateDisplay(t *testing.T) {
+func TestParseRatingDisplay(t *testing.T) {
 	tests := []struct {
 		input      string
 		wantRating int
@@ -309,9 +309,9 @@ func TestParseZrateDisplay(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		rating, note := parseZrateDisplay(tt.input)
+		rating, note := parseRatingDisplay(tt.input)
 		if rating != tt.wantRating || note != tt.wantNote {
-			t.Errorf("parseZrateDisplay(%q) = (%d, %q), want (%d, %q)", tt.input, rating, note, tt.wantRating, tt.wantNote)
+			t.Errorf("parseRatingDisplay(%q) = (%d, %q), want (%d, %q)", tt.input, rating, note, tt.wantRating, tt.wantNote)
 		}
 	}
 }

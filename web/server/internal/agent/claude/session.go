@@ -86,9 +86,9 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 	}
 }
 
-// isZrateDisplay returns true if the display field represents a /bb
+// isRatingDisplay returns true if the display field represents a /bb
 // command invocation. Matches "/bb", "/bb 4", "/bb:rate", etc.
-func isZrateDisplay(display string) bool {
+func isRatingDisplay(display string) bool {
 	d := strings.TrimSpace(display)
 	return d == "/bb" || d == "/bb:rate" || d == "/bbrate" ||
 		strings.HasPrefix(d, "/bb ") || strings.HasPrefix(d, "/bb:rate ") || strings.HasPrefix(d, "/bbrate ")
@@ -139,7 +139,7 @@ func searchHistory(path string, tailBytes int64, maxAge time.Duration) (string, 
 			break
 		}
 
-		if isZrateDisplay(entry.Display) && entry.SessionID != "" {
+		if isRatingDisplay(entry.Display) && entry.SessionID != "" {
 			return entry.SessionID, true
 		}
 	}

@@ -9,9 +9,9 @@ import (
 )
 
 // DefaultScanWindow is how far back the initial scan looks (default 90 days).
-// Override with ZRATE_SCAN_WINDOW_HOURS environment variable.
+// Override with BUILDERMARK_LOCAL_SCAN_WINDOW_HOURS environment variable.
 var DefaultScanWindow = func() time.Duration {
-	if v := os.Getenv("ZRATE_SCAN_WINDOW_HOURS"); v != "" {
+	if v := os.Getenv("BUILDERMARK_LOCAL_SCAN_WINDOW_HOURS"); v != "" {
 		if hours, err := strconv.ParseInt(v, 10, 64); err == nil && hours > 0 {
 			log.Printf("using custom scan window: %d hours", hours)
 			return time.Duration(hours) * time.Hour

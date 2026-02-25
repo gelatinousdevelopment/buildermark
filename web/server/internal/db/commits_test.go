@@ -9,7 +9,7 @@ func TestUpsertCommit_ConflictOnProjectAndHash(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()
 
-	projectID, err := EnsureProject(ctx, database, "/tmp/zrate-test-repo")
+	projectID, err := EnsureProject(ctx, database, "/tmp/buildermark-test-repo")
 	if err != nil {
 		t.Fatalf("EnsureProject: %v", err)
 	}
@@ -21,8 +21,8 @@ func TestUpsertCommit_ConflictOnProjectAndHash(t *testing.T) {
 		BranchName:  "main",
 		CommitHash:  commitHash,
 		Subject:     "first subject",
-		UserName:  "Test User",
-		UserEmail: "test@example.com",
+		UserName:    "Test User",
+		UserEmail:   "test@example.com",
 		AuthoredAt:  1700000000,
 		DiffContent: "diff --git a/a b/a",
 	}); err != nil {
@@ -34,8 +34,8 @@ func TestUpsertCommit_ConflictOnProjectAndHash(t *testing.T) {
 		BranchName:  "feature",
 		CommitHash:  commitHash,
 		Subject:     "updated subject",
-		UserName:  "Test User",
-		UserEmail: "test@example.com",
+		UserName:    "Test User",
+		UserEmail:   "test@example.com",
 		AuthoredAt:  1700000001,
 		DiffContent: "diff --git a/a b/a\n+line",
 	}); err != nil {
@@ -66,7 +66,7 @@ func TestListDistinctUsers(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()
 
-	projectID, err := EnsureProject(ctx, database, "/tmp/zrate-test-users")
+	projectID, err := EnsureProject(ctx, database, "/tmp/buildermark-test-users")
 	if err != nil {
 		t.Fatalf("EnsureProject: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestListAndCountCommitsByProjectAndUser(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()
 
-	projectID, err := EnsureProject(ctx, database, "/tmp/zrate-test-user-filter")
+	projectID, err := EnsureProject(ctx, database, "/tmp/buildermark-test-user-filter")
 	if err != nil {
 		t.Fatalf("EnsureProject: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestHasStaleCommitCoverage(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()
 
-	projectID, err := EnsureProject(ctx, database, "/tmp/zrate-test-repo-stale")
+	projectID, err := EnsureProject(ctx, database, "/tmp/buildermark-test-repo-stale")
 	if err != nil {
 		t.Fatalf("EnsureProject: %v", err)
 	}
@@ -166,8 +166,8 @@ func TestHasStaleCommitCoverage(t *testing.T) {
 		BranchName:      "main",
 		CommitHash:      "hash-fresh",
 		Subject:         "fresh",
-		UserName:      "Test User",
-		UserEmail:     "test@example.com",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
 		AuthoredAt:      1700000000,
 		DiffContent:     "diff --git a/a b/a",
 		CoverageVersion: 1,
@@ -188,8 +188,8 @@ func TestHasStaleCommitCoverage(t *testing.T) {
 		BranchName:      "main",
 		CommitHash:      "hash-stale",
 		Subject:         "stale",
-		UserName:      "Test User",
-		UserEmail:     "test@example.com",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
 		AuthoredAt:      1700000001,
 		DiffContent:     "diff --git a/b b/b",
 		CoverageVersion: 0,
