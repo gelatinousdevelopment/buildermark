@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { page } from '$app/state';
-	import { getConversation, createRating } from '$lib/api';
+	import { createRating } from '$lib/api';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
@@ -23,9 +22,9 @@
 		| TimelineItem
 		| { kind: 'log-group'; id: string; messages: MessageRead[]; time: number };
 
-	let conversation: ConversationDetail | null = $state(null);
-	let loading = $state(true);
-	let error: string | null = $state(null);
+	let { data } = $props();
+
+	let conversation: ConversationDetail = $derived(data.conversation);
 
 	let bottomRatingValue: number = $state(0);
 	let bottomNote: string = $state('');
@@ -36,6 +35,25 @@
 	let selectedMessage: MessageRead | null = $state(null);
 	let isWideMode = $state(false);
 	let wideModeQuery: MediaQueryList | null = null;
+	let leftColumn: HTMLDivElement | undefined = $state();
+
+	// Reset UI state when conversation changes (e.g. navigating parent/child links).
+	let lastConversationId = '';
+	$effect(() => {
+		if (conversation.id !== lastConversationId) {
+			lastConversationId = conversation.id;
+			bottomRatingValue = 0;
+			bottomNote = '';
+			bottomError = null;
+			expandedMessages.clear();
+			expandedLogGroups.clear();
+			selectedMessage = null;
+			leftColumn?.scrollTo(0, 0);
+		}
+	});
+
+	// Local copy of ratings so we can append without mutating the load data.
+	let localRatings: Rating[] = $derived(conversation.ratings);
 
 	function selectMessage(message: MessageRead) {
 		selectedMessage = selectedMessage?.id === message.id ? null : message;
@@ -81,12 +99,12 @@
 	}
 
 	async function submitBottomRating() {
-		if (!conversation || bottomRatingValue < 1) return;
+		if (bottomRatingValue < 1) return;
 		bottomSubmitting = true;
 		bottomError = null;
 		try {
 			const newRating = await createRating(conversation.id, bottomRatingValue, bottomNote);
-			conversation.ratings = [...conversation.ratings, newRating];
+			localRatings = [...localRatings, newRating];
 			bottomRatingValue = 0;
 			bottomNote = '';
 		} catch (e) {
@@ -97,8 +115,6 @@
 	}
 
 	let timeline: TimelineItem[] = $derived.by(() => {
-		if (!conversation) return [];
-
 		const items: TimelineItem[] = [];
 
 		// Messages are pre-filtered server-side.
@@ -110,7 +126,7 @@
 		}
 
 		// Ratings have matchedTimestamp from server-side rating matching.
-		for (const rating of conversation.ratings) {
+		for (const rating of localRatings) {
 			const time = rating.matchedTimestamp ?? rating.createdAt;
 			items.push({ kind: 'rating', rating, time });
 		}
@@ -120,7 +136,6 @@
 	});
 
 	let conversationModels: string[] = $derived.by(() => {
-		if (!conversation) return [];
 		const seen = new SvelteSet<string>();
 		const models: string[] = [];
 		for (const message of conversation.messages) {
@@ -182,20 +197,11 @@
 		return false;
 	});
 
-	onMount(async () => {
+	onMount(() => {
 		layoutStore.fixedHeight = true;
 		wideModeQuery = window.matchMedia('(min-width: 1024px)');
 		updateWideMode(wideModeQuery);
 		wideModeQuery.addEventListener('change', updateWideMode);
-		try {
-			const id = page.params.id;
-			if (!id) throw new Error('Missing conversation ID');
-			conversation = await getConversation(id);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load conversation';
-		} finally {
-			loading = false;
-		}
 	});
 
 	onDestroy(() => {
@@ -207,169 +213,163 @@
 <div class="content">
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="column left" onclick={clearSelectionOnLeftBackground}>
-		{#if loading}
-			<p class="loading">Loading conversation...</p>
-		{:else if error}
-			<p class="error">{error}</p>
-		{:else if conversation}
-			<h2>{(conversation.title && singleLineTitle(conversation.title)) || conversation.id}</h2>
-			<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
-			{#if conversationModels.length > 0}
-				<div class="models-summary">
-					<span class="models-label">Models:</span>
-					<ul class="models-list">
-						{#each conversationModels as model (model)}
-							<li>{model}</li>
-						{/each}
-					</ul>
-				</div>
-			{/if}
+	<div class="column left" bind:this={leftColumn} onclick={clearSelectionOnLeftBackground}>
+		<h2>{(conversation.title && singleLineTitle(conversation.title)) || conversation.id}</h2>
+		<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
+		{#if conversationModels.length > 0}
+			<div class="models-summary">
+				<span class="models-label">Models:</span>
+				<ul class="models-list">
+					{#each conversationModels as model (model)}
+						<li>{model}</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 
-			{#if conversation.parentConversationId}
+		{#if conversation.parentConversationId}
+			<a
+				class="conversation-link parent-link"
+				href={resolve('/local/projects/[project_id]/conversations/[id]', {
+					project_id: conversation.projectId,
+					id: conversation.parentConversationId
+				})}
+			>
+				<svg class="link-icon" viewBox="0 0 16 16" fill="currentColor"
+					><path d="M8 3l4 4H9v5H7V7H4l4-4z" /></svg
+				>
+				Parent conversation
+			</a>
+		{/if}
+
+		{#if timeline.length === 0}
+			<p>No messages or ratings.</p>
+		{:else}
+			{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
+				{#if item.kind === 'message' && isUserPromptMessage(item.message)}
+					<div class="message user-message" data-message-id={item.message.id}>
+						<UserPromptMessageCard message={item.message} />
+					</div>
+				{:else if item.kind === 'message' && isDiffMessage(item.message)}
+					{@const messageSelected = selectedMessage?.id === item.message.id}
+					{@const diffExpanded = isWideMode
+						? messageSelected
+						: expandedMessages.has(item.message.id)}
+					{@const messageInteractive = isWideMode || !diffExpanded}
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div
+						class="message inline-diff-message"
+						class:message-selected={messageSelected}
+						class:message-collapsed={!diffExpanded}
+						role={messageInteractive ? 'button' : undefined}
+						tabindex={messageInteractive ? 0 : undefined}
+						onclick={() => activateMessage(item.message, diffExpanded)}
+						onkeydown={messageInteractive
+							? (e: KeyboardEvent) => handleMessageActivateKeydown(e, item.message, diffExpanded)
+							: undefined}
+					>
+						<DiffMessageCard
+							timestamp={item.message.timestamp}
+							role={item.message.role === 'agent' ? conversation.agent : item.message.role}
+							model={messageModel(item.message)}
+							content={item.message.content}
+							expanded={diffExpanded}
+							subtleAgentTag={true}
+							onToggle={!isWideMode && diffExpanded
+								? () => toggleExpanded(item.message.id)
+								: undefined}
+						/>
+					</div>
+				{:else if item.kind === 'rating'}
+					<div class="rating-card">
+						<RatingMessageCard rating={item.rating} />
+					</div>
+				{:else if item.kind === 'log-group'}
+					{@const groupExpanded = expandedLogGroups.has(item.id)}
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div
+						class="message log-group"
+						class:message-collapsed={!groupExpanded}
+						role={!groupExpanded ? 'button' : undefined}
+						tabindex={!groupExpanded ? 0 : undefined}
+						onclick={!groupExpanded ? () => toggleLogGroup(item.id) : undefined}
+						onkeydown={!groupExpanded
+							? (e: KeyboardEvent) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										toggleLogGroup(item.id);
+									}
+								}
+							: undefined}
+					>
+						<LogGroupCard
+							messages={item.messages}
+							agent={conversation.agent}
+							expanded={groupExpanded}
+							subtleAgentTag={true}
+							wideMode={isWideMode}
+							selectedMessageId={selectedMessage?.id ?? null}
+							{expandedMessages}
+							onToggleMessage={toggleExpanded}
+							onSelectMessage={selectMessage}
+							onToggle={groupExpanded ? () => toggleLogGroup(item.id) : undefined}
+						/>
+					</div>
+				{/if}
+			{/each}
+		{/if}
+		{#if conversation.childConversations && conversation.childConversations.length > 0}
+			{#each conversation.childConversations as child (child.id)}
 				<a
-					class="conversation-link parent-link"
+					class="conversation-link child-link"
 					href={resolve('/local/projects/[project_id]/conversations/[id]', {
 						project_id: conversation.projectId,
-						id: conversation.parentConversationId
+						id: child.id
 					})}
 				>
 					<svg class="link-icon" viewBox="0 0 16 16" fill="currentColor"
-						><path d="M8 3l4 4H9v5H7V7H4l4-4z" /></svg
+						><path d="M8 13l4-4H9V4H7v5H4l4 4z" /></svg
 					>
-					Parent conversation
+					Child conversation: {(child.title && singleLineTitle(child.title)) || shortId(child.id)}
 				</a>
-			{/if}
+			{/each}
+		{/if}
 
-			{#if timeline.length === 0}
-				<p>No messages or ratings.</p>
-			{:else}
-				{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
-					{#if item.kind === 'message' && isUserPromptMessage(item.message)}
-						<div class="message user-message" data-message-id={item.message.id}>
-							<UserPromptMessageCard message={item.message} />
-						</div>
-					{:else if item.kind === 'message' && isDiffMessage(item.message)}
-						{@const messageSelected = selectedMessage?.id === item.message.id}
-						{@const diffExpanded = isWideMode
-							? messageSelected
-							: expandedMessages.has(item.message.id)}
-						{@const messageInteractive = isWideMode || !diffExpanded}
-						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-						<div
-							class="message inline-diff-message"
-							class:message-selected={messageSelected}
-							class:message-collapsed={!diffExpanded}
-							role={messageInteractive ? 'button' : undefined}
-							tabindex={messageInteractive ? 0 : undefined}
-							onclick={() => activateMessage(item.message, diffExpanded)}
-							onkeydown={messageInteractive
-								? (e: KeyboardEvent) => handleMessageActivateKeydown(e, item.message, diffExpanded)
-								: undefined}
-						>
-							<DiffMessageCard
-								timestamp={item.message.timestamp}
-								role={item.message.role === 'agent' ? conversation.agent : item.message.role}
-								model={messageModel(item.message)}
-								content={item.message.content}
-								expanded={diffExpanded}
-								subtleAgentTag={true}
-								onToggle={!isWideMode && diffExpanded
-									? () => toggleExpanded(item.message.id)
-									: undefined}
-							/>
-						</div>
-					{:else if item.kind === 'rating'}
-						<div class="rating-card">
-							<RatingMessageCard rating={item.rating} />
-						</div>
-					{:else if item.kind === 'log-group'}
-						{@const groupExpanded = expandedLogGroups.has(item.id)}
-						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-						<div
-							class="message log-group"
-							class:message-collapsed={!groupExpanded}
-							role={!groupExpanded ? 'button' : undefined}
-							tabindex={!groupExpanded ? 0 : undefined}
-							onclick={!groupExpanded ? () => toggleLogGroup(item.id) : undefined}
-							onkeydown={!groupExpanded
-								? (e: KeyboardEvent) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.preventDefault();
-											toggleLogGroup(item.id);
-										}
-									}
-								: undefined}
-						>
-							<LogGroupCard
-								messages={item.messages}
-								agent={conversation.agent}
-								expanded={groupExpanded}
-								subtleAgentTag={true}
-								wideMode={isWideMode}
-								selectedMessageId={selectedMessage?.id ?? null}
-								{expandedMessages}
-								onToggleMessage={toggleExpanded}
-								onSelectMessage={selectMessage}
-								onToggle={groupExpanded ? () => toggleLogGroup(item.id) : undefined}
-							/>
-						</div>
-					{/if}
-				{/each}
-			{/if}
-			{#if conversation.childConversations && conversation.childConversations.length > 0}
-				{#each conversation.childConversations as child (child.id)}
-					<a
-						class="conversation-link child-link"
-						href={resolve('/local/projects/[project_id]/conversations/[id]', {
-							project_id: conversation.projectId,
-							id: child.id
-						})}
-					>
-						<svg class="link-icon" viewBox="0 0 16 16" fill="currentColor"
-							><path d="M8 13l4-4H9V4H7v5H4l4 4z" /></svg
-						>
-						Child conversation: {(child.title && singleLineTitle(child.title)) || shortId(child.id)}
-					</a>
-				{/each}
-			{/if}
-
-			{#if !hasRatingAfterLastUser}
-				<div class="rating-card rating-input">
-					<div class="rating-input-header">
-						<strong>Add rating</strong>
-					</div>
-					<div class="inline-stars">
-						{#each [1, 2, 3, 4, 5] as star (star)}
-							<button
-								class="star-btn"
-								class:active={star <= bottomRatingValue}
-								onclick={() => (bottomRatingValue = star)}
-							>
-								{star <= bottomRatingValue ? '★' : '☆'}
-							</button>
-						{/each}
-					</div>
-					<input
-						type="text"
-						class="inline-note"
-						placeholder="Optional note..."
-						bind:value={bottomNote}
-					/>
-					<div class="inline-actions">
-						<button
-							class="btn-sm"
-							disabled={bottomSubmitting || bottomRatingValue < 1}
-							onclick={submitBottomRating}
-						>
-							{bottomSubmitting ? 'Submitting...' : 'Submit'}
-						</button>
-					</div>
-					{#if bottomError}
-						<p class="inline-error">{bottomError}</p>
-					{/if}
+		{#if !hasRatingAfterLastUser}
+			<div class="rating-card rating-input">
+				<div class="rating-input-header">
+					<strong>Add rating</strong>
 				</div>
-			{/if}
+				<div class="inline-stars">
+					{#each [1, 2, 3, 4, 5] as star (star)}
+						<button
+							class="star-btn"
+							class:active={star <= bottomRatingValue}
+							onclick={() => (bottomRatingValue = star)}
+						>
+							{star <= bottomRatingValue ? '★' : '☆'}
+						</button>
+					{/each}
+				</div>
+				<input
+					type="text"
+					class="inline-note"
+					placeholder="Optional note..."
+					bind:value={bottomNote}
+				/>
+				<div class="inline-actions">
+					<button
+						class="btn-sm"
+						disabled={bottomSubmitting || bottomRatingValue < 1}
+						onclick={submitBottomRating}
+					>
+						{bottomSubmitting ? 'Submitting...' : 'Submit'}
+					</button>
+				</div>
+				{#if bottomError}
+					<p class="inline-error">{bottomError}</p>
+				{/if}
+			</div>
 		{/if}
 	</div>
 	<hr class="divider" />
