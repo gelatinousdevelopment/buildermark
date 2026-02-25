@@ -295,12 +295,12 @@
 		position: absolute;
 		box-sizing: border-box;
 		padding: 1rem;
-		background: rgba(255, 255, 255, 0.85);
+		background: var(--color-popover-bg);
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
-		border: 0.5px solid rgba(0, 0, 0, 0.12);
+		border: 0.5px solid var(--color-popover-border);
 		border-radius: 8px;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+		box-shadow: 0 1px 3px var(--color-popover-shadow);
 		z-index: 10;
 		white-space: nowrap;
 		overflow-y: auto;

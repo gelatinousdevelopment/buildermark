@@ -62,7 +62,7 @@
 <style>
 	.message-header {
 		font-size: 0.85rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -83,12 +83,12 @@
 	}
 
 	.message-model {
-		color: #9a9a9a;
+		color: var(--color-text-faded);
 	}
 
 	.expansion-indicator {
 		margin-left: auto;
-		color: #888;
+		color: var(--color-text-tertiary);
 	}
 
 	.chevron {
@@ -98,7 +98,7 @@
 
 	.message-summary {
 		font-size: 1rem;
-		color: #333;
+		color: var(--color-text-strong);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;

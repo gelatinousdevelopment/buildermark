@@ -154,7 +154,7 @@
 <style>
 	.log-group-header {
 		font-size: 0.85rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -165,7 +165,7 @@
 	}
 
 	.log-group-header strong {
-		color: #828282;
+		color: var(--color-text-tertiary);
 		font-size: 0.9rem;
 		font-weight: normal;
 	}
@@ -193,24 +193,24 @@
 	.log-item {
 		margin-bottom: 0.5rem;
 		padding: 0.75rem;
-		border: 1px solid #eee;
+		border: 1px solid var(--color-border-light);
 		border-radius: 4px;
 	}
 
 	.log-item-collapsed {
 		padding: 0.5rem 0.75rem;
-		background: #fafafa;
+		background: var(--color-background-subtle);
 		cursor: pointer;
 	}
 
 	.log-item-selected {
-		border-color: #84b8ff;
-		background: #eff6ff;
+		border-color: var(--color-selected-border);
+		background: var(--color-selected-bg);
 	}
 
 	.log-item-selected:hover {
-		border-color: #5a9cff;
-		background: #e4f0ff;
+		border-color: var(--color-selected-border-hover);
+		background: var(--color-selected-bg-hover);
 	}
 
 	.log-item-collapsed:hover {

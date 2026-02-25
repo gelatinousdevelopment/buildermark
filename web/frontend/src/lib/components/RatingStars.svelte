@@ -68,11 +68,11 @@
 	}
 
 	.rating-note {
-		color: #333;
+		color: var(--color-text-strong);
 	}
 
 	.rating-analysis {
-		color: #666;
+		color: var(--color-text-secondary);
 		font-size: 0.82rem;
 	}
 </style>

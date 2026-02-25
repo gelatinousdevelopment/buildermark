@@ -36,7 +36,7 @@
 <style>
 	.message-header {
 		font-size: 0.85rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;

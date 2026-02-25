@@ -249,7 +249,7 @@
 <style>
 	.message-header {
 		font-size: 0.85rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		margin-bottom: 0.25rem;
 		display: flex;
 		align-items: center;
@@ -271,19 +271,19 @@
 	}
 
 	.message-model {
-		color: #9a9a9a;
+		color: var(--color-text-faded);
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
 	}
 
 	.message-diff-stats {
-		color: #5f6b7a;
+		color: var(--color-text-secondary);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.agent-pct {
-		color: #666;
+		color: var(--color-text-secondary);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -302,7 +302,7 @@
 	}
 
 	.file-stats-path {
-		color: #333;
+		color: var(--color-text-strong);
 		font-family: var(--font-family-monospace);
 		flex: 1 1 auto;
 		min-width: 0;
@@ -320,7 +320,7 @@
 	}
 
 	.message-content {
-		background: #fff;
+		background: var(--color-background-content);
 		font-size: 0.85rem;
 		margin-top: 0.35rem;
 	}

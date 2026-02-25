@@ -362,7 +362,7 @@
 		padding: 0;
 		border: 0.5px solid var(--color-divider);
 		border-radius: 4px;
-		background: #fbfbfb;
+		background: var(--color-background-elevated);
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity 0.15s;
@@ -381,10 +381,10 @@
 		position: fixed;
 		inset: unset;
 		margin: 0;
-		background: #fff;
+		background: var(--color-background-surface);
 		border: 0.5px solid var(--color-divider);
 		border-radius: 5px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+		box-shadow: 0 2px 8px var(--color-popover-shadow);
 		padding: 0.5rem 1rem 0.5rem 0.7rem;
 		white-space: nowrap;
 	}
@@ -394,7 +394,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		font-size: 0.85rem;
-		color: #444;
+		color: var(--color-text);
 		cursor: pointer;
 		user-select: none;
 	}
@@ -427,7 +427,7 @@
 		align-items: center;
 		gap: 0.25rem;
 		font-size: 0.9rem;
-		color: #555;
+		color: var(--color-text-secondary);
 	}
 
 	.dc-key-label {
@@ -437,14 +437,14 @@
 	}
 
 	.dc-key-pct {
-		color: #888;
+		color: var(--color-text-tertiary);
 		font-variant-numeric: tabular-nums;
 		margin-left: auto;
 	}
 
 	.dc-history-agent {
 		font-size: 0.88rem;
-		color: #444;
+		color: var(--color-text);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -460,7 +460,7 @@
 
 	.dc-more-link {
 		text-decoration: none;
-		color: var(--link-color, #1f4cd1);
+		color: var(--color-link-body);
 	}
 
 	.dc-more-link:hover {
@@ -513,7 +513,7 @@
 
 	.dc-date {
 		font-size: 0.65rem;
-		color: #999;
+		color: var(--color-text-faded);
 		text-align: center;
 		padding-top: 0.25rem;
 		height: 1rem;
@@ -536,12 +536,12 @@
 	.dc-popover-date {
 		font-weight: 600;
 		font-size: 0.85rem;
-		color: #333;
+		color: var(--color-text-strong);
 	}
 
 	.dc-popover-lines {
 		font-size: 0.8rem;
-		color: #888;
+		color: var(--color-text-tertiary);
 	}
 
 	.dc-popover-breakdown {
@@ -566,18 +566,18 @@
 	}
 
 	.dc-popover-name {
-		color: #333;
+		color: var(--color-text-strong);
 	}
 
 	.dc-popover-pct {
-		color: #888;
+		color: var(--color-text-tertiary);
 		margin-left: auto;
 		padding-left: 0.75rem;
 		font-variant-numeric: tabular-nums;
 	}
 
 	.dc-popover-commits {
-		border-top: 1px solid #eee;
+		border-top: 1px solid var(--color-border-light);
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
@@ -588,7 +588,7 @@
 
 	.dc-commit-link {
 		font-size: 0.8rem;
-		color: var(--link-color, #1f4cd1);
+		color: var(--color-link-body);
 		text-decoration: none;
 		white-space: nowrap;
 		overflow: hidden;

@@ -165,7 +165,7 @@
 
 	.remote-link {
 		text-decoration: none;
-		color: var(--link-color, #1f4cd1);
+		color: var(--color-link-body);
 	}
 
 	.remote-link:hover {

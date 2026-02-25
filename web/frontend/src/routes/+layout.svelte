@@ -300,7 +300,7 @@
 	}
 
 	header nav a {
-		color: #555;
+		color: var(--color-text-secondary);
 		text-decoration: none;
 	}
 

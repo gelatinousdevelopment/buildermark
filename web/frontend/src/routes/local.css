@@ -1,55 +1,124 @@
 :root {
-	--accent-color: #0066cc;
-	--accent-color-darker: #0055aa;
-	--accent-color-darkest: #003377;
-	--accent-color-ultralight: #eff7ff;
-	--accent-color-divider: #9fbbd6;
-	--color-text: #444;
-	--color-text-faded: #999;
-	--color-divider: #bbb;
-	--color-status-green: #55bb33;
-	--color-status-yellow: #f8d233;
-	--color-status-red: #dd5555;
+	color-scheme: light dark;
 
-	--color-background-content: #fff;
-	--color-background-page: #fcfcfc;
-	--color-background-empty: #f0f0f0;
-	--color-background-project-header: #fff;
-	--color-alternate-table-row-background: #fcfcfc;
+	--accent-color: light-dark(#0066cc, #4d9aff);
+	--accent-color-darker: light-dark(#0055aa, #3d88ee);
+	--accent-color-darkest: light-dark(#003377, #6db3ff);
+	--accent-color-ultralight: light-dark(#eff7ff, #1a2a3d);
+	--accent-color-divider: light-dark(#9fbbd6, #3a5a7a);
+	--color-text: light-dark(#444, #d4d4d4);
+	--color-text-faded: light-dark(#999, #777);
+	--color-text-secondary: light-dark(#666, #999);
+	--color-text-tertiary: light-dark(#888, #777);
+	--color-text-strong: light-dark(#333, #e0e0e0);
+	--color-divider: light-dark(#bbb, #3a3a3e);
+	--color-border-light: light-dark(#eee, #333);
+	--color-border-medium: light-dark(#ccc, #444);
+	--color-border-input: light-dark(#ccc, #555);
+	--color-status-green: light-dark(#55bb33, #55bb33);
+	--color-status-yellow: light-dark(#f8d233, #f8d233);
+	--color-status-red: light-dark(#dd5555, #dd5555);
 
-	--color-link: #0066cc;
-	--color-link-hover: #aa6600;
-	--color-link-active: #662200;
+	--color-background-content: light-dark(#fff, #222226);
+	--color-background-page: light-dark(#fcfcfc, #1a1a1e);
+	--color-background-empty: light-dark(#f0f0f0, #2a2a2e);
+	--color-background-project-header: light-dark(#fff, #222226);
+	--color-background-elevated: light-dark(#fbfbfb, #2a2a2e);
+	--color-background-subtle: light-dark(#fafafa, #262628);
+	--color-background-surface: light-dark(#fff, #2e2e32);
+	--color-alternate-table-row-background: light-dark(#fcfcfc, #262628);
+
+	--color-link: light-dark(#0066cc, #4d9aff);
+	--color-link-hover: light-dark(#aa6600, #ddaa44);
+	--color-link-active: light-dark(#662200, #ffcc66);
+	--color-link-body: light-dark(#1f4cd1, #6b9eff);
 
 	--content-width: 1540px;
 
 	/* Agent colors (known coding agents) */
-	--agent-color-generic: #a7439b;
+	--agent-color-generic: light-dark(#a7439b, #c76abb);
 	--agent-foreground-color-generic: rgb(255, 255, 255, 0.9);
-	--agent-color-manual: #ccc; /* #dbe4a1 */
+	--agent-color-manual: light-dark(#ccc, #555);
 	--agent-foreground-color-manual: #fff;
-	--agent-color-claude: #cf6f30;
+	--agent-color-claude: light-dark(#cf6f30, #e08844);
 	--agent-foreground-color-claude: rgb(255, 255, 255, 0.9);
-	--agent-color-codex: #4c5dff;
+	--agent-color-codex: light-dark(#4c5dff, #6b7aff);
 	--agent-foreground-color-codex: rgb(255, 255, 255, 0.9);
-	--agent-color-gemini: #3180f7;
+	--agent-color-gemini: light-dark(#3180f7, #4d99ff);
 	--agent-foreground-color-gemini: rgb(255, 255, 255, 0.9);
 
 	--font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-	--color-prompt-background: #ebfddd;
-	--color-prompt-border: #a8ef70;
-	--color-rating-background: #fffbea;
-	--color-rating-border: #f0c040;
-	--color-tag-border: #555;
-	--color-tag-background: #eee;
-	--color-tag-text: #555;
-	--color-tag-background-hover: #555;
+	--color-prompt-background: light-dark(#ebfddd, #1a2e14);
+	--color-prompt-border: light-dark(#a8ef70, #3a6a24);
+	--color-rating-background: light-dark(#fffbea, #2e2a16);
+	--color-rating-border: light-dark(#f0c040, #8a7028);
+	--color-tag-border: light-dark(#555, #666);
+	--color-tag-background: light-dark(#eee, #333);
+	--color-tag-text: light-dark(#555, #bbb);
+	--color-tag-background-hover: light-dark(#555, #666);
 	--color-tag-text-hover: white;
 
-	--color-relationship-foreground: #b49e00;
-	--color-relationship-highlight: #fff8e1;
-	--color-relationship-source: #e3f2fd;
+	--color-relationship-foreground: light-dark(#b49e00, #d4be44);
+	--color-relationship-highlight: light-dark(#fff8e1, #2e2a16);
+	--color-relationship-source: light-dark(#e3f2fd, #1a2a3d);
+
+	/* Diff colors */
+	--color-diff-added-text: light-dark(#1a7f37, #3fb950);
+	--color-diff-added-bg: light-dark(#dafbe1, #1a3328);
+	--color-diff-added-border: light-dark(#aceebb, #2a6a3f);
+	--color-diff-removed-text: light-dark(#cf222e, #f85149);
+	--color-diff-removed-bg: light-dark(#ffebe9, #3d1a1a);
+	--color-diff-removed-border: light-dark(#ffcecb, #6a2a2a);
+
+	/* Selection */
+	--color-selected-bg: light-dark(#eff6ff, #1a2a3d);
+	--color-selected-border: light-dark(#84b8ff, #3a6aaa);
+	--color-selected-bg-hover: light-dark(#e4f0ff, #1e3048);
+	--color-selected-border-hover: light-dark(#5a9cff, #4d7abf);
+
+	/* Errors/notices */
+	--color-error: light-dark(#cc0000, #ff4444);
+	--color-danger: light-dark(#dc2626, #ef4444);
+	--color-danger-hover: light-dark(#b91c1c, #dc2626);
+	--color-notice: light-dark(#1d6d1d, #4ade80);
+	--color-warning-text: light-dark(#b45309, #f59e0b);
+	--color-fallback-note: light-dark(#8a6d1f, #d4be44);
+
+	/* Code */
+	--color-code-bg: light-dark(rgb(0 0 0 / 0.03), rgb(255 255 255 / 0.06));
+	--color-code-inline-bg: light-dark(rgb(255 253 193 / 76%), rgb(80 70 20 / 50%));
+	--color-code-border: light-dark(#ddd, #444);
+
+	/* Popover */
+	--color-popover-bg: light-dark(rgba(255, 255, 255, 0.85), rgba(40, 40, 44, 0.92));
+	--color-popover-border: light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.1));
+	--color-popover-shadow: light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.4));
+
+	/* Modal */
+	--color-modal-backdrop: light-dark(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6));
+	--color-modal-bg: light-dark(#fff, #2e2e32);
+
+	/* Spinner */
+	--color-spinner-border: light-dark(#bbb, #555);
+	--color-spinner-top: light-dark(#333, #ddd);
+
+	/* Buttons */
+	--color-button-bg: light-dark(#f5f5f5, #333);
+	--color-button-gradient-start: light-dark(#fafafa, #2e2e32);
+	--color-button-gradient-end: light-dark(#ffffff, #383840);
+
+	/* Status dot */
+	--color-status-connecting: light-dark(#e0a020, #e0a020);
+	--color-status-disconnected: light-dark(#999, #666);
+
+	/* Hidden banner */
+	--color-hidden-bg: light-dark(#ececec, #333);
+	--color-hidden-border: light-dark(#d4d4d4, #444);
+	--color-hidden-btn-bg: light-dark(#ddd, #444);
+
+	/* Visibility button */
+	--color-visibility-btn-bg: light-dark(#e8e8e8, #333);
 }
 
 html,
@@ -69,6 +138,8 @@ body {
 	font-size: 13px;
 	margin: 0;
 	padding: 0;
+	background: var(--color-background-page);
+	color: var(--color-text);
 }
 
 a {
@@ -112,11 +183,15 @@ a:active {
 
 a.bordered,
 button.bordered {
-	background: linear-gradient(0deg, #fafafa, #ffffff);
+	background: linear-gradient(
+		0deg,
+		var(--color-button-gradient-start),
+		var(--color-button-gradient-end)
+	);
 	border-radius: 4px;
 	border: 0.5px solid var(--color-divider);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-	color: var(--color-text-content);
+	color: var(--color-text);
 	cursor: pointer;
 	font-size: 0.9rem;
 	line-height: 1.4;
@@ -136,7 +211,11 @@ button.bordered:disabled {
 
 a.bordered:hover,
 button.bordered:hover {
-	background: linear-gradient(0deg, var(--accent-color-ultralight), #ffffff);
+	background: linear-gradient(
+		0deg,
+		var(--accent-color-ultralight),
+		var(--color-button-gradient-end)
+	);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 	color: var(--accent-color);
 	border-color: var(--accent-color);
@@ -177,7 +256,7 @@ table.data {
 }
 
 table.data.bordered {
-	border: 1px solid #eee;
+	border: 1px solid var(--color-border-light);
 }
 
 table.data.striped tr:nth-child(even) {
@@ -189,7 +268,7 @@ table.data.hoverable tr:hover {
 }
 
 table.data tr {
-	border-bottom: 1px solid #eee;
+	border-bottom: 1px solid var(--color-border-light);
 }
 
 table.data.bordered tr:last-child {
@@ -209,12 +288,12 @@ table.data.bordered td {
 
 table.data th {
 	font-weight: 600;
-	color: #666;
+	color: var(--color-text-secondary);
 	font-size: 0.85rem;
 }
 
 table.data td a {
-	color: #0066cc;
+	color: var(--color-link);
 	text-decoration: none;
 }
 
@@ -225,7 +304,7 @@ table.data td a:hover {
 /* Utilities */
 
 .info-box {
-	background: #fbfbfb;
+	background: var(--color-background-elevated);
 	border-radius: 5px;
 	border: 0.5px solid var(--color-divider);
 	display: flex;
@@ -237,9 +316,9 @@ table.data td a:hover {
 }
 
 .loading {
-	color: #888;
+	color: var(--color-text-tertiary);
 }
 
 .error {
-	color: #cc0000;
+	color: var(--color-error);
 }

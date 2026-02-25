@@ -308,14 +308,14 @@
 		margin: 0 0 1rem;
 		padding-left: 1.5rem;
 		font-size: 0.8rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		line-height: 1.6;
 	}
 
 	.default-paths-list code {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		font-size: 0.78rem;
-		background: #f5f5f5;
+		background: var(--color-button-bg);
 		padding: 0.1rem 0.3rem;
 		border-radius: 2px;
 	}
@@ -330,7 +330,9 @@
 		width: 100%;
 		padding: 0.4rem 0.6rem;
 		font-size: 1rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
+		background: var(--color-background-surface);
+		color: var(--color-text);
 		border-radius: 4px;
 		box-sizing: border-box;
 		margin-bottom: 1rem;
@@ -352,7 +354,9 @@
 		font-size: 0.9rem;
 		line-height: 1.45;
 		padding: 0.65rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
+		background: var(--color-background-surface);
+		color: var(--color-text);
 		border-radius: 4px;
 		box-sizing: border-box;
 	}
@@ -360,7 +364,7 @@
 	.hint {
 		margin-top: 0.35rem;
 		font-size: 0.8rem;
-		color: #777;
+		color: var(--color-text-faded);
 	}
 
 	.actions {
@@ -372,7 +376,7 @@
 
 	.notice {
 		font-size: 0.85rem;
-		color: #1d6d1d;
+		color: var(--color-notice);
 	}
 
 	.danger-zone {
@@ -384,29 +388,29 @@
 	.danger-zone h2 {
 		margin: 0 0 0.5rem;
 		font-size: 1rem;
-		color: #b91c1c;
+		color: var(--color-danger-hover);
 	}
 
 	.danger-description {
 		margin: 0 0 0.75rem;
 		font-size: 0.85rem;
-		color: #777;
+		color: var(--color-text-faded);
 	}
 
 	.btn-danger {
 		padding: 0.35rem 0.8rem;
 		font-size: 1rem;
 		line-height: 1.4;
-		border: 1px solid #dc2626;
+		border: 1px solid var(--color-danger);
 		border-radius: 3px;
-		background: #dc2626;
+		background: var(--color-danger);
 		color: #fff;
 		cursor: pointer;
 	}
 
 	.btn-danger:hover {
-		background: #b91c1c;
-		border-color: #b91c1c;
+		background: var(--color-danger-hover);
+		border-color: var(--color-danger-hover);
 	}
 
 	.btn-danger:disabled {
@@ -426,17 +430,17 @@
 	.modal-backdrop {
 		position: absolute;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.4);
+		background: var(--color-modal-backdrop);
 	}
 
 	.modal-dialog {
 		position: relative;
-		background: #fff;
+		background: var(--color-modal-bg);
 		border-radius: 8px;
 		padding: 1.5rem;
 		max-width: 440px;
 		width: 90%;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 4px 24px var(--color-popover-shadow);
 	}
 
 	.modal-dialog h3 {
@@ -454,7 +458,9 @@
 		width: 100%;
 		padding: 0.4rem 0.6rem;
 		font-size: 1rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
+		background: var(--color-background-surface);
+		color: var(--color-text);
 		border-radius: 4px;
 		box-sizing: border-box;
 	}

@@ -161,12 +161,12 @@
 	}
 
 	.apb-popover-name {
-		color: #333;
+		color: var(--color-text-strong);
 		font-size: 15px;
 	}
 
 	.apb-popover-pct {
-		color: #888;
+		color: var(--color-text-tertiary);
 		margin-left: auto;
 		padding-left: 0.75rem;
 		font-variant-numeric: tabular-nums;
@@ -201,7 +201,7 @@
 		align-items: center;
 		gap: 0.25rem;
 		font-size: 0.78rem;
-		color: #555;
+		color: var(--color-text-secondary);
 	}
 
 	.apb-swatch {
@@ -213,7 +213,7 @@
 	}
 
 	.apb-pct {
-		color: #888;
+		color: var(--color-text-tertiary);
 		font-variant-numeric: tabular-nums;
 	}
 </style>

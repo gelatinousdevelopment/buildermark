@@ -216,7 +216,7 @@
 	.label {
 		margin: 0;
 		font-size: 0.8rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
 	}
@@ -229,7 +229,7 @@
 	}
 
 	.muted {
-		color: #777;
+		color: var(--color-text-faded);
 		font-size: 0.85rem;
 	}
 
@@ -295,10 +295,10 @@
 
 	.history-import-controls select {
 		padding: 0.25rem 0.5rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
 		border-radius: 4px;
-		background: #fff;
-		color: #444;
+		background: var(--color-background-surface);
+		color: var(--color-text);
 		font-size: 0.85rem;
 	}
 
@@ -316,8 +316,8 @@
 	.spinner {
 		width: 0.8rem;
 		height: 0.8rem;
-		border: 2px solid #bbb;
-		border-top-color: #333;
+		border: 2px solid var(--color-spinner-border);
+		border-top-color: var(--color-spinner-top);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -329,7 +329,7 @@
 	}
 
 	.import-status {
-		color: #666;
+		color: var(--color-text-secondary);
 		font-size: 0.85rem;
 		margin: 0.3rem 0 0 0;
 		animation: fade-in 200ms ease;

@@ -597,7 +597,7 @@
 	.files-path {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.78rem;
-		color: #444;
+		color: var(--color-text);
 		white-space: nowrap;
 		line-height: 1.4;
 		overflow: hidden;
@@ -680,7 +680,7 @@
 		background: var(--color-prompt-background);
 		border: 1px solid var(--color-prompt-border);
 		border-radius: 8px;
-		color: #444;
+		color: var(--color-text);
 		padding: 0.5rem 0.75rem;
 	}
 
@@ -695,7 +695,7 @@
 		border: 1px solid var(--color-rating-border);
 		border-radius: 8px;
 		padding: 0.5rem 0.75rem;
-		color: #444;
+		color: var(--color-text);
 	}
 
 	table.data.detailed td.ratings {

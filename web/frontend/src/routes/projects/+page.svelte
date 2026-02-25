@@ -173,16 +173,13 @@
 
 	.project .content {
 		align-items: stretch;
-		background: #fbfbfb;
+		background: var(--color-background-content);
 		border-radius: 12px;
-		border: 0.5px solid #ccc;
+		border: 0.5px solid var(--color-divider);
 		display: flex;
 		flex-direction: row;
 		justify-content: space-between;
 		padding: 0;
-
-		background: #fff;
-		border-color: var(--color-divider);
 	}
 
 	@media (max-width: 1023px) {

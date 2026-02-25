@@ -33,7 +33,7 @@
 	}
 
 	.files-count {
-		color: #5f6b7a;
+		color: var(--color-text-secondary);
 	}
 
 	.badge {
@@ -45,14 +45,14 @@
 	}
 
 	.badge.added {
-		color: #1a7f37;
-		background: #dafbe1;
-		border: 1px solid #aceebb;
+		color: var(--color-diff-added-text);
+		background: var(--color-diff-added-bg);
+		border: 1px solid var(--color-diff-added-border);
 	}
 
 	.badge.removed {
-		color: #cf222e;
-		background: #ffebe9;
-		border: 1px solid #ffcecb;
+		color: var(--color-diff-removed-text);
+		background: var(--color-diff-removed-bg);
+		border: 1px solid var(--color-diff-removed-border);
 	}
 </style>

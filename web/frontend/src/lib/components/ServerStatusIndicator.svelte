@@ -66,7 +66,7 @@
 		border-radius: 99px;
 		width: 1rem;
 		height: 1rem;
-		background: #999;
+		background: var(--color-status-disconnected);
 		transition: background 300ms ease;
 	}
 
@@ -75,12 +75,12 @@
 	}
 
 	.status-dot.connecting {
-		background: #e0a020;
+		background: var(--color-status-connecting);
 		animation: pulse 1.5s ease-in-out infinite;
 	}
 
 	.status-dot.disconnected {
-		background: #999;
+		background: var(--color-status-disconnected);
 	}
 
 	.activity-ring {
@@ -152,7 +152,7 @@
 		border-radius: 99px;
 		width: 0.5rem;
 		height: 0.5rem;
-		background: #999;
+		background: var(--color-status-disconnected);
 		flex-shrink: 0;
 	}
 
@@ -161,11 +161,11 @@
 	}
 
 	.status-dot-small.connecting {
-		background: #e0a020;
+		background: var(--color-status-connecting);
 	}
 
 	.status-dot-small.disconnected {
-		background: #999;
+		background: var(--color-status-disconnected);
 	}
 
 	.connection-label {
@@ -175,7 +175,7 @@
 
 	.activity-message {
 		font-size: 0.8rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		white-space: normal;
 		word-break: break-word;
 		line-height: 1.4;

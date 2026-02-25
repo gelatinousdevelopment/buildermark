@@ -206,6 +206,8 @@
 		font-size: 1.2rem;
 		min-width: 300px;
 		padding: 1rem;
+		background: var(--color-background-surface);
+		color: var(--color-text);
 	}
 
 	.search-bar select {
@@ -214,6 +216,8 @@
 		font-size: 1.2rem;
 		min-width: 300px;
 		padding: 1rem;
+		background: var(--color-background-surface);
+		color: var(--color-text);
 	}
 
 	@media (max-width: 900px) {
@@ -235,7 +239,7 @@
 	}
 
 	.project .content {
-		background: #fff;
+		background: var(--color-background-content);
 		border-radius: 12px;
 		border: 0.5px solid var(--color-divider);
 		display: flex;

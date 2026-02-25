@@ -423,7 +423,7 @@
 	}
 
 	.fallback-note {
-		color: #8a6d1f;
+		color: var(--color-fallback-note);
 		font-size: 0.9rem;
 		margin: 0.35rem 0 0.6rem 0;
 	}
@@ -448,7 +448,7 @@
 	/*.file-table th,*/
 	.file-table td {
 		padding: 0.4rem 0.5rem;
-		border-bottom: 1px solid #ececec;
+		border-bottom: 1px solid var(--color-border-light);
 		text-align: left;
 	}
 
@@ -472,14 +472,14 @@
 	}
 
 	.ignored-row {
-		color: #9a9a9a;
-		background: #f9f9f9;
+		color: var(--color-text-faded);
+		background: var(--color-background-subtle);
 	}
 
 	.file-tag {
 		margin-left: 0.4rem;
 		font-size: 0.8rem;
-		color: #8a8a8a;
+		color: var(--color-text-tertiary);
 	}
 
 	.section-header {
@@ -495,11 +495,11 @@
 	.btn-expand-all {
 		padding: 0.15rem 0.5rem;
 		font-size: 0.8rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
 		border-radius: 4px;
-		background: #f5f5f5;
+		background: var(--color-button-bg);
 		cursor: pointer;
-		color: #555;
+		color: var(--color-text-secondary);
 	}
 
 	.btn-expand-all:hover {
@@ -514,9 +514,9 @@
 	.diff-card {
 		margin-bottom: 1rem;
 		padding: 0.5rem 0.75rem;
-		border: 1px solid #eee;
+		border: 1px solid var(--color-border-light);
 		border-radius: 4px;
-		background: #fafafa;
+		background: var(--color-background-subtle);
 	}
 
 	.diff-card-collapsed {
@@ -544,7 +544,9 @@
 	.override-input {
 		width: 3rem;
 		padding: 0.2rem 0.4rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
+		background: var(--color-background-surface);
+		color: var(--color-text);
 		border-radius: 4px;
 		font-size: 0.85rem;
 	}
@@ -552,11 +554,11 @@
 	.btn-override-action {
 		padding: 0.15rem 0.5rem;
 		font-size: 0.8rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
 		border-radius: 4px;
-		background: #f5f5f5;
+		background: var(--color-button-bg);
 		cursor: pointer;
-		color: #555;
+		color: var(--color-text-secondary);
 	}
 
 	.btn-override-action:hover {

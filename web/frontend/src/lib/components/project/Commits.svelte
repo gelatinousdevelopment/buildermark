@@ -685,7 +685,7 @@
 	.link-button {
 		background: none;
 		border: 0;
-		color: var(--link-color, #1f4cd1);
+		color: var(--color-link-body);
 		cursor: pointer;
 		display: block;
 		font: inherit;
@@ -713,14 +713,14 @@
 	.load-more {
 		margin-top: 1.2rem;
 		padding: 0.8rem;
-		border: 1px solid #e6e6e6;
+		border: 1px solid var(--color-border-light);
 		border-radius: 6px;
-		background: #fbfbfb;
+		background: var(--color-background-elevated);
 	}
 
 	.load-more-info {
 		font-size: 0.85rem;
-		color: #666;
+		color: var(--color-text-secondary);
 		display: block;
 		margin-bottom: 0.5rem;
 	}
@@ -741,7 +741,9 @@
 	.load-more-input {
 		width: 5rem;
 		padding: 0.25rem 0.4rem;
-		border: 1px solid #ccc;
+		border: 1px solid var(--color-border-input);
+		background: var(--color-background-surface);
+		color: var(--color-text);
 		border-radius: 4px;
 		font-size: 0.9rem;
 		text-align: center;
@@ -850,7 +852,7 @@
 	}
 
 	.timeline-line {
-		background: color-mix(in srgb, var(--color-border, #999) 75%, transparent);
+		background: color-mix(in srgb, var(--color-text-faded) 75%, transparent);
 		bottom: 0;
 		left: 60%;
 		position: absolute;
@@ -860,8 +862,8 @@
 	}
 
 	.timeline-dot {
-		background: var(--surface-bg, #fff);
-		border: 1px solid var(--color-border, #999);
+		background: var(--color-background-content);
+		border: 1px solid var(--color-text-faded);
 		border-radius: 50%;
 		height: 10px;
 		left: 60%;
@@ -1003,7 +1005,7 @@
 
 	.user-popover-email {
 		font-size: 0.82rem;
-		color: var(--color-text-secondary, #666);
+		color: var(--color-text-secondary);
 		margin-top: 0.15rem;
 	}
 </style>
