@@ -710,6 +710,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	agentFilter := strings.TrimSpace(r.URL.Query().Get("agent"))
+	searchTerm := strings.TrimSpace(r.URL.Query().Get("search"))
 
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
@@ -772,6 +773,21 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		log.Printf("error listing branch hashes for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list branch commits")
 		return
+	}
+	if searchTerm != "" {
+		filteredHashes, searchErr := db.FilterCommitHashesBySearch(
+			r.Context(),
+			s.DB,
+			repoProject.ID,
+			allHashes,
+			searchTerm,
+		)
+		if searchErr != nil {
+			log.Printf("error filtering commit hashes by search for %s: %v", repoProject.Path, searchErr)
+			writeError(w, http.StatusInternalServerError, "failed to search commits")
+			return
+		}
+		allHashes = filteredHashes
 	}
 
 	// Check how many of these hashes exist in DB.

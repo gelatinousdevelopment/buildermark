@@ -64,6 +64,7 @@ type ConversationFilters struct {
 	Agent      string // filter by agent name (empty = all)
 	Rating     int    // 0 = all, -1 = < 5 stars, 1-5 = exact rating
 	HiddenOnly bool   // false = visible, true = hidden only
+	Search     string // optional free-text search against user messages
 }
 
 type ConversationPagination struct {
@@ -167,6 +168,16 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	} else if filters.Rating >= 1 && filters.Rating <= 5 {
 		filterClauses = append(filterClauses, "c.id IN (SELECT conversation_id FROM ratings WHERE rating = ?)")
 		filterArgs = append(filterArgs, filters.Rating)
+	}
+	if search := strings.TrimSpace(filters.Search); search != "" {
+		ftsQuery := buildFTSMatchQuery(search)
+		if !supportsFTS5(ctx, db) || isShortSearchOnly(search) || ftsQuery == "" {
+			filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages_fts WHERE project_id = c.project_id AND instr(lower(content), lower(?)) > 0)")
+			filterArgs = append(filterArgs, search)
+		} else {
+			filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages_fts WHERE project_id = c.project_id AND messages_fts MATCH ?)")
+			filterArgs = append(filterArgs, ftsQuery)
+		}
 	}
 
 	filterWhere := ""

@@ -46,6 +46,7 @@
 		showBranch?: boolean;
 		showDiffCount?: boolean;
 		showUser?: boolean;
+		showCoverageBar?: boolean;
 		showColumnNames?: boolean;
 		syncPaginationWithUrl?: boolean;
 		onPageChange?: PageChangeHandler;
@@ -56,6 +57,8 @@
 		loadSignal?: number;
 		enableRelationshipHover?: boolean;
 		onCommitsLoaded?: (commitHashes: string[]) => void;
+		searchTerm?: string;
+		defaultToCurrentUser?: boolean;
 	}
 
 	let {
@@ -77,6 +80,7 @@
 		showBranch = false,
 		showDiffCount = true,
 		showUser = false,
+		showCoverageBar = true,
 		showColumnNames = false,
 		syncPaginationWithUrl = false,
 		onPageChange,
@@ -86,7 +90,9 @@
 		loadPriority = 0,
 		loadSignal = 0,
 		enableRelationshipHover = false,
-		onCommitsLoaded = undefined
+		onCommitsLoaded = undefined,
+		searchTerm = '',
+		defaultToCurrentUser = true
 	}: Props = $props();
 
 	let data: ProjectCommitPageResponse | null = $state(null);
@@ -200,7 +206,8 @@
 					selectedBranch,
 					pageSize,
 					resolvedUser,
-					selectedAgent
+					selectedAgent,
+					searchTerm.trim()
 				)
 			);
 			if (myToken !== requestToken) return;
@@ -209,7 +216,7 @@
 				internalBranch = loaded.branch;
 			}
 			// Default to the current git user on first load.
-			if (!userDefaultApplied && loaded.currentEmail) {
+			if (defaultToCurrentUser && !userDefaultApplied && loaded.currentEmail) {
 				userDefaultApplied = true;
 				if (!internalUser) {
 					internalUser = loaded.currentEmail;
@@ -240,7 +247,7 @@
 	$effect(() => {
 		if (!autoload) return;
 		const resolved = resolveUserFilter(selectedUser, data?.currentEmail);
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${searchTerm}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();
@@ -432,7 +439,9 @@
 			{#if showUser}
 				<col class="user-col" />
 			{/if}
-			<col class="bar-col" />
+			{#if showCoverageBar}
+				<col class="bar-col" />
+			{/if}
 		</colgroup>
 		{#if showColumnNames}
 			<thead>
@@ -456,7 +465,9 @@
 					{#if showUser}
 						<th class="user-col">User</th>
 					{/if}
-					<th class="bar-col">Agent %</th>
+					{#if showCoverageBar}
+						<th class="bar-col">Agent %</th>
+					{/if}
 				</tr>
 			</thead>
 		{/if}
@@ -556,14 +567,16 @@
 							{/if}
 						</td>
 					{/if}
-					<td class="bar"
-						>{#if !c.workingCopy}<AgentPercentageBar
-								agentPercent={c.linePercent}
-								segments={c.overrideLinePercent != null ? [] : toBarSegments(c.agentSegments)}
-								totalLines={c.linesTotal}
-								showKey={false}
-							/>{/if}</td
-					>
+					{#if showCoverageBar}
+						<td class="bar"
+							>{#if !c.workingCopy}<AgentPercentageBar
+									agentPercent={c.linePercent}
+									segments={c.overrideLinePercent != null ? [] : toBarSegments(c.agentSegments)}
+									totalLines={c.linesTotal}
+									showKey={false}
+								/>{/if}</td
+						>
+					{/if}
 				</tr>
 			{/each}
 		</tbody>

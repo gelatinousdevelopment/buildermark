@@ -301,6 +301,12 @@ export interface ProjectCommitCoverage {
 	overrideLinePercent?: number | null;
 }
 
+export interface ProjectSearchMatch {
+	project: Project;
+	conversationMatches: number;
+	commitMatches: number;
+}
+
 export interface CommitConversationLinks {
 	commitToConversations: Record<string, string[]>;
 	conversationToCommits: Record<string, string[]>;

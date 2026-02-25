@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"testing"
@@ -18,6 +19,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 	if err := runMigrations(db); err != nil {
 		db.Close()
 		t.Fatalf("run migrations: %v", err)
+	}
+	if err := ensureSearchIndexSchema(context.Background(), db); err != nil {
+		db.Close()
+		t.Fatalf("initialize search schema: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
