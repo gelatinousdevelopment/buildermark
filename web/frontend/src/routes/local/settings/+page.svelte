@@ -159,6 +159,10 @@
 	{:else if localSettings}
 		<div class="local-info">
 			<h2>Local Environment</h2>
+			<p class="label">Buildermark Local Sqlite Database</p>
+			<p class="path">{localSettings.dbPath}</p>
+			<p class="label">Server Port</p>
+			<p class="path">{localSettings.listenAddr}</p>
 			<p class="label">Home Folder</p>
 			<p class="path">{localSettings.homePath}</p>
 			<p class="label">Agent Search Paths</p>

@@ -9,6 +9,8 @@ import (
 
 type localSettingsResponse struct {
 	HomePath                string            `json:"homePath"`
+	DBPath                  string            `json:"dbPath"`
+	ListenAddr              string            `json:"listenAddr"`
 	ConversationSearchPaths []agentSearchPath `json:"conversationSearchPaths"`
 }
 
@@ -44,8 +46,15 @@ func (s *Server) handleGetLocalSettings(w http.ResponseWriter, r *http.Request) 
 		return paths[i].Agent < paths[j].Agent
 	})
 
+	dbPath := s.DBPath
+	if abs, err := filepath.Abs(dbPath); err == nil {
+		dbPath = abs
+	}
+
 	writeSuccess(w, http.StatusOK, localSettingsResponse{
 		HomePath:                home,
+		DBPath:                  dbPath,
+		ListenAddr:              s.ListenAddr,
 		ConversationSearchPaths: paths,
 	})
 }

@@ -67,7 +67,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *addr,
-		Handler:      (&handler.Server{DB: database, Agents: registry}).Routes(),
+		Handler:      (&handler.Server{DB: database, Agents: registry, DBPath: *dbPath, ListenAddr: *addr}).Routes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

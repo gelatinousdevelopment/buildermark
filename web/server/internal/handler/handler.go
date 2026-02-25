@@ -13,8 +13,10 @@ import (
 
 // Server holds dependencies shared across HTTP handlers.
 type Server struct {
-	DB     *sql.DB
-	Agents *agent.Registry // may be nil if no agents are registered
+	DB         *sql.DB
+	Agents     *agent.Registry // may be nil if no agents are registered
+	DBPath     string          // resolved path to the SQLite database file
+	ListenAddr string          // address the server is listening on
 
 	refreshMu sync.Mutex
 	refresher *commitRefreshManager

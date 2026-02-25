@@ -18,6 +18,8 @@ export interface AgentConversationSearchPath {
 
 export interface LocalSettings {
 	homePath: string;
+	dbPath: string;
+	listenAddr: string;
 	conversationSearchPaths: AgentConversationSearchPath[];
 }
 
