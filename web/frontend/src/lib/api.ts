@@ -69,6 +69,14 @@ export function setProjectLabel(id: string, label: string): Promise<void> {
 	});
 }
 
+export function setProjectPath(id: string, path: string): Promise<void> {
+	return api(`/api/v1/projects/${id}/path`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ path })
+	});
+}
+
 export function setProjectOldPaths(id: string, oldPaths: string): Promise<void> {
 	return api(`/api/v1/projects/${id}/old-paths`, {
 		method: 'POST',

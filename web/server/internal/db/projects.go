@@ -332,6 +332,22 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	return &p, nil
 }
 
+// SetProjectPath sets the path on a project.
+func SetProjectPath(ctx context.Context, db *sql.DB, projectID, path string) error {
+	res, err := db.ExecContext(ctx, "UPDATE projects SET path = ? WHERE id = ?", path, projectID)
+	if err != nil {
+		return fmt.Errorf("update project path: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
+	}
+	return nil
+}
+
 // SetProjectLabel sets the label on a project.
 func SetProjectLabel(ctx context.Context, db *sql.DB, projectID, label string) error {
 	res, err := db.ExecContext(ctx, "UPDATE projects SET label = ? WHERE id = ?", label, projectID)

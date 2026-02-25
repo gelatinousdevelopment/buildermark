@@ -45,6 +45,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignored", s.handleSetProjectIgnored)
 	mux.HandleFunc("POST /api/v1/projects/{id}/label", s.handleSetProjectLabel)
+	mux.HandleFunc("POST /api/v1/projects/{id}/path", s.handleSetProjectPath)
 	mux.HandleFunc("POST /api/v1/projects/{id}/old-paths", s.handleSetProjectOldPaths)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignore-diff-paths", s.handleSetProjectIgnoreDiffPaths)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignore-default-diff-paths", s.handleSetProjectIgnoreDefaultDiffPaths)

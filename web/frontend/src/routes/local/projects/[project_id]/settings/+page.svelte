@@ -6,6 +6,8 @@
 	import {
 		deleteProject,
 		getProject,
+		setProjectLabel,
+		setProjectPath,
 		setProjectOldPaths,
 		setProjectIgnoreDiffPaths,
 		setProjectIgnoreDefaultDiffPaths
@@ -39,6 +41,8 @@
 	];
 
 	let project: ProjectDetail | null = $state(null);
+	let label = $state('');
+	let path = $state('');
 	let oldPaths = $state('');
 	let ignoreDiffPaths = $state('');
 	let ignoreDefaultDiffPaths = $state(true);
@@ -55,7 +59,7 @@
 
 	function getProjectDisplayName(): string {
 		if (!project) return '';
-		return project.label || project.path;
+		return label || path || project.path;
 	}
 
 	function getProjectID(): string {
@@ -74,6 +78,8 @@
 		const id = page.params.project_id;
 		if (!id) throw new Error('Missing project ID');
 		project = await getProject(id);
+		label = project.label ?? '';
+		path = project.path ?? '';
 		oldPaths = project.oldPaths ?? '';
 		ignoreDiffPaths = project.ignoreDiffPaths ?? '';
 		ignoreDefaultDiffPaths = project.ignoreDefaultDiffPaths ?? true;
@@ -86,6 +92,8 @@
 		notice = null;
 		websocketStore.clearImportStatus();
 		try {
+			if (label) await setProjectLabel(project.id, label);
+			await setProjectPath(project.id, path);
 			await setProjectOldPaths(project.id, oldPaths);
 			await setProjectIgnoreDiffPaths(project.id, ignoreDiffPaths);
 			await setProjectIgnoreDefaultDiffPaths(project.id, ignoreDefaultDiffPaths);
@@ -128,10 +136,19 @@
 	{:else if error && !project}
 		<p class="error">{error}</p>
 	{:else if project}
-		<h1>{project.label || project.path}</h1>
-		{#if project.label}
-			<p class="project-path">{project.path}</p>
-		{/if}
+		<h1>Project Settings</h1>
+
+		<label class="field-label" for="project-label">Label</label>
+		<input id="project-label" type="text" bind:value={label} placeholder="Project label" />
+
+		<label class="field-label" for="project-path">Path</label>
+		<input
+			id="project-path"
+			type="text"
+			bind:value={path}
+			placeholder="/path/to/project"
+			class="mono-input"
+		/>
 
 		<div class="defaults-row">
 			<label class="checkbox-label">
@@ -245,14 +262,8 @@
 	}
 
 	h1 {
-		margin: 0;
+		margin: 0 0 1rem;
 		font-size: 1.2rem;
-	}
-
-	.project-path {
-		margin: 0.35rem 0 1rem;
-		color: #888;
-		font-size: 0.85rem;
 	}
 
 	.defaults-row {
@@ -308,6 +319,20 @@
 		display: block;
 		margin-bottom: 0.35rem;
 		font-weight: 600;
+	}
+
+	input[type='text'] {
+		width: 100%;
+		padding: 0.4rem 0.6rem;
+		font-size: 0.85rem;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		box-sizing: border-box;
+		margin-bottom: 1rem;
+	}
+
+	.mono-input {
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	}
 
 	textarea {

@@ -99,6 +99,45 @@ func (s *Server) handleSetProjectLabel(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, http.StatusOK, nil)
 }
 
+func (s *Server) handleSetProjectPath(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "project id is required")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+
+	var body struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if body.Path == "" {
+		writeError(w, http.StatusBadRequest, "path must not be empty")
+		return
+	}
+
+	if err := db.SetProjectPath(r.Context(), s.DB, id, body.Path); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "project not found")
+			return
+		}
+		log.Printf("error setting project path: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to update project")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, nil)
+}
+
 func (s *Server) handleSetProjectOldPaths(w http.ResponseWriter, r *http.Request) {
 	if !requireJSON(w, r) {
 		return
