@@ -51,6 +51,7 @@
 		initialError?: string | null;
 		enableRelationshipHover?: boolean;
 		onConversationsLoaded?: (conversationIds: string[]) => void;
+		searchTerm?: string;
 	}
 
 	let {
@@ -81,7 +82,8 @@
 		initialData = null,
 		initialError = null,
 		enableRelationshipHover = false,
-		onConversationsLoaded = undefined
+		onConversationsLoaded = undefined,
+		searchTerm = ''
 	}: Props = $props();
 
 	let project: ProjectDetail | null = $state(null);
@@ -154,10 +156,12 @@
 		try {
 			const requestedPage = Math.max(1, currentPage);
 			const requestedPageSize = pageSize > 0 ? pageSize : undefined;
-			const filters: { agent?: string; rating?: number; hiddenOnly?: boolean } = {};
+			const filters: { agent?: string; rating?: number; hiddenOnly?: boolean; search?: string } =
+				{};
 			if (selectedAgent) filters.agent = selectedAgent;
 			if (selectedRating !== 0) filters.rating = selectedRating;
 			if (currentShowHidden) filters.hiddenOnly = true;
+			if (searchTerm.trim()) filters.search = searchTerm.trim();
 			const detail = await withOptionalQueue(() =>
 				getProject(projectId, requestedPage, requestedPageSize, undefined, filters)
 			);
@@ -179,7 +183,7 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${currentShowHidden}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${currentShowHidden}:${searchTerm}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadProjectData();

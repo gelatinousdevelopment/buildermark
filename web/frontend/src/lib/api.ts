@@ -14,7 +14,8 @@ import type {
 	CommitIngestionStatusResponse,
 	DiscoverImportableProjectsResponse,
 	ImportProjectsResponse,
-	CommitConversationLinks
+	CommitConversationLinks,
+	ProjectSearchMatch
 } from './types';
 
 interface Envelope<T> {
@@ -90,7 +91,7 @@ export function getProject(
 	page?: number,
 	pageSize?: number,
 	fetchFn?: APIFetch,
-	filters?: { agent?: string; rating?: number; hiddenOnly?: boolean }
+	filters?: { agent?: string; rating?: number; hiddenOnly?: boolean; search?: string }
 ): Promise<ProjectDetail> {
 	const params = new URLSearchParams();
 	if (page !== undefined) params.set('page', String(page));
@@ -99,6 +100,7 @@ export function getProject(
 	if (filters?.rating !== undefined && filters.rating !== 0)
 		params.set('rating', String(filters.rating));
 	if (filters?.hiddenOnly) params.set('hidden', 'true');
+	if (filters?.search) params.set('search', filters.search);
 	const q = params.size > 0 ? `?${params.toString()}` : '';
 	return api(`/api/v1/projects/${id}${q}`, undefined, fetchFn);
 }
@@ -187,14 +189,23 @@ export function listProjectCommitsPage(
 	branch = '',
 	pageSize = 10,
 	user = '',
-	agent = ''
+	agent = '',
+	search = ''
 ): Promise<ProjectCommitPageResponse> {
 	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 	if (branch) params.set('branch', branch);
 	if (user) params.set('user', user);
 	if (agent) params.set('agent', agent);
+	if (search) params.set('search', search);
 	params.set('tzOffset', String(new Date().getTimezoneOffset()));
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
+}
+
+export function listSearchProjects(query: string, projectId = ''): Promise<ProjectSearchMatch[]> {
+	const params = new URLSearchParams();
+	if (query) params.set('q', query);
+	if (projectId) params.set('projectId', projectId);
+	return api(`/api/v1/search/projects?${params.toString()}`);
 }
 
 export function getProjectCommitDetail(

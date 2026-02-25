@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -36,6 +37,10 @@ func InitDB(path string) (*sql.DB, error) {
 	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+	if err := ensureSearchIndexSchema(context.Background(), db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize search schema: %w", err)
 	}
 
 	return db, nil

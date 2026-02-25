@@ -9,6 +9,7 @@
 	import plusSvg from '$lib/icons/plus.svg?raw';
 	import documentSvg from '$lib/icons/document.svg?raw';
 	import userSvg from '$lib/icons/user.svg?raw';
+	import searchSvg from '$lib/icons/search.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -25,7 +26,8 @@
 		externalLink: externalLinkSvg,
 		plus: plusSvg,
 		document: documentSvg,
-		user: userSvg
+		user: userSvg,
+		search: searchSvg
 	};
 </script>
 

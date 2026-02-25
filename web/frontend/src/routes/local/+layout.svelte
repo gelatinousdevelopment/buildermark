@@ -109,9 +109,7 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href="https://github.com/gelatinousdevelopment/buildermark" class="item"
-					><Icon name="github" width="15px" /></a
-				>
+				<a href={resolve('/local/search')} class="item"><Icon name="search" width="19px" /></a>
 			</nav>
 		</section>
 		<hr class="divider" />
@@ -123,6 +121,16 @@
 		<hr class="divider" />
 		<section>
 			<ServerStatusIndicator />
+		</section>
+		<hr class="divider" />
+		<section>
+			<nav class="right">
+				<a
+					href="https://github.com/gelatinousdevelopment/buildermark"
+					class="item"
+					title="Buildermark on GitHub"><Icon name="github" width="15px" /></a
+				>
+			</nav>
 		</section>
 	</header>
 

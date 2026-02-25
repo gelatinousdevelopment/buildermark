@@ -362,6 +362,7 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	var filters db.ConversationFilters
 	filters.Agent = strings.TrimSpace(r.URL.Query().Get("agent"))
 	filters.HiddenOnly = strings.TrimSpace(r.URL.Query().Get("hidden")) == "true"
+	filters.Search = strings.TrimSpace(r.URL.Query().Get("search"))
 	if ratingRaw := strings.TrimSpace(r.URL.Query().Get("rating")); ratingRaw != "" {
 		if v, err := strconv.Atoi(ratingRaw); err == nil {
 			filters.Rating = v

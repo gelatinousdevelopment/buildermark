@@ -1,0 +1,3 @@
+-- Search index tables are initialized in code to support environments where
+-- SQLite may not include FTS5. When FTS5 is available, Buildermark uses
+-- FTS5 with trigram tokenizer; otherwise a plain-table fallback is created.
