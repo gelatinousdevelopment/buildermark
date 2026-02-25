@@ -138,13 +138,16 @@
 
 	.project-header .details {
 		align-items: flex-start;
-		min-width: 20rem;
+		display: flex;
+		flex-direction: column;
 		flex: 1;
+		gap: 0.5rem;
 		height: 108px;
+		min-width: 20rem;
 	}
 
 	h3 {
-		font-size: 1.8rem;
+		font-size: 2.3rem;
 		font-weight: 300;
 		letter-spacing: 0.03rem;
 		margin: 0;
@@ -154,7 +157,7 @@
 		display: flex;
 		gap: 0.3rem;
 		font-size: 0.9rem;
-		margin: 0.3rem 0 0 0;
+		margin: 0;
 	}
 
 	.remote-link {
