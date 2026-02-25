@@ -5,6 +5,7 @@
 	import { getProject, listProjects } from '$lib/api';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
+	import { navStore } from '$lib/stores/nav.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { Project, ProjectDetail } from '$lib/types';
@@ -85,6 +86,9 @@
 				})
 			);
 			rows = loadedRows.sort(sortRows);
+			for (const row of rows) {
+				navStore.setCachedLabel(row.project.id, projectName(row.project));
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load projects';
 		} finally {

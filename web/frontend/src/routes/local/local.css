@@ -1,5 +1,6 @@
 :root {
 	--accent-color: #0066cc;
+	--accent-color-darker: #0055aa;
 	--accent-color-ultralight: #eff7ff;
 	--accent-color-divider: #9fbbd6;
 	--color-text: #444;
@@ -89,7 +90,8 @@ body {
 
 /* Reusable button */
 
-a.bordered {
+a.bordered,
+button.bordered {
 	background: linear-gradient(0deg, #fafafa, #ffffff);
 	border-radius: 4px;
 	border: 0.5px solid var(--color-divider);
@@ -98,21 +100,48 @@ a.bordered {
 	cursor: pointer;
 	font-size: 0.9rem;
 	line-height: 1.4;
-	padding: 0.65rem 1em;
+	padding: 0.5rem 1em;
 	text-decoration: none;
 }
 
-a.bordered:hover {
+a.bordered:disabled,
+button.bordered:disabled {
+	opacity: 0.5;
+}
+
+a.bordered:hover,
+button.bordered:hover {
 	background: linear-gradient(0deg, var(--accent-color-ultralight), #ffffff);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 	color: var(--accent-color);
 	border-color: var(--accent-color);
 }
 
-a.bordered:active {
+a.bordered:active,
+button.bordered:active {
 	background: var(--accent-color);
 	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 	color: var(--accent-color-ultralight);
+}
+
+a.bordered.prominent,
+button.bordered.prominent {
+	background: var(--accent-color);
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+	color: var(--accent-color-ultralight);
+	font-weight: bold;
+}
+
+a.bordered.prominent:hover,
+button.bordered.prominent:hover {
+	background: var(--accent-color-darker);
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	color: white;
+}
+
+a.bordered.prominent:active,
+button.bordered.prominent:active {
+	background: var(--accent-color);
 }
 
 .btn-sm {

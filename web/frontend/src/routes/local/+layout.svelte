@@ -79,7 +79,7 @@
 						href={resolve('/local/projects/[project_id]', { project_id: projectId })}
 						class="item project"
 						class:selected={page.route.id === '/local/projects/[project_id]'}
-						style:font-weight="bold">{navStore.projectName || projectId}</a
+						style:font-weight="bold">{navStore.projectName || ''}</a
 					>
 					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
 					{#each projectTabs as tab (tab.segment)}

@@ -150,6 +150,9 @@
 			class="mono-input"
 		/>
 
+		<br />
+
+		<label class="field-label" for="ignore-diff-paths">Ignore Paths for Diff Matching</label>
 		<div class="defaults-row">
 			<label class="checkbox-label">
 				<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
@@ -170,29 +173,32 @@
 				{/each}
 			</ul>
 		{/if}
-
-		<label class="field-label" for="ignore-diff-paths">Ignore Diff Paths</label>
+		<p class="hint">One glob path per line.</p>
 		<textarea
 			id="ignore-diff-paths"
 			bind:value={ignoreDiffPaths}
-			rows="14"
+			rows="10"
 			spellcheck="false"
 			placeholder="Glob patterns, one per line"
 		></textarea>
-		<p class="hint">One glob path per line.</p>
 
-		<label class="field-label" for="old-paths">Old Paths</label>
+		<br />
+		<br />
+
+		<label class="field-label" for="old-paths">Old Filesystem Paths</label>
+		<p class="hint">
+			Match conversations created from previous project locations. One absolute path per line.
+		</p>
 		<textarea
 			id="old-paths"
 			bind:value={oldPaths}
-			rows="6"
+			rows="4"
 			spellcheck="false"
 			placeholder="/old/path/to/repo"
 		></textarea>
-		<p class="hint">One absolute path per line for previous project locations.</p>
 
 		<div class="actions">
-			<button class="btn-sm" disabled={saving} onclick={save}
+			<button class="bordered prominent" disabled={saving} onclick={save}
 				>{saving ? 'Saving...' : 'Save'}</button
 			>
 			{#if notice}
@@ -257,7 +263,7 @@
 
 <style>
 	.page {
-		max-width: 920px;
+		max-width: 700px;
 		padding: 1.5rem;
 	}
 
@@ -270,14 +276,13 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-bottom: 1rem;
+		margin-bottom: 0.5rem;
 	}
 
 	.checkbox-label {
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
-		font-weight: 600;
 		font-size: 0.9rem;
 		cursor: pointer;
 	}
@@ -390,7 +395,7 @@
 	.danger-zone {
 		margin-top: 2.5rem;
 		padding-top: 1.5rem;
-		border-top: 1px solid #e5c0c0;
+		border-top: 1px solid var(--color-divider);
 	}
 
 	.danger-zone h2 {

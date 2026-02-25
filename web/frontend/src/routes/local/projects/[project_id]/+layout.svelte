@@ -19,8 +19,11 @@
 		try {
 			const projectId = page.params.project_id;
 			if (!projectId) throw new Error('Missing project ID');
+			navStore.projectName = navStore.getCachedLabel(projectId) ?? null;
 			project = await getProject(projectId);
-			navStore.projectName = project.label || project.path;
+			const label = project.label || project.path;
+			navStore.projectName = label;
+			navStore.setCachedLabel(projectId, label);
 
 			try {
 				const resp = await listProjectCommitsPage(projectId, 1, '', 1);
