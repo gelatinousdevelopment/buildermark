@@ -21,7 +21,7 @@ func TestListConversations(t *testing.T) {
 		}
 	}
 
-	conversations, err := ListConversations(ctx, db, 100)
+	conversations, err := ListConversations(ctx, db, 100, false)
 	if err != nil {
 		t.Fatalf("ListConversations: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestListConversationsEmpty(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 
-	conversations, err := ListConversations(ctx, db, 100)
+	conversations, err := ListConversations(ctx, db, 100, false)
 	if err != nil {
 		t.Fatalf("ListConversations: %v", err)
 	}
@@ -54,6 +54,40 @@ func TestListConversationsEmpty(t *testing.T) {
 	}
 	if len(conversations) != 0 {
 		t.Errorf("got %d conversations, want 0", len(conversations))
+	}
+}
+
+func TestListConversationsHiddenFilter(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"conv-a", "conv-b"} {
+		if err := EnsureConversation(ctx, db, id, pid, "claude"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := SetConversationHidden(ctx, db, "conv-b", true); err != nil {
+		t.Fatalf("SetConversationHidden: %v", err)
+	}
+
+	visible, err := ListConversations(ctx, db, 100, false)
+	if err != nil {
+		t.Fatalf("ListConversations visible: %v", err)
+	}
+	if len(visible) != 1 || visible[0].ID != "conv-a" {
+		t.Fatalf("visible conversations = %+v, want only conv-a", visible)
+	}
+
+	hidden, err := ListConversations(ctx, db, 100, true)
+	if err != nil {
+		t.Fatalf("ListConversations hidden: %v", err)
+	}
+	if len(hidden) != 1 || hidden[0].ID != "conv-b" {
+		t.Fatalf("hidden conversations = %+v, want only conv-b", hidden)
 	}
 }
 
@@ -380,7 +414,7 @@ func TestUpdateConversationTitle(t *testing.T) {
 	}
 
 	// Also check ListConversations returns title.
-	convs, err := ListConversations(ctx, db, 100)
+	convs, err := ListConversations(ctx, db, 100, false)
 	if err != nil {
 		t.Fatalf("ListConversations: %v", err)
 	}

@@ -189,5 +189,12 @@ export const relationshipCache = {
 		_hoveredCommitHash = null;
 		_highlightedConversationIds = new Set();
 		_highlightedCommitHashes = new Set();
+	},
+
+	clearProject(projectId: string): void {
+		cache.delete(projectId);
+		if (_hoveredConversationId || _hoveredCommitHash) {
+			this.clearHover();
+		}
 	}
 };

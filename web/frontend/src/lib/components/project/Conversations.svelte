@@ -20,6 +20,7 @@
 
 	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
+	type HiddenChangeHandler = (value: boolean) => void | Promise<void>;
 
 	interface Props {
 		projectId: string;
@@ -35,9 +36,11 @@
 		showRatingsColumn?: boolean;
 		showPagination?: boolean;
 		showColumnNames?: boolean;
+		showHidden?: boolean;
 		onPageChange?: PageChangeHandler;
 		onAgentChange?: FilterChangeHandler;
 		onRatingChange?: FilterChangeHandler;
+		onHiddenChange?: HiddenChangeHandler;
 		agent?: string;
 		rating?: number;
 		autoload?: boolean;
@@ -64,9 +67,11 @@
 		showRatingsColumn = true,
 		showPagination = false,
 		showColumnNames = false,
+		showHidden = undefined,
 		onPageChange,
 		onAgentChange,
 		onRatingChange,
+		onHiddenChange,
 		agent = undefined,
 		rating = undefined,
 		autoload = true,
@@ -85,6 +90,7 @@
 	let internalPage = $state(1);
 	let internalAgent = $state('');
 	let internalRating = $state(0);
+	let internalShowHidden = $state(false);
 	let detailed = $state(false);
 	let initialized = $state(false);
 	let requestToken = 0;
@@ -102,6 +108,7 @@
 		internalPage = page ?? 1;
 		internalAgent = agent ?? '';
 		internalRating = rating ?? 0;
+		internalShowHidden = showHidden ?? false;
 		loading = autoload && !initialData;
 	});
 
@@ -117,9 +124,14 @@
 		if (rating !== undefined) internalRating = rating;
 	});
 
+	$effect(() => {
+		if (showHidden !== undefined) internalShowHidden = showHidden;
+	});
+
 	const currentPage = $derived(page ?? internalPage);
 	const selectedAgent = $derived(agent ?? internalAgent);
 	const selectedRating = $derived(rating ?? internalRating);
+	const currentShowHidden = $derived(showHidden ?? internalShowHidden);
 	const visibleConversations = $derived.by(() => {
 		const all = project?.conversations ?? [];
 		if (limit > 0) return all.slice(0, limit);
@@ -142,9 +154,10 @@
 		try {
 			const requestedPage = Math.max(1, currentPage);
 			const requestedPageSize = pageSize > 0 ? pageSize : undefined;
-			const filters: { agent?: string; rating?: number } = {};
+			const filters: { agent?: string; rating?: number; hiddenOnly?: boolean } = {};
 			if (selectedAgent) filters.agent = selectedAgent;
 			if (selectedRating !== 0) filters.rating = selectedRating;
+			if (currentShowHidden) filters.hiddenOnly = true;
 			const detail = await withOptionalQueue(() =>
 				getProject(projectId, requestedPage, requestedPageSize, undefined, filters)
 			);
@@ -166,7 +179,7 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${currentShowHidden}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadProjectData();
@@ -229,6 +242,15 @@
 			onRatingChange(String(value));
 		}
 	}
+
+	function handleHiddenChange(event: Event) {
+		const value = (event.currentTarget as HTMLInputElement).checked;
+		internalShowHidden = value;
+		internalPage = 1;
+		if (onHiddenChange) {
+			onHiddenChange(value);
+		}
+	}
 </script>
 
 {#if showHeader}
@@ -267,6 +289,10 @@
 			<label class="toggle-label">
 				<input type="checkbox" bind:checked={detailed} />
 				Show prompts and ratings
+			</label>
+			<label class="toggle-label">
+				<input type="checkbox" checked={currentShowHidden} onchange={handleHiddenChange} />
+				Show hidden
 			</label>
 		</div>
 	</div>

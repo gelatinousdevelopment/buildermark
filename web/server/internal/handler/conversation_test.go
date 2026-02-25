@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -48,6 +49,61 @@ func TestListConversations(t *testing.T) {
 	}
 	if len(data) != 2 {
 		t.Errorf("got %d conversations, want 2", len(data))
+	}
+}
+
+func TestListConversationsHiddenFilter(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"conv-a", "conv-b"} {
+		if err := db.EnsureConversation(ctx, s.DB, id, pid, "claude"); err != nil {
+			t.Fatalf("EnsureConversation: %v", err)
+		}
+	}
+	if err := db.SetConversationHidden(ctx, s.DB, "conv-b", true); err != nil {
+		t.Fatalf("SetConversationHidden: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/conversations", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode visible response: %v", err)
+	}
+	data, ok := env.Data.([]any)
+	if !ok {
+		t.Fatalf("visible data is not array: %T", env.Data)
+	}
+	if len(data) != 1 {
+		t.Fatalf("visible count = %d, want 1", len(data))
+	}
+
+	req = httptest.NewRequest("GET", "/api/v1/conversations?hidden=true", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("hidden status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	env = jsonEnvelope{}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode hidden response: %v", err)
+	}
+	data, ok = env.Data.([]any)
+	if !ok {
+		t.Fatalf("hidden data is not array: %T", env.Data)
+	}
+	if len(data) != 1 {
+		t.Fatalf("hidden count = %d, want 1", len(data))
 	}
 }
 
@@ -213,5 +269,45 @@ func TestGetConversationByTempConversationID(t *testing.T) {
 	}
 	if data["id"] != "conv-1" {
 		t.Errorf("id = %v, want %q", data["id"], "conv-1")
+	}
+}
+
+func TestSetConversationHidden(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-1", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	body := []byte(`{"hidden":true}`)
+	req := httptest.NewRequest("POST", "/api/v1/conversations/conv-1/hidden", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok = false, want true")
+	}
+
+	conv, err := db.GetConversation(ctx, s.DB, "conv-1")
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if conv == nil || !conv.Hidden {
+		t.Fatalf("conversation hidden = false, want true")
 	}
 }

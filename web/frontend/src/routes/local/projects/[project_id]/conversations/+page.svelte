@@ -19,6 +19,7 @@
 		const parsed = Number.parseInt(raw, 10);
 		return Number.isInteger(parsed) ? parsed : 0;
 	});
+	const currentHidden = $derived(page.url.searchParams.get('hidden') === 'true');
 
 	function updateUrl(updates: Record<string, string | null>) {
 		if (!projectId) return;
@@ -54,6 +55,10 @@
 	function handleRatingChange(value: string) {
 		updateUrl({ rating: value === '0' ? null : value, page: null });
 	}
+
+	function handleHiddenChange(value: boolean) {
+		updateUrl({ hidden: value ? 'true' : null, page: null });
+	}
 </script>
 
 <div class="project-section">
@@ -65,11 +70,13 @@
 		pageSize={40}
 		compact={false}
 		showPagination={true}
+		showHidden={currentHidden}
 		agent={currentAgent}
 		rating={currentRating}
 		onPageChange={handlePageChange}
 		onAgentChange={handleAgentChange}
 		onRatingChange={handleRatingChange}
+		onHiddenChange={handleHiddenChange}
 	/>
 </div>
 

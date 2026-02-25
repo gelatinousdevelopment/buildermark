@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { createRating } from '$lib/api';
+	import { createRating, setConversationHidden } from '$lib/api';
 	import { layoutStore } from '$lib/stores/layout.svelte';
+	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
 	import { isUserPromptMessage, isDiffMessage, messageModel } from '$lib/messageUtils';
@@ -30,6 +32,10 @@
 	let bottomNote: string = $state('');
 	let bottomSubmitting: boolean = $state(false);
 	let bottomError: string | null = $state(null);
+	let hiddenSubmitting: boolean = $state(false);
+	let hiddenError: string | null = $state(null);
+	let localHidden: boolean = $state(false);
+	let recalculatingDiffMatching: boolean = $state(false);
 	let expandedMessages = new SvelteSet<string>();
 	let expandedLogGroups = new SvelteSet<string>();
 	let selectedMessage: MessageRead | null = $state(null);
@@ -45,6 +51,10 @@
 			bottomRatingValue = 0;
 			bottomNote = '';
 			bottomError = null;
+			hiddenError = null;
+			hiddenSubmitting = false;
+			localHidden = conversation.hidden;
+			recalculatingDiffMatching = false;
 			expandedMessages.clear();
 			expandedLogGroups.clear();
 			selectedMessage = null;
@@ -113,6 +123,33 @@
 			bottomSubmitting = false;
 		}
 	}
+
+	async function toggleConversationHidden() {
+		hiddenSubmitting = true;
+		hiddenError = null;
+		try {
+			const updated = await setConversationHidden(conversation.id, !localHidden);
+			localHidden = updated.hidden;
+			if (updated.hidden) {
+				recalculatingDiffMatching = true;
+			}
+			relationshipCache.clearProject(conversation.projectId);
+		} catch (e) {
+			hiddenError = e instanceof Error ? e.message : 'Failed to update hidden state';
+		} finally {
+			hiddenSubmitting = false;
+		}
+	}
+
+	$effect(() => {
+		if (!recalculatingDiffMatching) return;
+		const status = websocketStore.importStatus;
+		if (!status) return;
+		if (!status.message.includes(conversation.id)) return;
+		if (status.state === 'complete' || status.state === 'error') {
+			recalculatingDiffMatching = false;
+		}
+	});
 
 	let timeline: TimelineItem[] = $derived.by(() => {
 		const items: TimelineItem[] = [];
@@ -216,6 +253,22 @@
 	<div class="column left" bind:this={leftColumn} onclick={clearSelectionOnLeftBackground}>
 		<h2>{(conversation.title && singleLineTitle(conversation.title)) || conversation.id}</h2>
 		<p class="agent-header">Agent: <AgentTag agent={conversation.agent} /></p>
+		{#if localHidden}
+			<div class="hidden-banner">
+				<span>This conversation is hidden.</span>
+				<div class="hidden-banner-actions">
+					<button
+						class="btn-sm hidden-banner-btn"
+						disabled={hiddenSubmitting}
+						onclick={toggleConversationHidden}
+						>{hiddenSubmitting ? 'Saving...' : 'Mark as not hidden'}</button
+					>
+					{#if recalculatingDiffMatching}
+						<span class="recalculate-message">Reclaculating diff matching...</span>
+					{/if}
+				</div>
+			</div>
+		{/if}
 		{#if conversationModels.length > 0}
 			<div class="models-summary">
 				<span class="models-label">Models:</span>
@@ -368,6 +421,27 @@
 				</div>
 				{#if bottomError}
 					<p class="inline-error">{bottomError}</p>
+				{/if}
+			</div>
+		{/if}
+		{#if !localHidden}
+			<div class="conversation-visibility">
+				<button
+					class="btn-sm visibility-btn"
+					disabled={hiddenSubmitting}
+					onclick={toggleConversationHidden}
+				>
+					{#if hiddenSubmitting}
+						Saving...
+					{:else}
+						Hide conversation
+					{/if}
+				</button>
+				{#if recalculatingDiffMatching}
+					<span class="recalculate-message">Reclaculating diff matching...</span>
+				{/if}
+				{#if hiddenError}
+					<p class="inline-error">{hiddenError}</p>
 				{/if}
 			</div>
 		{/if}
@@ -618,6 +692,43 @@
 		color: #c00;
 		font-size: 0.85rem;
 		margin: 0;
+	}
+
+	.conversation-visibility {
+		align-items: center;
+		display: flex;
+		gap: 0.6rem;
+		margin: 1rem 0 1rem 0;
+	}
+
+	.visibility-btn {
+		background: #e8e8e8;
+	}
+
+	.recalculate-message {
+		color: #666;
+		font-size: 0.85rem;
+	}
+
+	.hidden-banner {
+		align-items: center;
+		background: #ececec;
+		border: 1px solid #d4d4d4;
+		border-radius: 6px;
+		display: flex;
+		justify-content: space-between;
+		margin: 0.25rem 0 0.75rem 0;
+		padding: 0.5rem 0.7rem;
+	}
+
+	.hidden-banner-actions {
+		align-items: center;
+		display: flex;
+		gap: 0.55rem;
+	}
+
+	.hidden-banner-btn {
+		background: #ddd;
 	}
 
 	.conversation-link {

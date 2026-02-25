@@ -53,15 +53,17 @@ type ConversationWithRatings struct {
 	Agent                string   `json:"agent"`
 	Title                string   `json:"title"`
 	ParentConversationID string   `json:"parentConversationId"`
-	LastMessageTimestamp  int64    `json:"lastMessageTimestamp"`
+	Hidden               bool     `json:"hidden"`
+	LastMessageTimestamp int64    `json:"lastMessageTimestamp"`
 	Ratings              []Rating `json:"ratings"`
 	FilesEdited          []string `json:"filesEdited"`
 }
 
 // ConversationFilters holds optional filter criteria for conversation queries.
 type ConversationFilters struct {
-	Agent  string // filter by agent name (empty = all)
-	Rating int    // 0 = all, -1 = < 5 stars, 1-5 = exact rating
+	Agent      string // filter by agent name (empty = all)
+	Rating     int    // 0 = all, -1 = < 5 stars, 1-5 = exact rating
+	HiddenOnly bool   // false = visible, true = hidden only
 }
 
 type ConversationPagination struct {
@@ -126,7 +128,12 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	}
 
 	// Fetch distinct agents for filter dropdown.
-	agentRows, err := db.QueryContext(ctx, "SELECT DISTINCT agent FROM conversations WHERE project_id = ? ORDER BY agent", projectID)
+	hidden := 0
+	if filters.HiddenOnly {
+		hidden = 1
+	}
+
+	agentRows, err := db.QueryContext(ctx, "SELECT DISTINCT agent FROM conversations WHERE project_id = ? AND hidden = ? ORDER BY agent", projectID, hidden)
 	if err != nil {
 		return nil, fmt.Errorf("query distinct agents: %w", err)
 	}
@@ -168,8 +175,8 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	}
 
 	var total int
-	countArgs := append([]any{projectID}, filterArgs...)
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM conversations c WHERE c.project_id = ?"+filterWhere, countArgs...).Scan(&total); err != nil {
+	countArgs := append([]any{projectID, hidden}, filterArgs...)
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM conversations c WHERE c.project_id = ? AND c.hidden = ?"+filterWhere, countArgs...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count conversations: %w", err)
 	}
 
@@ -204,12 +211,12 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	}
 
 	// Fetch conversations for this project ordered by latest activity.
-	selectArgs := append([]any{projectID}, filterArgs...)
+	selectArgs := append([]any{projectID, hidden}, filterArgs...)
 	selectArgs = append(selectArgs, limit, offset)
 	convRows, err := db.QueryContext(ctx,
-		`SELECT c.id, c.agent, c.title, c.parent_conversation_id, c.ended_at
+		`SELECT c.id, c.agent, c.title, c.parent_conversation_id, c.hidden, c.ended_at
 		 FROM conversations c
-		 WHERE c.project_id = ?`+filterWhere+`
+		 WHERE c.project_id = ? AND c.hidden = ?`+filterWhere+`
 		 ORDER BY c.ended_at DESC, c.id DESC
 		 LIMIT ? OFFSET ?`,
 		selectArgs...,
@@ -224,7 +231,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 
 	for convRows.Next() {
 		var c ConversationWithRatings
-		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title, &c.ParentConversationID, &c.LastMessageTimestamp); err != nil {
+		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title, &c.ParentConversationID, &c.Hidden, &c.LastMessageTimestamp); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		c.Ratings = []Rating{}

@@ -18,6 +18,7 @@ type Conversation struct {
 	Title                string `json:"title"`
 	StartedAt            int64  `json:"startedAt"`
 	EndedAt              int64  `json:"endedAt"`
+	Hidden               bool   `json:"hidden"`
 	ParentConversationID string `json:"parentConversationId"`
 }
 
@@ -40,25 +41,31 @@ type ConversationRef struct {
 
 // ConversationDetail is a conversation with all its messages and ratings.
 type ConversationDetail struct {
-	ID                   string           `json:"id"`
-	ProjectID            string           `json:"projectId"`
-	Agent                string           `json:"agent"`
-	Title                string           `json:"title"`
-	StartedAt            int64            `json:"startedAt"`
-	EndedAt              int64            `json:"endedAt"`
-	ParentConversationID string           `json:"parentConversationId"`
+	ID                   string            `json:"id"`
+	ProjectID            string            `json:"projectId"`
+	Agent                string            `json:"agent"`
+	Title                string            `json:"title"`
+	StartedAt            int64             `json:"startedAt"`
+	EndedAt              int64             `json:"endedAt"`
+	Hidden               bool              `json:"hidden"`
+	ParentConversationID string            `json:"parentConversationId"`
 	ChildConversations   []ConversationRef `json:"childConversations"`
-	Messages             []MessageRead    `json:"messages"`
-	Ratings              []Rating         `json:"ratings"`
+	Messages             []MessageRead     `json:"messages"`
+	Ratings              []Rating          `json:"ratings"`
 }
 
 // ListConversations returns conversations, up to limit.
-func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversation, error) {
+func ListConversations(ctx context.Context, db *sql.DB, limit int, hiddenOnly bool) ([]Conversation, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title, started_at, ended_at, parent_conversation_id FROM conversations ORDER BY id LIMIT ?", limit)
+	hidden := 0
+	if hiddenOnly {
+		hidden = 1
+	}
+
+	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE hidden = ? ORDER BY id LIMIT ?", hidden, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -67,7 +74,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 	conversations := []Conversation{}
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.ParentConversationID); err != nil {
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		conversations = append(conversations, c)
@@ -80,8 +87,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	resolvedID := conversationID
 	var c ConversationDetail
 	err := db.QueryRowContext(ctx,
-		"SELECT id, project_id, agent, title, started_at, ended_at, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
-	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.ParentConversationID)
+		"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
+	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID)
 	if err == sql.ErrNoRows {
 		aliasConversationID, found, resolveErr := ResolveConversationIDByTempID(ctx, db, conversationID)
 		if resolveErr != nil {
@@ -92,8 +99,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		}
 		resolvedID = aliasConversationID
 		err = db.QueryRowContext(ctx,
-			"SELECT id, project_id, agent, title, started_at, ended_at, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
-		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.ParentConversationID)
+			"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
+		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID)
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -223,6 +230,37 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		return nil, fmt.Errorf("iterate child conversations: %w", err)
 	}
 
+	return &c, nil
+}
+
+func SetConversationHidden(ctx context.Context, db *sql.DB, conversationID string, hidden bool) error {
+	res, err := db.ExecContext(ctx, "UPDATE conversations SET hidden = ? WHERE id = ?", hidden, conversationID)
+	if err != nil {
+		return fmt.Errorf("update conversation hidden: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("conversation %s: %w", conversationID, ErrNotFound)
+	}
+	return nil
+}
+
+func GetConversation(ctx context.Context, db *sql.DB, conversationID string) (*Conversation, error) {
+	var c Conversation
+	err := db.QueryRowContext(
+		ctx,
+		"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE id = ?",
+		conversationID,
+	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query conversation: %w", err)
+	}
 	return &c, nil
 }
 

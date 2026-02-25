@@ -235,6 +235,61 @@ func TestGetProjectSupportsConversationPagination(t *testing.T) {
 	}
 }
 
+func TestGetProjectHiddenFilter(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"conv-visible", "conv-hidden"} {
+		if err := db.EnsureConversation(ctx, s.DB, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := db.SetConversationHidden(ctx, s.DB, "conv-hidden", true); err != nil {
+		t.Fatalf("SetConversationHidden: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+pid, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("visible status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode visible response: %v", err)
+	}
+	data := env.Data.(map[string]any)
+	conversations := data["conversations"].([]any)
+	if len(conversations) != 1 {
+		t.Fatalf("visible conversations = %d, want 1", len(conversations))
+	}
+
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+pid+"?hidden=true", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("hidden status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	env = jsonEnvelope{}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode hidden response: %v", err)
+	}
+	data = env.Data.(map[string]any)
+	conversations = data["conversations"].([]any)
+	if len(conversations) != 1 {
+		t.Fatalf("hidden conversations = %d, want 1", len(conversations))
+	}
+	first := conversations[0].(map[string]any)
+	if first["id"] != "conv-hidden" {
+		t.Fatalf("hidden conversation id = %v, want %q", first["id"], "conv-hidden")
+	}
+}
+
 func TestListProjectsIgnoredFilter(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()

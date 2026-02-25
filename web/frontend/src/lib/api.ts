@@ -90,7 +90,7 @@ export function getProject(
 	page?: number,
 	pageSize?: number,
 	fetchFn?: APIFetch,
-	filters?: { agent?: string; rating?: number }
+	filters?: { agent?: string; rating?: number; hiddenOnly?: boolean }
 ): Promise<ProjectDetail> {
 	const params = new URLSearchParams();
 	if (page !== undefined) params.set('page', String(page));
@@ -98,6 +98,7 @@ export function getProject(
 	if (filters?.agent) params.set('agent', filters.agent);
 	if (filters?.rating !== undefined && filters.rating !== 0)
 		params.set('rating', String(filters.rating));
+	if (filters?.hiddenOnly) params.set('hidden', 'true');
 	const q = params.size > 0 ? `?${params.toString()}` : '';
 	return api(`/api/v1/projects/${id}${q}`, undefined, fetchFn);
 }
@@ -121,12 +122,23 @@ export function setProjectIgnoreDefaultDiffPaths(
 	});
 }
 
-export function listConversations(): Promise<Conversation[]> {
-	return api('/api/v1/conversations');
+export function listConversations(hiddenOnly = false): Promise<Conversation[]> {
+	return api(`/api/v1/conversations${hiddenOnly ? '?hidden=true' : ''}`);
 }
 
 export function getConversation(id: string, fetchFn?: APIFetch): Promise<ConversationDetail> {
 	return api(`/api/v1/conversations/${id}`, undefined, fetchFn);
+}
+
+export function setConversationHidden(
+	id: string,
+	hidden: boolean
+): Promise<{ conversationId: string; hidden: boolean; queued: boolean }> {
+	return api(`/api/v1/conversations/${id}/hidden`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ hidden })
+	});
 }
 
 export function getConversationsBatchDetail(ids: string[]): Promise<ConversationBatchDetail[]> {

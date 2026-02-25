@@ -1454,10 +1454,24 @@ func computeCoverageForRepo(
 }
 
 func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs []string, minTs, maxTs int64) ([]messageDiff, error) {
+	return listDerivedDiffMessagesWithHidden(ctx, database, projectIDs, minTs, maxTs, false)
+}
+
+func listDerivedDiffMessagesWithHidden(
+	ctx context.Context,
+	database *sql.DB,
+	projectIDs []string,
+	minTs, maxTs int64,
+	includeHidden bool,
+) ([]messageDiff, error) {
 	if len(projectIDs) == 0 {
 		return nil, nil
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
+	hiddenClause := "AND COALESCE(c.hidden, 0) = 0"
+	if includeHidden {
+		hiddenClause = ""
+	}
 	query := fmt.Sprintf(
 		`SELECT m.id, m.timestamp, m.conversation_id, c.title, c.agent, m.model, m.content, m.raw_json
 		 FROM messages m
@@ -1465,8 +1479,9 @@ func listDerivedDiffMessages(ctx context.Context, database *sql.DB, projectIDs [
 		 WHERE m.role = 'agent'
 		   AND m.timestamp BETWEEN ? AND ?
 		   AND m.project_id IN (%s)
+		   %s
 		 ORDER BY m.timestamp, m.id`,
-		placeholders,
+		placeholders, hiddenClause,
 	)
 	args := make([]any, 0, len(projectIDs)+2)
 	args = append(args, minTs, maxTs)

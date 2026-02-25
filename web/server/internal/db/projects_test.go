@@ -295,6 +295,46 @@ func TestGetProjectDetailPageSortsByLastMessageTimestampAndPaginates(t *testing.
 	}
 }
 
+func TestGetProjectDetailPageHiddenFilter(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"conv-visible", "conv-hidden"} {
+		if err := EnsureConversation(ctx, db, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := SetConversationHidden(ctx, db, "conv-hidden", true); err != nil {
+		t.Fatalf("SetConversationHidden: %v", err)
+	}
+
+	visible, err := GetProjectDetailPage(ctx, db, pid, 1, 10, ConversationFilters{})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage visible: %v", err)
+	}
+	if len(visible.Conversations) != 1 || visible.Conversations[0].ID != "conv-visible" {
+		t.Fatalf("visible conversations = %+v, want only conv-visible", visible.Conversations)
+	}
+	if len(visible.Agents) != 1 || visible.Agents[0] != "codex" {
+		t.Fatalf("visible agents = %+v, want [codex]", visible.Agents)
+	}
+
+	hiddenOnly, err := GetProjectDetailPage(ctx, db, pid, 1, 10, ConversationFilters{HiddenOnly: true})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage hidden: %v", err)
+	}
+	if len(hiddenOnly.Conversations) != 1 || hiddenOnly.Conversations[0].ID != "conv-hidden" {
+		t.Fatalf("hidden conversations = %+v, want only conv-hidden", hiddenOnly.Conversations)
+	}
+	if !hiddenOnly.Conversations[0].Hidden {
+		t.Fatalf("hidden conversation flag = false, want true")
+	}
+}
+
 func TestListProjectsReturnsLabel(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

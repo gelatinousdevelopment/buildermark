@@ -22,6 +22,9 @@ type Server struct {
 	coverageRecomputeMu      sync.Mutex
 	coverageRecomputeRunning map[string]bool
 
+	conversationVisibilityMu      sync.Mutex
+	conversationVisibilityRunning map[string]bool
+
 	ws       *wsHub
 	importMu sync.Mutex // guards against concurrent imports
 }
@@ -52,6 +55,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/conversations", s.handleListConversations)
 	mux.HandleFunc("GET /api/v1/conversations/batch-detail", s.handleGetConversationsBatchDetail)
 	mux.HandleFunc("GET /api/v1/conversations/{id}", s.handleGetConversation)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/hidden", s.handleSetConversationHidden)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ingest-commits", s.handleIngestMoreCommits)
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/refresh-commits", s.handleRefreshProjectCommits)
 	mux.HandleFunc("POST /api/v1/projects/{id}/recompute-commit-coverage", s.handleRecomputeCommitCoverage)
