@@ -102,24 +102,24 @@ func (s *Server) runHistoryScanJob(since time.Time, agentName string) {
 
 	ctx := context.Background()
 
-	broadcast := func(state, message string, entries int) {
-		s.ws.broadcastEvent("import_status", importStatusEvent{
-			State:            state,
-			Message:          message,
-			EntriesProcessed: entries,
+	broadcast := func(state, message string) {
+		s.ws.broadcastEvent("job_status", jobStatusEvent{
+			JobType: "history_scan",
+			State:   state,
+			Message: message,
 		})
 	}
 
-	broadcast("running", "Scanning conversation history...", 0)
+	broadcast("running", "Scanning conversation history...")
 
 	// Only scan conversations belonging to existing projects.
 	projectsByPath, err := listProjectsByPath(ctx, s.DB)
 	if err != nil {
-		broadcast("error", "Failed to list projects", 0)
+		broadcast("error", "Failed to list projects")
 		return
 	}
 	if len(projectsByPath) == 0 {
-		broadcast("complete", "Imported 0 conversation entries", 0)
+		broadcast("complete", "Imported 0 conversation entries")
 		return
 	}
 
@@ -143,10 +143,10 @@ func (s *Server) runHistoryScanJob(since time.Time, agentName string) {
 			return
 		}
 		lastProgress = now
-		broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)), 0)
+		broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)))
 	}
 
 	count := s.scanWatchersSincePaths(ctx, since, agentName, paths, progress)
 
-	broadcast("complete", fmt.Sprintf("Imported %d conversation entries", count), count)
+	broadcast("complete", fmt.Sprintf("Imported %d conversation entries", count))
 }

@@ -20,7 +20,9 @@
 	const historyImportDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
 
 	let importStatusMessage = $derived(
-		websocketStore.importStatus?.state === 'running' ? websocketStore.importStatus.message : null
+		websocketStore.getJob('history_scan')?.state === 'running'
+			? (websocketStore.getJob('history_scan')?.message ?? null)
+			: null
 	);
 
 	function projectName(project: { label: string; path: string }): string {
@@ -74,20 +76,20 @@
 		importingHistory = true;
 		historyImportError = null;
 		historyImportResult = null;
-		websocketStore.clearImportStatus();
+		websocketStore.clearJob('history_scan');
 		try {
 			await scanHistory(historyImportTimeframe(historyImportDays));
-			const result = await websocketStore.waitForImportComplete();
+			const result = await websocketStore.waitForJob('history_scan');
 			if (result.state === 'error') {
 				historyImportError = result.message;
 				return;
 			}
-			historyImportResult = `Imported ${result.entriesProcessed.toLocaleString()} entries.`;
+			historyImportResult = result.message;
 		} catch (e) {
 			historyImportError = e instanceof Error ? e.message : 'Failed to import history';
 		} finally {
 			importingHistory = false;
-			websocketStore.clearImportStatus();
+			websocketStore.clearJob('history_scan');
 		}
 	}
 </script>
@@ -122,7 +124,7 @@
 	</div>
 
 	<div class="history-import">
-		<h2>Import Conversation History</h2>
+		<h2>Re-import Conversation History</h2>
 		<p class="muted">This may take a while.</p>
 		<div class="history-import-controls">
 			<label for="history-days-select">Import window</label>

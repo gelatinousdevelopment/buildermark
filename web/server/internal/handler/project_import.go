@@ -44,14 +44,6 @@ type importProjectsResponse struct {
 	Started bool `json:"started"`
 }
 
-// importStatusEvent is broadcast over WebSocket during an import job.
-type importStatusEvent struct {
-	State            string `json:"state"`   // "running", "complete", "error"
-	Message          string `json:"message"` // human-readable status line
-	ProjectsImported int    `json:"projectsImported"`
-	EntriesProcessed int    `json:"entriesProcessed"`
-	CommitsIngested  int    `json:"commitsIngested"`
-}
 
 func (s *Server) handleDiscoverImportableProjects(w http.ResponseWriter, r *http.Request) {
 	if s.Agents == nil {
@@ -157,36 +149,34 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 
 	ctx := context.Background()
 
-	broadcast := func(state, message string, projects, entries, commits int) {
-		s.ws.broadcastEvent("import_status", importStatusEvent{
-			State:            state,
-			Message:          message,
-			ProjectsImported: projects,
-			EntriesProcessed: entries,
-			CommitsIngested:  commits,
+	broadcast := func(state, message string) {
+		s.ws.broadcastEvent("job_status", jobStatusEvent{
+			JobType: "import",
+			State:   state,
+			Message: message,
 		})
 	}
 
-	broadcast("running", fmt.Sprintf("Setting up %d project(s)...", len(roots)), 0, 0, 0)
+	broadcast("running", fmt.Sprintf("Setting up %d project(s)...", len(roots)))
 
 	projectIDs := make([]string, 0, len(roots))
 	for _, root := range roots {
 		label := db.RepoLabel(root)
-		broadcast("running", fmt.Sprintf("Ensuring project %s...", label), len(projectIDs), 0, 0)
+		broadcast("running", fmt.Sprintf("Ensuring project %s...", label))
 
 		projectID, err := db.EnsureProject(ctx, s.DB, root)
 		if err != nil {
-			broadcast("error", fmt.Sprintf("Failed to ensure project %s: %v", label, err), len(projectIDs), 0, 0)
+			broadcast("error", fmt.Sprintf("Failed to ensure project %s: %v", label, err))
 			return
 		}
 		if err := db.SetProjectIgnored(ctx, s.DB, projectID, false); err != nil && !errors.Is(err, db.ErrNotFound) {
-			broadcast("error", fmt.Sprintf("Failed to update project tracking for %s: %v", label, err), len(projectIDs), 0, 0)
+			broadcast("error", fmt.Sprintf("Failed to update project tracking for %s: %v", label, err))
 			return
 		}
 
 		project, err := getProjectByID(ctx, s.DB, projectID)
 		if err != nil || project == nil {
-			broadcast("error", fmt.Sprintf("Failed to load project %s", label), len(projectIDs), 0, 0)
+			broadcast("error", fmt.Sprintf("Failed to load project %s", label))
 			return
 		}
 		if strings.TrimSpace(project.GitID) == "" {
@@ -203,7 +193,7 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 
 	entriesProcessed := 0
 	if s.Agents != nil && len(s.Agents.Watchers()) > 0 {
-		broadcast("running", "Scanning conversation history...", len(projectIDs), 0, 0)
+		broadcast("running", "Scanning conversation history...")
 
 		// Rate-limited progress: report file names no faster than every 50ms.
 		var lastProgress time.Time
@@ -213,16 +203,16 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 				return
 			}
 			lastProgress = now
-			broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)), len(projectIDs), 0, 0)
+			broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)))
 		}
 
 		entriesProcessed = s.scanWatchersSincePaths(ctx, since, "", roots, progress)
-		broadcast("running", fmt.Sprintf("Found %d conversation entries", entriesProcessed), len(projectIDs), entriesProcessed, 0)
+		broadcast("running", fmt.Sprintf("Found %d conversation entries", entriesProcessed))
 	}
 
 	groups, err := listAllProjectGroups(ctx, s.DB)
 	if err != nil {
-		broadcast("error", "Failed to list projects", len(projectIDs), entriesProcessed, 0)
+		broadcast("error", "Failed to list projects")
 		return
 	}
 
@@ -242,18 +232,18 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 		}
 
 		label := db.RepoLabel(repoProject.Path)
-		broadcast("running", fmt.Sprintf("Ingesting commits for %s (%d/%d)...", label, i+1, len(projectIDs)), len(projectIDs), entriesProcessed, commitsIngested)
+		broadcast("running", fmt.Sprintf("Ingesting commits for %s (%d/%d)...", label, i+1, len(projectIDs)))
 
 		ingested, err := IngestCommitsForWindow(ctx, s.DB, repoProject, group, branch, since, includeAll)
 		if err != nil {
 			log.Printf("error ingesting commits for %s: %v", repoProject.Path, err)
-			broadcast("error", fmt.Sprintf("Failed to ingest commits for %s", label), len(projectIDs), entriesProcessed, commitsIngested)
+			broadcast("error", fmt.Sprintf("Failed to ingest commits for %s", label))
 			return
 		}
 		commitsIngested += ingested
 	}
 
-	broadcast("complete", fmt.Sprintf("Imported %d project(s), %d entries, %d commits", len(projectIDs), entriesProcessed, commitsIngested), len(projectIDs), entriesProcessed, commitsIngested)
+	broadcast("complete", fmt.Sprintf("Imported %d project(s), %d entries, %d commits", len(projectIDs), entriesProcessed, commitsIngested))
 }
 
 func normalizeImportPaths(paths []string) ([]string, error) {

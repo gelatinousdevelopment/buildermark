@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
 	import { enqueueLoad } from '$lib/loadQueue';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import type {
 		ProjectCommitPageResponse,
 		CommitIngestionStatusResponse,
@@ -250,6 +251,15 @@
 		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${searchTerm}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
+		void loadCommitsData();
+	});
+
+	// Auto-reload when async commit ingestion completes.
+	$effect(() => {
+		const job = websocketStore.getJob('commit_ingest');
+		if (!job || job.state !== 'complete') return;
+		if (job.projectId && job.projectId !== projectId) return;
+		websocketStore.clearJob('commit_ingest');
 		void loadCommitsData();
 	});
 

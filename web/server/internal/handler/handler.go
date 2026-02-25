@@ -25,6 +25,9 @@ type Server struct {
 	conversationVisibilityMu      sync.Mutex
 	conversationVisibilityRunning map[string]bool
 
+	commitIngestMu      sync.Mutex
+	commitIngestRunning map[string]bool // key: "projectID:branch"
+
 	ws       *wsHub
 	importMu sync.Mutex // guards against concurrent imports
 }

@@ -825,13 +825,9 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		}
 	}
 
-	// Ingest only the missing commits.
+	// Enqueue async ingestion for missing commits.
 	if len(missingHashes) > 0 {
-		if _, err := ingestMissingCommits(r.Context(), s.DB, repoProject, group, branch, missingHashes); err != nil {
-			log.Printf("warning: missing commit ingestion failed for %s: %v", repoProject.Path, err)
-		}
-		// Refresh existing set after ingestion.
-		existing, _ = db.ExistingCommitHashes(r.Context(), s.DB, repoProject.ID, allHashes)
+		s.enqueueCommitIngestion(repoProject, group, branch, missingHashes)
 	}
 
 	// Check for stale coverage using hash-based query.
@@ -1038,6 +1034,68 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		},
 		Commits: paged,
 	})
+}
+
+func (s *Server) enqueueCommitIngestion(repoProject *db.Project, group projectGroup, branch string, missingHashes []string) bool {
+	key := repoProject.ID + ":" + branch
+	s.commitIngestMu.Lock()
+	if s.commitIngestRunning == nil {
+		s.commitIngestRunning = make(map[string]bool)
+	}
+	if s.commitIngestRunning[key] {
+		s.commitIngestMu.Unlock()
+		return false
+	}
+	s.commitIngestRunning[key] = true
+	s.commitIngestMu.Unlock()
+
+	go s.runCommitIngestion(*repoProject, group, branch, missingHashes, key)
+	return true
+}
+
+func (s *Server) runCommitIngestion(repoProject db.Project, group projectGroup, branch string, missingHashes []string, key string) {
+	defer func() {
+		s.commitIngestMu.Lock()
+		delete(s.commitIngestRunning, key)
+		s.commitIngestMu.Unlock()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	if s.ws != nil {
+		s.ws.broadcastEvent("job_status", jobStatusEvent{
+			JobType:   "commit_ingest",
+			State:     "running",
+			Message:   fmt.Sprintf("Ingesting %d commit(s) for %s...", len(missingHashes), db.RepoLabel(repoProject.Path)),
+			ProjectID: repoProject.ID,
+			Branch:    branch,
+		})
+	}
+
+	if _, err := ingestMissingCommits(ctx, s.DB, &repoProject, group, branch, missingHashes); err != nil {
+		log.Printf("async commit ingestion failed for %s: %v", repoProject.Path, err)
+		if s.ws != nil {
+			s.ws.broadcastEvent("job_status", jobStatusEvent{
+				JobType:   "commit_ingest",
+				State:     "error",
+				Message:   fmt.Sprintf("Commit ingestion failed for %s", db.RepoLabel(repoProject.Path)),
+				ProjectID: repoProject.ID,
+				Branch:    branch,
+			})
+		}
+		return
+	}
+
+	if s.ws != nil {
+		s.ws.broadcastEvent("job_status", jobStatusEvent{
+			JobType:   "commit_ingest",
+			State:     "complete",
+			Message:   fmt.Sprintf("Ingested %d commit(s) for %s", len(missingHashes), db.RepoLabel(repoProject.Path)),
+			ProjectID: repoProject.ID,
+			Branch:    branch,
+		})
+	}
 }
 
 func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCoverage {

@@ -20,6 +20,15 @@ type wsMessage struct {
 	Data json.RawMessage `json:"data"`
 }
 
+// jobStatusEvent is broadcast over WebSocket for any background job.
+type jobStatusEvent struct {
+	JobType   string `json:"jobType"`             // "import", "history_scan", "diff_recompute", "commit_ingest"
+	State     string `json:"state"`               // "running", "complete", "error"
+	Message   string `json:"message"`
+	ProjectID string `json:"projectId,omitempty"`
+	Branch    string `json:"branch,omitempty"`
+}
+
 // wsClient represents a single connected WebSocket client.
 type wsClient struct {
 	conn *websocket.Conn

@@ -10,5 +10,6 @@
     "mode": "debug",
     "cwd": "$ZED_WORKTREE_ROOT/web/server",
     "program": "$ZED_WORKTREE_ROOT/web/server/cmd/buildermark",
+    "output": "$ZED_WORKTREE_ROOT/web/server/.zed/debug/buildermark",
   },
 ]

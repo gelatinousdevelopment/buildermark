@@ -143,7 +143,7 @@
 
 	$effect(() => {
 		if (!recalculatingDiffMatching) return;
-		const status = websocketStore.importStatus;
+		const status = websocketStore.getJob('diff_recompute');
 		if (!status) return;
 		if (!status.message.includes(conversation.id)) return;
 		if (status.state === 'complete' || status.state === 'error') {

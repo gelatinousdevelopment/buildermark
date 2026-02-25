@@ -69,11 +69,12 @@
 
 	let projectDisplayName = $derived(getProjectDisplayName());
 	let projectID = $derived(getProjectID());
-	let recomputeStatusMessage = $derived(
-		projectID && websocketStore.importStatus?.message?.includes(projectID)
-			? websocketStore.importStatus.message
-			: null
-	);
+	let recomputeStatusMessage = $derived.by(() => {
+		const job = websocketStore.getJob('diff_recompute');
+		if (!job || !projectID) return null;
+		if (job.message?.includes(projectID)) return job.message;
+		return null;
+	});
 
 	async function load() {
 		const id = page.params.project_id;
@@ -91,7 +92,7 @@
 		saving = true;
 		error = null;
 		notice = null;
-		websocketStore.clearImportStatus();
+		websocketStore.clearJob('diff_recompute');
 		try {
 			if (label) await setProjectLabel(project.id, label);
 			await setProjectPath(project.id, path);

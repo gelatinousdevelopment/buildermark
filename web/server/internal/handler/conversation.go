@@ -162,16 +162,14 @@ func (s *Server) enqueueConversationVisibilityRecompute(conv db.Conversation, hi
 	go func() {
 		defer s.finishConversationVisibilityRecompute(conv.ID)
 
-		broadcast := func(state, message string, commits int) {
+		broadcast := func(state, message string) {
 			if s.ws == nil {
 				return
 			}
-			s.ws.broadcastEvent("import_status", importStatusEvent{
-				State:            state,
-				Message:          message,
-				ProjectsImported: 0,
-				EntriesProcessed: 0,
-				CommitsIngested:  commits,
+			s.ws.broadcastEvent("job_status", jobStatusEvent{
+				JobType: "diff_recompute",
+				State:   state,
+				Message: message,
 			})
 		}
 
@@ -179,7 +177,7 @@ func (s *Server) enqueueConversationVisibilityRecompute(conv db.Conversation, hi
 		if !hidden {
 			action = "Unhiding"
 		}
-		broadcast("running", fmt.Sprintf("%s conversation %s: finding affected commits...", action, conv.ID), 0)
+		broadcast("running", fmt.Sprintf("%s conversation %s: finding affected commits...", action, conv.ID))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
@@ -187,12 +185,12 @@ func (s *Server) enqueueConversationVisibilityRecompute(conv db.Conversation, hi
 		hashes, err := s.commitsToRecomputeForConversationVisibility(ctx, &conv, hidden)
 		if err != nil {
 			log.Printf("error finding commits for visibility update: %v", err)
-			broadcast("error", fmt.Sprintf("%s conversation %s failed while finding commits", action, conv.ID), 0)
+			broadcast("error", fmt.Sprintf("%s conversation %s failed while finding commits", action, conv.ID))
 			return
 		}
 		if len(hashes) == 0 {
 			clearCommitDetailCacheForProject(conv.ProjectID)
-			broadcast("complete", fmt.Sprintf("%s conversation %s: no affected commits", action, conv.ID), 0)
+			broadcast("complete", fmt.Sprintf("%s conversation %s: no affected commits", action, conv.ID))
 			return
 		}
 
@@ -203,17 +201,17 @@ func (s *Server) enqueueConversationVisibilityRecompute(conv db.Conversation, hi
 				return
 			}
 			lastProgress = now
-			broadcast("running", message, processed)
+			broadcast("running", message)
 		}
 
 		recomputed, err := s.recomputeCommitCoverageForHashes(ctx, conv.ProjectID, hashes, progress)
 		if err != nil {
 			log.Printf("error recomputing commit coverage: %v", err)
-			broadcast("error", fmt.Sprintf("%s conversation %s failed while recomputing coverage", action, conv.ID), recomputed)
+			broadcast("error", fmt.Sprintf("%s conversation %s failed while recomputing coverage", action, conv.ID))
 			return
 		}
 		clearCommitDetailCacheForProject(conv.ProjectID)
-		broadcast("complete", fmt.Sprintf("%s conversation %s: recomputed %d commit(s)", action, conv.ID, recomputed), recomputed)
+		broadcast("complete", fmt.Sprintf("%s conversation %s: recomputed %d commit(s)", action, conv.ID, recomputed))
 	}()
 	return true
 }

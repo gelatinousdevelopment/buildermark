@@ -573,16 +573,14 @@ func (s *Server) enqueueProjectCoverageRecompute(projectID, reason string, chang
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
 
-		status := func(state, message string, recomputedCommits int) {
+		status := func(state, message string) {
 			if s.ws == nil {
 				return
 			}
-			s.ws.broadcastEvent("import_status", importStatusEvent{
-				State:            state,
-				Message:          message,
-				ProjectsImported: 0,
-				EntriesProcessed: 0,
-				CommitsIngested:  recomputedCommits,
+			s.ws.broadcastEvent("job_status", jobStatusEvent{
+				JobType: "diff_recompute",
+				State:   state,
+				Message: message,
 			})
 		}
 
@@ -590,7 +588,7 @@ func (s *Server) enqueueProjectCoverageRecompute(projectID, reason string, chang
 		if len(changedPatterns) > 1 {
 			preview = fmt.Sprintf("%s (+%d more)", changedPatterns[0], len(changedPatterns)-1)
 		}
-		status("running", fmt.Sprintf("Recomputing diffs for project %s: %s", projectID, preview), 0)
+		status("running", fmt.Sprintf("Recomputing diffs for project %s: %s", projectID, preview))
 		lastProgress := time.Time{}
 		progress := func(message string) {
 			now := time.Now()
@@ -598,15 +596,15 @@ func (s *Server) enqueueProjectCoverageRecompute(projectID, reason string, chang
 				return
 			}
 			lastProgress = now
-			status("running", message, 0)
+			status("running", message)
 		}
 
 		recomputedBranches, recomputedCommits, err := s.recomputeProjectCoverageAllBranchesWithChangedPatterns(ctx, projectID, changedPatterns, progress)
 		if err != nil {
-			status("error", fmt.Sprintf("Diff recompute failed for project %s", projectID), recomputedCommits)
+			status("error", fmt.Sprintf("Diff recompute failed for project %s", projectID))
 			log.Printf("project %s settings changed (%s); coverage recompute failed: %v", projectID, reason, err)
 		} else {
-			status("complete", fmt.Sprintf("Recomputed %d commit(s) across %d branch(es) for project %s", recomputedCommits, recomputedBranches, projectID), recomputedCommits)
+			status("complete", fmt.Sprintf("Recomputed %d commit(s) across %d branch(es) for project %s", recomputedCommits, recomputedBranches, projectID))
 			log.Printf("project %s settings changed (%s); recomputed coverage on %d branch(es), %d commits", projectID, reason, recomputedBranches, recomputedCommits)
 		}
 	}()

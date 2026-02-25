@@ -2,7 +2,13 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import { websocketStore, getWsUrl } from '$lib/stores/websocket.svelte';
 
-	let isActive = $derived(websocketStore.importStatus?.state === 'running');
+	let isActive = $derived(websocketStore.hasActiveJob);
+	let activeMessage = $derived.by(() => {
+		for (const job of Object.values(websocketStore.activeJobs)) {
+			if (job.state === 'running' && job.message) return job.message;
+		}
+		return null;
+	});
 </script>
 
 <Popover position="below" fixed={true} width="280px" padding="0.75rem">
@@ -27,8 +33,8 @@
 							: 'Disconnected'}
 				</span>
 			</div>
-			{#if isActive && websocketStore.importStatus?.message}
-				<div class="activity-message">{websocketStore.importStatus.message}</div>
+			{#if isActive && activeMessage}
+				<div class="activity-message">{activeMessage}</div>
 			{/if}
 		</div>
 	{/snippet}

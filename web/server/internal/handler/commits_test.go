@@ -15,6 +15,39 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
 )
 
+// waitForCommitIngestion polls until no commit ingestion goroutines are running.
+func waitForCommitIngestion(t *testing.T, s *Server) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		s.commitIngestMu.Lock()
+		running := len(s.commitIngestRunning)
+		s.commitIngestMu.Unlock()
+		if running == 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for commit ingestion to complete")
+}
+
+// waitForCommitRefresh polls until no commit refresh goroutines are running.
+func waitForCommitRefresh(t *testing.T, s *Server) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		mgr := s.refreshManager()
+		mgr.mu.Lock()
+		running := len(mgr.running)
+		mgr.mu.Unlock()
+		if running == 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for commit refresh to complete")
+}
+
 func TestListProjectCommits(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
@@ -469,12 +502,20 @@ func TestProjectCommitsPageAlwaysImportsLatestCommits(t *testing.T) {
 		t.Fatalf("UpdateProjectGitID: %v", err)
 	}
 
+	// First call triggers async ingestion.
 	req := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("first call status = %d, want %d", rec.Code, http.StatusOK)
 	}
+
+	// Wait for async ingestion to finish, then re-query.
+	waitForCommitIngestion(t, s)
+
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
 
 	var env jsonEnvelope
 	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
@@ -493,12 +534,20 @@ func TestProjectCommitsPageAlwaysImportsLatestCommits(t *testing.T) {
 	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "app.txt")
 	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "second commit")
 
+	// Trigger async ingestion for the second commit.
 	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("second call status = %d, want %d", rec.Code, http.StatusOK)
 	}
+
+	// Wait for async ingestion to finish, then re-query.
+	waitForCommitIngestion(t, s)
+
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
 
 	env = jsonEnvelope{}
 	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
@@ -579,13 +628,15 @@ func TestProjectCommitsPageAutoHealsStaleCoverage(t *testing.T) {
 	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "agent change")
 	agentCommitHash := strings.TrimSpace(gitRun(t, repo, nil, "rev-parse", "HEAD"))
 
-	// Prime ingestion.
+	// Prime ingestion (async).
 	req := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("prime status = %d, want %d", rec.Code, http.StatusOK)
 	}
+	waitForCommitIngestion(t, s)
+	waitForCommitRefresh(t, s)
 
 	// Force stale persisted coverage for the commit and remove per-agent segments.
 	if _, err := s.DB.ExecContext(ctx,
@@ -1499,11 +1550,21 @@ func TestListProjectCommitsForProject_ByBranch(t *testing.T) {
 		t.Fatalf("UpdateProjectDefaultBranch: %v", err)
 	}
 
+	// Trigger async ingestion.
 	req := httptest.NewRequest("GET", "/api/v1/projects/"+pid+"/commits?page=1&branch=feature/demo", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	waitForCommitIngestion(t, s)
+
+	// Re-query after ingestion completes.
+	req = httptest.NewRequest("GET", "/api/v1/projects/"+pid+"/commits?page=1&branch=feature/demo", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status after ingestion = %d, want %d", rec.Code, http.StatusOK)
 	}
 
 	var env jsonEnvelope

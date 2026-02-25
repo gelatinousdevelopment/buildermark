@@ -30,6 +30,7 @@
 		showKey?: boolean;
 		/** Include the Manual label in the key. */
 		showManual?: boolean;
+		height?: string;
 	}
 
 	let {
@@ -37,7 +38,8 @@
 		segments = [],
 		totalLines = -1,
 		showKey = true,
-		showManual = false
+		showManual = false,
+		height = undefined
 	}: Props = $props();
 
 	interface ResolvedSegment {
@@ -97,7 +99,7 @@
 	}
 </script>
 
-<div class="apb">
+<div class="apb" style:--bar-height={height}>
 	{#if showKey}
 		<div class="apb-bar" role="img" aria-label="Agent percentage bar">
 			{#each barSegments as seg (seg.name)}
@@ -141,6 +143,7 @@
 
 <style>
 	.apb {
+		--bar-height: 10px;
 		width: 100%;
 	}
 
@@ -174,7 +177,7 @@
 		border-radius: 2px;
 		display: flex;
 		gap: 0.5px;
-		height: 10px;
+		height: var(--bar-height, 10px);
 		overflow: hidden;
 		width: 100%;
 	}

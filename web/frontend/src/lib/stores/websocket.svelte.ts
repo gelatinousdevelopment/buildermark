@@ -2,12 +2,12 @@ import { PUBLIC_API_URL } from '$env/static/public';
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
-export type ImportStatus = {
+export type JobStatus = {
+	jobType: string;
 	state: 'running' | 'complete' | 'error';
 	message: string;
-	projectsImported: number;
-	entriesProcessed: number;
-	commitsIngested: number;
+	projectId?: string;
+	branch?: string;
 };
 
 type WSMessage = {
@@ -16,18 +16,19 @@ type WSMessage = {
 };
 
 let _connectionState = $state<ConnectionState>('disconnected');
-let _importStatus = $state<ImportStatus | null>(null);
+let _activeJobs = $state<Record<string, JobStatus>>({});
 
 let _ws: WebSocket | null = null;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _reconnectAttempts = 0;
 const MAX_RECONNECT_DELAY = 10_000;
 
-type ImportResolver = {
-	resolve: (status: ImportStatus) => void;
+type JobResolver = {
+	resolve: (status: JobStatus) => void;
 	reject: (error: Error) => void;
 };
-let _importWaiters: ImportResolver[] = [];
+// eslint-disable-next-line svelte/prefer-svelte-reactivity -- not reactive state
+const _jobWaiters: Map<string, JobResolver[]> = new Map();
 
 export function getWsUrl(): string {
 	if (PUBLIC_API_URL) {
@@ -55,11 +56,13 @@ function connect() {
 		_connectionState = 'disconnected';
 		_ws = null;
 
-		// Reject any pending import waiters on disconnect.
-		for (const waiter of _importWaiters) {
-			waiter.reject(new Error('WebSocket disconnected'));
+		// Reject any pending job waiters on disconnect.
+		for (const [, waiters] of _jobWaiters) {
+			for (const waiter of waiters) {
+				waiter.reject(new Error('WebSocket disconnected'));
+			}
 		}
-		_importWaiters = [];
+		_jobWaiters.clear();
 
 		scheduleReconnect();
 	};
@@ -79,15 +82,18 @@ function connect() {
 }
 
 function handleMessage(msg: WSMessage) {
-	if (msg.type === 'import_status') {
-		const status = msg.data as ImportStatus;
-		_importStatus = status;
+	if (msg.type === 'job_status') {
+		const status = msg.data as JobStatus;
+		_activeJobs = { ..._activeJobs, [status.jobType]: status };
 
 		if (status.state === 'complete' || status.state === 'error') {
-			for (const waiter of _importWaiters) {
-				waiter.resolve(status);
+			const waiters = _jobWaiters.get(status.jobType);
+			if (waiters) {
+				for (const waiter of waiters) {
+					waiter.resolve(status);
+				}
+				_jobWaiters.delete(status.jobType);
 			}
-			_importWaiters = [];
 		}
 	}
 }
@@ -115,29 +121,41 @@ function disconnect() {
 }
 
 /**
- * Returns a promise that resolves when the current import job reaches
+ * Returns a promise that resolves when the specified job type reaches
  * a terminal state ("complete" or "error"). If the WebSocket disconnects
- * before the import finishes, the promise rejects.
+ * before the job finishes, the promise rejects.
  */
-function waitForImportComplete(): Promise<ImportStatus> {
+function waitForJob(jobType: string): Promise<JobStatus> {
 	return new Promise((resolve, reject) => {
-		_importWaiters.push({ resolve, reject });
+		const waiters = _jobWaiters.get(jobType) ?? [];
+		waiters.push({ resolve, reject });
+		_jobWaiters.set(jobType, waiters);
 	});
 }
 
-function clearImportStatus() {
-	_importStatus = null;
+function clearJob(jobType: string) {
+	const { [jobType]: _removed, ...rest } = _activeJobs;
+	void _removed;
+	_activeJobs = rest;
+}
+
+function getJob(jobType: string): JobStatus | null {
+	return _activeJobs[jobType] ?? null;
 }
 
 export const websocketStore = {
 	get connectionState() {
 		return _connectionState;
 	},
-	get importStatus() {
-		return _importStatus;
+	get activeJobs() {
+		return _activeJobs;
+	},
+	getJob,
+	get hasActiveJob() {
+		return Object.values(_activeJobs).some((j) => j.state === 'running');
 	},
 	connect,
 	disconnect,
-	waitForImportComplete,
-	clearImportStatus
+	waitForJob,
+	clearJob
 };

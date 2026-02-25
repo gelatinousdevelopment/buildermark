@@ -17,7 +17,9 @@
 	const historyDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
 
 	let importStatusMessage = $derived(
-		websocketStore.importStatus?.state === 'running' ? websocketStore.importStatus.message : null
+		websocketStore.getJob('import')?.state === 'running'
+			? (websocketStore.getJob('import')?.message ?? null)
+			: null
 	);
 
 	function projectName(project: { label: string; path: string }): string {
@@ -57,10 +59,10 @@
 		if (selectedProjectPaths.length === 0) return;
 		savingSelection = true;
 		saveSelectionError = null;
-		websocketStore.clearImportStatus();
+		websocketStore.clearJob('import');
 		try {
 			await importProjects(selectedProjectPaths, historyImportDays);
-			const result = await websocketStore.waitForImportComplete();
+			const result = await websocketStore.waitForJob('import');
 			if (result.state === 'error') {
 				saveSelectionError = result.message;
 			} else {
@@ -70,7 +72,7 @@
 			saveSelectionError = e instanceof Error ? e.message : 'Failed to import selected projects';
 		} finally {
 			savingSelection = false;
-			websocketStore.clearImportStatus();
+			websocketStore.clearJob('import');
 		}
 	}
 
