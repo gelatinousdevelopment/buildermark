@@ -106,20 +106,31 @@
 		{:else if projects.length === 0}
 			<p class="muted">No tracked projects yet.</p>
 		{:else}
-			<ul class="project-list">
-				{#each projects as project (project.id)}
-					<li>
-						<a
-							href={resolve('/local/projects/[project_id]/settings', {
-								project_id: project.id
-							})}
-						>
-							<span class="project-name">{projectName(project)}</span>
-							<span class="project-path">{project.path}</span>
-						</a>
-					</li>
-				{/each}
-			</ul>
+			<table class="data bordered striped hoverable" style:max-width="50rem">
+				<tbody>
+					{#each projects as project (project.id)}
+						<tr>
+							<td>
+								<a
+									href={resolve('/local/projects/[project_id]', {
+										project_id: project.id
+									})}
+									class="project-name">{projectName(project)}</a
+								>
+							</td>
+							<td>
+								<a
+									href={resolve('/local/projects/[project_id]/settings', {
+										project_id: project.id
+									})}
+									class="project-name">Settings</a
+								>
+							</td>
+							<td><span class="project-path">{project.path}</span></td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
 		{/if}
 	</div>
 

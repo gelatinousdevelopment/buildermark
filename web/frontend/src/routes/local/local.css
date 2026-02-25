@@ -176,14 +176,35 @@ table.data {
 	border-collapse: collapse;
 }
 
+table.data.bordered {
+	border: 1px solid #eee;
+}
+
+table.data.striped tr:nth-child(even) {
+	background: var(--color-alternate-table-row-background);
+}
+
+table.data.hoverable tr:hover {
+	background: var(--accent-color-ultralight);
+}
+
 table.data tr {
 	border-bottom: 1px solid #eee;
+}
+
+table.data.bordered tr:last-child {
+	border-bottom: 0;
 }
 
 table.data th,
 table.data td {
 	text-align: left;
 	padding: 0.4rem 0.75rem 0.4rem 0;
+}
+
+table.data.bordered th,
+table.data.bordered td {
+	padding: 0.4rem 0.75rem;
 }
 
 table.data th {
