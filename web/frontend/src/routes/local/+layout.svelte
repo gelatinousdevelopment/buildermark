@@ -1,6 +1,7 @@
 <script lang="ts">
 	import './local.css';
 	import './markdown.css';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { onMount, onDestroy } from 'svelte';
@@ -48,7 +49,16 @@
 	function isTabSelected(segment: string): boolean {
 		return page.url.pathname.includes('/' + segment);
 	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+			e.preventDefault();
+			goto(resolve('/local/search'));
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="site" class:fixed-height={layoutStore.fixedHeight}>
 	<header>

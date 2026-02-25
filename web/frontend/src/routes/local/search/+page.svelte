@@ -99,10 +99,12 @@
 
 <div class="limited-content-width search-page">
 	<form class="search-bar" onsubmit={handleSubmit}>
+		<!-- svelte-ignore a11y_autofocus -->
 		<input
 			type="search"
 			placeholder="Search prompts, commit subjects, diffs, and hashes"
 			bind:value={queryInput}
+			autofocus
 		/>
 		<select value={currentProjectId} onchange={handleProjectChange}>
 			<option value="">All projects</option>
