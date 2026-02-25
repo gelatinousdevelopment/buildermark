@@ -250,10 +250,6 @@
 				>
 			{/if}
 		</p>
-		<p>
-			Agent attribution: {Math.round(agentLinesFromAgent)}/{agentLinesTotal} attributable changed lines
-			({percent(agentLinesFromAgent, agentLinesTotal).toFixed(1)}%) in non-ignored, non-moved files
-		</p>
 		{#if hasOverride}
 			<p class="override-display">
 				Agent Attribution Override: {detail.commit.overrideLinePercent}%
@@ -268,6 +264,7 @@
 				segments={hasOverride ? [] : toBarSegments(detail.commit.agentSegments)}
 				totalLines={agentLinesTotal}
 				showManual={true}
+				height="18px"
 			/>
 		</div>
 		<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
