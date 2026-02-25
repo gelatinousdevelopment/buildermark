@@ -612,8 +612,16 @@ func DeleteCommitAgentCoverageByCommitID(ctx context.Context, database *sql.DB, 
 	if strings.TrimSpace(commitID) == "" {
 		return nil
 	}
-	if _, err := database.ExecContext(ctx, "DELETE FROM commit_agent_coverage WHERE commit_id = ?", commitID); err != nil {
+	res, err := database.ExecContext(ctx, "DELETE FROM commit_agent_coverage WHERE commit_id = ?", commitID)
+	if err != nil {
 		return fmt.Errorf("delete commit_agent_coverage: %w", err)
+	}
+	deletedRows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("commit agent coverage rows affected: %w", err)
+	}
+	if err := runIncrementalVacuum(ctx, database, deletedRows); err != nil {
+		return err
 	}
 	return nil
 }

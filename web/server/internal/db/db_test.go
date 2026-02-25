@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,6 +16,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
+	}
+	if err := ensureIncrementalAutoVacuum(context.Background(), db); err != nil {
+		db.Close()
+		t.Fatalf("configure auto vacuum: %v", err)
 	}
 	if err := runMigrations(db); err != nil {
 		db.Close()
@@ -130,4 +135,52 @@ func TestTimestampColumnsUseIntegerUnixMs(t *testing.T) {
 	assertColumnType("ratings", "created_at", "INTEGER")
 	assertColumnType("commits", "created_at", "INTEGER")
 	assertColumnType("schema_version", "applied_at", "INTEGER")
+}
+
+func TestInitDBSetsIncrementalAutoVacuum(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "buildermark.db")
+	database, err := InitDB(dbPath)
+	if err != nil {
+		t.Fatalf("InitDB: %v", err)
+	}
+	t.Cleanup(func() { database.Close() })
+
+	var mode int
+	if err := database.QueryRow("PRAGMA auto_vacuum").Scan(&mode); err != nil {
+		t.Fatalf("query auto_vacuum: %v", err)
+	}
+	if mode != autoVacuumIncremental {
+		t.Fatalf("auto_vacuum mode = %d, want %d", mode, autoVacuumIncremental)
+	}
+}
+
+func TestEnsureIncrementalAutoVacuumUpgradesExistingDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "existing.db")
+	raw, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatalf("open raw db: %v", err)
+	}
+	if _, err := raw.Exec("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)"); err != nil {
+		raw.Close()
+		t.Fatalf("create table: %v", err)
+	}
+	if _, err := raw.Exec("INSERT INTO t(v) VALUES ('x')"); err != nil {
+		raw.Close()
+		t.Fatalf("insert row: %v", err)
+	}
+	raw.Close()
+
+	database, err := InitDB(dbPath)
+	if err != nil {
+		t.Fatalf("InitDB existing db: %v", err)
+	}
+	t.Cleanup(func() { database.Close() })
+
+	var mode int
+	if err := database.QueryRow("PRAGMA auto_vacuum").Scan(&mode); err != nil {
+		t.Fatalf("query auto_vacuum: %v", err)
+	}
+	if mode != autoVacuumIncremental {
+		t.Fatalf("auto_vacuum mode = %d, want %d", mode, autoVacuumIncremental)
+	}
 }

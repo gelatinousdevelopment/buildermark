@@ -79,9 +79,16 @@ func UpsertWatcherScanState(ctx context.Context, database *sql.DB, st WatcherSca
 }
 
 func DeleteWatcherScanState(ctx context.Context, database *sql.DB, agent, sourceKind, sourceKey string) error {
-	_, err := database.ExecContext(ctx, `DELETE FROM watcher_scan_state WHERE agent = ? AND source_kind = ? AND source_key = ?`, agent, sourceKind, sourceKey)
+	res, err := database.ExecContext(ctx, `DELETE FROM watcher_scan_state WHERE agent = ? AND source_kind = ? AND source_key = ?`, agent, sourceKind, sourceKey)
 	if err != nil {
 		return fmt.Errorf("delete watcher scan state: %w", err)
+	}
+	deletedRows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("watcher scan state rows affected: %w", err)
+	}
+	if err := runIncrementalVacuum(ctx, database, deletedRows); err != nil {
+		return err
 	}
 	return nil
 }

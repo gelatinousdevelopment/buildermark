@@ -615,11 +615,23 @@ func DeleteProject(ctx context.Context, database *sql.DB, projectID string) erro
 		return fmt.Errorf("delete commit_sync_state: %w", err)
 	}
 	// Delete the project itself.
-	if _, err := tx.ExecContext(ctx, "DELETE FROM projects WHERE id = ?", projectID); err != nil {
+	res, err := tx.ExecContext(ctx, "DELETE FROM projects WHERE id = ?", projectID)
+	if err != nil {
 		return fmt.Errorf("delete project: %w", err)
 	}
+	deletedRows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete project rows affected: %w", err)
+	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if err := runIncrementalVacuum(ctx, database, deletedRows); err != nil {
+		return err
+	}
+	return nil
 }
 
 // UpdateProjectRemote sets the remote URL on a project.

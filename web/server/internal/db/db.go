@@ -34,6 +34,11 @@ func InitDB(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
+	if err := ensureIncrementalAutoVacuum(context.Background(), db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("configure auto vacuum: %w", err)
+	}
+
 	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
