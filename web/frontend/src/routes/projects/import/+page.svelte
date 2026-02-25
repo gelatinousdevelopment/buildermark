@@ -66,7 +66,7 @@
 			if (result.state === 'error') {
 				saveSelectionError = result.message;
 			} else {
-				goto(resolve('/local/projects'));
+				goto(resolve('/projects'));
 			}
 		} catch (e) {
 			saveSelectionError = e instanceof Error ? e.message : 'Failed to import selected projects';

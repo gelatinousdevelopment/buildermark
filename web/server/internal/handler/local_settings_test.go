@@ -15,7 +15,7 @@ func TestGetLocalSettings(t *testing.T) {
 	s := setupTestServerWithWatcher(t, w1, w2)
 	handler := s.Routes()
 
-	req := httptest.NewRequest("GET", "/api/v1/local/settings", nil)
+	req := httptest.NewRequest("GET", "/api/v1/settings", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -61,7 +61,7 @@ func TestGetLocalSettingsWithoutAgents(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
 
-	req := httptest.NewRequest("GET", "/api/v1/local/settings", nil)
+	req := httptest.NewRequest("GET", "/api/v1/settings", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

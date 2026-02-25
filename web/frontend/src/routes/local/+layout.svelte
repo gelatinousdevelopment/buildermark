@@ -27,22 +27,22 @@
 		{
 			label: 'Conversations',
 			segment: 'conversations',
-			route: '/local/projects/[project_id]/conversations' as const
+			route: '/projects/[project_id]/conversations' as const
 		},
 		{
 			label: 'Commits',
 			segment: 'commits',
-			route: '/local/projects/[project_id]/commits' as const
+			route: '/projects/[project_id]/commits' as const
 		},
 		{
 			label: 'Insights',
 			segment: 'insights',
-			route: '/local/projects/[project_id]/insights' as const
+			route: '/projects/[project_id]/insights' as const
 		},
 		{
 			label: 'Settings',
 			segment: 'settings',
-			route: '/local/projects/[project_id]/settings' as const
+			route: '/projects/[project_id]/settings' as const
 		}
 	];
 
@@ -53,18 +53,26 @@
 	function handleKeydown(e: KeyboardEvent) {
 		if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 			e.preventDefault();
-			goto(resolve('/local/search'));
+			goto(resolve('/search'));
 		}
 	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
+<svelte:head
+	><title
+		>{navStore.projectName
+			? navStore.projectName + ' | Buildermark Local'
+			: 'Buildermark Local'}</title
+	></svelte:head
+>
+
 <div class="site" class:fixed-height={layoutStore.fixedHeight}>
 	<header>
 		<section>
 			<div class="brand">
-				<a href={resolve('/local/projects')} class="item"
+				<a href={resolve('/projects')} class="item"
 					><Icon name="wrench" width="22px" />
 					<div class="text">
 						<div class="title">Buildermark</div>
@@ -79,16 +87,16 @@
 				{#if projectId}
 					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<!-- <a
-						href={resolve('/local/projects/[project_id]', { project_id: projectId })}
+						href={resolve('/projects/[project_id]', { project_id: projectId })}
 						class="item project"
 						style:font-weight="400">gelatinousdevelopment</a
 					> -->
 					<!-- <div class="chevron-right" style:margin="0 0.5rem">/</div> -->
 					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<a
-						href={resolve('/local/projects/[project_id]', { project_id: projectId })}
+						href={resolve('/projects/[project_id]', { project_id: projectId })}
 						class="item project"
-						class:selected={page.route.id === '/local/projects/[project_id]'}
+						class:selected={page.route.id === '/projects/[project_id]'}
 						style:font-weight="bold">{navStore.projectName || ''}</a
 					>
 					<div class="chevron-right"><Icon name="chevronRight" width="15px" /></div>
@@ -101,15 +109,15 @@
 					{/each}
 				{:else}
 					<a
-						href={resolve('/local/projects')}
+						href={resolve('/projects')}
 						class="item"
-						class:selected={page.route.id === '/local/projects'}>Projects</a
+						class:selected={page.route.id === '/projects'}>Projects</a
 					>
 					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<a
-						href={resolve('/local/projects/import')}
+						href={resolve('/projects/import')}
 						class="item"
-						class:selected={page.route.id === '/local/projects/import'}>Import</a
+						class:selected={page.route.id === '/projects/import'}>Import</a
 					>
 				{/if}
 			</nav>
@@ -119,13 +127,13 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href={resolve('/local/search')} class="item"><Icon name="search" width="19px" /></a>
+				<a href={resolve('/search')} class="item"><Icon name="search" width="19px" /></a>
 			</nav>
 		</section>
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href={resolve('/local/settings')} class="item"><Icon name="gear" width="17px" /></a>
+				<a href={resolve('/settings')} class="item"><Icon name="gear" width="17px" /></a>
 			</nav>
 		</section>
 		<hr class="divider" />

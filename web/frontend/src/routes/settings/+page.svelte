@@ -112,7 +112,7 @@
 						<tr>
 							<td>
 								<a
-									href={resolve('/local/projects/[project_id]', {
+									href={resolve('/projects/[project_id]', {
 										project_id: project.id
 									})}
 									class="project-name">{projectName(project)}</a
@@ -120,7 +120,7 @@
 							</td>
 							<td>
 								<a
-									href={resolve('/local/projects/[project_id]/settings', {
+									href={resolve('/projects/[project_id]/settings', {
 										project_id: project.id
 									})}
 									class="project-name">Settings</a

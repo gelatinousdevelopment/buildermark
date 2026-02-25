@@ -368,7 +368,7 @@
 					<td class="title">
 						<div class="title-content">
 							<a
-								href={resolve('/local/projects/[project_id]/conversations/[id]', {
+								href={resolve('/projects/[project_id]/conversations/[id]', {
 									project_id: project.id,
 									id: conv.id
 								})}

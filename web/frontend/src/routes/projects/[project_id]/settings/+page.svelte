@@ -113,7 +113,7 @@
 		deleteError = null;
 		try {
 			await deleteProject(project.id);
-			goto(resolve('/local/projects'));
+			goto(resolve('/projects'));
 		} catch (e) {
 			deleteError = e instanceof Error ? e.message : 'Failed to delete project';
 		} finally {

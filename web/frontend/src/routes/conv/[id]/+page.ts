@@ -16,6 +16,6 @@ export async function load({ params, fetch }) {
 
 	throw redirect(
 		302,
-		`/local/projects/${encodeURIComponent(conversation.projectId)}/conversations/${encodeURIComponent(conversation.id)}`
+		`/projects/${encodeURIComponent(conversation.projectId)}/conversations/${encodeURIComponent(conversation.id)}`
 	);
 }

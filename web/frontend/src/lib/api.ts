@@ -47,7 +47,7 @@ export function listProjects(ignored = false): Promise<Project[]> {
 }
 
 export function getLocalSettings(): Promise<LocalSettings> {
-	return api('/api/v1/local/settings');
+	return api('/api/v1/settings');
 }
 
 export function deleteProject(id: string): Promise<void> {

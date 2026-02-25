@@ -59,7 +59,7 @@
 		try {
 			const projects = (await listProjects(false)).filter((project) => project.gitId);
 			if (projects.length === 0) {
-				goto(resolve('/local/projects/import'));
+				goto(resolve('/projects/import'));
 				return;
 			}
 			const loadedRows = await Promise.all(
@@ -112,7 +112,7 @@
 				<div class="project">
 					<div class="meta">
 						<div class="label">
-							<a href={resolve('/local/projects/[project_id]', { project_id: row.project.id })}
+							<a href={resolve('/projects/[project_id]', { project_id: row.project.id })}
 								>{projectName(row.project)}</a
 							>
 						</div>
@@ -124,7 +124,7 @@
 						<div class="column conversations">
 							<div class="heading">
 								<a
-									href={resolve('/local/projects/[project_id]/conversations', {
+									href={resolve('/projects/[project_id]/conversations', {
 										project_id: row.project.id
 									})}>Agent Conversations</a
 								>
@@ -148,9 +148,7 @@
 								limit={10}
 								compact={true}
 								showHeader={true}
-								headerLink={resolve(
-									`/local/projects/${encodeURIComponent(row.project.id)}/commits`
-								)}
+								headerLink={resolve(`/projects/${encodeURIComponent(row.project.id)}/commits`)}
 								showBranch={false}
 								useLoadQueue={true}
 								loadPriority={index}

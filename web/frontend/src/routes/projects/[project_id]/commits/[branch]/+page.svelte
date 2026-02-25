@@ -9,7 +9,7 @@
 
 	async function handleBranchChange(nextBranch: string) {
 		if (!projectId || !nextBranch) return;
-		const base = resolve('/local/projects/[project_id]/commits/[branch]', {
+		const base = resolve('/projects/[project_id]/commits/[branch]', {
 			project_id: projectId,
 			branch: encodeURIComponent(nextBranch)
 		});

@@ -34,7 +34,7 @@
 		const query = params.toString();
 		void goto(
 			resolve(
-				`/local/projects/${encodeURIComponent(projectId)}/conversations${query ? `?${query}` : ''}`
+				`/projects/${encodeURIComponent(projectId)}/conversations${query ? `?${query}` : ''}`
 			),
 			{
 				replaceState: true,

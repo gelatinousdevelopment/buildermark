@@ -74,7 +74,7 @@
 			params.delete('project');
 		}
 		const query = params.toString();
-		const base = resolve('/local/search');
+		const base = resolve('/search');
 		void goto(query ? `${base}?${query}` : base, {
 			replaceState: true,
 			noScroll: true,
@@ -131,7 +131,7 @@
 				<div class="project">
 					<div class="meta">
 						<div class="label">
-							<a href={resolve('/local/projects/[project_id]', { project_id: row.project.id })}
+							<a href={resolve('/projects/[project_id]', { project_id: row.project.id })}
 								>{projectName(row.project)}</a
 							>
 						</div>
@@ -145,7 +145,7 @@
 						<div class="column conversations">
 							<div class="heading">
 								<a
-									href={resolve('/local/projects/[project_id]/conversations', {
+									href={resolve('/projects/[project_id]/conversations', {
 										project_id: row.project.id
 									})}>Agent Conversations</a
 								>
@@ -171,9 +171,7 @@
 								limit={20}
 								compact={true}
 								showHeader={true}
-								headerLink={resolve(
-									`/local/projects/${encodeURIComponent(row.project.id)}/commits`
-								)}
+								headerLink={resolve(`/projects/${encodeURIComponent(row.project.id)}/commits`)}
 								showBranch={false}
 								searchTerm={currentQuery}
 								useLoadQueue={true}

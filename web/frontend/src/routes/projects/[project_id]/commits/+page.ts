@@ -17,6 +17,6 @@ export async function load({ params, fetch }) {
 	const branch = project.currentBranch || project.defaultBranch || 'main';
 	throw redirect(
 		302,
-		`/local/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(branch)}`
+		`/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(branch)}`
 	);
 }

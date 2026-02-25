@@ -282,7 +282,7 @@
 													{#each col.summary.commits as c (c.commitHash)}
 														<a
 															href={resolve(
-																`/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(branch)}/${encodeURIComponent(c.commitHash)}`
+																`/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(branch)}/${encodeURIComponent(c.commitHash)}`
 															)}
 															class="dc-commit-link"
 														>
@@ -328,7 +328,7 @@
 				<div class="subtitle">
 					<a
 						class="dc-more-link"
-						href={resolve(`/local/projects/${encodeURIComponent(projectId)}/insights`)}>more...</a
+						href={resolve(`/projects/${encodeURIComponent(projectId)}/insights`)}>more...</a
 					>
 				</div>
 			{/if}

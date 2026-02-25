@@ -29,7 +29,7 @@
 <div class="project-content">
 	<div class="column conversations">
 		<div class="heading">
-			<a href={resolve('/local/projects/[project_id]/conversations', { project_id: projectId })}
+			<a href={resolve('/projects/[project_id]/conversations', { project_id: projectId })}
 				>Agent Conversations</a
 			>
 		</div>
@@ -47,8 +47,7 @@
 		<div class="more">
 			<a
 				class="bordered small"
-				href={resolve('/local/projects/[project_id]/conversations', { project_id: projectId })}
-				>More...</a
+				href={resolve('/projects/[project_id]/conversations', { project_id: projectId })}>More...</a
 			>
 		</div>
 	</div>
@@ -61,7 +60,7 @@
 			limit={30}
 			compact={true}
 			showHeader={true}
-			headerLink={resolve('/local/projects/[project_id]/commits', { project_id: projectId })}
+			headerLink={resolve('/projects/[project_id]/commits', { project_id: projectId })}
 			showBranch={false}
 			showDate={true}
 			enableRelationshipHover={true}
@@ -70,7 +69,7 @@
 		<div class="more">
 			<a
 				class="bordered small"
-				href={resolve('/local/projects/[project_id]/commits', { project_id: projectId })}>More...</a
+				href={resolve('/projects/[project_id]/commits', { project_id: projectId })}>More...</a
 			>
 		</div>
 	</div>

@@ -512,8 +512,8 @@
 							<a
 								href={resolve(
 									selectedBranch || data?.branch || ''
-										? `/local/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
-										: `/local/projects/${encodeURIComponent(c.projectId)}/commits`
+										? `/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
+										: `/projects/${encodeURIComponent(c.projectId)}/commits`
 								)}
 								class="link-button"
 							>

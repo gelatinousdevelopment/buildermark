@@ -283,7 +283,7 @@
 		{#if conversation.parentConversationId}
 			<a
 				class="conversation-link parent-link"
-				href={resolve('/local/projects/[project_id]/conversations/[id]', {
+				href={resolve('/projects/[project_id]/conversations/[id]', {
 					project_id: conversation.projectId,
 					id: conversation.parentConversationId
 				})}
@@ -375,7 +375,7 @@
 			{#each conversation.childConversations as child (child.id)}
 				<a
 					class="conversation-link child-link"
-					href={resolve('/local/projects/[project_id]/conversations/[id]', {
+					href={resolve('/projects/[project_id]/conversations/[id]', {
 						project_id: conversation.projectId,
 						id: child.id
 					})}

@@ -395,7 +395,7 @@
 						content={message.content}
 						expanded={msgExpanded}
 						statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
-						linkHref={resolve('/local/projects/[project_id]/conversations/[id]', {
+						linkHref={resolve('/projects/[project_id]/conversations/[id]', {
 							project_id: detail.commit.projectId,
 							id: message.conversationId
 						})}
