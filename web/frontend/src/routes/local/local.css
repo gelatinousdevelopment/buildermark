@@ -5,6 +5,8 @@
 	--color-text: #444;
 	--color-divider: #bbb;
 	--color-status-green: #55bb33;
+	--color-status-yellow: #f8d233;
+	--color-status-red: #dd5555;
 
 	--color-background-content: #fff;
 	--color-background-page: #fcfcfc;
@@ -38,6 +40,7 @@
 	--color-tag-background-hover: #555;
 	--color-tag-text-hover: white;
 
+	--color-relationship-foreground: #b49e00;
 	--color-relationship-highlight: #fff8e1;
 	--color-relationship-source: #e3f2fd;
 }

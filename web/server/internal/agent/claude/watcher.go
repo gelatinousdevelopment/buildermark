@@ -32,6 +32,7 @@ func (a *Agent) Run(ctx context.Context) {
 		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
 	}
 	a.backfillTitles(ctx)
+	a.backfillParentConversations(ctx)
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
 
@@ -103,6 +104,7 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	n := a.doScan(ctx, since, false, nil)
 	n += a.scanProjectFilesSince(ctx, since, false, nil, progress)
+	a.backfillParentConversations(ctx)
 	log.Printf("claude watcher: manual scan processed %d entries (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
@@ -112,6 +114,7 @@ func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []str
 	filter := newPathFilter(paths)
 	n := a.doScan(ctx, since, false, filter)
 	n += a.scanProjectFilesSince(ctx, since, false, filter, progress)
+	a.backfillParentConversations(ctx)
 	log.Printf("claude watcher: manual path scan processed %d entries (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
@@ -569,6 +572,32 @@ func (a *Agent) backfillTitles(ctx context.Context) {
 	}
 }
 
+// backfillParentConversations finds conversations with no parent set and
+// attempts to detect a parent session ID from their conversation log files.
+func (a *Agent) backfillParentConversations(ctx context.Context) {
+	parentless, err := db.ListParentlessConversations(ctx, a.db, a.Name())
+	if err != nil {
+		log.Printf("claude watcher: list parentless conversations: %v", err)
+		return
+	}
+
+	updated := 0
+	for _, u := range parentless {
+		entries := readConversationLogEntries(a.home, u.ProjectPath, u.ID)
+		parentSessionID := extractParentSessionID(entries)
+		if parentSessionID != "" && parentSessionID != u.ID {
+			if err := db.UpdateConversationParent(ctx, a.db, u.ID, parentSessionID); err != nil {
+				log.Printf("claude watcher: backfill parent for %s: %v", u.ID, err)
+				continue
+			}
+			updated++
+		}
+	}
+	if updated > 0 {
+		log.Printf("claude watcher: backfilled %d conversation parents", updated)
+	}
+}
+
 // backfillLabels updates project labels from the last path component to the
 // git repository root directory name for projects whose label was auto-generated.
 func (a *Agent) backfillLabels(ctx context.Context) {
@@ -673,6 +702,11 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		if _, ok := conversationLogCache[cacheKey]; !ok {
 			conversationLogCache[cacheKey] = readConversationLogEntries(a.home, g.project, sid)
 		}
+		parentSessionID := extractParentSessionID(conversationLogCache[cacheKey])
+		if parentSessionID != "" && parentSessionID != sid {
+			db.UpdateConversationParent(ctx, a.db, sid, parentSessionID)
+		}
+
 		if _, ok := sessionTitleCache[cacheKey]; !ok {
 			// Highest priority: inline summary from type="summary" entries.
 			var title string

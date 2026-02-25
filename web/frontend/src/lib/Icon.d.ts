@@ -9,5 +9,6 @@ declare global {
 		| 'gear'
 		| 'branch'
 		| 'externalLink'
-		| 'plus';
+		| 'plus'
+		| 'document';
 }

@@ -1941,3 +1941,63 @@ func TestWatcherExtractsModelFromNestedRawHistoryJSON(t *testing.T) {
 		t.Errorf("model = %q, want %q", model, "claude-3-5-sonnet")
 	}
 }
+
+func TestExtractParentSessionID(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []conversationLogEntry
+		want    string
+	}{
+		{
+			name:    "no entries",
+			entries: nil,
+			want:    "",
+		},
+		{
+			name: "no user messages",
+			entries: []conversationLogEntry{
+				{Role: "agent", Content: "Hello"},
+			},
+			want: "",
+		},
+		{
+			name: "user message without jsonl reference",
+			entries: []conversationLogEntry{
+				{Role: "user", Content: "Please implement the feature"},
+			},
+			want: "",
+		},
+		{
+			name: "user message with jsonl reference",
+			entries: []conversationLogEntry{
+				{Role: "user", Content: "Implement the plan.\n\nread the full transcript at: /Users/david/.claude/projects/-Users-david-github-zrate/8baafe77-1234-5678-9abc-def012345678.jsonl"},
+			},
+			want: "8baafe77-1234-5678-9abc-def012345678",
+		},
+		{
+			name: "skips system messages to find real first user message",
+			entries: []conversationLogEntry{
+				{Role: "user", Content: "<system-reminder>some system stuff</system-reminder>"},
+				{Role: "user", Content: "read the full transcript at: /Users/david/.claude/projects/foo/abcdef01-2345-6789-abcd-ef0123456789.jsonl"},
+			},
+			want: "abcdef01-2345-6789-abcd-ef0123456789",
+		},
+		{
+			name: "only checks first substantive user message",
+			entries: []conversationLogEntry{
+				{Role: "user", Content: "Please do the thing"},
+				{Role: "user", Content: "read the full transcript at: /Users/david/.claude/projects/foo/8baafe77-1234-5678-9abc-def012345678.jsonl"},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractParentSessionID(tt.entries)
+			if got != tt.want {
+				t.Errorf("extractParentSessionID() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -12,12 +12,13 @@ var pastedTextRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 
 // Conversation represents a row in the conversations table.
 type Conversation struct {
-	ID        string `json:"id"`
-	ProjectID string `json:"projectId"`
-	Agent     string `json:"agent"`
-	Title     string `json:"title"`
-	StartedAt int64  `json:"startedAt"`
-	EndedAt   int64  `json:"endedAt"`
+	ID                   string `json:"id"`
+	ProjectID            string `json:"projectId"`
+	Agent                string `json:"agent"`
+	Title                string `json:"title"`
+	StartedAt            int64  `json:"startedAt"`
+	EndedAt              int64  `json:"endedAt"`
+	ParentConversationID string `json:"parentConversationId"`
 }
 
 // MessageRead is a message as returned by read queries.
@@ -31,16 +32,24 @@ type MessageRead struct {
 	RawJSON        string `json:"rawJson"`
 }
 
+// ConversationRef is a minimal reference to a conversation (for parent/child links).
+type ConversationRef struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
 // ConversationDetail is a conversation with all its messages and ratings.
 type ConversationDetail struct {
-	ID        string        `json:"id"`
-	ProjectID string        `json:"projectId"`
-	Agent     string        `json:"agent"`
-	Title     string        `json:"title"`
-	StartedAt int64         `json:"startedAt"`
-	EndedAt   int64         `json:"endedAt"`
-	Messages  []MessageRead `json:"messages"`
-	Ratings   []Rating      `json:"ratings"`
+	ID                   string           `json:"id"`
+	ProjectID            string           `json:"projectId"`
+	Agent                string           `json:"agent"`
+	Title                string           `json:"title"`
+	StartedAt            int64            `json:"startedAt"`
+	EndedAt              int64            `json:"endedAt"`
+	ParentConversationID string           `json:"parentConversationId"`
+	ChildConversations   []ConversationRef `json:"childConversations"`
+	Messages             []MessageRead    `json:"messages"`
+	Ratings              []Rating         `json:"ratings"`
 }
 
 // ListConversations returns conversations, up to limit.
@@ -49,7 +58,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 		limit = 100
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title, started_at, ended_at FROM conversations ORDER BY id LIMIT ?", limit)
+	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title, started_at, ended_at, parent_conversation_id FROM conversations ORDER BY id LIMIT ?", limit)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -58,7 +67,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int) ([]Conversati
 	conversations := []Conversation{}
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.ParentConversationID); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		conversations = append(conversations, c)
@@ -71,8 +80,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	resolvedID := conversationID
 	var c ConversationDetail
 	err := db.QueryRowContext(ctx,
-		"SELECT id, project_id, agent, title, started_at, ended_at FROM conversations WHERE id = ?", resolvedID,
-	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt)
+		"SELECT id, project_id, agent, title, started_at, ended_at, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
+	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.ParentConversationID)
 	if err == sql.ErrNoRows {
 		aliasConversationID, found, resolveErr := ResolveConversationIDByTempID(ctx, db, conversationID)
 		if resolveErr != nil {
@@ -83,8 +92,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		}
 		resolvedID = aliasConversationID
 		err = db.QueryRowContext(ctx,
-			"SELECT id, project_id, agent, title, started_at, ended_at FROM conversations WHERE id = ?", resolvedID,
-		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt)
+			"SELECT id, project_id, agent, title, started_at, ended_at, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
+		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.ParentConversationID)
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -191,6 +200,28 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		filtered = append(filtered, msg)
 	}
 	c.Messages = filtered
+
+	// Fetch child conversations (conversations whose parent is this one).
+	childRows, err := db.QueryContext(ctx,
+		"SELECT id, title FROM conversations WHERE parent_conversation_id = ? ORDER BY started_at ASC",
+		resolvedID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query child conversations: %w", err)
+	}
+	defer childRows.Close()
+
+	c.ChildConversations = []ConversationRef{}
+	for childRows.Next() {
+		var ref ConversationRef
+		if err := childRows.Scan(&ref.ID, &ref.Title); err != nil {
+			return nil, fmt.Errorf("scan child conversation: %w", err)
+		}
+		c.ChildConversations = append(c.ChildConversations, ref)
+	}
+	if err := childRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate child conversations: %w", err)
+	}
 
 	return &c, nil
 }
@@ -403,6 +434,47 @@ func UpdateConversationTitle(ctx context.Context, db *sql.DB, conversationID, ti
 		return fmt.Errorf("conversation %s: %w", conversationID, ErrNotFound)
 	}
 	return nil
+}
+
+// UpdateConversationParent sets the parent_conversation_id on an existing
+// conversation, but only if it is not already set (idempotent).
+func UpdateConversationParent(ctx context.Context, db *sql.DB, conversationID, parentID string) error {
+	_, err := db.ExecContext(ctx,
+		"UPDATE conversations SET parent_conversation_id = ? WHERE id = ? AND parent_conversation_id = ''",
+		parentID, conversationID,
+	)
+	if err != nil {
+		return fmt.Errorf("update conversation parent: %w", err)
+	}
+	return nil
+}
+
+// ParentlessConversation is a conversation with an empty parent_conversation_id.
+type ParentlessConversation struct {
+	ID          string
+	ProjectPath string
+}
+
+// ListParentlessConversations returns conversations that have an empty parent_conversation_id for the given agent.
+func ListParentlessConversations(ctx context.Context, db *sql.DB, agent string) ([]ParentlessConversation, error) {
+	rows, err := db.QueryContext(ctx,
+		"SELECT c.id, p.path FROM conversations c JOIN projects p ON c.project_id = p.id WHERE c.agent = ? AND c.parent_conversation_id = ''",
+		agent,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query parentless conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var result []ParentlessConversation
+	for rows.Next() {
+		var u ParentlessConversation
+		if err := rows.Scan(&u.ID, &u.ProjectPath); err != nil {
+			return nil, fmt.Errorf("scan parentless conversation: %w", err)
+		}
+		result = append(result, u)
+	}
+	return result, rows.Err()
 }
 
 // UpdateConversationProject sets the project_id on an existing conversation.

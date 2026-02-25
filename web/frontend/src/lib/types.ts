@@ -52,6 +52,7 @@ export interface ConversationWithRatings {
 	id: string;
 	agent: string;
 	title: string;
+	parentConversationId: string;
 	lastMessageTimestamp: number;
 	ratings: Rating[];
 	filesEdited: string[];
@@ -68,6 +69,12 @@ export interface Conversation {
 	projectId: string;
 	agent: string;
 	title: string;
+	parentConversationId: string;
+}
+
+export interface ConversationRef {
+	id: string;
+	title: string;
 }
 
 export interface ConversationDetail {
@@ -75,6 +82,8 @@ export interface ConversationDetail {
 	projectId: string;
 	agent: string;
 	title: string;
+	parentConversationId: string;
+	childConversations: ConversationRef[];
 	messages: MessageRead[];
 	ratings: Rating[];
 }

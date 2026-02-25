@@ -12,7 +12,8 @@
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
 	import AgentTag from '$lib/components/AgentTag.svelte';
-	import { singleLineTitle } from '$lib/utils';
+	import { singleLineTitle, shortId } from '$lib/utils';
+	import { resolve } from '$app/paths';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -225,6 +226,21 @@
 				</div>
 			{/if}
 
+			{#if conversation.parentConversationId}
+				<a
+					class="conversation-link parent-link"
+					href={resolve('/local/projects/[project_id]/conversations/[id]', {
+						project_id: conversation.projectId,
+						id: conversation.parentConversationId
+					})}
+				>
+					<svg class="link-icon" viewBox="0 0 16 16" fill="currentColor"
+						><path d="M8 3l4 4H9v5H7V7H4l4-4z" /></svg
+					>
+					Parent conversation
+				</a>
+			{/if}
+
 			{#if timeline.length === 0}
 				<p>No messages or ratings.</p>
 			{:else}
@@ -301,6 +317,23 @@
 					{/if}
 				{/each}
 			{/if}
+			{#if conversation.childConversations && conversation.childConversations.length > 0}
+				{#each conversation.childConversations as child (child.id)}
+					<a
+						class="conversation-link child-link"
+						href={resolve('/local/projects/[project_id]/conversations/[id]', {
+							project_id: conversation.projectId,
+							id: child.id
+						})}
+					>
+						<svg class="link-icon" viewBox="0 0 16 16" fill="currentColor"
+							><path d="M8 13l4-4H9V4H7v5H4l4 4z" /></svg
+						>
+						Child conversation: {(child.title && singleLineTitle(child.title)) || shortId(child.id)}
+					</a>
+				{/each}
+			{/if}
+
 			{#if !hasRatingAfterLastUser}
 				<div class="rating-card rating-input">
 					<div class="rating-input-header">
@@ -585,5 +618,43 @@
 		color: #c00;
 		font-size: 0.85rem;
 		margin: 0;
+	}
+
+	.conversation-link {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.5rem 0.75rem;
+		border-radius: 6px;
+		font-size: 0.85rem;
+		text-decoration: none;
+		margin-bottom: 0.5rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.parent-link {
+		background: var(--color-prompt-background, #f0f4ff);
+		border: 1px solid var(--color-prompt-border, #d0d8e8);
+		color: #555;
+	}
+
+	.child-link {
+		background: var(--color-rating-background, #fffbf0);
+		border: 1px solid var(--color-rating-border, #e8e0c8);
+		color: #555;
+	}
+
+	.conversation-link:hover {
+		border-color: var(--accent-color);
+		color: var(--accent-color);
+	}
+
+	.link-icon {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+		opacity: 0.5;
 	}
 </style>

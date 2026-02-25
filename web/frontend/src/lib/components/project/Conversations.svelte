@@ -16,6 +16,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { ProjectDetail, ConversationBatchDetail } from '$lib/types';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
+	import Icon from '$lib/Icon.svelte';
 
 	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
@@ -149,6 +150,9 @@
 			);
 			if (myToken !== requestToken) return;
 			project = detail;
+			if (enableRelationshipHover) {
+				relationshipCache.loadConversationParentLinks(projectId, detail.conversations);
+			}
 			if (onConversationsLoaded) {
 				onConversationsLoaded(detail.conversations.map((c) => c.id));
 			}
@@ -338,7 +342,9 @@
 								id: conv.id
 							})}
 						>
-							{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
+							{#if conv.parentConversationId}<div class="document-icon">
+									<Icon name="document" width="13px" />
+								</div>{/if}{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
 						</a>
 						{#if detailed && detail}
 							<div class="detail-messages">
@@ -589,6 +595,16 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.document-icon {
+		color: var(--color-relationship-foreground);
+		display: inline-block;
+		flex-shrink: 0;
+		height: 12px;
+		margin-right: 5px;
+		vertical-align: -2px;
+		width: 12px;
 	}
 
 	.title a:hover {

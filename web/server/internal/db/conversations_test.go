@@ -417,3 +417,51 @@ func TestUpdateConversationProject(t *testing.T) {
 		t.Errorf("project_id = %q, want %q", detail.ProjectID, pidB)
 	}
 }
+
+func TestUpdateConversationParent(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "child-conv", pid, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// Initially parent should be empty.
+	detail, err := GetConversationDetail(ctx, db, "child-conv")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.ParentConversationID != "" {
+		t.Errorf("initial parent = %q, want empty", detail.ParentConversationID)
+	}
+
+	// Set parent.
+	if err := UpdateConversationParent(ctx, db, "child-conv", "parent-conv"); err != nil {
+		t.Fatalf("UpdateConversationParent: %v", err)
+	}
+
+	detail, err = GetConversationDetail(ctx, db, "child-conv")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.ParentConversationID != "parent-conv" {
+		t.Errorf("parent = %q, want %q", detail.ParentConversationID, "parent-conv")
+	}
+
+	// Idempotent: setting again should not overwrite.
+	if err := UpdateConversationParent(ctx, db, "child-conv", "other-parent"); err != nil {
+		t.Fatalf("UpdateConversationParent (idempotent): %v", err)
+	}
+
+	detail, err = GetConversationDetail(ctx, db, "child-conv")
+	if err != nil {
+		t.Fatalf("GetConversationDetail: %v", err)
+	}
+	if detail.ParentConversationID != "parent-conv" {
+		t.Errorf("parent after idempotent call = %q, want %q (should not change)", detail.ParentConversationID, "parent-conv")
+	}
+}

@@ -52,7 +52,8 @@ type ConversationWithRatings struct {
 	ID                   string   `json:"id"`
 	Agent                string   `json:"agent"`
 	Title                string   `json:"title"`
-	LastMessageTimestamp int64    `json:"lastMessageTimestamp"`
+	ParentConversationID string   `json:"parentConversationId"`
+	LastMessageTimestamp  int64    `json:"lastMessageTimestamp"`
 	Ratings              []Rating `json:"ratings"`
 	FilesEdited          []string `json:"filesEdited"`
 }
@@ -206,7 +207,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	selectArgs := append([]any{projectID}, filterArgs...)
 	selectArgs = append(selectArgs, limit, offset)
 	convRows, err := db.QueryContext(ctx,
-		`SELECT c.id, c.agent, c.title, c.ended_at
+		`SELECT c.id, c.agent, c.title, c.parent_conversation_id, c.ended_at
 		 FROM conversations c
 		 WHERE c.project_id = ?`+filterWhere+`
 		 ORDER BY c.ended_at DESC, c.id DESC
@@ -223,7 +224,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 
 	for convRows.Next() {
 		var c ConversationWithRatings
-		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title, &c.LastMessageTimestamp); err != nil {
+		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title, &c.ParentConversationID, &c.LastMessageTimestamp); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		c.Ratings = []Rating{}

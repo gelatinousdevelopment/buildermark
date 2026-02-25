@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -450,6 +451,30 @@ func truncateTitle(s string) string {
 		return string([]rune(s)[:maxTitleLen]) + "..."
 	}
 	return s
+}
+
+var parentSessionIDRe = regexp.MustCompile(`/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl`)
+
+// extractParentSessionID scans conversation log entries for a reference to a
+// parent conversation's JSONL transcript file (emitted when Claude Code exits
+// plan mode and starts a new implementation conversation). Returns the parent
+// session UUID, or empty string if not found.
+func extractParentSessionID(entries []conversationLogEntry) string {
+	for _, e := range entries {
+		if e.Role != "user" {
+			continue
+		}
+		text := strings.TrimSpace(e.Content)
+		if text == "" || isSystemMessage(text) {
+			continue
+		}
+		if m := parentSessionIDRe.FindStringSubmatch(text); len(m) > 1 {
+			return m[1]
+		}
+		// Only check the first substantive user message.
+		return ""
+	}
+	return ""
 }
 
 // isSystemMessage returns true for system/meta messages that should be skipped
