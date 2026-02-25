@@ -16,7 +16,7 @@ Server starts on [http://localhost:7022](http://localhost:7022).
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
 | `-addr` | — | `:7022` | Listen address |
-| `-db` | `ZRATE_DB_PATH` | `../../.data/zrate.db` | SQLite database path |
+| `-db` | `ZRATE_DB_PATH` | `../../.data/local.db` | SQLite database path |
 
 ## API
 

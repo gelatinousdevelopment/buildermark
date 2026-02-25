@@ -20,7 +20,7 @@ import (
 )
 
 func main() {
-	defaultDB := "../../.data/zrate.db"
+	defaultDB := "../../.data/local.db"
 	if env := os.Getenv("ZRATE_DB_PATH"); env != "" {
 		defaultDB = env
 	}
