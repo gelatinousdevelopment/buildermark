@@ -10,5 +10,6 @@ declare global {
 		| 'branch'
 		| 'externalLink'
 		| 'plus'
-		| 'document';
+		| 'document'
+		| 'user';
 }

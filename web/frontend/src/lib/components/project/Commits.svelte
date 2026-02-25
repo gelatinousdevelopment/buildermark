@@ -137,6 +137,12 @@
 	const currentPage = $derived(page ?? internalPage);
 	const selectedBranch = $derived(branch ?? internalBranch);
 	const selectedUser = $derived(internalUser);
+	const selectedUserDisplay = $derived.by(() => {
+		if (!selectedUser) return '';
+		if (selectedUser === USER_AND_AGENTS) return 'Me + agents';
+		const match = data?.users?.find((u) => u.email === selectedUser);
+		return match?.name || selectedUser;
+	});
 	const visibleCommits = $derived.by(() => {
 		const all = data?.commits ?? [];
 		if (limit > 0) return all.slice(0, limit);
@@ -309,8 +315,13 @@
 
 {#if showHeader}
 	<div class="heading">
-		{#if headerLink}<a href={headerLink}>{header}</a
-			>{:else}{header}{/if}{#if selectedBranch || data?.branch}<span class="heading-branch"
+		{#if headerLink}<a href={headerLink}>{header}</a>{:else}{header}{/if}
+		<div style:flex="1"></div>
+		{#if selectedUserDisplay}<span class="heading-filter" title={selectedUserDisplay}
+				><Icon name="user" width="12px" />{selectedUserDisplay}</span
+			>{/if}{#if selectedBranch || data?.branch}<span
+				class="heading-filter"
+				title={selectedBranch || data?.branch}
 				><Icon name="branch" width="13px" />{selectedBranch || data?.branch}</span
 			>{/if}
 	</div>
@@ -568,6 +579,7 @@
 		display: flex;
 		font-size: 0.9rem;
 		font-weight: 600;
+		gap: 1rem;
 		justify-content: space-between;
 		margin-bottom: 0.75rem;
 		opacity: 0.5;
@@ -584,7 +596,7 @@
 		text-decoration: underline;
 	}
 
-	.heading-branch {
+	.heading-filter {
 		align-items: center;
 		display: inline-flex;
 		font-weight: 400;
