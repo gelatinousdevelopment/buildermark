@@ -9,6 +9,7 @@
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
+	import '$lib/stores/settings.svelte';
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 
 	let { children } = $props();

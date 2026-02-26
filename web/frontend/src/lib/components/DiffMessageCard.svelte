@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { html as diffToHtml } from 'diff2html';
+	import type { ColorSchemeType } from 'diff2html';
 	import 'diff2html/bundles/css/diff2html.min.css';
 	import { fmtTime } from '$lib/utils';
 	import DiffCount from './DiffCount.svelte';
@@ -148,7 +149,8 @@
 			return diffToHtml(diffText, {
 				drawFileList: false,
 				matching: 'lines',
-				outputFormat: 'line-by-line'
+				outputFormat: 'line-by-line',
+				colorScheme: 'auto' as ColorSchemeType
 			});
 		} catch {
 			return `<pre>${escapeHtml(diffText)}</pre>`;

@@ -3,7 +3,7 @@
 
 	--accent-color: light-dark(#0066cc, #4d9aff);
 	--accent-color-darker: light-dark(#0055aa, #3d88ee);
-	--accent-color-darkest: light-dark(#003377, #6db3ff);
+	--accent-color-darkest: light-dark(#003377, #9ecdff);
 	--accent-color-ultralight: light-dark(#eff7ff, #1a2a3d);
 	--accent-color-divider: light-dark(#9fbbd6, #3a5a7a);
 	--color-text: light-dark(#444, #d4d4d4);
@@ -41,11 +41,11 @@
 	--agent-color-manual: light-dark(#ccc, #555);
 	--agent-foreground-color-manual: #fff;
 	--agent-color-claude: light-dark(#cf6f30, #e08844);
-	--agent-foreground-color-claude: rgb(255, 255, 255, 0.9);
+	--agent-foreground-color-claude: light-dark(rgb(255, 255, 255, 0.9), rgb(54 23 0));
 	--agent-color-codex: light-dark(#4c5dff, #6b7aff);
-	--agent-foreground-color-codex: rgb(255, 255, 255, 0.9);
+	--agent-foreground-color-codex: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0, 0.9));
 	--agent-color-gemini: light-dark(#3180f7, #4d99ff);
-	--agent-foreground-color-gemini: rgb(255, 255, 255, 0.9);
+	--agent-foreground-color-gemini: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0, 0.9));
 
 	--font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
@@ -121,6 +121,14 @@
 	--color-visibility-btn-bg: light-dark(#e8e8e8, #333);
 }
 
+:root[data-content-width='wider'] {
+	--content-width: 1800px;
+}
+
+:root[data-content-width='full'] {
+	--content-width: 100%;
+}
+
 html,
 body {
 	font-family:
@@ -172,11 +180,26 @@ a:active {
 }
 
 @media (max-width: 1540px) {
-	.inset-when-limited-content-width {
+	:root:not([data-content-width]) .inset-when-limited-content-width,
+	:root[data-content-width='default'] .inset-when-limited-content-width {
 		border-width: 0 0 0.5px 0;
 		margin: 0 auto;
 		border-radius: 0;
 	}
+}
+
+@media (max-width: 1800px) {
+	:root[data-content-width='wider'] .inset-when-limited-content-width {
+		border-width: 0 0 0.5px 0;
+		margin: 0 auto;
+		border-radius: 0;
+	}
+}
+
+:root[data-content-width='full'] .inset-when-limited-content-width {
+	border-width: 0 0 0.5px 0;
+	margin: 0 auto;
+	border-radius: 0;
 }
 
 /* Bordered Button */
@@ -321,4 +344,10 @@ table.data td a:hover {
 
 .error {
 	color: var(--color-error);
+}
+
+@media (prefers-color-scheme: dark) {
+	.d2h-auto-color-scheme {
+		background-color: transparent !important;
+	}
 }

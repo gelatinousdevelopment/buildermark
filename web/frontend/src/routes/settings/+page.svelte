@@ -3,7 +3,14 @@
 	import { resolve } from '$app/paths';
 	import { getLocalSettings, listProjects, scanHistory } from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
+	import { settingsStore, type ContentWidth } from '$lib/stores/settings.svelte';
 	import type { LocalSettings, Project } from '$lib/types';
+
+	const contentWidthOptions: { value: ContentWidth; label: string; description: string }[] = [
+		{ value: 'default', label: 'Default', description: '1540px' },
+		{ value: 'wider', label: 'Wider', description: '1800px' },
+		{ value: 'full', label: 'Full', description: '100%' }
+	];
 
 	let projects: Project[] = $state([]);
 	let loadingProjects = $state(true);
@@ -170,27 +177,59 @@
 	{:else if localSettings}
 		<div class="local-info">
 			<h2>Local Environment</h2>
-			<p class="label">Buildermark Local Sqlite Database</p>
-			<p class="path">{localSettings.dbPath}</p>
-			<p class="label">Server Port</p>
-			<p class="path">{localSettings.listenAddr}</p>
-			<p class="label">Home Folder</p>
-			<p class="path">{localSettings.homePath}</p>
-			<p class="label">Agent Search Paths</p>
-			{#if localSettings.conversationSearchPaths.length === 0}
-				<p class="muted">No agent watchers are currently registered.</p>
-			{:else}
-				<ul class="search-paths">
-					{#each localSettings.conversationSearchPaths as entry, index (index)}
-						<li>
-							<span class="agent">{entry.agent}</span>
-							<span class="path">{entry.path}</span>
-						</li>
-					{/each}
-				</ul>
-			{/if}
+			<table class="data bordered striped hoverable" style:max-width="50rem">
+				<tbody>
+					<tr>
+						<td class="label-cell">Home Folder</td>
+						<td class="path">{localSettings.homePath}</td>
+					</tr>
+					<tr>
+						<td class="label-cell">Agent Search Paths</td>
+						<td>
+							{#if localSettings.conversationSearchPaths.length === 0}
+								<span class="muted">No agent watchers are currently registered.</span>
+							{:else}
+								{#each localSettings.conversationSearchPaths as entry, index (index)}
+									<div class="search-path-entry">
+										<span class="agent">{entry.agent}</span>
+										<span class="path">{entry.path}</span>
+									</div>
+								{/each}
+							{/if}
+						</td>
+					</tr>
+					<tr>
+						<td class="label-cell">Sqlite Database</td>
+						<td class="path">{localSettings.dbPath}</td>
+					</tr>
+					<tr>
+						<td class="label-cell">Server Port</td>
+						<td class="path">{localSettings.listenAddr}</td>
+					</tr>
+				</tbody>
+			</table>
 		</div>
 	{/if}
+
+	<div class="ui-section">
+		<h2>User Interface</h2>
+		<p class="label">Page Max Width</p>
+		<fieldset class="radio-group">
+			{#each contentWidthOptions as option (option.value)}
+				<label class="radio-option">
+					<input
+						type="radio"
+						name="content-width"
+						value={option.value}
+						checked={settingsStore.contentWidth === option.value}
+						onchange={() => (settingsStore.contentWidth = option.value)}
+					/>
+					<span class="radio-label">{option.label}</span>
+					<span class="radio-description">{option.description}</span>
+				</label>
+			{/each}
+		</fieldset>
+	</div>
 </div>
 
 <style>
@@ -209,13 +248,14 @@
 	}
 
 	h2 {
+		color: var(--accent-color-darkest);
 		margin-top: 1rem;
 		font-size: 1rem;
 	}
 
 	.label {
 		margin: 0;
-		font-size: 0.8rem;
+		font-size: 0.9rem;
 		color: var(--color-text-secondary);
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
@@ -239,51 +279,17 @@
 		gap: 0.4rem;
 	}
 
-	.project-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-	}
-
-	.project-list li a {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.45rem 0.6rem;
-		border: 0.5px solid var(--color-divider);
-		border-radius: 6px;
-		text-decoration: none;
-		color: inherit;
-	}
-
-	.project-list li a:hover {
-		background: var(--accent-color-ultralight);
-		border-color: var(--accent-color-divider);
-	}
-
-	.project-list .project-name {
-		font-weight: 600;
+	.label-cell {
+		white-space: nowrap;
+		vertical-align: top;
+		color: var(--color-text-secondary);
+		text-transform: uppercase;
 		font-size: 0.9rem;
+		letter-spacing: 0.02em;
 	}
 
-	.project-list .project-path {
-		font-size: 0.8rem;
-		opacity: 0.6;
-		font-family:
-			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-			monospace;
-	}
-
-	.search-paths {
-		margin: 0.75rem 0 0;
-		padding: 0 0 0 1rem;
-	}
-
-	.search-paths li {
-		margin-bottom: 0.4rem;
+	.search-path-entry {
+		padding: 0.15rem 0;
 	}
 
 	.history-import-controls {
@@ -349,5 +355,32 @@
 		min-width: 4.5rem;
 		font-weight: 600;
 		text-transform: lowercase;
+	}
+
+	.radio-group {
+		border: none;
+		margin: 0.8rem 0 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: row;
+		gap: 2rem;
+	}
+
+	.radio-option {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.radio-option input[type='radio'] {
+		margin: 0;
+	}
+
+	.radio-label {
+		font-weight: 600;
+	}
+
+	.radio-description {
+		color: var(--color-text-faded);
 	}
 </style>
