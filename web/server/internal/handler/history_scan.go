@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
 )
 
 type historyScanRequest struct {
@@ -114,20 +112,6 @@ func (s *Server) runHistoryScanJob(since time.Time, agentName string) {
 
 	broadcast("running", "Scanning conversation history...")
 
-	broadcast("running", "Deleting conversations/messages in selected window...")
-	deletedConversations, deletedMessages, err := db.DeleteConversationsAndMessagesByStartedAtWindow(ctx, s.DB, since)
-	if err != nil {
-		broadcast("error", "Failed to delete existing conversation history in selected window")
-		return
-	}
-	broadcast("running", fmt.Sprintf("Deleted %d conversations and %d messages", deletedConversations, deletedMessages))
-
-	broadcast("running", "Running VACUUM...")
-	if err := s.vacuumDatabase(ctx); err != nil {
-		log.Printf("history scan: vacuum failed (continuing): %v", err)
-		broadcast("running", "VACUUM failed; continuing import")
-	}
-
 	// Only scan conversations belonging to existing projects.
 	projectsByPath, err := listProjectsByPath(ctx, s.DB)
 	if err != nil {
@@ -165,12 +149,4 @@ func (s *Server) runHistoryScanJob(since time.Time, agentName string) {
 	count := s.scanWatchersSincePaths(ctx, since, agentName, paths, progress)
 
 	broadcast("complete", fmt.Sprintf("Imported %d conversation entries", count))
-}
-
-func (s *Server) vacuumDatabase(ctx context.Context) error {
-	if s.vacuumFn != nil {
-		return s.vacuumFn(ctx, s.DB)
-	}
-	_, err := s.DB.ExecContext(ctx, "VACUUM")
-	return err
 }

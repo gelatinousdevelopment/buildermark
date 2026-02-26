@@ -3,9 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -319,7 +317,7 @@ func TestHistoryScanConflict(t *testing.T) {
 	s.importMu.Unlock()
 }
 
-func TestHistoryScanDeletesConversationsAndMessagesByWindow(t *testing.T) {
+func TestHistoryScanRetainsExistingConversationsAndMessages(t *testing.T) {
 	w := &mockWatcher{name: "claude"}
 	s := setupTestServerWithWatcher(t, w)
 	handler := s.Routes()
@@ -329,21 +327,30 @@ func TestHistoryScanDeletesConversationsAndMessagesByWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureProject: %v", err)
 	}
-	if err := db.EnsureConversation(ctx, s.DB, "conv-old", projectID, "claude"); err != nil {
-		t.Fatalf("EnsureConversation conv-old: %v", err)
+	if err := db.EnsureConversation(ctx, s.DB, "conv-a", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation conv-a: %v", err)
 	}
-	if err := db.EnsureConversation(ctx, s.DB, "conv-recent", projectID, "claude"); err != nil {
-		t.Fatalf("EnsureConversation conv-recent: %v", err)
+	if err := db.EnsureConversation(ctx, s.DB, "conv-b", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation conv-b: %v", err)
 	}
 
 	nowMs := time.Now().UnixMilli()
 	oldTs := nowMs - int64((14*24*time.Hour)/time.Millisecond)
 	recentTs := nowMs - int64((2*24*time.Hour)/time.Millisecond)
 	if err := db.InsertMessages(ctx, s.DB, []db.Message{
-		{Timestamp: oldTs, ProjectID: projectID, ConversationID: "conv-old", Role: "user", Content: "old", RawJSON: "{}"},
-		{Timestamp: recentTs, ProjectID: projectID, ConversationID: "conv-recent", Role: "user", Content: "recent", RawJSON: "{}"},
+		{Timestamp: oldTs, ProjectID: projectID, ConversationID: "conv-a", Role: "user", Content: "old", RawJSON: "{}"},
+		{Timestamp: recentTs, ProjectID: projectID, ConversationID: "conv-b", Role: "user", Content: "recent", RawJSON: "{}"},
 	}); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var convBefore int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations WHERE project_id = ?", projectID).Scan(&convBefore); err != nil {
+		t.Fatalf("count conversations before: %v", err)
+	}
+	var msgBefore int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE project_id = ?", projectID).Scan(&msgBefore); err != nil {
+		t.Fatalf("count messages before: %v", err)
 	}
 
 	body, _ := json.Marshal(map[string]any{"timeframe": "168h"})
@@ -357,34 +364,20 @@ func TestHistoryScanDeletesConversationsAndMessagesByWindow(t *testing.T) {
 
 	waitForImportUnlock(s)
 
-	var oldCount int
-	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = 'conv-old'").Scan(&oldCount); err != nil {
-		t.Fatalf("count conv-old: %v", err)
+	var convAfter int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations WHERE project_id = ?", projectID).Scan(&convAfter); err != nil {
+		t.Fatalf("count conversations after: %v", err)
 	}
-	if oldCount != 1 {
-		t.Fatalf("conv-old count = %d, want 1", oldCount)
-	}
-	var recentCount int
-	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = 'conv-recent'").Scan(&recentCount); err != nil {
-		t.Fatalf("count conv-recent: %v", err)
-	}
-	if recentCount != 0 {
-		t.Fatalf("conv-recent count = %d, want 0", recentCount)
+	if convAfter != convBefore {
+		t.Fatalf("conversation count after = %d, want %d", convAfter, convBefore)
 	}
 
-	var oldMsg int
-	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'conv-old'").Scan(&oldMsg); err != nil {
-		t.Fatalf("count conv-old messages: %v", err)
+	var msgAfter int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE project_id = ?", projectID).Scan(&msgAfter); err != nil {
+		t.Fatalf("count messages after: %v", err)
 	}
-	if oldMsg != 1 {
-		t.Fatalf("conv-old message count = %d, want 1", oldMsg)
-	}
-	var recentMsg int
-	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'conv-recent'").Scan(&recentMsg); err != nil {
-		t.Fatalf("count conv-recent messages: %v", err)
-	}
-	if recentMsg != 0 {
-		t.Fatalf("conv-recent message count = %d, want 0", recentMsg)
+	if msgAfter != msgBefore {
+		t.Fatalf("message count after = %d, want %d", msgAfter, msgBefore)
 	}
 }
 
@@ -453,16 +446,30 @@ func TestHistoryScanDoesNotDeleteOtherTables(t *testing.T) {
 	}
 }
 
-func TestHistoryScanVacuumFailureDoesNotAbort(t *testing.T) {
+func TestHistoryScanIsIdempotentForExistingMessages(t *testing.T) {
 	w := &mockWatcher{name: "claude"}
 	s := setupTestServerWithWatcher(t, w)
-	s.vacuumFn = func(ctx context.Context, database *sql.DB) error {
-		_ = ctx
-		_ = database
-		return errors.New("vacuum failed")
-	}
+	ctx := context.Background()
 	addTestProject(t, s, "/tmp/test-project")
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/test-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-idem", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	ts := time.Now().Add(-2 * time.Hour).UnixMilli()
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: ts, ProjectID: projectID, ConversationID: "conv-idem", Role: "user", Content: "hello", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
 	handler := s.Routes()
+
+	var before int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE project_id = ?", projectID).Scan(&before); err != nil {
+		t.Fatalf("count messages before: %v", err)
+	}
 
 	body, _ := json.Marshal(map[string]any{"timeframe": "168h"})
 	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
@@ -474,8 +481,21 @@ func TestHistoryScanVacuumFailureDoesNotAbort(t *testing.T) {
 	}
 	waitForImportUnlock(s)
 
-	_, scanPathsCount, _, _ := w.snapshot()
-	if scanPathsCount != 1 {
-		t.Fatalf("watcher scanPathsCount = %d, want 1", scanPathsCount)
+	// Run a second scan to confirm no deletions/dup explosions for existing rows.
+	req2 := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusAccepted {
+		t.Fatalf("second status = %d, want %d", rec2.Code, http.StatusAccepted)
+	}
+	waitForImportUnlock(s)
+
+	var after int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE project_id = ?", projectID).Scan(&after); err != nil {
+		t.Fatalf("count messages after: %v", err)
+	}
+	if after != before {
+		t.Fatalf("message count after = %d, want %d", after, before)
 	}
 }
