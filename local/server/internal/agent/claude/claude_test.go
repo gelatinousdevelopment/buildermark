@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
 func setupTestDB(t *testing.T) *sql.DB {
@@ -209,7 +209,7 @@ func TestScanProjectFilesDerivesDiffFromToolUseEdit(t *testing.T) {
 	sessionID := "sess-edit-raw"
 	lines := []string{
 		`{"type":"user","timestamp":"2026-02-22T11:51:25.292Z","sessionId":"sess-edit-raw","cwd":"/proj/a","message":{"role":"user","content":"apply change"}}`,
-		`{"type":"assistant","timestamp":"2026-02-22T11:51:35.482Z","sessionId":"sess-edit-raw","cwd":"/proj/a","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/proj/a/web/frontend/src/lib/messageUtils.ts","old_string":"old line","new_string":"new line"}}]}}`,
+		`{"type":"assistant","timestamp":"2026-02-22T11:51:35.482Z","sessionId":"sess-edit-raw","cwd":"/proj/a","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/proj/a/local/frontend/src/lib/messageUtils.ts","old_string":"old line","new_string":"new line"}}]}}`,
 	}
 	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("write project conversation: %v", err)
@@ -404,8 +404,8 @@ func TestAppendDiffDBMessagesDerivesDiffFromSnapshotBackup(t *testing.T) {
 	if out[2].Timestamp != 2001 {
 		t.Fatalf("diff timestamp = %d, want 2001", out[2].Timestamp)
 	}
-	if !strings.Contains(out[2].Content, "--- a/web/frontend/src/a.txt") ||
-		!strings.Contains(out[2].Content, "+++ b/web/frontend/src/a.txt") {
+	if !strings.Contains(out[2].Content, "--- a/local/frontend/src/a.txt") ||
+		!strings.Contains(out[2].Content, "+++ b/local/frontend/src/a.txt") {
 		t.Fatalf("missing expected file path in derived diff: %q", out[2].Content)
 	}
 	if !strings.Contains(out[2].Content, "\n-old\n") || !strings.Contains(out[2].Content, "\n+new\n") {

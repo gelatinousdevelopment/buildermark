@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
 const (
@@ -43,7 +43,6 @@ type importProjectsRequest struct {
 type importProjectsResponse struct {
 	Started bool `json:"started"`
 }
-
 
 func (s *Server) handleDiscoverImportableProjects(w http.ResponseWriter, r *http.Request) {
 	if s.Agents == nil {

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 	"github.com/pmezard/go-difflib/difflib"
 )
 

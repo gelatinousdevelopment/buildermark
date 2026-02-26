@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
 
 type pastedContent struct {

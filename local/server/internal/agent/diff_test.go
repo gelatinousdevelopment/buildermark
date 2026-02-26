@@ -165,7 +165,7 @@ func TestExtractReliableDiffFromStructuredPatchJSON(t *testing.T) {
 	if !ok || diff == "" {
 		t.Fatal("expected diff from structuredPatch JSON")
 	}
-	if !strings.Contains(diff, "diff --git a/web/frontend/src/app.ts b/web/frontend/src/app.ts") {
+	if !strings.Contains(diff, "diff --git a/local/frontend/src/app.ts b/local/frontend/src/app.ts") {
 		t.Fatalf("expected repo-relative path variant in diff, got: %q", diff)
 	}
 	if got := strings.Count(diff, "diff --git "); got != 1 {
@@ -254,7 +254,7 @@ func TestExtractReliableDiffFromJSONPrefersRealDiffOverSnapshot(t *testing.T) {
 	if !strings.Contains(diff, "diff --git a/x.txt b/x.txt") {
 		t.Fatalf("expected real unified diff to be preferred, got: %q", diff)
 	}
-	if strings.Contains(diff, "+++ b/web/frontend/src/app.ts") {
+	if strings.Contains(diff, "+++ b/local/frontend/src/app.ts") {
 		t.Fatalf("unexpected fallback snapshot diff selected: %q", diff)
 	}
 }
@@ -283,7 +283,7 @@ func TestExtractReliableDiffFromJSONClaudeEditOldNewString(t *testing.T) {
 	if !ok || diff == "" {
 		t.Fatal("expected diff from Claude Edit old/new string payload")
 	}
-	if !strings.Contains(diff, "diff --git a/web/frontend/src/lib/messageUtils.ts b/web/frontend/src/lib/messageUtils.ts") {
+	if !strings.Contains(diff, "diff --git a/local/frontend/src/lib/messageUtils.ts b/local/frontend/src/lib/messageUtils.ts") {
 		t.Fatalf("missing expected file path in extracted diff: %q", diff)
 	}
 	if !strings.Contains(diff, "+marked.use({") {

@@ -11,12 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent/claude"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent/codex"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent/gemini"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/handler"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/claude"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/codex"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/gemini"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/handler"
 )
 
 func main() {

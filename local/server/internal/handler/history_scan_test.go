@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
 // mockWatcher implements agent.Watcher for testing.

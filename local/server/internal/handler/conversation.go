@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
 func (s *Server) handleListConversations(w http.ResponseWriter, r *http.Request) {

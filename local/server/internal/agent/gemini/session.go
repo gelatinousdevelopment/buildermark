@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
 
 func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agent.SessionResult {

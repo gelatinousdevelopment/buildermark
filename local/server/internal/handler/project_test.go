@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/web/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
 func TestListProjects(t *testing.T) {
