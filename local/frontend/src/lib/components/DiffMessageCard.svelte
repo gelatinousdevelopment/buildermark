@@ -3,6 +3,7 @@
 	import type { ColorSchemeType } from 'diff2html';
 	import 'diff2html/bundles/css/diff2html.min.css';
 	import { fmtTime } from '$lib/utils';
+	import { escapeHtml } from '$lib/messageUtils';
 	import DiffCount from './DiffCount.svelte';
 	import AgentTag from './AgentTag.svelte';
 
@@ -131,15 +132,6 @@
 
 		if (files === 0 && (added > 0 || removed > 0)) files = 1;
 		return { files, added, removed };
-	}
-
-	function escapeHtml(s: string): string {
-		return s
-			.replaceAll('&', '&amp;')
-			.replaceAll('<', '&lt;')
-			.replaceAll('>', '&gt;')
-			.replaceAll('"', '&quot;')
-			.replaceAll("'", '&#39;');
 	}
 
 	function renderDiff(textInput: string): string {

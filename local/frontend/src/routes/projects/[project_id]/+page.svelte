@@ -71,7 +71,6 @@
 			showHeader={true}
 			headerLink={resolve('/projects/[project_id]/commits', { project_id: projectId })}
 			showBranch={false}
-			showDate={true}
 			enableRelationshipHover={true}
 			onCommitsLoaded={handleCommitsLoaded}
 			start={dateRange?.from}

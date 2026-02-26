@@ -103,6 +103,14 @@ export function formatFullDateTitle(unixMs: number): string {
 	});
 }
 
+export function unixMsToDateString(ms: number): string {
+	const d = new Date(ms);
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+	return `${y}-${m}-${day}`;
+}
+
 export function dateStringToUnixMsRange(dateStr: string): { from: number; to: number } {
 	const [y, m, d] = dateStr.split('-').map(Number);
 	const start = new Date(y, m - 1, d);

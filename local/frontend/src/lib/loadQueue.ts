@@ -33,6 +33,15 @@ function pumpQueue() {
 	}
 }
 
+export function withOptionalQueue<T>(
+	task: () => Promise<T>,
+	useQueue: boolean,
+	priority = 0
+): Promise<T> {
+	if (useQueue) return enqueueLoad(task, priority);
+	return task();
+}
+
 export function enqueueLoad<T>(run: () => Promise<T>, priority = 0): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		pending.push({

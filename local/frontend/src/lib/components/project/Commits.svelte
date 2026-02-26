@@ -3,7 +3,7 @@
 	import { browser } from '$app/environment';
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
-	import { enqueueLoad } from '$lib/loadQueue';
+	import { withOptionalQueue } from '$lib/loadQueue';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import type {
 		ProjectCommitPageResponse,
@@ -14,6 +14,7 @@
 	import DiffCount from '$lib/components/DiffCount.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { formatRelativeOrShortDate, formatFullDateTitle, commitUrl } from '$lib/utils';
 
@@ -43,7 +44,6 @@
 		showAgentPicker?: boolean;
 		showPagination?: boolean;
 		showLoadMore?: boolean;
-		showDate?: boolean;
 		showBranch?: boolean;
 		showDiffCount?: boolean;
 		showUser?: boolean;
@@ -81,7 +81,6 @@
 		showAgentPicker = false,
 		showPagination = false,
 		showLoadMore = false,
-		showDate = false,
 		showBranch = false,
 		showDiffCount = true,
 		showUser = false,
@@ -185,15 +184,6 @@
 	const effectiveStart = $derived(start ?? internalStart);
 	const effectiveEnd = $derived(end ?? internalEnd);
 
-	// Derive a YYYY-MM-DD string for the date input from the effective start.
-	const dateInputValue = $derived.by(() => {
-		if (!effectiveStart) return '';
-		const d = new Date(effectiveStart);
-		const y = d.getFullYear();
-		const m = String(d.getMonth() + 1).padStart(2, '0');
-		const day = String(d.getDate()).padStart(2, '0');
-		return `${y}-${m}-${day}`;
-	});
 	const selectedUserDisplay = $derived.by(() => {
 		if (!selectedUser) return '';
 		if (selectedUser === USER_AND_AGENTS) return 'Me + agents';
@@ -206,19 +196,16 @@
 		return all;
 	});
 
-	function withOptionalQueue<T>(task: () => Promise<T>): Promise<T> {
-		if (useLoadQueue) return enqueueLoad(task, loadPriority);
-		return task();
-	}
-
 	async function loadIngestionStatus(branchValue: string) {
 		if (!showLoadMore || !projectId) {
 			ingestionStatus = null;
 			return;
 		}
 		try {
-			ingestionStatus = await withOptionalQueue(() =>
-				getCommitIngestionStatus(projectId, branchValue)
+			ingestionStatus = await withOptionalQueue(
+				() => getCommitIngestionStatus(projectId, branchValue),
+				useLoadQueue,
+				loadPriority
 			);
 		} catch {
 			ingestionStatus = null;
@@ -242,18 +229,21 @@
 		try {
 			const pageNum = Math.max(1, currentPage);
 			const resolvedUser = resolveUserFilter(selectedUser, data?.currentEmail);
-			const loaded = await withOptionalQueue(() =>
-				listProjectCommitsPage(
-					projectId,
-					pageNum,
-					selectedBranch,
-					pageSize,
-					resolvedUser,
-					selectedAgent,
-					searchTerm.trim(),
-					effectiveStart,
-					effectiveEnd
-				)
+			const loaded = await withOptionalQueue(
+				() =>
+					listProjectCommitsPage(
+						projectId,
+						pageNum,
+						selectedBranch,
+						pageSize,
+						resolvedUser,
+						selectedAgent,
+						searchTerm.trim(),
+						effectiveStart,
+						effectiveEnd
+					),
+				useLoadQueue,
+				loadPriority
 			);
 			if (myToken !== requestToken) return;
 			data = loaded;
@@ -386,23 +376,19 @@
 		internalPage = 1;
 	}
 
-	function handleDateFilterChange(event: Event) {
-		const value = (event.currentTarget as HTMLInputElement).value;
-		if (value) {
-			const [y, m, d] = value.split('-').map(Number);
-			const dayStart = new Date(y, m - 1, d);
-			const dayEnd = new Date(y, m - 1, d + 1);
-			internalStart = dayStart.getTime();
-			internalEnd = dayEnd.getTime();
+	function handleDateFilterChange(range: { from: number; to: number } | null) {
+		if (range) {
+			internalStart = range.from;
+			internalEnd = range.to;
 			if (syncPaginationWithUrl && browser) {
 				const url = new URL(window.location.href);
-				url.searchParams.set('start', dayStart.toISOString());
-				url.searchParams.set('end', dayEnd.toISOString());
+				url.searchParams.set('start', new Date(range.from).toISOString());
+				url.searchParams.set('end', new Date(range.to).toISOString());
 				url.searchParams.delete('page');
 				window.history.replaceState(window.history.state, '', url);
 			}
 			if (onDateChange) {
-				onDateChange(dayStart.toISOString(), dayEnd.toISOString());
+				onDateChange(new Date(range.from).toISOString(), new Date(range.to).toISOString());
 			}
 		} else {
 			internalStart = undefined;
@@ -421,28 +407,16 @@
 		internalPage = 1;
 	}
 
-	function clearDateFilter() {
-		internalStart = undefined;
-		internalEnd = undefined;
-		if (syncPaginationWithUrl && browser) {
-			const url = new URL(window.location.href);
-			url.searchParams.delete('start');
-			url.searchParams.delete('end');
-			url.searchParams.delete('page');
-			window.history.replaceState(window.history.state, '', url);
-		}
-		if (onDateChange) {
-			onDateChange(null, null);
-		}
-		internalPage = 1;
-	}
-
 	async function handleLoadMore() {
 		if (!projectId || loadingMore) return;
 		loadingMore = true;
 		loadMoreError = null;
 		try {
-			await withOptionalQueue(() => ingestMoreCommits(projectId, loadMoreCount, selectedBranch));
+			await withOptionalQueue(
+				() => ingestMoreCommits(projectId, loadMoreCount, selectedBranch),
+				useLoadQueue,
+				loadPriority
+			);
 			await loadCommitsData();
 		} catch (e) {
 			loadMoreError = e instanceof Error ? e.message : 'Failed to load more commits';
@@ -481,12 +455,7 @@
 		<div class="top-row">
 			<div class="filters">
 				{#if showDateFilter}
-					<div class="filter-picker date-picker">
-						<input type="date" value={dateInputValue} onchange={handleDateFilterChange} />
-						{#if effectiveStart}
-							<button class="clear-date" onclick={clearDateFilter}>×</button>
-						{/if}
-					</div>
+					<DateFilterPicker start={effectiveStart} onchange={handleDateFilterChange} />
 				{/if}
 
 				{#if showBranchPicker}
@@ -537,7 +506,7 @@
 			{#if !compact}
 				<col class="timeline-col" />
 			{/if}
-			{#if !compact && (showDate || !showDate)}
+			{#if !compact}
 				<col class="time-col" />
 			{/if}
 			<col class="title-col" />
@@ -563,7 +532,7 @@
 					{#if !compact}
 						<th class="timeline-col"></th>
 					{/if}
-					{#if !compact && (showDate || !showDate)}
+					{#if !compact}
 						<th class="time-col">Time</th>
 					{/if}
 					<th>Commit</th>
@@ -606,7 +575,7 @@
 							<span class="timeline-dot"></span>
 						</td>
 					{/if}
-					{#if !compact && (showDate || !showDate)}
+					{#if !compact}
 						<td class="time" title={formatFullDateTitle(c.authoredAtUnixMs)}
 							>{formatRelativeOrShortDate(c.authoredAtUnixMs)}</td
 						>

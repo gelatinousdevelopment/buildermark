@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getProject, getConversationsBatchDetail } from '$lib/api';
-	import { enqueueLoad } from '$lib/loadQueue';
+	import { withOptionalQueue } from '$lib/loadQueue';
 	import {
 		shortId,
 		formatRelativeOrShortDate,
@@ -17,6 +17,7 @@
 	import type { ProjectDetail, ConversationBatchDetail } from '$lib/types';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
 
 	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
@@ -147,16 +148,6 @@
 	const effectiveStart = $derived(start ?? internalStart);
 	const effectiveEnd = $derived(end ?? internalEnd);
 
-	// Derive a YYYY-MM-DD string for the date input from the effective start.
-	const dateInputValue = $derived.by(() => {
-		if (!effectiveStart) return '';
-		const d = new Date(effectiveStart);
-		const y = d.getFullYear();
-		const m = String(d.getMonth() + 1).padStart(2, '0');
-		const day = String(d.getDate()).padStart(2, '0');
-		return `${y}-${m}-${day}`;
-	});
-
 	// Reset to page 1 when date filter changes.
 	let lastDateKey = '';
 	$effect(() => {
@@ -171,11 +162,6 @@
 		if (limit > 0) return all.slice(0, limit);
 		return all;
 	});
-
-	function withOptionalQueue<T>(task: () => Promise<T>): Promise<T> {
-		if (useLoadQueue) return enqueueLoad(task, loadPriority);
-		return task();
-	}
 
 	async function loadProjectData() {
 		if (!projectId) {
@@ -202,8 +188,10 @@
 			if (searchTerm.trim()) filters.search = searchTerm.trim();
 			if (effectiveStart) filters.start = effectiveStart;
 			if (effectiveEnd) filters.end = effectiveEnd;
-			const detail = await withOptionalQueue(() =>
-				getProject(projectId, requestedPage, requestedPageSize, undefined, filters)
+			const detail = await withOptionalQueue(
+				() => getProject(projectId, requestedPage, requestedPageSize, undefined, filters),
+				useLoadQueue,
+				loadPriority
 			);
 			if (myToken !== requestToken) return;
 			project = detail;
@@ -296,16 +284,12 @@
 		}
 	}
 
-	function handleDateFilterChange(event: Event) {
-		const value = (event.currentTarget as HTMLInputElement).value;
-		if (value) {
-			const [y, m, d] = value.split('-').map(Number);
-			const dayStart = new Date(y, m - 1, d);
-			const dayEnd = new Date(y, m - 1, d + 1);
-			internalStart = dayStart.getTime();
-			internalEnd = dayEnd.getTime();
+	function handleDateFilterChange(range: { from: number; to: number } | null) {
+		if (range) {
+			internalStart = range.from;
+			internalEnd = range.to;
 			if (onDateChange) {
-				onDateChange(dayStart.toISOString(), dayEnd.toISOString());
+				onDateChange(new Date(range.from).toISOString(), new Date(range.to).toISOString());
 			}
 		} else {
 			internalStart = undefined;
@@ -313,15 +297,6 @@
 			if (onDateChange) {
 				onDateChange(null, null);
 			}
-		}
-		internalPage = 1;
-	}
-
-	function clearDateFilter() {
-		internalStart = undefined;
-		internalEnd = undefined;
-		if (onDateChange) {
-			onDateChange(null, null);
 		}
 		internalPage = 1;
 	}
@@ -335,12 +310,7 @@
 	<div class="top-row">
 		<div class="filters">
 			{#if showDateFilter}
-				<div class="date-picker">
-					<input type="date" value={dateInputValue} onchange={handleDateFilterChange} />
-					{#if effectiveStart}
-						<button class="clear-date" onclick={clearDateFilter}>×</button>
-					{/if}
-				</div>
+				<DateFilterPicker start={effectiveStart} onchange={handleDateFilterChange} />
 			{/if}
 			<div class="filter-picker">
 				<!-- <label for="agent-{projectId}">Agent:</label> -->
