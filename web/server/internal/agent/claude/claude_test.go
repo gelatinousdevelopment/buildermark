@@ -2001,3 +2001,188 @@ func TestExtractParentSessionID(t *testing.T) {
 		})
 	}
 }
+
+// --- readConversationLogEntries noise filtering tests ---
+
+func TestReadConversationLogEntriesSkipsProgressEntries(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/proj/test"
+	sessionID := "sess-1"
+
+	convPath := conversationPath(home, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []string{
+		`{"type":"progress","timestamp":"2026-02-18T10:00:00.000Z"}`,
+		`{"type":"progress","timestamp":"2026-02-18T10:00:01.000Z","message":{"content":"hook running"}}`,
+		`{"type":"assistant","timestamp":"2026-02-18T10:00:02.000Z","message":{"content":"real response"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	entries := readConversationLogEntries(home, projectPath, sessionID)
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1; got entries: %v", len(entries), entries)
+	}
+	if entries[0].Content != "real response" {
+		t.Errorf("content = %q, want %q", entries[0].Content, "real response")
+	}
+}
+
+func TestReadConversationLogEntriesSkipsEmptyContent(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/proj/test"
+	sessionID := "sess-1"
+
+	convPath := conversationPath(home, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Assistant entry with only thinking blocks → no text content extracted.
+	lines := []string{
+		`{"type":"assistant","timestamp":"2026-02-18T10:00:00.000Z","message":{"content":[{"type":"thinking","thinking":"internal thought"}]}}`,
+		`{"type":"user","timestamp":"2026-02-18T10:00:01.000Z","message":{"content":[]}}`,
+		`{"type":"assistant","timestamp":"2026-02-18T10:00:02.000Z","message":{"content":"visible reply"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	entries := readConversationLogEntries(home, projectPath, sessionID)
+	if len(entries) != 1 {
+		t.Fatalf("entries len = %d, want 1; entries: %v", len(entries), entries)
+	}
+	if entries[0].Content != "visible reply" {
+		t.Errorf("content = %q, want %q", entries[0].Content, "visible reply")
+	}
+}
+
+func TestReadConversationLogEntriesSkipsSystemMessages(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/proj/test"
+	sessionID := "sess-1"
+
+	convPath := conversationPath(home, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []string{
+		// command-name XML
+		`{"type":"user","timestamp":"2026-02-18T10:00:00.000Z","message":{"content":"<command-name>/clear</command-name><command-message>clear</command-message><command-args></command-args>"}}`,
+		// local-command-caveat
+		`{"type":"user","timestamp":"2026-02-18T10:00:01.000Z","message":{"content":"<local-command-caveat>Caveat: messages below...</local-command-caveat>"}}`,
+		// system-reminder
+		`{"type":"user","timestamp":"2026-02-18T10:00:02.000Z","message":{"content":"<system-reminder>Available skills...</system-reminder>"}}`,
+		// request interrupted
+		`{"type":"user","timestamp":"2026-02-18T10:00:03.000Z","message":{"content":"[Request interrupted by user for tool use]"}}`,
+		// real message
+		`{"type":"user","timestamp":"2026-02-18T10:00:04.000Z","message":{"content":"This is a real user message"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	entries := readConversationLogEntries(home, projectPath, sessionID)
+	if len(entries) != 1 {
+		for i, e := range entries {
+			t.Logf("  entry[%d]: type=%q content=%q", i, e.Type, e.Content)
+		}
+		t.Fatalf("entries len = %d, want 1", len(entries))
+	}
+	if entries[0].Content != "This is a real user message" {
+		t.Errorf("content = %q, want %q", entries[0].Content, "This is a real user message")
+	}
+}
+
+func TestReadConversationLogEntriesKeepsSummaryEntries(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/proj/test"
+	sessionID := "sess-1"
+
+	convPath := conversationPath(home, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []string{
+		`{"type":"summary","summary":"Implemented feature X"}`,
+		`{"type":"user","timestamp":"2026-02-18T10:00:00.000Z","message":{"content":"do the thing"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	entries := readConversationLogEntries(home, projectPath, sessionID)
+	if len(entries) != 2 {
+		t.Fatalf("entries len = %d, want 2", len(entries))
+	}
+	if entries[0].Content != "Implemented feature X" {
+		t.Errorf("summary content = %q, want %q", entries[0].Content, "Implemented feature X")
+	}
+}
+
+// --- processEntries noise filtering tests ---
+
+func TestProcessEntriesSkipsNoiseHistoryEntries(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	a := &Agent{
+		db:       database,
+		path:     histPath,
+		home:     tmpDir,
+		interval: time.Hour,
+	}
+
+	projectPath := "/proj/test"
+	sessionID := "sess-noise"
+
+	// Ensure project + conversation exist.
+	projectID, err := db.EnsureProject(ctx, database, projectPath)
+	if err != nil {
+		t.Fatalf("ensure project: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, database, sessionID, projectID, a.Name()); err != nil {
+		t.Fatalf("ensure conversation: %v", err)
+	}
+
+	now := time.Now()
+	entries := []historyEntry{
+		// Noise: empty display (will produce [progress] fallback)
+		{Display: "", Timestamp: now.UnixMilli(), SessionID: sessionID, Project: projectPath, Type: "progress"},
+		// Noise: system command message
+		{Display: "<command-name>/clear</command-name>", Timestamp: now.UnixMilli() + 1, SessionID: sessionID, Project: projectPath, Type: "user"},
+		// Noise: request interrupted
+		{Display: "[Request interrupted by user for tool use]", Timestamp: now.UnixMilli() + 2, SessionID: sessionID, Project: projectPath, Type: "user"},
+		// Real message
+		{Display: "Implement the feature", Timestamp: now.UnixMilli() + 3, SessionID: sessionID, Project: projectPath, Type: "user"},
+		// Real assistant message
+		{Display: "Here is the implementation", Timestamp: now.UnixMilli() + 4, SessionID: sessionID, Project: projectPath, Type: "assistant"},
+	}
+
+	a.processEntries(ctx, entries)
+
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", sessionID).Scan(&count); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 2 {
+		// List what got inserted for debugging.
+		rows, _ := database.Query("SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY timestamp", sessionID)
+		defer rows.Close()
+		for rows.Next() {
+			var role, content string
+			rows.Scan(&role, &content)
+			t.Logf("  message: role=%q content=%q", role, content)
+		}
+		t.Fatalf("message count = %d, want 2 (only real messages)", count)
+	}
+}

@@ -765,6 +765,11 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		}
 
 		for _, e := range g.entries {
+			// Skip entry types that never carry conversational content.
+			if e.Type == "progress" {
+				continue
+			}
+
 			role := "user"
 			if isAssistantAuthoredHistoryEntry(e) {
 				role = "agent"
@@ -777,6 +782,15 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if len(e.PastedContents) > 0 {
 				display = resolvePastedContents(a.home, display, e.PastedContents)
 			}
+
+			// Skip entries with no content and system/meta messages.
+			if strings.TrimSpace(display) == "" && e.Type != "summary" {
+				continue
+			}
+			if strings.TrimSpace(display) != "" && isSystemMessage(strings.TrimSpace(display)) {
+				continue
+			}
+
 			if strings.TrimSpace(display) == "" {
 				display = "[" + strings.TrimSpace(e.Type) + "]"
 			}

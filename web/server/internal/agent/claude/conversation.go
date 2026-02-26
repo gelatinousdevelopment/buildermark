@@ -290,10 +290,27 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 	lastTS := int64(0)
 
 	scanConversationFile(convPath, func(line string, entry conversationEntry) {
+		// Skip entry types that never carry conversational content.
+		if entry.Type == "progress" {
+			return
+		}
+
 		content := contentFromConversationEntry(entry)
 		if entry.Type == "summary" && strings.TrimSpace(entry.Summary) != "" {
 			content = strings.TrimSpace(entry.Summary)
 		}
+
+		// Skip entries with no extractable content (e.g. thinking-only assistant
+		// messages) instead of generating synthetic [type] placeholders.
+		if content == "" && entry.Type != "summary" {
+			return
+		}
+
+		// Skip system/meta messages (command XML, caveats, interruptions).
+		if content != "" && isSystemMessage(content) {
+			return
+		}
+
 		if content == "" {
 			content = fmt.Sprintf("[%s]", strings.TrimSpace(entry.Type))
 		}

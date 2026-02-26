@@ -118,7 +118,7 @@ const dupWindowMs = 10_000 // 10 seconds
 
 const hiddenIngestMessageMaxLen = 256
 
-var hiddenIngestMessageRe = regexp.MustCompile(`^[\[<].*[\]>](?s)`)
+var hiddenIngestMessageRe = regexp.MustCompile(`(?s)^[\[<].*[\]>]$`)
 
 // InsertMessages inserts multiple messages in a single transaction, skipping duplicates.
 // Duplicates are detected both within the batch (same conversation + role + content
@@ -233,11 +233,6 @@ func filterMessagesForIngest(messages []Message) []Message {
 func shouldSkipMessageOnIngest(m Message) bool {
 	trimmed := strings.TrimSpace(m.Content)
 	if trimmed == "" {
-		return false
-	}
-	// Keep short bracketed placeholders when raw JSON exists; downstream
-	// attribution and parsing can still extract structured data from raw_json.
-	if strings.TrimSpace(m.RawJSON) != "" {
 		return false
 	}
 	if utf8.RuneCountInString(trimmed) >= hiddenIngestMessageMaxLen {

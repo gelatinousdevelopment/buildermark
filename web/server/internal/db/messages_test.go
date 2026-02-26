@@ -359,6 +359,50 @@ func TestInsertMessagesFiltersShortBracketedMessagesAtIngest(t *testing.T) {
 	}
 }
 
+func TestInsertMessagesFiltersHiddenMessagesEvenWithRawJSON(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// The critical bug: messages with RawJSON were bypassing the filter.
+	// All of these should be filtered even though they have RawJSON set.
+	messages := []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "[progress]", RawJSON: `{"type":"progress"}`},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "[assistant]", RawJSON: `{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"..."}]}}`},
+		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "<command-name>/clear</command-name>", RawJSON: `{"type":"user"}`},
+		{Timestamp: 4000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "<local-command-caveat>Caveat...</local-command-caveat>", RawJSON: `{"type":"user"}`},
+		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "[Request interrupted by user for tool use]", RawJSON: `{"type":"user"}`},
+		{Timestamp: 6000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "[user]", RawJSON: `{"type":"user"}`},
+		// This one should be kept.
+		{Timestamp: 7000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real user message", RawJSON: `{"type":"user"}`},
+	}
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count); err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 1 {
+		rows, _ := db.Query("SELECT content FROM messages WHERE conversation_id = ? ORDER BY timestamp", "conv-1")
+		defer rows.Close()
+		for rows.Next() {
+			var c string
+			rows.Scan(&c)
+			t.Logf("  got message: %q", c)
+		}
+		t.Fatalf("message count = %d, want 1 (only 'real user message')", count)
+	}
+}
+
 func TestInsertMessagesKeepsLongBracketedMessages(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
