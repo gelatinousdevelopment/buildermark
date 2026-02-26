@@ -2,18 +2,19 @@ package handler
 
 import (
 	"embed"
+	"io/fs"
 	"net/http"
 )
 
-//go:embed index.html
-var dashboardHTML embed.FS
+//go:embed all:frontend
+var frontendFS embed.FS
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
-	html, err := dashboardHTML.ReadFile("index.html")
+	html, err := frontendFS.ReadFile("frontend/200.html")
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -24,4 +25,11 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(rendered))
+}
+
+// staticFrontendHandler returns an http.Handler that serves the embedded
+// frontend static assets (JS, CSS, etc.) under /_app/.
+func staticFrontendHandler() http.Handler {
+	sub, _ := fs.Sub(frontendFS, "frontend")
+	return http.FileServer(http.FS(sub))
 }

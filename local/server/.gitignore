@@ -26,3 +26,10 @@ go.work.sum
 
 # env file
 .env
+
+# Embedded frontend build (copied by scripts/build.sh)
+internal/handler/frontend/*
+!internal/handler/frontend/.gitkeep
+
+/buildermark
+/buildermark-server

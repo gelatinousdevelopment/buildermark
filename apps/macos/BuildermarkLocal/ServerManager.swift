@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "dev.buildermark.local", category: "ServerManager")
 
 @MainActor
 final class ServerManager: ObservableObject {
@@ -45,40 +48,74 @@ final class ServerManager: ObservableObject {
 
         // Look for the server binary in the app bundle first, then fall back to PATH.
         if let bundled = Bundle.main.url(forResource: "buildermark-server", withExtension: nil) {
+            logger.info("Found server binary in bundle resources: \(bundled.path, privacy: .public)")
             proc.executableURL = bundled
         } else if let inMacOS = Bundle.main.executableURL?.deletingLastPathComponent()
                     .appendingPathComponent("buildermark-server"),
                   FileManager.default.isExecutableFile(atPath: inMacOS.path) {
+            logger.info("Found server binary alongside executable: \(inMacOS.path, privacy: .public)")
             proc.executableURL = inMacOS
         } else if let found = findInPath("buildermark-server") {
+            logger.info("Found server binary in PATH: \(found, privacy: .public)")
             proc.executableURL = URL(fileURLWithPath: found)
         } else {
+            logger.error("Server binary not found in bundle, MacOS dir, or PATH")
             status = .error("Server binary not found")
             return
         }
 
-        proc.arguments = ["-addr", ":7022"]
-        proc.standardOutput = FileHandle.nullDevice
-        proc.standardError = FileHandle.nullDevice
+        let dbPath = Self.resolveDBPath()
+        logger.info("Using database path: \(dbPath, privacy: .public)")
+        proc.arguments = ["-addr", ":7022", "-db", dbPath]
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        proc.standardOutput = stdoutPipe
+        proc.standardError = stderrPipe
+
+        // Log server output asynchronously.
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty, let line = String(data: data, encoding: .utf8) {
+                logger.info("server stdout: \(line, privacy: .public)")
+            }
+        }
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty, let line = String(data: data, encoding: .utf8) {
+                logger.error("server stderr: \(line, privacy: .public)")
+            }
+        }
 
         proc.terminationHandler = { [weak self] terminated in
+            // Clean up pipe handlers.
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+
+            let code = terminated.terminationStatus
+            logger.info("Server process exited with code \(code)")
+
             Task { @MainActor in
                 self?.healthCheckTimer?.invalidate()
                 self?.healthCheckTimer = nil
                 self?.process = nil
-                if terminated.terminationStatus != 0 {
-                    self?.status = .error("Exited (\(terminated.terminationStatus))")
+                if code != 0 {
+                    self?.status = .error("Exited (\(code))")
                 } else {
                     self?.status = .stopped
                 }
             }
         }
 
+        logger.info("Launching server: \(proc.executableURL?.path ?? "nil", privacy: .public) \(proc.arguments ?? [], privacy: .public)")
+
         do {
             try proc.run()
+            logger.info("Server process started (pid \(proc.processIdentifier))")
             process = proc
             startHealthCheck()
         } catch {
+            logger.error("Failed to launch server: \(error.localizedDescription, privacy: .public)")
             status = .error(error.localizedDescription)
         }
     }
@@ -127,6 +164,16 @@ final class ServerManager: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    /// Returns the database path, honoring BUILDERMARK_LOCAL_DB_PATH if set,
+    /// otherwise defaulting to ~/Library/Application Support/BuildermarkLocal/local.db.
+    private static func resolveDBPath() -> String {
+        if let env = ProcessInfo.processInfo.environment["BUILDERMARK_LOCAL_DB_PATH"], !env.isEmpty {
+            return env
+        }
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport.appendingPathComponent("BuildermarkLocal/local.db").path
+    }
 
     private func findInPath(_ binary: String) -> String? {
         let dirs = (ProcessInfo.processInfo.environment["PATH"] ?? "/usr/local/bin:/usr/bin:/bin")

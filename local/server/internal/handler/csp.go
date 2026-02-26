@@ -14,10 +14,11 @@ import (
 type cspNonceKey struct{}
 
 var (
-	scriptOpenTagRe = regexp.MustCompile(`(?i)<script\b([^>]*)>`)
-	scriptNonceAttr = regexp.MustCompile(`(?i)\bnonce\s*=`)
-	cspNonceMetaRe  = regexp.MustCompile(`(?i)<meta[^>]+property\s*=\s*["']csp-nonce["'][^>]*>`)
-	headOpenTagRe   = regexp.MustCompile(`(?i)<head\b[^>]*>`)
+	scriptOpenTagRe    = regexp.MustCompile(`(?i)<script\b([^>]*)>`)
+	scriptNonceAttr    = regexp.MustCompile(`(?i)\bnonce\s*=\s*["'][^"']*["']`)
+	cspNonceMetaRe     = regexp.MustCompile(`(?i)<meta[^>]+property\s*=\s*["']csp-nonce["'][^>]*>`)
+	cspNonceMetaNonceRe = regexp.MustCompile(`(?i)\bnonce\s*=\s*["'][^"']*["']`)
+	headOpenTagRe      = regexp.MustCompile(`(?i)<head\b[^>]*>`)
 )
 
 func newCSPNonce() (string, error) {
@@ -83,7 +84,11 @@ func injectNonceIntoHTML(html, nonce string) string {
 	}
 
 	withMeta := html
-	if !cspNonceMetaRe.MatchString(withMeta) {
+	if cspNonceMetaRe.MatchString(withMeta) {
+		withMeta = cspNonceMetaRe.ReplaceAllStringFunc(withMeta, func(tag string) string {
+			return cspNonceMetaNonceRe.ReplaceAllString(tag, `nonce="`+nonce+`"`)
+		})
+	} else {
 		meta := `<meta property="csp-nonce" nonce="` + nonce + `">`
 		loc := headOpenTagRe.FindStringIndex(withMeta)
 		if loc != nil {
@@ -92,10 +97,11 @@ func injectNonceIntoHTML(html, nonce string) string {
 		}
 	}
 
+	newNonce := `nonce="` + nonce + `"`
 	return scriptOpenTagRe.ReplaceAllStringFunc(withMeta, func(tag string) string {
 		if scriptNonceAttr.MatchString(tag) {
-			return tag
+			return scriptNonceAttr.ReplaceAllString(tag, newNonce)
 		}
-		return strings.TrimSuffix(tag, ">") + ` nonce="` + nonce + `">`
+		return strings.TrimSuffix(tag, ">") + ` ` + newNonce + `>`
 	})
 }

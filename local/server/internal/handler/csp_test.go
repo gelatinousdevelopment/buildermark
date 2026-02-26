@@ -67,8 +67,8 @@ func TestInjectNonceIntoHTML(t *testing.T) {
 	if !strings.Contains(out, `<script nonce="`+nonce+`">console.log('a')</script>`) {
 		t.Fatalf("missing injected script nonce: %s", out)
 	}
-	if !strings.Contains(out, `<script nonce="already">console.log('b')</script>`) {
-		t.Fatalf("existing nonce should be preserved: %s", out)
+	if !strings.Contains(out, `<script nonce="`+nonce+`">console.log('b')</script>`) {
+		t.Fatalf("existing nonce should be replaced with runtime nonce: %s", out)
 	}
 }
 

@@ -28,16 +28,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
-ARCHIVE_PATH="$BUILD_DIR/BuildermarkLocal.xcarchive"
 EXPORT_DIR="$BUILD_DIR/export"
 DMG_DIR="$BUILD_DIR/dmg"
 DMG_OUTPUT="$BUILD_DIR/BuildermarkLocal.dmg"
 
-SCHEME="${SCHEME:-BuildermarkLocal}"
-CONFIGURATION="${CONFIGURATION:-Release}"
-DEVELOPER_ID="${DEVELOPER_ID:-Developer ID Application}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-BuildermarkNotary}"
-TEAM_ID="${TEAM_ID:-}"
 
 NOTARIZE=false
 for arg in "$@"; do
@@ -68,11 +63,9 @@ check_tool() {
 }
 
 # ---------------------------------------------------------------------------
-# Preflight
+# Preflight (distribution tools)
 # ---------------------------------------------------------------------------
 
-step "Checking prerequisites"
-check_tool xcodebuild "Install Xcode Command Line Tools: xcode-select --install"
 check_tool create-dmg "Install via Homebrew: brew install create-dmg"
 
 if $NOTARIZE; then
@@ -80,78 +73,12 @@ if $NOTARIZE; then
 fi
 
 # ---------------------------------------------------------------------------
-# Clean
+# Build
 # ---------------------------------------------------------------------------
 
-step "Cleaning previous build"
-rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR"
-
-# ---------------------------------------------------------------------------
-# Resolve packages
-# ---------------------------------------------------------------------------
-
-step "Resolving Swift package dependencies"
-xcodebuild -project "$PROJECT_DIR/BuildermarkLocal.xcodeproj" \
-    -scheme "$SCHEME" \
-    -resolvePackageDependencies \
-    -clonedSourcePackagesDirPath "$BUILD_DIR/SourcePackages"
-
-# ---------------------------------------------------------------------------
-# Archive
-# ---------------------------------------------------------------------------
-
-step "Archiving $SCHEME ($CONFIGURATION)"
-
-ARCHIVE_ARGS=(
-    -project "$PROJECT_DIR/BuildermarkLocal.xcodeproj"
-    -scheme "$SCHEME"
-    -configuration "$CONFIGURATION"
-    -archivePath "$ARCHIVE_PATH"
-    -clonedSourcePackagesDirPath "$BUILD_DIR/SourcePackages"
-    -destination "generic/platform=macOS"
-    archive
-)
-
-if [ -n "$TEAM_ID" ]; then
-    ARCHIVE_ARGS+=("DEVELOPMENT_TEAM=$TEAM_ID")
-fi
-
-xcodebuild "${ARCHIVE_ARGS[@]}"
-
-# ---------------------------------------------------------------------------
-# Export
-# ---------------------------------------------------------------------------
-
-step "Exporting app from archive"
-
-EXPORT_OPTIONS_PLIST="$BUILD_DIR/ExportOptions.plist"
-cat > "$EXPORT_OPTIONS_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>developer-id</string>
-    <key>signingStyle</key>
-    <string>automatic</string>
-    <key>destination</key>
-    <string>export</string>
-</dict>
-</plist>
-PLIST
-
-xcodebuild -exportArchive \
-    -archivePath "$ARCHIVE_PATH" \
-    -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist "$EXPORT_OPTIONS_PLIST"
+"$SCRIPT_DIR/build.sh"
 
 APP_PATH="$EXPORT_DIR/$APP_NAME.app"
-
-if [ ! -d "$APP_PATH" ]; then
-    echo "Error: exported app not found at $APP_PATH"
-    exit 1
-fi
 
 # ---------------------------------------------------------------------------
 # Create DMG

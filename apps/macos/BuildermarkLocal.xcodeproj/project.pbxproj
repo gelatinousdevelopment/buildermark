@@ -113,10 +113,10 @@
 				Base,
 			);
 			mainGroup = 089C1665A1A04F3BA1000002;
-			productRefGroup = 089C1665A1A04F3BA1000003 /* Products */;
 			packageReferences = (
 				089C1665A1A04F3BA1000060 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
+			productRefGroup = 089C1665A1A04F3BA1000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -171,7 +171,7 @@
 				);
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
@@ -194,7 +194,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -210,6 +210,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2P4QNS2Y9Y;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BuildermarkLocal/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -233,6 +234,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2P4QNS2Y9Y;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BuildermarkLocal/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -289,7 +291,6 @@
 			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
-
 	};
 	rootObject = 089C1665A1A04F3BA1000001 /* Project object */;
 }
