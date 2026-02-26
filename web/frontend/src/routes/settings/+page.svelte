@@ -104,77 +104,68 @@
 <div class="settings limited-content-width inset-when-limited-content-width">
 	<h1>Global Settings</h1>
 
-	<div class="tracking-section">
-		<h2>Tracked Projects</h2>
-		{#if loadingProjects}
-			<p>Loading projects...</p>
-		{:else if projectError}
-			<p class="error">{projectError}</p>
-		{:else if projects.length === 0}
-			<p class="muted">No tracked projects yet.</p>
-		{:else}
-			<table class="data bordered striped hoverable" style:max-width="50rem">
-				<tbody>
-					{#each projects as project (project.id)}
-						<tr>
-							<td>
-								<a
-									href={resolve('/projects/[project_id]', {
-										project_id: project.id
-									})}
-									class="project-name">{projectName(project)}</a
-								>
-							</td>
-							<td>
-								<a
-									href={resolve('/projects/[project_id]/settings', {
-										project_id: project.id
-									})}
-									class="project-name">Settings</a
-								>
-							</td>
-							<td><span class="project-path">{project.path}</span></td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		{/if}
-	</div>
-
-	<div class="history-import">
-		<h2>Re-import Conversation History</h2>
-		<p class="muted">This may take a while.</p>
-		<div class="history-import-controls">
-			<label for="history-days-select">Import window</label>
-			<select id="history-days-select" bind:value={historyImportDays} disabled={importingHistory}>
-				{#each historyImportDayOptions as option (option)}
-					<option value={option}>{historyOptionLabel(option)}</option>
-				{/each}
-			</select>
-			<button class="bordered small import-btn" onclick={importHistory} disabled={importingHistory}>
-				{#if importingHistory}
-					<span class="spinner" aria-hidden="true"></span>
-					Importing...
-				{:else}
-					Import
-				{/if}
-			</button>
-		</div>
-		{#if importingHistory && importStatusMessage}
-			<p class="import-status">{importStatusMessage}</p>
-		{/if}
-		{#if historyImportError}
-			<p class="error">{historyImportError}</p>
-		{:else if historyImportResult}
-			<p class="status">{historyImportResult}</p>
-		{/if}
-	</div>
-
 	{#if localSettingsLoading}
 		<p>Loading local settings...</p>
 	{:else if localSettingsError}
 		<p class="error">{localSettingsError}</p>
 	{:else if localSettings}
+		<div class="ui-section">
+			<h2>User Interface</h2>
+			<p class="label">Page Max Width</p>
+			<fieldset class="radio-group">
+				{#each contentWidthOptions as option (option.value)}
+					<label class="radio-option">
+						<input
+							type="radio"
+							name="content-width"
+							value={option.value}
+							checked={settingsStore.contentWidth === option.value}
+							onchange={() => (settingsStore.contentWidth = option.value)}
+						/>
+						<span class="radio-label">{option.label}</span>
+						<span class="radio-description">{option.description}</span>
+					</label>
+				{/each}
+			</fieldset>
+		</div>
+
+		<div class="tracking-section">
+			<h2>Tracked Projects</h2>
+			{#if loadingProjects}
+				<p>Loading projects...</p>
+			{:else if projectError}
+				<p class="error">{projectError}</p>
+			{:else if projects.length === 0}
+				<p class="muted">No tracked projects yet.</p>
+			{:else}
+				<table class="data bordered striped hoverable" style:max-width="50rem">
+					<tbody>
+						{#each projects as project (project.id)}
+							<tr>
+								<td>
+									<a
+										href={resolve('/projects/[project_id]', {
+											project_id: project.id
+										})}
+										class="project-name">{projectName(project)}</a
+									>
+								</td>
+								<td>
+									<a
+										href={resolve('/projects/[project_id]/settings', {
+											project_id: project.id
+										})}
+										class="project-name">Settings</a
+									>
+								</td>
+								<td><span class="project-path">{project.path}</span></td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		</div>
+
 		<div class="local-info">
 			<h2>Local Environment</h2>
 			<table class="data bordered striped hoverable" style:max-width="50rem">
@@ -211,24 +202,33 @@
 		</div>
 	{/if}
 
-	<div class="ui-section">
-		<h2>User Interface</h2>
-		<p class="label">Page Max Width</p>
-		<fieldset class="radio-group">
-			{#each contentWidthOptions as option (option.value)}
-				<label class="radio-option">
-					<input
-						type="radio"
-						name="content-width"
-						value={option.value}
-						checked={settingsStore.contentWidth === option.value}
-						onchange={() => (settingsStore.contentWidth = option.value)}
-					/>
-					<span class="radio-label">{option.label}</span>
-					<span class="radio-description">{option.description}</span>
-				</label>
-			{/each}
-		</fieldset>
+	<div class="history-import">
+		<h2>Re-import Conversation History</h2>
+		<p class="muted">This may take a while.</p>
+		<div class="history-import-controls">
+			<label for="history-days-select">Import window</label>
+			<select id="history-days-select" bind:value={historyImportDays} disabled={importingHistory}>
+				{#each historyImportDayOptions as option (option)}
+					<option value={option}>{historyOptionLabel(option)}</option>
+				{/each}
+			</select>
+			<button class="bordered small import-btn" onclick={importHistory} disabled={importingHistory}>
+				{#if importingHistory}
+					<span class="spinner" aria-hidden="true"></span>
+					Importing...
+				{:else}
+					Import
+				{/if}
+			</button>
+		</div>
+		{#if importingHistory && importStatusMessage}
+			<p class="import-status">{importStatusMessage}</p>
+		{/if}
+		{#if historyImportError}
+			<p class="error">{historyImportError}</p>
+		{:else if historyImportResult}
+			<p class="status">{historyImportResult}</p>
+		{/if}
 	</div>
 </div>
 

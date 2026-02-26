@@ -399,7 +399,8 @@
 
 	.btn-danger {
 		padding: 0.35rem 0.8rem;
-		font-size: 1rem;
+		font-size: 0.9rem;
+		font-weight: bold;
 		line-height: 1.4;
 		border: 1px solid var(--color-danger);
 		border-radius: 3px;
