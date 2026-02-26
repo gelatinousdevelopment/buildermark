@@ -11,6 +11,8 @@
 		089C1665A1A04F3BA1000041 /* ServerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000031 /* ServerManager.swift */; };
 		089C1665A1A04F3BA1000042 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000032 /* SettingsView.swift */; };
 		089C1665A1A04F3BA1000043 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000033 /* Assets.xcassets */; };
+		089C1665A1A04F3BA1000044 /* UpdaterViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */; };
+		089C1665A1A04F3BA1000045 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 089C1665A1A04F3BA1000061 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +22,7 @@
 		089C1665A1A04F3BA1000033 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		089C1665A1A04F3BA1000035 /* BuildermarkLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuildermarkLocal.entitlements; sourceTree = "<group>"; };
 		089C1665A1A04F3BA1000036 /* Buildermark Local.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Buildermark Local.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -27,6 +30,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				089C1665A1A04F3BA1000045 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -55,6 +59,7 @@
 				089C1665A1A04F3BA1000030 /* BuildermarkLocalApp.swift */,
 				089C1665A1A04F3BA1000031 /* ServerManager.swift */,
 				089C1665A1A04F3BA1000032 /* SettingsView.swift */,
+				089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */,
 				089C1665A1A04F3BA1000033 /* Assets.xcassets */,
 				089C1665A1A04F3BA1000035 /* BuildermarkLocal.entitlements */,
 			);
@@ -77,6 +82,9 @@
 			dependencies = (
 			);
 			name = BuildermarkLocal;
+			packageProductDependencies = (
+				089C1665A1A04F3BA1000061 /* Sparkle */,
+			);
 			productName = BuildermarkLocal;
 			productReference = 089C1665A1A04F3BA1000036 /* Buildermark Local.app */;
 			productType = "com.apple.product-type.application";
@@ -106,6 +114,9 @@
 			);
 			mainGroup = 089C1665A1A04F3BA1000002;
 			productRefGroup = 089C1665A1A04F3BA1000003 /* Products */;
+			packageReferences = (
+				089C1665A1A04F3BA1000060 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -133,6 +144,7 @@
 				089C1665A1A04F3BA1000040 /* BuildermarkLocalApp.swift in Sources */,
 				089C1665A1A04F3BA1000041 /* ServerManager.swift in Sources */,
 				089C1665A1A04F3BA1000042 /* SettingsView.swift in Sources */,
+				089C1665A1A04F3BA1000044 /* UpdaterViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,6 +270,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		089C1665A1A04F3BA1000060 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		089C1665A1A04F3BA1000061 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 089C1665A1A04F3BA1000060 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 	};
 	rootObject = 089C1665A1A04F3BA1000001 /* Project object */;

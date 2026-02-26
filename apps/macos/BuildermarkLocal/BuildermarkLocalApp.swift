@@ -3,10 +3,11 @@ import SwiftUI
 @main
 struct BuildermarkLocalApp: App {
     @StateObject private var serverManager = ServerManager()
+    @StateObject private var updaterViewModel = UpdaterViewModel()
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarMenu(serverManager: serverManager)
+            MenuBarMenu(serverManager: serverManager, updaterViewModel: updaterViewModel)
         } label: {
             Label("Buildermark Local", systemImage: "hammer.fill")
         }
@@ -20,6 +21,7 @@ struct BuildermarkLocalApp: App {
 
 struct MenuBarMenu: View {
     @ObservedObject var serverManager: ServerManager
+    @ObservedObject var updaterViewModel: UpdaterViewModel
 
     var body: some View {
         Label(serverManager.statusText, systemImage: serverManager.statusIcon)
@@ -34,6 +36,11 @@ struct MenuBarMenu: View {
         .keyboardShortcut("o")
 
         Divider()
+
+        Button("Check for Updates\u{2026}") {
+            updaterViewModel.checkForUpdates()
+        }
+        .disabled(!updaterViewModel.canCheckForUpdates)
 
         SettingsLink {
             Text("Settings\u{2026}")
