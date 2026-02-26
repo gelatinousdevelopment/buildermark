@@ -1,0 +1,31 @@
+app-id: dev.buildermark.LocalTray
+runtime: org.gnome.Platform
+runtime-version: "47"
+sdk: org.gnome.Sdk
+command: buildermark-local-tray
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=xdg-data/buildermark:create
+
+modules:
+  - name: buildermark-local
+    buildsystem: simple
+    build-commands:
+      - cd local/server && go build -o /app/bin/buildermark-local ./cmd/buildermark
+    sources:
+      - type: dir
+        path: ../..
+
+  - name: tray-app
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 src/main.py /app/bin/buildermark-local-tray
+      - install -Dm644 data/dev.buildermark.LocalTray.desktop /app/share/applications/dev.buildermark.LocalTray.desktop
+      - install -Dm644 data/dev.buildermark.LocalTray.appdata.xml /app/share/metainfo/dev.buildermark.LocalTray.appdata.xml
+      - install -Dm644 data/dev.buildermark.LocalTray.svg /app/share/icons/hicolor/scalable/apps/dev.buildermark.LocalTray.svg
+    sources:
+      - type: dir
+        path: .

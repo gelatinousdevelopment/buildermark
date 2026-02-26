@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.buildermark.LocalTray</id>
+  <name>Buildermark Local Tray</name>
+  <summary>Tray application for Buildermark Local</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>Runs Buildermark Local in the background and exposes tray controls for opening the app, settings, and quitting.</p>
+  </description>
+  <launchable type="desktop-id">dev.buildermark.LocalTray.desktop</launchable>
+</component>

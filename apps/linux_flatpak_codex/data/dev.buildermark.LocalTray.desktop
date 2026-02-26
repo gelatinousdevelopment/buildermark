@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Buildermark Local Tray
+Comment=Buildermark Local tray app
+Exec=buildermark-local-tray
+Icon=dev.buildermark.LocalTray
+Terminal=false
+Categories=Development;
+StartupNotify=false
