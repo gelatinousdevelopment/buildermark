@@ -31,8 +31,11 @@ if %errorlevel% neq 0 (
 )
 
 :: Step 4 — Build the tray application
-echo [4/4] Building buildermark-local.exe...
-go build -ldflags="-H windowsgui" -o buildermark-local.exe .
+:: Pass a version number as the first argument: build.bat 1.2.0
+set VERSION=%~1
+if "%VERSION%"=="" set VERSION=dev
+echo [4/4] Building buildermark-local.exe (version %VERSION%)...
+go build -ldflags="-H windowsgui -X main.version=%VERSION%" -o buildermark-local.exe .
 if %errorlevel% neq 0 (
     echo ERROR: Build failed.
     exit /b 1

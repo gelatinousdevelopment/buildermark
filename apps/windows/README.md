@@ -14,6 +14,7 @@ Right-click the tray icon to see:
 | **Open Buildermark Local**  | Opens http://localhost:7022 in your browser  |
 | ─                         | *(divider)*                                  |
 | **Settings**              | Opens a settings dialog                      |
+| **Check for Updates**     | Checks for a newer version and offers to update |
 | **Quit**                  | Stops the server and exits                   |
 
 ## Prerequisites
@@ -39,10 +40,11 @@ Right-click the tray icon to see:
 From this directory (`apps/windows`):
 
 ```bat
-build.bat
+build.bat 1.0.0
 ```
 
-This installs tools, generates the resource file, resolves dependencies, and
+Pass the version number as the first argument (defaults to `dev`). This
+installs tools, generates the resource file, resolves dependencies, and
 produces `buildermark-local.exe`.
 
 ### Manual Build
@@ -58,7 +60,8 @@ rsrc -manifest buildermark.manifest -o rsrc.syso
 go mod tidy
 
 :: 4. Build (the -H windowsgui flag hides the console window)
-go build -ldflags="-H windowsgui" -o buildermark-local.exe .
+::    -X main.version bakes in the version for auto-update comparisons
+go build -ldflags="-H windowsgui -X main.version=1.0.0" -o buildermark-local.exe .
 ```
 
 ### Build the Server
@@ -104,7 +107,8 @@ buildermark-local.exe (this app)
   ├─ Creates system tray icon via Walk NotifyIcon
   ├─ Launches buildermark-server.exe as a hidden child process
   ├─ Polls http://localhost:7022/api/v1/settings every 2s for status
-  └─ Opens browser / settings dialog on menu clicks
+  ├─ Opens browser / settings dialog on menu clicks
+  └─ Auto-update: checks release feed → downloads → binary swap → restart
 ```
 
 ### Technology
@@ -118,6 +122,7 @@ buildermark-local.exe (this app)
 | File                     | Purpose                                        |
 |--------------------------|------------------------------------------------|
 | `main.go`                | Tray icon, menu, server management, settings   |
+| `updater.go`             | Auto-update: version check, download, swap, restart |
 | `go.mod`                 | Go module definition                           |
 | `buildermark.manifest`   | Windows application manifest (common controls, DPI) |
 | `build.bat`              | One-step build script                          |
@@ -144,3 +149,40 @@ buildermark-local.exe (this app)
 **Walk / manifest errors**
 - The `rsrc.syso` file must be present in the build directory. Re-run:
   `rsrc -manifest buildermark.manifest -o rsrc.syso`
+
+## Auto-Update
+
+The app includes a Sparkle-style auto-update mechanism:
+
+1. **Background checks** — On startup (after a 10 s delay) and then every 6
+   hours, the app fetches the release feed at:
+   ```
+   https://buildermark.dev/api/releases/windows/latest
+   ```
+2. **Prompt** — If a newer version is found, a dialog shows the release notes
+   with "Update and Restart" / "Skip" buttons.
+3. **Binary swap** — The new `.exe` is downloaded, then the running binary is
+   renamed to `.old` (Windows allows renaming an in-use exe) and the new file
+   takes its place. The app restarts automatically.
+4. **Manual check** — Users can trigger a check via the "Check for Updates"
+   tray menu item.
+
+### Release feed format
+
+The endpoint must return JSON:
+
+```json
+{
+  "version": "1.2.0",
+  "url": "https://buildermark.dev/releases/windows/buildermark-local-1.2.0.exe",
+  "notes": "Bug fixes and performance improvements."
+}
+```
+
+- `version` — semver string compared against the build-time version
+  (`-X main.version=...`).
+- `url` — direct download URL for the new `.exe`.
+- `notes` — shown in the update dialog.
+
+Builds with `version=dev` (the default when no version flag is passed) skip
+update checks entirely.

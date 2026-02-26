@@ -57,7 +57,7 @@ func (a *app) run() error {
 	if err := a.ni.SetIcon(walk.IconApplication()); err != nil {
 		return fmt.Errorf("set icon: %w", err)
 	}
-	if err := a.ni.SetToolTip("Buildermark Local"); err != nil {
+	if err := a.ni.SetToolTip(fmt.Sprintf("Buildermark Local v%s", version)); err != nil {
 		return fmt.Errorf("set tooltip: %w", err)
 	}
 
@@ -71,6 +71,7 @@ func (a *app) run() error {
 	defer a.stopServer()
 
 	go a.monitorStatus()
+	a.startUpdateChecker()
 
 	// Run the Windows message loop (blocks until exit).
 	a.mw.Run()
@@ -104,6 +105,14 @@ func (a *app) buildMenu() {
 		a.showSettings()
 	})
 	menu.Actions().Add(settingsAction)
+
+	// Check for Updates.
+	updateAction := walk.NewAction()
+	updateAction.SetText("Check for Updates")
+	updateAction.Triggered().Attach(func() {
+		go a.checkForUpdate(true)
+	})
+	menu.Actions().Add(updateAction)
 
 	// Quit — stop server and exit.
 	quitAction := walk.NewAction()
