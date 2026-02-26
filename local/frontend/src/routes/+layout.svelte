@@ -126,13 +126,17 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href={resolve('/search')} class="item"><Icon name="search" width="19px" /></a>
+				<a href={resolve('/search')} class="item" title="Search"
+					><Icon name="search" width="19px" /></a
+				>
 			</nav>
 		</section>
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href={resolve('/settings')} class="item"><Icon name="gear" width="17px" /></a>
+				<a href={resolve('/settings')} class="item" title="Global Settings"
+					><Icon name="gear" width="17px" /></a
+				>
 			</nav>
 		</section>
 		<hr class="divider" />

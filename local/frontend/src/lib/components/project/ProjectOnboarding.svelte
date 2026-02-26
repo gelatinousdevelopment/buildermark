@@ -67,11 +67,11 @@
 				target="_blank">Buildermark plugins</a
 			>
 			for your agents, so you can rate and log analysis about each AI coding session by running the
-			<code>bbrate</code> skill:
+			<code>bbrate</code> skill.
 		</p>
-		<h3>Claude Code:</h3>
+		<h3>Rate a conversation in Claude Code:</h3>
 		<code class="bigger">› /bbrate</code>
-		<h3>Codex:</h3>
+		<h3>Rate a conversation in Codex:</h3>
 		<code class="bigger">› $bbrate</code>
 		<p>
 			If you have questions or encounter a bug, start a discussion or file a bug report on github: <a
@@ -94,7 +94,7 @@
 			saving={savingSelection}
 			saveError={saveSelectionError}
 			{importStatusMessage}
-			submitLabel="Import Projects"
+			submitLabel={selectedProjectPaths.length == 1 ? 'Import Project' : 'Import Projects'}
 			submitDisabled={selectedProjectPaths.length === 0}
 			onToggle={onToggleSelection}
 			{onHistoryDaysChange}
@@ -123,6 +123,7 @@
 	}
 
 	.onboarding h3 {
+		color: var(--accent-color-darkest);
 		font-size: 1em;
 		font-weight: 600;
 		margin: 0;

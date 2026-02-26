@@ -246,7 +246,7 @@
 			{:else if dailySummary.length === 0}
 				<p class="status">No commit data in the selected range.</p>
 			{:else}
-				<DailyCommitsChart {dailySummary} {branch} {projectId} enableDateSelection={false}  />
+				<DailyCommitsChart {dailySummary} {branch} {projectId} enableDateSelection={false} />
 			{/if}
 		</div>
 	</div>
@@ -330,11 +330,19 @@
 		font-weight: 600;
 		padding: 0.35rem 0.6rem;
 		border: none;
-		border-radius: 4px;
+		border-radius: 0px;
 		background: var(--color-background-surface);
 		color: var(--color-text-secondary);
 		cursor: pointer;
 		line-height: 1.2;
+	}
+
+	.preset-range button:first-of-type {
+		border-radius: 4px 0 0 4px;
+	}
+
+	.preset-range button:last-of-type {
+		border-radius: 0 4px 4px 0;
 	}
 
 	.preset-range button:hover {
