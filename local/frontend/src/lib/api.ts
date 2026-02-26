@@ -201,7 +201,9 @@ export function listProjectCommitsPage(
 	agent = '',
 	search = '',
 	start?: number,
-	end?: number
+	end?: number,
+	dailyWindowDays?: number,
+	dailyWindowEnd?: number
 ): Promise<ProjectCommitPageResponse> {
 	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 	if (branch) params.set('branch', branch);
@@ -210,6 +212,8 @@ export function listProjectCommitsPage(
 	if (search) params.set('search', search);
 	if (start) params.set('start', String(start));
 	if (end) params.set('end', String(end));
+	if (dailyWindowDays) params.set('dailyWindowDays', String(dailyWindowDays));
+	if (dailyWindowEnd) params.set('dailyWindowEnd', String(dailyWindowEnd));
 	params.set('tzOffset', String(new Date().getTimezoneOffset()));
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }

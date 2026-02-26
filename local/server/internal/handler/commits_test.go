@@ -20,10 +20,7 @@ func waitForCommitIngestion(t *testing.T, s *Server) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		s.commitIngestMu.Lock()
-		running := len(s.commitIngestRunning)
-		s.commitIngestMu.Unlock()
-		if running == 0 {
+		if s.commitIngestJobs.isIdle() {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -36,11 +33,7 @@ func waitForCommitRefresh(t *testing.T, s *Server) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		mgr := s.refreshManager()
-		mgr.mu.Lock()
-		running := len(mgr.running)
-		mgr.mu.Unlock()
-		if running == 0 {
+		if s.refreshJobs.isIdle() {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -1477,6 +1470,96 @@ func TestBuildDailySummary(t *testing.T) {
 	}
 	if len(emptyEntry.Commits) != 0 {
 		t.Fatalf("empty day commits = %d, want 0", len(emptyEntry.Commits))
+	}
+}
+
+func TestBuildDailySummaryWindow_CustomWindow(t *testing.T) {
+	loc := time.UTC
+	windowEnd := time.Date(2026, time.January, 10, 12, 0, 0, 0, loc)
+	commits := []projectCommitCoverage{
+		{
+			ProjectID:        "p1",
+			CommitHash:       "in-window",
+			Subject:          "inside",
+			AuthoredAtUnixMs: time.Date(2026, time.January, 9, 8, 0, 0, 0, loc).UnixMilli(),
+			LinesTotal:       5,
+			LinesFromAgent:   2,
+		},
+		{
+			ProjectID:        "p1",
+			CommitHash:       "out-window",
+			Subject:          "outside",
+			AuthoredAtUnixMs: time.Date(2025, time.December, 25, 8, 0, 0, 0, loc).UnixMilli(),
+			LinesTotal:       7,
+			LinesFromAgent:   3,
+		},
+	}
+
+	result := buildDailySummaryWindow(commits, 7, loc, &windowEnd, false)
+	if len(result) != 7 {
+		t.Fatalf("len = %d, want 7", len(result))
+	}
+
+	if got := result[0].Date; got != "2026-01-04" {
+		t.Fatalf("first date = %q, want %q", got, "2026-01-04")
+	}
+	if got := result[6].Date; got != "2026-01-10" {
+		t.Fatalf("last date = %q, want %q", got, "2026-01-10")
+	}
+	if got := result[5].LinesTotal; got != 5 {
+		t.Fatalf("day before end linesTotal = %d, want 5", got)
+	}
+	if got := result[5].LinesFromAgent; got != 2 {
+		t.Fatalf("day before end linesFromAgent = %d, want 2", got)
+	}
+}
+
+func TestListProjectCommitsForProject_DailyWindowDaysQuery(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	appPath := filepath.Join(repo, "app.txt")
+	mustWriteFile(t, appPath, "hello\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "app.txt")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "commit", "-m", "seed")
+
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/commits?page=1&dailyWindowDays=365", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	dailySummary, ok := data["dailySummary"].([]any)
+	if !ok {
+		t.Fatalf("dailySummary missing or invalid type")
+	}
+	if got := len(dailySummary); got != 365 {
+		t.Fatalf("dailySummary len = %d, want 365", got)
 	}
 }
 

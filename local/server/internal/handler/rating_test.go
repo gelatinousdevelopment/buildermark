@@ -19,7 +19,15 @@ func setupTestServer(t *testing.T) *Server {
 		t.Fatalf("init test db: %v", err)
 	}
 	t.Cleanup(func() { database.Close() })
-	return &Server{DB: database}
+	return &Server{
+		DB:                database,
+		refreshJobs:       newJobTracker(),
+		coverageJobs:      newJobTracker(),
+		visibilityJobs:    newJobTracker(),
+		commitIngestJobs:  newJobTracker(),
+		commitDetailCache: newCommitDetailCacheStore(),
+		branchCache:       newBranchCacheStore(),
+	}
 }
 
 func TestCreateRating(t *testing.T) {

@@ -18,17 +18,13 @@ type Server struct {
 	DBPath     string          // resolved path to the SQLite database file
 	ListenAddr string          // address the server is listening on
 
-	refreshMu sync.Mutex
-	refresher *commitRefreshManager
+	refreshJobs      *jobTracker
+	coverageJobs     *jobTracker
+	visibilityJobs   *jobTracker
+	commitIngestJobs *jobTracker
 
-	coverageRecomputeMu      sync.Mutex
-	coverageRecomputeRunning map[string]bool
-
-	conversationVisibilityMu      sync.Mutex
-	conversationVisibilityRunning map[string]bool
-
-	commitIngestMu      sync.Mutex
-	commitIngestRunning map[string]bool // key: "projectID:branch"
+	commitDetailCache *commitDetailCacheStore
+	branchCache       *branchCacheStore
 
 	ws       *wsHub
 	importMu sync.Mutex // guards against concurrent imports
@@ -38,6 +34,24 @@ type Server struct {
 func (s *Server) Routes() http.Handler {
 	if s.ws == nil {
 		s.ws = newWSHub()
+	}
+	if s.refreshJobs == nil {
+		s.refreshJobs = newJobTracker()
+	}
+	if s.coverageJobs == nil {
+		s.coverageJobs = newJobTracker()
+	}
+	if s.visibilityJobs == nil {
+		s.visibilityJobs = newJobTracker()
+	}
+	if s.commitIngestJobs == nil {
+		s.commitIngestJobs = newJobTracker()
+	}
+	if s.commitDetailCache == nil {
+		s.commitDetailCache = newCommitDetailCacheStore()
+	}
+	if s.branchCache == nil {
+		s.branchCache = newBranchCacheStore()
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/ws", s.handleWS)

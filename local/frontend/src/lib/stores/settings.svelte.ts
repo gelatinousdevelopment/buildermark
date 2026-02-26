@@ -6,11 +6,13 @@ export type ContentWidth = 'default' | 'wider' | 'full';
 
 interface Settings {
 	commits_chart_scale_by_lines: boolean;
+	commits_chart_stretch_bars: boolean;
 	content_width: ContentWidth;
 }
 
 const defaults: Settings = {
 	commits_chart_scale_by_lines: false,
+	commits_chart_stretch_bars: false,
 	content_width: 'default'
 };
 
@@ -28,6 +30,7 @@ function load(): Settings {
 function currentSettings(): Settings {
 	return {
 		commits_chart_scale_by_lines: _commitsChartScaleByLines,
+		commits_chart_stretch_bars: _commitsChartStretchBars,
 		content_width: _contentWidth
 	};
 }
@@ -53,6 +56,7 @@ function applyContentWidth(width: ContentWidth) {
 const initial = load();
 
 let _commitsChartScaleByLines = $state(initial.commits_chart_scale_by_lines);
+let _commitsChartStretchBars = $state(initial.commits_chart_stretch_bars);
 let _contentWidth = $state(initial.content_width);
 
 applyContentWidth(initial.content_width);
@@ -62,6 +66,7 @@ if (browser) {
 		if (e.key !== STORAGE_KEY) return;
 		const updated = load();
 		_commitsChartScaleByLines = updated.commits_chart_scale_by_lines;
+		_commitsChartStretchBars = updated.commits_chart_stretch_bars;
 		_contentWidth = updated.content_width;
 		applyContentWidth(updated.content_width);
 	});
@@ -73,6 +78,13 @@ export const settingsStore = {
 	},
 	set commitsChartScaleByLines(v: boolean) {
 		_commitsChartScaleByLines = v;
+		save();
+	},
+	get commitsChartStretchBars() {
+		return _commitsChartStretchBars;
+	},
+	set commitsChartStretchBars(v: boolean) {
+		_commitsChartStretchBars = v;
 		save();
 	},
 	get contentWidth(): ContentWidth {

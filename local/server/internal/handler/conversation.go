@@ -23,6 +23,9 @@ func (s *Server) handleListConversations(w http.ResponseWriter, r *http.Request)
 			limit = parsed
 		}
 	}
+	if limit > 1000 {
+		limit = 1000
+	}
 	hiddenOnly := strings.TrimSpace(r.URL.Query().Get("hidden")) == "true"
 
 	conversations, err := db.ListConversations(r.Context(), s.DB, limit, hiddenOnly)
@@ -122,7 +125,7 @@ func (s *Server) handleSetConversationHidden(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "failed to update conversation visibility")
 		return
 	}
-	clearCommitDetailCacheForProject(conv.ProjectID)
+	s.commitDetailCache.clearProject(conv.ProjectID)
 
 	queued := s.enqueueConversationVisibilityRecompute(*conv, body.Hidden)
 	writeSuccess(w, http.StatusAccepted, map[string]any{
@@ -133,25 +136,11 @@ func (s *Server) handleSetConversationHidden(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) tryStartConversationVisibilityRecompute(conversationID string) bool {
-	s.conversationVisibilityMu.Lock()
-	defer s.conversationVisibilityMu.Unlock()
-	if s.conversationVisibilityRunning == nil {
-		s.conversationVisibilityRunning = make(map[string]bool)
-	}
-	if s.conversationVisibilityRunning[conversationID] {
-		return false
-	}
-	s.conversationVisibilityRunning[conversationID] = true
-	return true
+	return s.visibilityJobs.tryStart(conversationID)
 }
 
 func (s *Server) finishConversationVisibilityRecompute(conversationID string) {
-	s.conversationVisibilityMu.Lock()
-	defer s.conversationVisibilityMu.Unlock()
-	if s.conversationVisibilityRunning == nil {
-		return
-	}
-	delete(s.conversationVisibilityRunning, conversationID)
+	s.visibilityJobs.finish(conversationID)
 }
 
 func (s *Server) enqueueConversationVisibilityRecompute(conv db.Conversation, hidden bool) bool {
@@ -189,7 +178,7 @@ func (s *Server) enqueueConversationVisibilityRecompute(conv db.Conversation, hi
 			return
 		}
 		if len(hashes) == 0 {
-			clearCommitDetailCacheForProject(conv.ProjectID)
+			s.commitDetailCache.clearProject(conv.ProjectID)
 			broadcast("complete", fmt.Sprintf("%s conversation %s: no affected commits", action, conv.ID))
 			return
 		}
@@ -210,7 +199,7 @@ func (s *Server) enqueueConversationVisibilityRecompute(conv db.Conversation, hi
 			broadcast("error", fmt.Sprintf("%s conversation %s failed while recomputing coverage", action, conv.ID))
 			return
 		}
-		clearCommitDetailCacheForProject(conv.ProjectID)
+		s.commitDetailCache.clearProject(conv.ProjectID)
 		broadcast("complete", fmt.Sprintf("%s conversation %s: recomputed %d commit(s)", action, conv.ID, recomputed))
 	}()
 	return true

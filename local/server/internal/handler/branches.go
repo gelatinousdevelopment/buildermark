@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
@@ -16,12 +15,6 @@ type branchCacheEntry struct {
 	branches  []string
 	fetchedAt time.Time
 }
-
-var (
-	branchCacheMu  sync.RWMutex
-	branchCache    = make(map[string]branchCacheEntry)
-	branchCacheTTL = 30 * time.Second
-)
 
 func detectCurrentBranch(ctx context.Context, repoPath string) string {
 	out, err := runGit(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD")
@@ -56,15 +49,12 @@ func detectDefaultBranch(ctx context.Context, repoPath string) (string, error) {
 	return "", fmt.Errorf("could not resolve default branch")
 }
 
-func listRepoBranches(ctx context.Context, repoPath, defaultBranch string) ([]string, error) {
+func (s *Server) listRepoBranches(ctx context.Context, repoPath, defaultBranch string) ([]string, error) {
 	cacheKey := repoPath + "\x00" + defaultBranch
 
-	branchCacheMu.RLock()
-	if entry, ok := branchCache[cacheKey]; ok && time.Since(entry.fetchedAt) < branchCacheTTL {
-		branchCacheMu.RUnlock()
-		return entry.branches, nil
+	if branches, ok := s.branchCache.get(cacheKey); ok {
+		return branches, nil
 	}
-	branchCacheMu.RUnlock()
 
 	out, err := runGit(ctx, repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads")
 	if err != nil {
@@ -85,9 +75,7 @@ func listRepoBranches(ctx context.Context, repoPath, defaultBranch string) ([]st
 		add(line)
 	}
 
-	branchCacheMu.Lock()
-	branchCache[cacheKey] = branchCacheEntry{branches: branches, fetchedAt: time.Now()}
-	branchCacheMu.Unlock()
+	s.branchCache.set(cacheKey, branches)
 
 	return branches, nil
 }

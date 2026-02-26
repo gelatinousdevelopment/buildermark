@@ -732,12 +732,8 @@ func TestSetProjectIgnoreDiffPathsClearsCommitDetailCacheForProject(t *testing.T
 		t.Fatalf("EnsureProject other: %v", err)
 	}
 
-	commitDetailCacheMu.Lock()
-	commitDetailCache = map[string]*commitDetailCacheEntry{
-		commitDetailCacheKey(projectID, "h1", []string{"README.md"}):      {fetchedAt: time.Now()},
-		commitDetailCacheKey(otherProjectID, "h2", []string{"README.md"}): {fetchedAt: time.Now()},
-	}
-	commitDetailCacheMu.Unlock()
+	s.commitDetailCache.set(commitDetailCacheKey(projectID, "h1", []string{"README.md"}), &commitDetailCacheEntry{fetchedAt: time.Now()})
+	s.commitDetailCache.set(commitDetailCacheKey(otherProjectID, "h2", []string{"README.md"}), &commitDetailCacheEntry{fetchedAt: time.Now()})
 
 	body, _ := json.Marshal(map[string]string{"ignoreDiffPaths": "CHANGELOG.md"})
 	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ignore-diff-paths", bytes.NewReader(body))
@@ -748,12 +744,8 @@ func TestSetProjectIgnoreDiffPathsClearsCommitDetailCacheForProject(t *testing.T
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	commitDetailCacheMu.RLock()
-	defer commitDetailCacheMu.RUnlock()
-	for key := range commitDetailCache {
-		if strings.HasPrefix(key, projectID+":") {
-			t.Fatalf("cache key %q should have been cleared for project %s", key, projectID)
-		}
+	if entry, ok := s.commitDetailCache.get(commitDetailCacheKey(projectID, "h1", []string{"README.md"})); ok && entry != nil {
+		t.Fatalf("cache entry for project %s should have been cleared", projectID)
 	}
 }
 

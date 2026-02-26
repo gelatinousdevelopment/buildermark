@@ -333,10 +333,6 @@ func ingestCommits(
 
 	dbCommits := make([]db.Commit, 0, len(toIngest))
 	// Per-commit, per-agent coverage: map from commit hash to agent->lines/chars.
-	type agentStats struct {
-		lines int
-		chars int
-	}
 	perCommitAgent := make(map[string]map[string]*agentStats)
 
 	for _, gc := range toIngest {
@@ -468,6 +464,100 @@ func recomputeCommitCoverageForProject(
 	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, nil)
 }
 
+// recomputeSingleCommit recomputes coverage for one commit.
+func recomputeSingleCommit(
+	ctx context.Context,
+	repoPath string,
+	c db.Commit,
+	ignorePatterns []string,
+	messages []messageDiff,
+) (db.Commit, map[string]agentStats, error) {
+	cleanDiff := c.DiffContent
+	rawDiff, rawErr := runGit(ctx, repoPath, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
+	if rawErr == nil {
+		cleanDiff = stripBinaryDiffs(rawDiff)
+	}
+
+	tokenDiff, err := runGit(ctx, repoPath, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
+	if err != nil {
+		tokenDiff = cleanDiff
+	}
+	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
+	totalLines, totalChars := tokenTotals(commitTokens)
+
+	windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
+	windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
+	_, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+	matchedLines += fallbackLines
+	matchedChars += fallbackChars
+
+	recompAdded, recompRemoved := countDiffAddedRemoved(cleanDiff)
+	updated := db.Commit{
+		ID:              c.ID,
+		ProjectID:       c.ProjectID,
+		BranchName:      c.BranchName,
+		CommitHash:      c.CommitHash,
+		Subject:         c.Subject,
+		UserName:        c.UserName,
+		UserEmail:       c.UserEmail,
+		AuthoredAt:      c.AuthoredAt,
+		DiffContent:     cleanDiff,
+		LinesTotal:      totalLines,
+		CharsTotal:      totalChars,
+		LinesFromAgent:  matchedLines,
+		CharsFromAgent:  matchedChars,
+		LinesAdded:      recompAdded,
+		LinesRemoved:    recompRemoved,
+		CoverageVersion: currentCommitCoverageVersion,
+	}
+
+	var byAgent map[string]agentStats
+	segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+	if len(segs) > 0 {
+		byAgent = make(map[string]agentStats, len(segs))
+		for _, seg := range segs {
+			byAgent[seg.Agent] = agentStats{lines: seg.LinesFromAgent}
+		}
+	}
+	return updated, byAgent, nil
+}
+
+// persistRecomputedCommits upserts recomputed commits and agent coverage.
+func persistRecomputedCommits(
+	ctx context.Context,
+	database *sql.DB,
+	commits []db.Commit,
+	originals []db.Commit,
+	perCommitAgent map[string]map[string]agentStats,
+) error {
+	if err := db.UpsertCommits(ctx, database, commits); err != nil {
+		return fmt.Errorf("upsert recomputed commits: %w", err)
+	}
+	for _, c := range originals {
+		if err := db.DeleteCommitAgentCoverageByCommitID(ctx, database, c.ID); err != nil {
+			return err
+		}
+		byAgent := perCommitAgent[c.ID]
+		if len(byAgent) == 0 {
+			continue
+		}
+		rows := make([]db.CommitAgentCoverage, 0, len(byAgent))
+		for agentName, stats := range byAgent {
+			rows = append(rows, db.CommitAgentCoverage{
+				CommitID:       c.ID,
+				Agent:          agentName,
+				LinesFromAgent: stats.lines,
+				CharsFromAgent: stats.chars,
+			})
+		}
+		if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {
+			return fmt.Errorf("upsert recomputed commit agent coverage: %w", err)
+		}
+	}
+	return nil
+}
+
 func recomputeCommitCoverageForProjectHashes(
 	ctx context.Context,
 	database *sql.DB,
@@ -505,98 +595,24 @@ func recomputeCommitCoverageForProjectHashes(
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 
 	updatedCommits := make([]db.Commit, 0, len(commits))
-	type agentStats struct {
-		lines int
-		chars int
-	}
 	perCommitAgent := make(map[string]map[string]agentStats)
 
 	for _, c := range commits {
 		if progress != nil {
 			progress(fmt.Sprintf("Recomputing commit %s...", c.CommitHash), len(updatedCommits))
 		}
-		cleanDiff := c.DiffContent
-		rawDiff, rawErr := runGit(
-			ctx,
-			repoProject.Path,
-			"show",
-			"--pretty=format:",
-			"-M",
-			"-w",
-			"--ignore-blank-lines",
-			c.CommitHash,
-		)
-		if rawErr == nil {
-			cleanDiff = stripBinaryDiffs(rawDiff)
-		}
-
-		tokenDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
+		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages)
 		if err != nil {
-			tokenDiff = cleanDiff
+			continue
 		}
-		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
-		totalLines, totalChars := tokenTotals(commitTokens)
-
-		windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
-		windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
-		_, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
-		matchedLines += fallbackLines
-		matchedChars += fallbackChars
-
-		recompAdded, recompRemoved := countDiffAddedRemoved(cleanDiff)
-		updatedCommits = append(updatedCommits, db.Commit{
-			ID:              c.ID,
-			ProjectID:       c.ProjectID,
-			BranchName:      c.BranchName,
-			CommitHash:      c.CommitHash,
-			Subject:         c.Subject,
-			UserName:        c.UserName,
-			UserEmail:       c.UserEmail,
-			AuthoredAt:      c.AuthoredAt,
-			DiffContent:     cleanDiff,
-			LinesTotal:      totalLines,
-			CharsTotal:      totalChars,
-			LinesFromAgent:  matchedLines,
-			CharsFromAgent:  matchedChars,
-			LinesAdded:      recompAdded,
-			LinesRemoved:    recompRemoved,
-			CoverageVersion: currentCommitCoverageVersion,
-		})
-
-		segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
-		if len(segs) > 0 {
-			byAgent := make(map[string]agentStats)
-			for _, seg := range segs {
-				byAgent[seg.Agent] = agentStats{lines: seg.LinesFromAgent}
-			}
+		updatedCommits = append(updatedCommits, updated)
+		if len(byAgent) > 0 {
 			perCommitAgent[c.ID] = byAgent
 		}
 	}
 
-	if err := db.UpsertCommits(ctx, database, updatedCommits); err != nil {
-		return 0, fmt.Errorf("upsert recomputed commits by hash: %w", err)
-	}
-	for _, c := range commits {
-		if err := db.DeleteCommitAgentCoverageByCommitID(ctx, database, c.ID); err != nil {
-			return 0, err
-		}
-		byAgent := perCommitAgent[c.ID]
-		if len(byAgent) == 0 {
-			continue
-		}
-		rows := make([]db.CommitAgentCoverage, 0, len(byAgent))
-		for agentName, stats := range byAgent {
-			rows = append(rows, db.CommitAgentCoverage{
-				CommitID:       c.ID,
-				Agent:          agentName,
-				LinesFromAgent: stats.lines,
-				CharsFromAgent: stats.chars,
-			})
-		}
-		if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {
-			return 0, fmt.Errorf("upsert recomputed commit agent coverage by hash: %w", err)
-		}
+	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent); err != nil {
+		return 0, err
 	}
 	return len(updatedCommits), nil
 }
@@ -666,96 +682,21 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 
 	updatedCommits := make([]db.Commit, 0, len(commits))
-	type agentStats struct {
-		lines int
-		chars int
-	}
 	perCommitAgent := make(map[string]map[string]agentStats)
 
 	for _, c := range commits {
-		cleanDiff := c.DiffContent
-		rawDiff, rawErr := runGit(
-			ctx,
-			repoProject.Path,
-			"show",
-			"--pretty=format:",
-			"-M",
-			"-w",
-			"--ignore-blank-lines",
-			c.CommitHash,
-		)
-		if rawErr == nil {
-			cleanDiff = stripBinaryDiffs(rawDiff)
-		}
-
-		tokenDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
+		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages)
 		if err != nil {
-			tokenDiff = cleanDiff
+			continue
 		}
-		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
-		totalLines, totalChars := tokenTotals(commitTokens)
-
-		windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
-		windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
-		_, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
-		matchedLines += fallbackLines
-		matchedChars += fallbackChars
-
-		recompAdded, recompRemoved := countDiffAddedRemoved(cleanDiff)
-		updatedCommits = append(updatedCommits, db.Commit{
-			ID:              c.ID,
-			ProjectID:       c.ProjectID,
-			BranchName:      c.BranchName,
-			CommitHash:      c.CommitHash,
-			Subject:         c.Subject,
-			UserName:        c.UserName,
-			UserEmail:       c.UserEmail,
-			AuthoredAt:      c.AuthoredAt,
-			DiffContent:     cleanDiff,
-			LinesTotal:      totalLines,
-			CharsTotal:      totalChars,
-			LinesFromAgent:  matchedLines,
-			CharsFromAgent:  matchedChars,
-			LinesAdded:      recompAdded,
-			LinesRemoved:    recompRemoved,
-			CoverageVersion: currentCommitCoverageVersion,
-		})
-
-		// Aggregate agent attribution from both exact matches and copied-from-agent files.
-		segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
-		if len(segs) > 0 {
-			byAgent := make(map[string]agentStats)
-			for _, seg := range segs {
-				byAgent[seg.Agent] = agentStats{lines: seg.LinesFromAgent}
-			}
+		updatedCommits = append(updatedCommits, updated)
+		if len(byAgent) > 0 {
 			perCommitAgent[c.ID] = byAgent
 		}
 	}
 
-	if err := db.UpsertCommits(ctx, database, updatedCommits); err != nil {
-		return 0, fmt.Errorf("upsert recomputed commits: %w", err)
-	}
-	for _, c := range commits {
-		if err := db.DeleteCommitAgentCoverageByCommitID(ctx, database, c.ID); err != nil {
-			return 0, err
-		}
-		byAgent := perCommitAgent[c.ID]
-		if len(byAgent) == 0 {
-			continue
-		}
-		rows := make([]db.CommitAgentCoverage, 0, len(byAgent))
-		for agentName, stats := range byAgent {
-			rows = append(rows, db.CommitAgentCoverage{
-				CommitID:       c.ID,
-				Agent:          agentName,
-				LinesFromAgent: stats.lines,
-				CharsFromAgent: stats.chars,
-			})
-		}
-		if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {
-			return 0, fmt.Errorf("upsert recomputed commit agent coverage: %w", err)
-		}
+	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent); err != nil {
+		return 0, err
 	}
 	return len(updatedCommits), nil
 }

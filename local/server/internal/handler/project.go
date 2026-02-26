@@ -26,157 +26,105 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, http.StatusOK, projects)
 }
 
-func (s *Server) handleSetProjectIgnored(w http.ResponseWriter, r *http.Request) {
+// decodeProjectSetterBody validates the request is JSON, extracts the project
+// ID from the path, limits the body size, and decodes into dst.
+// Returns the project ID on success, or empty string if an error was written.
+func decodeProjectSetterBody(w http.ResponseWriter, r *http.Request, dst any) string {
 	if !requireJSON(w, r) {
-		return
+		return ""
 	}
-
 	id := r.PathValue("id")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "project id is required")
-		return
+		return ""
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return ""
+	}
+	return id
+}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+// handleProjectSetterError writes an appropriate error response for a project
+// setter DB call. Returns true if an error was handled.
+func handleProjectSetterError(w http.ResponseWriter, err error, action string) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, db.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "project not found")
+		return true
+	}
+	log.Printf("error setting project %s: %v", action, err)
+	writeError(w, http.StatusInternalServerError, "failed to update project")
+	return true
+}
 
+func (s *Server) handleSetProjectIgnored(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Ignored bool `json:"ignored"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	id := decodeProjectSetterBody(w, r, &body)
+	if id == "" {
 		return
 	}
-
-	if err := db.SetProjectIgnored(r.Context(), s.DB, id, body.Ignored); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
-		log.Printf("error setting project ignored: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update project")
+	if handleProjectSetterError(w, db.SetProjectIgnored(r.Context(), s.DB, id, body.Ignored), "ignored") {
 		return
 	}
-
 	writeSuccess(w, http.StatusOK, nil)
 }
 
 func (s *Server) handleSetProjectLabel(w http.ResponseWriter, r *http.Request) {
-	if !requireJSON(w, r) {
-		return
-	}
-
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "project id is required")
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
-
 	var body struct {
 		Label string `json:"label"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	id := decodeProjectSetterBody(w, r, &body)
+	if id == "" {
 		return
 	}
-
 	if body.Label == "" {
 		writeError(w, http.StatusBadRequest, "label must not be empty")
 		return
 	}
-
-	if err := db.SetProjectLabel(r.Context(), s.DB, id, body.Label); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
-		log.Printf("error setting project label: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update project")
+	if handleProjectSetterError(w, db.SetProjectLabel(r.Context(), s.DB, id, body.Label), "label") {
 		return
 	}
-
 	writeSuccess(w, http.StatusOK, nil)
 }
 
 func (s *Server) handleSetProjectPath(w http.ResponseWriter, r *http.Request) {
-	if !requireJSON(w, r) {
-		return
-	}
-
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "project id is required")
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
-
 	var body struct {
 		Path string `json:"path"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	id := decodeProjectSetterBody(w, r, &body)
+	if id == "" {
 		return
 	}
-
 	if body.Path == "" {
 		writeError(w, http.StatusBadRequest, "path must not be empty")
 		return
 	}
-
-	if err := db.SetProjectPath(r.Context(), s.DB, id, body.Path); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
-		log.Printf("error setting project path: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update project")
+	if handleProjectSetterError(w, db.SetProjectPath(r.Context(), s.DB, id, body.Path), "path") {
 		return
 	}
-
 	writeSuccess(w, http.StatusOK, nil)
 }
 
 func (s *Server) handleSetProjectOldPaths(w http.ResponseWriter, r *http.Request) {
-	if !requireJSON(w, r) {
-		return
-	}
-
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "project id is required")
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
-
 	var body struct {
 		OldPaths string `json:"oldPaths"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	id := decodeProjectSetterBody(w, r, &body)
+	if id == "" {
 		return
 	}
 
 	prevOldPaths, err := db.GetProjectOldPaths(r.Context(), s.DB, id)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
-		log.Printf("error reading project old_paths: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update project")
+	if handleProjectSetterError(w, err, "old_paths (read)") {
 		return
 	}
-
-	if err := db.SetProjectOldPaths(r.Context(), s.DB, id, body.OldPaths); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
-		log.Printf("error setting project old_paths: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update project")
+	if handleProjectSetterError(w, db.SetProjectOldPaths(r.Context(), s.DB, id, body.OldPaths), "old_paths") {
 		return
 	}
 
@@ -258,7 +206,7 @@ func (s *Server) recomputeProjectCoverageAllBranchesWithChangedPatterns(
 		defaultBranch = "main"
 	}
 	branches[defaultBranch] = struct{}{}
-	if repoBranches, err := listRepoBranches(ctx, repoProject.Path, defaultBranch); err == nil {
+	if repoBranches, err := s.listRepoBranches(ctx, repoProject.Path, defaultBranch); err == nil {
 		for _, b := range repoBranches {
 			b = strings.TrimSpace(b)
 			if b != "" {
@@ -422,23 +370,11 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.Request) {
-	if !requireJSON(w, r) {
-		return
-	}
-
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "project id is required")
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
-
 	var body struct {
 		IgnoreDiffPaths string `json:"ignoreDiffPaths"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	id := decodeProjectSetterBody(w, r, &body)
+	if id == "" {
 		return
 	}
 
@@ -465,18 +401,12 @@ func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.
 		log.Printf("warning: could not compute changed effective ignore patterns for project %s: %v", id, changedPatternErr)
 	}
 
-	if err := db.SetProjectIgnoreDiffPaths(r.Context(), s.DB, id, body.IgnoreDiffPaths); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
-		log.Printf("error setting project ignore_diff_paths: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update project")
+	if handleProjectSetterError(w, db.SetProjectIgnoreDiffPaths(r.Context(), s.DB, id, body.IgnoreDiffPaths), "ignore_diff_paths") {
 		return
 	}
 
 	if changed {
-		clearCommitDetailCacheForProject(id)
+		s.commitDetailCache.clearProject(id)
 		s.enqueueProjectCoverageRecompute(id, "ignore_diff_paths_changed", changedPatterns)
 	}
 
@@ -484,23 +414,11 @@ func (s *Server) handleSetProjectIgnoreDiffPaths(w http.ResponseWriter, r *http.
 }
 
 func (s *Server) handleSetProjectIgnoreDefaultDiffPaths(w http.ResponseWriter, r *http.Request) {
-	if !requireJSON(w, r) {
-		return
-	}
-
-	id := r.PathValue("id")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, "project id is required")
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
-
 	var body struct {
 		IgnoreDefaultDiffPaths bool `json:"ignoreDefaultDiffPaths"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	id := decodeProjectSetterBody(w, r, &body)
+	if id == "" {
 		return
 	}
 
@@ -527,18 +445,12 @@ func (s *Server) handleSetProjectIgnoreDefaultDiffPaths(w http.ResponseWriter, r
 		log.Printf("warning: could not compute changed effective ignore patterns for project %s: %v", id, changedPatternErr)
 	}
 
-	if err := db.SetProjectIgnoreDefaultDiffPaths(r.Context(), s.DB, id, body.IgnoreDefaultDiffPaths); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project not found")
-			return
-		}
-		log.Printf("error setting project ignore_default_diff_paths: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update project")
+	if handleProjectSetterError(w, db.SetProjectIgnoreDefaultDiffPaths(r.Context(), s.DB, id, body.IgnoreDefaultDiffPaths), "ignore_default_diff_paths") {
 		return
 	}
 
 	if changed {
-		clearCommitDetailCacheForProject(id)
+		s.commitDetailCache.clearProject(id)
 		s.enqueueProjectCoverageRecompute(id, "ignore_default_diff_paths_changed", changedPatterns)
 	}
 
@@ -546,25 +458,11 @@ func (s *Server) handleSetProjectIgnoreDefaultDiffPaths(w http.ResponseWriter, r
 }
 
 func (s *Server) tryStartProjectCoverageRecompute(projectID string) bool {
-	s.coverageRecomputeMu.Lock()
-	defer s.coverageRecomputeMu.Unlock()
-	if s.coverageRecomputeRunning == nil {
-		s.coverageRecomputeRunning = make(map[string]bool)
-	}
-	if s.coverageRecomputeRunning[projectID] {
-		return false
-	}
-	s.coverageRecomputeRunning[projectID] = true
-	return true
+	return s.coverageJobs.tryStart(projectID)
 }
 
 func (s *Server) finishProjectCoverageRecompute(projectID string) {
-	s.coverageRecomputeMu.Lock()
-	defer s.coverageRecomputeMu.Unlock()
-	if s.coverageRecomputeRunning == nil {
-		return
-	}
-	delete(s.coverageRecomputeRunning, projectID)
+	s.coverageJobs.finish(projectID)
 }
 
 func (s *Server) enqueueProjectCoverageRecompute(projectID, reason string, changedPatterns []string) {

@@ -5,45 +5,10 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
-
-type commitRefreshManager struct {
-	mu      sync.Mutex
-	running map[string]bool
-}
-
-func newCommitRefreshManager() *commitRefreshManager {
-	return &commitRefreshManager{running: make(map[string]bool)}
-}
-
-func (m *commitRefreshManager) tryStart(key string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.running[key] {
-		return false
-	}
-	m.running[key] = true
-	return true
-}
-
-func (m *commitRefreshManager) finish(key string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.running, key)
-}
-
-func (s *Server) refreshManager() *commitRefreshManager {
-	s.refreshMu.Lock()
-	defer s.refreshMu.Unlock()
-	if s.refresher == nil {
-		s.refresher = newCommitRefreshManager()
-	}
-	return s.refresher
-}
 
 func (s *Server) enqueueCommitRefresh(repoProject db.Project, group projectGroup, identity gitIdentity, branch string) (bool, string) {
 	branch = strings.TrimSpace(branch)
@@ -51,8 +16,7 @@ func (s *Server) enqueueCommitRefresh(repoProject db.Project, group projectGroup
 		branch = "main"
 	}
 	key := repoProject.ID + ":" + branch
-	mgr := s.refreshManager()
-	if !mgr.tryStart(key) {
+	if !s.refreshJobs.tryStart(key) {
 		return false, key
 	}
 
@@ -60,17 +24,19 @@ func (s *Server) enqueueCommitRefresh(repoProject db.Project, group projectGroup
 	if c, err := latestCommitByIdentity(context.Background(), repoProject.Path, branch, identity); err == nil && c != nil {
 		head = c.Hash
 	}
-	_ = db.UpsertCommitSyncState(context.Background(), s.DB, db.CommitSyncState{
+	if err := db.UpsertCommitSyncState(context.Background(), s.DB, db.CommitSyncState{
 		ProjectID:             repoProject.ID,
 		BranchName:            branch,
 		State:                 "queued",
 		LatestKnownHeadHash:   head,
 		LastProcessedHeadHash: "",
 		EstimatedTotalCommits: 0,
-	})
+	}); err != nil {
+		log.Printf("warning: commit sync state upsert (queued) failed: %v", err)
+	}
 
 	go func() {
-		defer mgr.finish(key)
+		defer s.refreshJobs.finish(key)
 		s.runCommitRefresh(repoProject, group, identity, branch)
 	}()
 
@@ -86,14 +52,16 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 	if c, err := latestCommitByIdentity(ctx, repoProject.Path, branch, identity); err == nil && c != nil {
 		head = c.Hash
 	}
-	_ = db.UpsertCommitSyncState(ctx, s.DB, db.CommitSyncState{
+	if err := db.UpsertCommitSyncState(ctx, s.DB, db.CommitSyncState{
 		ProjectID:             repoProject.ID,
 		BranchName:            branch,
 		State:                 "running",
 		LatestKnownHeadHash:   head,
 		LastProcessedHeadHash: "",
 		LastStartedAtMs:       startedAt,
-	})
+	}); err != nil {
+		log.Printf("warning: commit sync state upsert (running) failed: %v", err)
+	}
 
 	err := IngestDefaultCommits(ctx, s.DB, &repoProject, group, identity, branch)
 	if err == nil {
@@ -152,7 +120,7 @@ type refreshCommitsResponse struct {
 func (s *Server) handleRefreshProjectCommits(w http.ResponseWriter, r *http.Request) {
 	projectID := strings.TrimSpace(r.PathValue("projectId"))
 	if projectID == "" {
-		writeError(w, 400, "project id is required")
+		writeError(w, http.StatusBadRequest, "project id is required")
 		return
 	}
 
@@ -160,11 +128,11 @@ func (s *Server) handleRefreshProjectCommits(w http.ResponseWriter, r *http.Requ
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
 		log.Printf("error loading project %s: %v", projectID, err)
-		writeError(w, 500, "failed to load project")
+		writeError(w, http.StatusInternalServerError, "failed to load project")
 		return
 	}
 	if project == nil {
-		writeError(w, 404, "project not found")
+		writeError(w, http.StatusNotFound, "project not found")
 		return
 	}
 	if branch == "" {
@@ -176,27 +144,27 @@ func (s *Server) handleRefreshProjectCommits(w http.ResponseWriter, r *http.Requ
 
 	groups, err := listAllProjectGroups(r.Context(), s.DB)
 	if err != nil {
-		writeError(w, 500, "failed to list projects")
+		writeError(w, http.StatusInternalServerError, "failed to list projects")
 		return
 	}
 	group, ok := findProjectGroupByProjectID(groups, project.ID)
 	if !ok {
-		writeError(w, 404, "project group not found")
+		writeError(w, http.StatusNotFound, "project group not found")
 		return
 	}
 	repoProject, err := resolveRepoProject(r.Context(), group)
 	if err != nil {
-		writeError(w, 404, "repository for project not found")
+		writeError(w, http.StatusNotFound, "repository for project not found")
 		return
 	}
 	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
 	if err != nil {
-		writeError(w, 404, "git identity not configured for project")
+		writeError(w, http.StatusNotFound, "git identity not configured for project")
 		return
 	}
 
 	queued, jobID := s.enqueueCommitRefresh(*repoProject, group, identity, branch)
-	writeSuccess(w, 200, refreshCommitsResponse{
+	writeSuccess(w, http.StatusOK, refreshCommitsResponse{
 		Queued: queued,
 		JobID:  jobID,
 		Branch: branch,
