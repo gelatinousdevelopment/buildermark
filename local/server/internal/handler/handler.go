@@ -70,7 +70,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commit-conversation-links", s.handleGetCommitConversationLinks)
 	mux.HandleFunc("POST /api/v1/history/scan", s.handleHistoryScan)
 	mux.HandleFunc("GET /api/v1/settings", s.handleGetLocalSettings)
-	mux.HandleFunc("GET /", s.handleDashboard)
+
+	if frontendFS := embeddedFrontendFS(); frontendFS != nil {
+		// Serve the embedded SPA for all non-API routes
+		mux.Handle("GET /", spaFileServer(frontendFS, "200.html"))
+	} else {
+		mux.HandleFunc("GET /", s.handleDashboard)
+	}
+
 	return corsMiddleware(securityHeadersMiddleware(mux))
 }
 

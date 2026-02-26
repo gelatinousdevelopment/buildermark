@@ -19,7 +19,15 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/web/server/internal/handler"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
+
 	defaultDB := "../../.data/local.db"
 	if env := os.Getenv("BUILDERMARK_LOCAL_DB_PATH"); env != "" {
 		defaultDB = env
@@ -28,6 +36,11 @@ func main() {
 	dbPath := flag.String("db", defaultDB, "path to SQLite database file")
 	addr := flag.String("addr", ":7022", "listen address")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("buildermark %s (commit: %s, built: %s)\n", version, commit, date)
+		os.Exit(0)
+	}
 
 	database, err := db.InitDB(*dbPath)
 	if err != nil {

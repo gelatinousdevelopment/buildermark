@@ -1,0 +1,67 @@
+version: 2
+
+project_name: buildermark
+
+before:
+  hooks:
+    - cmd: bash ../../apps/homebrew/build-frontend.sh
+      dir: "{{ .ProjectDir }}"
+
+builds:
+  - id: buildermark
+    dir: local/server
+    main: ./cmd/buildermark
+    binary: buildermark
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - embed_frontend
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: buildermark
+    repository:
+      owner: gelatinousdevelopment
+      name: homebrew-tap
+    homepage: "https://github.com/gelatinousdevelopment/buildermark"
+    description: "Rate and review coding agent developer workflows"
+    license: "MIT"
+    install: |
+      bin.install "buildermark"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/buildermark --version")
+
+release:
+  github:
+    owner: gelatinousdevelopment
+    name: buildermark
+  draft: false
+  prerelease: auto

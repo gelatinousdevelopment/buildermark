@@ -4,3 +4,6 @@
 .playwright-cli
 /*.png
 .zed/debug
+
+# Build output
+dist/
