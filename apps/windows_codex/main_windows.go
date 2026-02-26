@@ -8,15 +8,21 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
+	"github.com/blang/semver"
 	"github.com/lxn/walk"
+	selfupdate "github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
 const (
 	defaultServerExecutable = "buildermark-server.exe"
+	defaultUpdateRepo       = "buildermark/local"
 	localURL                = "http://localhost:7022"
 )
+
+var appVersion = "dev"
 
 type app struct {
 	mw           *walk.MainWindow
@@ -106,6 +112,12 @@ func run() error {
 		a.setStatus(fmt.Sprintf("Status: Error (%v)", err))
 	}
 
+	go func() {
+		if err := a.checkForUpdatesAndApply(); err != nil {
+			fmt.Fprintf(os.Stderr, "auto-update failed: %v\n", err)
+		}
+	}()
+
 	mw.Run()
 	return nil
 }
@@ -192,6 +204,54 @@ func (a *app) startServer() error {
 	}()
 
 	return nil
+}
+
+func (a *app) checkForUpdatesAndApply() error {
+	if appVersion == "" || strings.EqualFold(appVersion, "dev") {
+		return nil
+	}
+
+	currentVersion, err := semver.Parse(strings.TrimPrefix(appVersion, "v"))
+	if err != nil {
+		return fmt.Errorf("parse app version %q: %w", appVersion, err)
+	}
+
+	repo := os.Getenv("BUILDERMARK_UPDATE_REPO")
+	if repo == "" {
+		repo = defaultUpdateRepo
+	}
+
+	latest, found, err := selfupdate.DetectLatest(repo)
+	if err != nil {
+		return err
+	}
+	if !found || !latest.Version.GT(currentVersion) {
+		return nil
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	if err := selfupdate.UpdateTo(latest.AssetURL, exePath); err != nil {
+		return err
+	}
+
+	a.restart()
+	return nil
+}
+
+func (a *app) restart() {
+	exePath, err := os.Executable()
+	if err == nil {
+		restartCmd := exec.Command(exePath)
+		restartCmd.Dir = filepath.Dir(exePath)
+		_ = restartCmd.Start()
+	}
+
+	a.stopServer()
+	walk.App().Exit(0)
 }
 
 func (a *app) stopServer() {
