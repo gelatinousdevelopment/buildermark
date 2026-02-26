@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -32,6 +33,8 @@ type Server struct {
 
 	ws       *wsHub
 	importMu sync.Mutex // guards against concurrent imports
+
+	vacuumFn func(context.Context, *sql.DB) error
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.

@@ -3,7 +3,9 @@ package handler
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -315,4 +317,165 @@ func TestHistoryScanConflict(t *testing.T) {
 	}
 
 	s.importMu.Unlock()
+}
+
+func TestHistoryScanDeletesConversationsAndMessagesByWindow(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/test-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-old", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation conv-old: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-recent", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation conv-recent: %v", err)
+	}
+
+	nowMs := time.Now().UnixMilli()
+	oldTs := nowMs - int64((14*24*time.Hour)/time.Millisecond)
+	recentTs := nowMs - int64((2*24*time.Hour)/time.Millisecond)
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: oldTs, ProjectID: projectID, ConversationID: "conv-old", Role: "user", Content: "old", RawJSON: "{}"},
+		{Timestamp: recentTs, ProjectID: projectID, ConversationID: "conv-recent", Role: "user", Content: "recent", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{"timeframe": "168h"})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+
+	waitForImportUnlock(s)
+
+	var oldCount int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = 'conv-old'").Scan(&oldCount); err != nil {
+		t.Fatalf("count conv-old: %v", err)
+	}
+	if oldCount != 1 {
+		t.Fatalf("conv-old count = %d, want 1", oldCount)
+	}
+	var recentCount int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = 'conv-recent'").Scan(&recentCount); err != nil {
+		t.Fatalf("count conv-recent: %v", err)
+	}
+	if recentCount != 0 {
+		t.Fatalf("conv-recent count = %d, want 0", recentCount)
+	}
+
+	var oldMsg int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'conv-old'").Scan(&oldMsg); err != nil {
+		t.Fatalf("count conv-old messages: %v", err)
+	}
+	if oldMsg != 1 {
+		t.Fatalf("conv-old message count = %d, want 1", oldMsg)
+	}
+	var recentMsg int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'conv-recent'").Scan(&recentMsg); err != nil {
+		t.Fatalf("count conv-recent messages: %v", err)
+	}
+	if recentMsg != 0 {
+		t.Fatalf("conv-recent message count = %d, want 0", recentMsg)
+	}
+}
+
+func TestHistoryScanDoesNotDeleteOtherTables(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/test-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-recent", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	recentTs := time.Now().Add(-2 * 24 * time.Hour).UnixMilli()
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: recentTs, ProjectID: projectID, ConversationID: "conv-recent", Role: "user", Content: "recent", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+	if _, err := db.InsertRating(ctx, s.DB, "conv-recent", 4, "keep", ""); err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+	if err := db.UpsertCommit(ctx, s.DB, db.Commit{
+		ProjectID:   projectID,
+		BranchName:  "main",
+		CommitHash:  "abc123",
+		Subject:     "subject",
+		DiffContent: "diff --git a/a b/a",
+	}); err != nil {
+		t.Fatalf("UpsertCommit: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{"timeframe": "168h"})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+	waitForImportUnlock(s)
+
+	var ratingCount int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM ratings").Scan(&ratingCount); err != nil {
+		t.Fatalf("count ratings: %v", err)
+	}
+	if ratingCount != 1 {
+		t.Fatalf("ratings count = %d, want 1", ratingCount)
+	}
+	var commitCount int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM commits").Scan(&commitCount); err != nil {
+		t.Fatalf("count commits: %v", err)
+	}
+	if commitCount != 1 {
+		t.Fatalf("commits count = %d, want 1", commitCount)
+	}
+	var projectCount int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM projects").Scan(&projectCount); err != nil {
+		t.Fatalf("count projects: %v", err)
+	}
+	if projectCount != 1 {
+		t.Fatalf("projects count = %d, want 1", projectCount)
+	}
+}
+
+func TestHistoryScanVacuumFailureDoesNotAbort(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	s.vacuumFn = func(ctx context.Context, database *sql.DB) error {
+		_ = ctx
+		_ = database
+		return errors.New("vacuum failed")
+	}
+	addTestProject(t, s, "/tmp/test-project")
+	handler := s.Routes()
+
+	body, _ := json.Marshal(map[string]any{"timeframe": "168h"})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+	waitForImportUnlock(s)
+
+	_, scanPathsCount, _, _ := w.snapshot()
+	if scanPathsCount != 1 {
+		t.Fatalf("watcher scanPathsCount = %d, want 1", scanPathsCount)
+	}
 }
