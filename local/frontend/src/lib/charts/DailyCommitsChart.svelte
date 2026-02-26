@@ -15,6 +15,7 @@
 		compact?: boolean;
 		selectedDate?: string | null;
 		onDateSelect?: (date: string | null) => void;
+		enableDateSelection?: boolean;
 	}
 
 	let {
@@ -23,13 +24,19 @@
 		projectId,
 		compact = false,
 		selectedDate = null,
-		onDateSelect
+		onDateSelect,
+		enableDateSelection = true
 	}: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
+	let stretchBars = $derived(settingsStore.commitsChartStretchBars);
 	const popoverId = `dc-menu-${Math.random().toString(36).slice(2, 8)}`;
+	const DEFAULT_BAR_GAP_PX = 1;
+	const FIXED_BAR_WIDTH_PX = 18;
 	let menuBtn: HTMLButtonElement | undefined;
 	let menuBody: HTMLDivElement | undefined;
 	let scrollWrap: HTMLDivElement | undefined;
+	let chartEl: HTMLDivElement | undefined;
+	let chartWidth = $state(0);
 	let lastAutoScrollKey = '';
 
 	interface Segment {
@@ -192,6 +199,11 @@
 		return String(d);
 	}
 
+	function isMonthBoundary(dateStr: string): boolean {
+		const [, , d] = dateStr.split('-').map(Number);
+		return d === 1;
+	}
+
 	function formatKeyPercent(percent: number): string {
 		if (percent < 1 || (percent > 99 && percent < 100)) {
 			return `${percent.toFixed(1)}%`;
@@ -221,6 +233,35 @@
 		menuBody.style.top = `${rect.bottom + 4}px`;
 		menuBody.style.left = `${rect.left}px`;
 	}
+
+	const denseBars = $derived.by(() => {
+		if (!stretchBars || columns.length <= 0) return false;
+		const totalGapWidth = Math.max(0, columns.length - 1) * DEFAULT_BAR_GAP_PX;
+		const widthWithDefaultGap = Math.max(0, (chartWidth - totalGapWidth) / columns.length);
+		return widthWithDefaultGap <= 12;
+	});
+
+	const barGapPx = $derived(denseBars ? 0 : DEFAULT_BAR_GAP_PX);
+
+	const effectiveBarWidth = $derived.by(() => {
+		if (!stretchBars || columns.length <= 0) return FIXED_BAR_WIDTH_PX;
+		const totalGapWidth = Math.max(0, columns.length - 1) * barGapPx;
+		return Math.max(0, (chartWidth - totalGapWidth) / columns.length);
+	});
+
+	const showDayNumbers = $derived(!denseBars && effectiveBarWidth > 12);
+
+	$effect(() => {
+		if (!stretchBars || !chartEl) return;
+		const updateWidth = () => {
+			if (!chartEl) return;
+			chartWidth = chartEl.clientWidth;
+		};
+		updateWidth();
+		const observer = new ResizeObserver(updateWidth);
+		observer.observe(chartEl);
+		return () => observer.disconnect();
+	});
 </script>
 
 <div class="dc-layout" class:compact>
@@ -233,7 +274,7 @@
 		>
 			<Icon name="chevronRight" width="12px" />
 		</button>
-		{#if selectedDate && onDateSelect}
+		{#if enableDateSelection && selectedDate && onDateSelect}
 			<button
 				class="dc-clear-btn"
 				aria-label="Clear date filter"
@@ -260,17 +301,32 @@
 				/>
 				Scale bars by line count
 			</label>
+			<label class="dc-menu-option">
+				<input
+					type="checkbox"
+					checked={settingsStore.commitsChartStretchBars}
+					onchange={(e) =>
+						(settingsStore.commitsChartStretchBars = (e.currentTarget as HTMLInputElement).checked)}
+				/>
+				Stretch bars to fit width
+			</label>
 		</div>
 		<div class="dc-wrap" bind:this={scrollWrap}>
-			<div class="dc-chart">
+			<div
+				class="dc-chart"
+				class:dc-chart-stretch={stretchBars}
+				style={`--dc-cols:${Math.max(columns.length, 1)};--dc-gap:${barGapPx}px;--dc-seg-gap:${barGapPx}px`}
+				bind:this={chartEl}
+			>
 				{#each columns as col (col.date)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						class="dc-col"
+						class:dc-col-clickable={enableDateSelection && !!onDateSelect}
 						class:dc-col-selected={selectedDate === col.date}
 						onclick={() => {
-							if (onDateSelect) {
+							if (enableDateSelection && onDateSelect) {
 								onDateSelect(selectedDate === col.date ? null : col.date);
 							}
 						}}
@@ -325,7 +381,9 @@
 							{/if}
 						</div>
 						<div class="dc-date">
-							{formatDateLabel(col.date)}
+							{#if isMonthBoundary(col.date) || showDayNumbers}
+								{formatDateLabel(col.date)}
+							{/if}
 						</div>
 					</div>
 				{/each}
@@ -372,7 +430,7 @@
 	.dc-chart-area {
 		flex: 1;
 		position: relative;
-		min-width: 0;
+		min-width: 569px;
 	}
 
 	.dc-menu-btn {
@@ -519,19 +577,31 @@
 	}
 
 	.dc-chart {
-		display: inline-flex;
-		gap: 1px;
+		display: inline-grid;
+		grid-auto-flow: column;
+		grid-auto-columns: 18px;
+		column-gap: var(--dc-gap, 1px);
 		align-items: stretch;
 		min-width: max-content;
 	}
 
+	.dc-chart-stretch {
+		display: grid;
+		grid-auto-flow: initial;
+		grid-auto-columns: initial;
+		grid-template-columns: repeat(var(--dc-cols), minmax(0, 1fr));
+		width: 100%;
+		min-width: 0;
+	}
+
 	.dc-col {
-		flex: 0 0 10px;
-		min-width: 18px;
 		display: flex;
 		flex-direction: column;
+		cursor: default;
+	}
+
+	.dc-col-clickable {
 		cursor: pointer;
-		border-radius: 3px;
 	}
 
 	.dc-col-selected {
@@ -545,7 +615,6 @@
 		inset: 0px;
 		content: '';
 		position: absolute;
-		border-radius: 2px;
 		outline: 2px solid var(--accent-color);
 		outline-offset: -1px;
 	}
@@ -562,11 +631,10 @@
 	.dc-bar {
 		width: 100%;
 		height: 100%;
-		border-radius: 2px;
 		overflow: hidden;
 		display: flex;
 		flex-direction: column-reverse;
-		gap: 1px;
+		gap: var(--dc-seg-gap, 1px);
 		background: var(--color-background-empty, #f0f0f0);
 	}
 

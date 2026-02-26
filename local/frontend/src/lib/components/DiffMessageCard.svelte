@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { html as diffToHtml } from 'diff2html';
-	import type { ColorSchemeType } from 'diff2html';
+	import * as Diff2Html from 'diff2html';
 	import 'diff2html/bundles/css/diff2html.min.css';
 	import { fmtTime } from '$lib/utils';
 	import { escapeHtml } from '$lib/messageUtils';
@@ -138,11 +137,11 @@
 		const diffText = extractDiffText(textInput);
 		if (!diffText) return `<pre>${escapeHtml(textInput)}</pre>`;
 		try {
-			return diffToHtml(diffText, {
+			return Diff2Html.html(diffText, {
 				drawFileList: false,
 				matching: 'lines',
 				outputFormat: 'line-by-line',
-				colorScheme: 'auto' as ColorSchemeType
+				colorScheme: 'auto' as never
 			});
 		} catch {
 			return `<pre>${escapeHtml(diffText)}</pre>`;

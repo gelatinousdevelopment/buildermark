@@ -110,7 +110,9 @@
 </div>
 
 <div
-	class="content limited-content-width inset-when-limited-content-width"
+	class:content={!layoutStore.hideContainer}
+	class:limited-content-width={!layoutStore.hideContainer}
+	class:inset-when-limited-content-width={!layoutStore.hideContainer}
 	class:fixed-height={layoutStore.fixedHeight}
 >
 	{@render children()}

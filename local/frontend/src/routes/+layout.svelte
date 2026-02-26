@@ -340,4 +340,12 @@
 	footer:hover .content {
 		opacity: 1;
 	}
+
+	footer a {
+		text-decoration: none;
+	}
+
+	footer a:hover {
+		text-decoration: underline;
+	}
 </style>
