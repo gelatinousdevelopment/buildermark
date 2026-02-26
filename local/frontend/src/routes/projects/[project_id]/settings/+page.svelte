@@ -10,11 +10,14 @@
 		setProjectPath,
 		setProjectOldPaths,
 		setProjectIgnoreDiffPaths,
-		setProjectIgnoreDefaultDiffPaths
+		setProjectIgnoreDefaultDiffPaths,
+		listTeamServers,
+		setProjectTeamServer
 	} from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
-	import type { ProjectDetail } from '$lib/types';
+	import type { ProjectDetail, TeamServer } from '$lib/types';
 	import Icon from '$lib/Icon.svelte';
+	import Dialog from '$lib/Dialog.svelte';
 
 	const defaultPaths = [
 		'**/.git/**',
@@ -53,6 +56,9 @@
 	let error: string | null = $state(null);
 	let notice: string | null = $state(null);
 
+	let teamServers: TeamServer[] = $state([]);
+	let teamServerId = $state('');
+
 	let showDeleteModal = $state(false);
 	let deleteConfirmName = $state('');
 	let deleting = $state(false);
@@ -79,12 +85,15 @@
 	async function load() {
 		const id = page.params.project_id;
 		if (!id) throw new Error('Missing project ID');
-		project = await getProject(id);
+		const [proj, servers] = await Promise.all([getProject(id), listTeamServers()]);
+		project = proj;
+		teamServers = servers;
 		label = project.label ?? '';
 		path = project.path ?? '';
 		oldPaths = project.oldPaths ?? '';
 		ignoreDiffPaths = project.ignoreDiffPaths ?? '';
 		ignoreDefaultDiffPaths = project.ignoreDefaultDiffPaths ?? true;
+		teamServerId = project.teamServerId ?? '';
 	}
 
 	async function save() {
@@ -96,6 +105,7 @@
 		try {
 			if (label) await setProjectLabel(project.id, label);
 			await setProjectPath(project.id, path);
+			await setProjectTeamServer(project.id, teamServerId);
 			await setProjectOldPaths(project.id, oldPaths);
 			await setProjectIgnoreDiffPaths(project.id, ignoreDiffPaths);
 			await setProjectIgnoreDefaultDiffPaths(project.id, ignoreDefaultDiffPaths);
@@ -157,6 +167,14 @@
 			placeholder="/path/to/project"
 			class="mono-input"
 		/>
+
+		<label class="field-label" for="team-server-select">Team Server</label>
+		<select id="team-server-select" bind:value={teamServerId} class="team-server-select">
+			<option value="">None</option>
+			{#each teamServers as server (server.id)}
+				<option value={server.id}>{server.label}</option>
+			{/each}
+		</select>
 
 		<br />
 
@@ -231,43 +249,35 @@
 	{/if}
 </div>
 
-{#if showDeleteModal}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" onkeydown={(e) => e.key === 'Escape' && (showDeleteModal = false)}>
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<div class="modal-backdrop" onclick={() => (showDeleteModal = false)}></div>
-		<div class="modal-dialog">
-			<h3>Delete Project</h3>
-			<p>
-				This will permanently delete <strong>{projectDisplayName}</strong> and all associated data. This
-				action cannot be undone.
-			</p>
-			<label class="field-label" for="delete-confirm">
-				Type <strong>{projectDisplayName}</strong> to confirm:
-			</label>
-			<input
-				id="delete-confirm"
-				type="text"
-				bind:value={deleteConfirmName}
-				placeholder={projectDisplayName}
-				autocomplete="off"
-			/>
-			{#if deleteError}
-				<p class="error">{deleteError}</p>
-			{/if}
-			<div class="modal-actions">
-				<button class="bordered small" onclick={() => (showDeleteModal = false)}>Cancel</button>
-				<button
-					class="btn-danger"
-					disabled={deleteConfirmName !== projectDisplayName || deleting}
-					onclick={confirmDeleteProject}
-				>
-					{deleting ? 'Deleting...' : 'Delete Project'}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<Dialog open={showDeleteModal} title="Delete Project" onclose={() => (showDeleteModal = false)}>
+	<p>
+		This will permanently delete <strong>{projectDisplayName}</strong> and all associated data. This action
+		cannot be undone.
+	</p>
+	<label for="delete-confirm">
+		Type <strong>{projectDisplayName}</strong> to confirm:
+	</label>
+	<input
+		id="delete-confirm"
+		type="text"
+		bind:value={deleteConfirmName}
+		placeholder={projectDisplayName}
+		autocomplete="off"
+	/>
+	{#if deleteError}
+		<p class="error">{deleteError}</p>
+	{/if}
+	{#snippet actions()}
+		<button class="bordered small" onclick={() => (showDeleteModal = false)}>Cancel</button>
+		<button
+			class="btn-danger"
+			disabled={deleteConfirmName !== projectDisplayName || deleting}
+			onclick={confirmDeleteProject}
+		>
+			{deleting ? 'Deleting...' : 'Delete Project'}
+		</button>
+	{/snippet}
+</Dialog>
 
 <style>
 	.page {
@@ -347,6 +357,17 @@
 		font-size: 0.9rem;
 	}
 
+	.team-server-select {
+		padding: 0.4rem 0.6rem;
+		font-size: 1rem;
+		border: 1px solid var(--color-border-input);
+		background: var(--color-background-surface);
+		color: var(--color-text);
+		border-radius: 4px;
+		min-width: 200px;
+		margin-bottom: 1rem;
+	}
+
 	textarea {
 		width: 100%;
 		max-width: 100%;
@@ -417,59 +438,5 @@
 	.btn-danger:disabled {
 		opacity: 0.5;
 		cursor: default;
-	}
-
-	.modal-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 1000;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.modal-backdrop {
-		position: absolute;
-		inset: 0;
-		background: var(--color-modal-backdrop);
-	}
-
-	.modal-dialog {
-		position: relative;
-		background: var(--color-modal-bg);
-		border-radius: 8px;
-		padding: 1.5rem;
-		max-width: 440px;
-		width: 90%;
-		box-shadow: 0 4px 24px var(--color-popover-shadow);
-	}
-
-	.modal-dialog h3 {
-		margin: 0 0 0.75rem;
-		font-size: 1.1rem;
-	}
-
-	.modal-dialog p {
-		margin: 0 0 0.75rem;
-		font-size: 0.9rem;
-		line-height: 1.45;
-	}
-
-	.modal-dialog input {
-		width: 100%;
-		padding: 0.4rem 0.6rem;
-		font-size: 1rem;
-		border: 1px solid var(--color-border-input);
-		background: var(--color-background-surface);
-		color: var(--color-text);
-		border-radius: 4px;
-		box-sizing: border-box;
-	}
-
-	.modal-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
-		margin-top: 1rem;
 	}
 </style>

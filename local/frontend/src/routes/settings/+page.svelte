@@ -5,6 +5,7 @@
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import { settingsStore, type ContentWidth } from '$lib/stores/settings.svelte';
 	import type { LocalSettings, Project } from '$lib/types';
+	import TeamServersSection from '$lib/TeamServersSection.svelte';
 
 	const contentWidthOptions: { value: ContentWidth; label: string; description: string }[] = [
 		{ value: 'default', label: 'Default', description: '1540px' },
@@ -128,6 +129,8 @@
 				{/each}
 			</fieldset>
 		</div>
+
+		<TeamServersSection />
 
 		<div class="tracking-section">
 			<h2>Tracked Projects</h2>

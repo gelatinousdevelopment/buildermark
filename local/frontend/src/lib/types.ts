@@ -9,6 +9,14 @@ export interface Project {
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
+	teamServerId: string;
+}
+
+export interface TeamServer {
+	id: string;
+	label: string;
+	url: string;
+	apiKey: string;
 }
 
 export interface AgentConversationSearchPath {
@@ -38,6 +46,7 @@ export interface ProjectDetail {
 	ignored: boolean;
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
+	teamServerId: string;
 	agents: string[];
 	conversationPagination: ConversationPagination;
 	conversations: ConversationWithRatings[];

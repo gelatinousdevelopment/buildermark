@@ -3,6 +3,7 @@ import type {
 	Project,
 	LocalSettings,
 	ProjectDetail,
+	TeamServer,
 	Conversation,
 	ConversationDetail,
 	ConversationBatchDetail,
@@ -285,6 +286,43 @@ export function importProjects(
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ paths, historyDays })
+	});
+}
+
+export function listTeamServers(): Promise<TeamServer[]> {
+	return api('/api/v1/team-servers');
+}
+
+export function createTeamServer(label: string, url: string, apiKey: string): Promise<TeamServer> {
+	return api('/api/v1/team-servers', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ label, url, apiKey })
+	});
+}
+
+export function updateTeamServer(
+	id: string,
+	label: string,
+	url: string,
+	apiKey: string
+): Promise<void> {
+	return api(`/api/v1/team-servers/${id}`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ label, url, apiKey })
+	});
+}
+
+export function deleteTeamServer(id: string): Promise<void> {
+	return api(`/api/v1/team-servers/${id}`, { method: 'DELETE' });
+}
+
+export function setProjectTeamServer(id: string, teamServerId: string): Promise<void> {
+	return api(`/api/v1/projects/${id}/team-server`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ teamServerId })
 	});
 }
 

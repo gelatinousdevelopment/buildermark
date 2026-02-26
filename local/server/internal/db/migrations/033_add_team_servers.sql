@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS team_servers (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    api_key TEXT NOT NULL DEFAULT ''
+);
+
+ALTER TABLE projects ADD COLUMN team_server_id TEXT NOT NULL DEFAULT '';
