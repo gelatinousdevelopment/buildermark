@@ -4,8 +4,15 @@
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
+	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
+	import { dateStringToUnixMsRange } from '$lib/utils';
 
 	const projectId = $derived(page.params.project_id ?? '');
+	const selectedDate = $derived(projectDateFilterStore.selectedDate);
+	const dateRange = $derived.by(() => {
+		if (!selectedDate) return null;
+		return dateStringToUnixMsRange(selectedDate);
+	});
 
 	let loadedCommitHashes: string[] = $state([]);
 	let loadedConversationIds: string[] = $state([]);
@@ -43,6 +50,8 @@
 			showRatingsColumn={true}
 			enableRelationshipHover={true}
 			onConversationsLoaded={handleConversationsLoaded}
+			start={dateRange?.from}
+			end={dateRange?.to}
 		/>
 		<div class="more">
 			<a
@@ -65,6 +74,8 @@
 			showDate={true}
 			enableRelationshipHover={true}
 			onCommitsLoaded={handleCommitsLoaded}
+			start={dateRange?.from}
+			end={dateRange?.to}
 		/>
 		<div class="more">
 			<a

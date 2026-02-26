@@ -14,7 +14,7 @@
 	--color-divider: light-dark(#bbb, #3a3a3e);
 	--color-border-light: light-dark(#eee, #333);
 	--color-border-medium: light-dark(#ccc, #444);
-	--color-border-input: light-dark(#ccc, #555);
+	--color-border-input: light-dark(#aaa, #666);
 	--color-status-green: light-dark(#55bb33, #55bb33);
 	--color-status-yellow: light-dark(#f8d233, #f8d233);
 	--color-status-red: light-dark(#dd5555, #dd5555);
@@ -322,6 +322,75 @@ table.data td a {
 
 table.data td a:hover {
 	text-decoration: underline;
+}
+
+/* Filters */
+
+.filters {
+	align-items: center;
+	display: flex;
+	flex-direction: row;
+	gap: 1.5rem;
+}
+
+.filters .filter-picker {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.filters .filter-picker select {
+	font-size: 0.85rem;
+	padding: 0.2rem 0.4rem;
+	background: var(--color-background-elevated);
+	border: 0.5px solid var(--color-border-input);
+	border-radius: 4px;
+	min-width: 100px;
+}
+
+.filters .toggle-label {
+	align-items: center;
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	cursor: pointer;
+	user-select: none;
+	font-size: 0.85rem;
+}
+
+.filters .date-picker {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.filters .date-picker input[type='date'] {
+	font-size: 0.85rem;
+	padding: 0.2rem 0.4rem;
+	border: 0.5px solid var(--color-border-input);
+	border-radius: 4px;
+	background: var(--color-background-elevated);
+	color: var(--color-text);
+}
+
+.filters .clear-date {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border: 0.5px solid var(--color-border-input);
+	border-radius: 4px;
+	background: var(--color-background-elevated);
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+	color: var(--color-text-secondary);
+}
+
+.filters .clear-date:hover {
+	background: var(--color-background-surface);
 }
 
 /* Utilities */

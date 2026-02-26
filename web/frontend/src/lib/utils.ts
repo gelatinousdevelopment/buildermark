@@ -103,6 +103,13 @@ export function formatFullDateTitle(unixMs: number): string {
 	});
 }
 
+export function dateStringToUnixMsRange(dateStr: string): { from: number; to: number } {
+	const [y, m, d] = dateStr.split('-').map(Number);
+	const start = new Date(y, m - 1, d);
+	const next = new Date(y, m - 1, d + 1);
+	return { from: start.getTime(), to: next.getTime() };
+}
+
 type ParsedRemote = {
 	domain: string;
 	owner: string;

@@ -712,6 +712,19 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	agentFilter := strings.TrimSpace(r.URL.Query().Get("agent"))
 	searchTerm := strings.TrimSpace(r.URL.Query().Get("search"))
 
+	// Optional date range filter (unix ms).
+	var dateFromSec, dateToSec int64
+	if raw := strings.TrimSpace(r.URL.Query().Get("start")); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			dateFromSec = v / 1000
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("end")); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			dateToSec = v / 1000
+		}
+	}
+
 	project, err := getProjectByID(r.Context(), s.DB, projectID)
 	if err != nil {
 		log.Printf("error loading project %s: %v", projectID, err)
@@ -894,13 +907,46 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		userEmailSet[strings.ToLower(e)] = true
 	}
 
-	// Filter to only commits on this branch.
+	// Filter to only commits on this branch (and optional date range).
 	var branchCommits []db.Commit
 	for _, c := range allProjectCommits {
 		if hashSet[c.CommitHash] {
 			if len(userEmails) == 0 || userEmailSet[strings.ToLower(c.UserEmail)] {
+				if dateFromSec > 0 && c.AuthoredAt < dateFromSec {
+					continue
+				}
+				if dateToSec > 0 && c.AuthoredAt >= dateToSec {
+					continue
+				}
 				branchCommits = append(branchCommits, c)
 			}
+		}
+	}
+
+	// When a date filter is active, recompute pagination from date-filtered branchCommits.
+	if dateFromSec > 0 || dateToSec > 0 {
+		filteredTotal = len(branchCommits)
+		totalPages = 0
+		if filteredTotal > 0 {
+			totalPages = (filteredTotal + pageSize - 1) / pageSize
+		}
+		if totalPages > 0 && page > totalPages {
+			page = totalPages
+		}
+		offset = (page - 1) * pageSize
+		if offset < 0 {
+			offset = 0
+		}
+		// Re-query page from date-filtered hashes.
+		dateFilteredHashes := make([]string, 0, len(branchCommits))
+		for _, c := range branchCommits {
+			dateFilteredHashes = append(dateFilteredHashes, c.CommitHash)
+		}
+		dbCommits, err = db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, dateFilteredHashes, nil, pageSize, offset)
+		if err != nil {
+			log.Printf("error listing date-filtered commits for %s: %v", repoProject.Path, err)
+			writeError(w, http.StatusInternalServerError, "failed to list commits")
+			return
 		}
 	}
 

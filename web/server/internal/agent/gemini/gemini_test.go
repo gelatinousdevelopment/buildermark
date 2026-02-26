@@ -150,6 +150,44 @@ func TestWatcherProcessSessionFile(t *testing.T) {
 	}
 }
 
+func TestWatcherScanSinceUsesMessageTimestampsEvenWhenFileMtimeIsOld(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	hash := "stale-mtime-hash"
+	sessionID := "scan-since-stale-mtime"
+	now := time.Now().UTC()
+
+	convPath := filepath.Join(tmpDir, hash, "chats", "session-2026-02-12T12-00-stale.json")
+	writeConversationFile(t, convPath, map[string]any{
+		"sessionId":   sessionID,
+		"projectHash": hash,
+		"directories": []string{"/proj/gemini"},
+		"messages": []map[string]any{
+			{
+				"id":        "m1",
+				"timestamp": now.Add(-2 * time.Hour).Format(time.RFC3339Nano),
+				"type":      "user",
+				"content":   "recent within window",
+			},
+		},
+	})
+
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(convPath, oldTime, oldTime); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+
+	a := newAgent(database, tmpDir, tmpDir)
+	n := a.ScanSince(context.Background(), time.Now().Add(-24*time.Hour), nil)
+	if n != 1 {
+		t.Fatalf("ScanSince processed %d files, want 1", n)
+	}
+
+	if got := countRows(t, database, "messages"); got != 1 {
+		t.Fatalf("messages: got %d, want 1", got)
+	}
+}
+
 func TestWatcherDetectsNestedConversationModel(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

@@ -6,6 +6,7 @@
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
+	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
 
 	let { children } = $props();
 
@@ -19,6 +20,7 @@
 		try {
 			const projectId = page.params.project_id;
 			if (!projectId) throw new Error('Missing project ID');
+			projectDateFilterStore.setProjectId(projectId);
 			navStore.projectName = navStore.getCachedLabel(projectId) ?? null;
 			project = await getProject(projectId);
 			const label = project.label || project.path;
@@ -63,6 +65,10 @@
 						{branch}
 						projectId={page.params.project_id}
 						compact={false}
+						selectedDate={projectDateFilterStore.selectedDate}
+						onDateSelect={(date) => {
+							projectDateFilterStore.selectedDate = date;
+						}}
 					/>
 				{/if}
 			</div>

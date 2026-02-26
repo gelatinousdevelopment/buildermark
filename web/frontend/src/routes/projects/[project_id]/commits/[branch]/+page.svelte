@@ -29,6 +29,7 @@
 		showBranchPicker={true}
 		showUserPicker={true}
 		showAgentPicker={true}
+		showDateFilter={true}
 		showCoverageBar={true}
 		showPagination={true}
 		showLoadMore={true}

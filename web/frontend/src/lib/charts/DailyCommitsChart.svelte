@@ -13,9 +13,18 @@
 		branch: string;
 		projectId?: string;
 		compact?: boolean;
+		selectedDate?: string | null;
+		onDateSelect?: (date: string | null) => void;
 	}
 
-	let { dailySummary, branch, projectId, compact = false }: Props = $props();
+	let {
+		dailySummary,
+		branch,
+		projectId,
+		compact = false,
+		selectedDate = null,
+		onDateSelect
+	}: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
 	const popoverId = `dc-menu-${Math.random().toString(36).slice(2, 8)}`;
 	let menuBtn: HTMLButtonElement | undefined;
@@ -224,6 +233,13 @@
 		>
 			<Icon name="chevronRight" width="12px" />
 		</button>
+		{#if selectedDate && onDateSelect}
+			<button
+				class="dc-clear-btn"
+				aria-label="Clear date filter"
+				onclick={() => onDateSelect?.(null)}>Clear Selection</button
+			>
+		{/if}
 		<div
 			id={popoverId}
 			class="dc-menu-body"
@@ -248,7 +264,17 @@
 		<div class="dc-wrap" bind:this={scrollWrap}>
 			<div class="dc-chart">
 				{#each columns as col (col.date)}
-					<div class="dc-col">
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="dc-col"
+						class:dc-col-selected={selectedDate === col.date}
+						onclick={() => {
+							if (onDateSelect) {
+								onDateSelect(selectedDate === col.date ? null : col.date);
+							}
+						}}
+					>
 						<div class="dc-bar-area">
 							{#if col.total > 0}
 								<Popover position="below" width="200px" padding="0" fixed={true}>
@@ -377,6 +403,29 @@
 		opacity: 1;
 	}
 
+	.dc-clear-btn {
+		position: absolute;
+		top: 6px;
+		left: 28px;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 18px;
+		padding: 0 0.5em;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 4px;
+		background: var(--color-background-elevated);
+		cursor: pointer;
+		font-size: 12px;
+		line-height: 1;
+		color: var(--color-text-secondary);
+	}
+
+	.dc-clear-btn:hover {
+		background: var(--color-background-surface);
+	}
+
 	.dc-menu-body {
 		position: fixed;
 		inset: unset;
@@ -400,10 +449,12 @@
 	}
 
 	.dc-wrap {
+		margin-top: -1px;
 		max-width: 100%;
 		overflow-x: auto;
 		overflow-y: hidden;
 		padding-bottom: 0.25rem;
+		padding-top: 1px;
 	}
 
 	.dc-side {
@@ -479,6 +530,24 @@
 		min-width: 18px;
 		display: flex;
 		flex-direction: column;
+		cursor: pointer;
+		border-radius: 3px;
+	}
+
+	.dc-col-selected {
+		background: var(--color-accent-muted, rgba(59, 130, 246, 0.15));
+		outline: 1.5px solid var(--color-accent, #3b82f6);
+		outline-offset: -1px;
+		position: relative;
+	}
+
+	.dc-col-selected::after {
+		inset: 0px;
+		content: '';
+		position: absolute;
+		border-radius: 2px;
+		outline: 2px solid var(--accent-color);
+		outline-offset: -1px;
 	}
 
 	.dc-bar-area {

@@ -130,7 +130,13 @@ func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter p
 
 // doScan walks the sessions directory and processes files modified after since.
 func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, useCheckpoint bool, progress agent.ScanProgressFunc) int {
-	files := a.listSessionFiles(since)
+	listSince := since
+	if !useCheckpoint {
+		// Manual scans prioritize correctness: inspect all session files and
+		// apply timeframe filtering by event timestamp inside each file.
+		listSince = time.Time{}
+	}
+	files := a.listSessionFiles(listSince)
 	processed := 0
 	projectCache := make(map[string]string)
 	for _, fi := range files {
@@ -151,7 +157,9 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, 
 			}
 		}
 
-		a.processSessionFile(ctx, fi.path, projectCache)
+		if !a.processSessionFileSince(ctx, fi.path, projectCache, since) {
+			continue
+		}
 		if useCheckpoint {
 			_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
 				Agent:       a.Name(),
@@ -343,14 +351,23 @@ func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
 
 // processSessionFile parses a single rollout JSONL file and imports its data.
 func (a *Agent) processSessionFile(ctx context.Context, path string, projectCache map[string]string) {
+	_ = a.processSessionFileSince(ctx, path, projectCache, time.Time{})
+}
+
+func (a *Agent) processSessionFileSince(ctx context.Context, path string, projectCache map[string]string, since time.Time) bool {
 	f, err := os.Open(path)
 	if err != nil {
-		return
+		return false
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+
+	cutoffMs := int64(0)
+	if !since.IsZero() {
+		cutoffMs = since.UnixMilli()
+	}
 
 	var threadID string
 	var workingDir string
@@ -613,6 +630,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 			})
 		}
 	}
+
 	if hasEventMsgUser {
 		for _, i := range responseItemUserIdx {
 			// When explicit user_message events exist, treat response_item user
@@ -622,6 +640,29 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 	}
 	messages = appendDiffDBMessages(messages)
 	normalizeMessageTimestamps(messages)
+	if cutoffMs > 0 {
+		filteredMessages := make([]db.Message, 0, len(messages))
+		for _, m := range messages {
+			if m.Timestamp < cutoffMs {
+				continue
+			}
+			filteredMessages = append(filteredMessages, m)
+		}
+		messages = filteredMessages
+
+		filteredRatings := make([]struct {
+			rating    int
+			note      string
+			timestamp int64
+		}, 0, len(ratingEntries))
+		for _, z := range ratingEntries {
+			if z.timestamp < cutoffMs {
+				continue
+			}
+			filteredRatings = append(filteredRatings, z)
+		}
+		ratingEntries = filteredRatings
+	}
 
 	// Derive thread ID from filename if not found in events.
 	if threadID == "" {
@@ -629,7 +670,10 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 	}
 
 	if threadID == "" || workingDir == "" {
-		return
+		return false
+	}
+	if len(messages) == 0 && len(ratingEntries) == 0 {
+		return false
 	}
 
 	if root, ok := agent.FindGitRoot(workingDir); ok {
@@ -645,7 +689,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 		projectID, err = db.EnsureProject(ctx, a.db, workingDir)
 		if err != nil {
 			log.Printf("codex watcher: ensure project %q: %v", workingDir, err)
-			return
+			return false
 		}
 		if projectCache != nil {
 			projectCache[workingDir] = projectID
@@ -654,7 +698,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 
 	if err := db.EnsureConversation(ctx, a.db, threadID, projectID, a.Name()); err != nil {
 		log.Printf("codex watcher: ensure conversation %s: %v", threadID, err)
-		return
+		return false
 	}
 
 	title := normalizeSummaryTitle(latestReasoningSummary)
@@ -692,6 +736,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string, projectCach
 			log.Printf("codex watcher: reconcile rating for session %s: %v", threadID, err)
 		}
 	}
+	return len(messages) > 0
 }
 
 func summarizeCodexEvent(eventType string, payload json.RawMessage, subtype string) string {

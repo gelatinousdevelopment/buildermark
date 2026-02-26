@@ -52,6 +52,10 @@
 		enableRelationshipHover?: boolean;
 		onConversationsLoaded?: (conversationIds: string[]) => void;
 		searchTerm?: string;
+		start?: number;
+		end?: number;
+		showDateFilter?: boolean;
+		onDateChange?: (start: string | null, end: string | null) => void;
 	}
 
 	let {
@@ -83,7 +87,11 @@
 		initialError = null,
 		enableRelationshipHover = false,
 		onConversationsLoaded = undefined,
-		searchTerm = ''
+		searchTerm = '',
+		start = undefined,
+		end = undefined,
+		showDateFilter = false,
+		onDateChange = undefined
 	}: Props = $props();
 
 	let project: ProjectDetail | null = $state(null);
@@ -93,6 +101,8 @@
 	let internalAgent = $state('');
 	let internalRating = $state(0);
 	let internalShowHidden = $state(false);
+	let internalStart: number | undefined = $state(undefined);
+	let internalEnd: number | undefined = $state(undefined);
 	let detailed = $state(false);
 	let initialized = $state(false);
 	let requestToken = 0;
@@ -134,6 +144,28 @@
 	const selectedAgent = $derived(agent ?? internalAgent);
 	const selectedRating = $derived(rating ?? internalRating);
 	const currentShowHidden = $derived(showHidden ?? internalShowHidden);
+	const effectiveStart = $derived(start ?? internalStart);
+	const effectiveEnd = $derived(end ?? internalEnd);
+
+	// Derive a YYYY-MM-DD string for the date input from the effective start.
+	const dateInputValue = $derived.by(() => {
+		if (!effectiveStart) return '';
+		const d = new Date(effectiveStart);
+		const y = d.getFullYear();
+		const m = String(d.getMonth() + 1).padStart(2, '0');
+		const day = String(d.getDate()).padStart(2, '0');
+		return `${y}-${m}-${day}`;
+	});
+
+	// Reset to page 1 when date filter changes.
+	let lastDateKey = '';
+	$effect(() => {
+		const key = `${effectiveStart}:${effectiveEnd}`;
+		if (lastDateKey && key !== lastDateKey) {
+			internalPage = 1;
+		}
+		lastDateKey = key;
+	});
 	const visibleConversations = $derived.by(() => {
 		const all = project?.conversations ?? [];
 		if (limit > 0) return all.slice(0, limit);
@@ -156,12 +188,20 @@
 		try {
 			const requestedPage = Math.max(1, currentPage);
 			const requestedPageSize = pageSize > 0 ? pageSize : undefined;
-			const filters: { agent?: string; rating?: number; hiddenOnly?: boolean; search?: string } =
-				{};
+			const filters: {
+				agent?: string;
+				rating?: number;
+				hiddenOnly?: boolean;
+				search?: string;
+				start?: number;
+				end?: number;
+			} = {};
 			if (selectedAgent) filters.agent = selectedAgent;
 			if (selectedRating !== 0) filters.rating = selectedRating;
 			if (currentShowHidden) filters.hiddenOnly = true;
 			if (searchTerm.trim()) filters.search = searchTerm.trim();
+			if (effectiveStart) filters.start = effectiveStart;
+			if (effectiveEnd) filters.end = effectiveEnd;
 			const detail = await withOptionalQueue(() =>
 				getProject(projectId, requestedPage, requestedPageSize, undefined, filters)
 			);
@@ -183,7 +223,7 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${currentShowHidden}:${searchTerm}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${currentShowHidden}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadProjectData();
@@ -255,6 +295,36 @@
 			onHiddenChange(value);
 		}
 	}
+
+	function handleDateFilterChange(event: Event) {
+		const value = (event.currentTarget as HTMLInputElement).value;
+		if (value) {
+			const [y, m, d] = value.split('-').map(Number);
+			const dayStart = new Date(y, m - 1, d);
+			const dayEnd = new Date(y, m - 1, d + 1);
+			internalStart = dayStart.getTime();
+			internalEnd = dayEnd.getTime();
+			if (onDateChange) {
+				onDateChange(dayStart.toISOString(), dayEnd.toISOString());
+			}
+		} else {
+			internalStart = undefined;
+			internalEnd = undefined;
+			if (onDateChange) {
+				onDateChange(null, null);
+			}
+		}
+		internalPage = 1;
+	}
+
+	function clearDateFilter() {
+		internalStart = undefined;
+		internalEnd = undefined;
+		if (onDateChange) {
+			onDateChange(null, null);
+		}
+		internalPage = 1;
+	}
 </script>
 
 {#if showHeader}
@@ -264,18 +334,31 @@
 {#if showFilters}
 	<div class="top-row">
 		<div class="filters">
-			{#if project?.agents && project.agents.length > 1}
-				<div class="filter-picker">
-					<!-- <label for="agent-{projectId}">Agent:</label> -->
-					<select id="agent-{projectId}" value={selectedAgent} onchange={handleAgentChange}>
-						<option value="">All Agents</option>
-						<hr />
+			{#if showDateFilter}
+				<div class="date-picker">
+					<input type="date" value={dateInputValue} onchange={handleDateFilterChange} />
+					{#if effectiveStart}
+						<button class="clear-date" onclick={clearDateFilter}>×</button>
+					{/if}
+				</div>
+			{/if}
+			<div class="filter-picker">
+				<!-- <label for="agent-{projectId}">Agent:</label> -->
+				<select
+					id="agent-{projectId}"
+					value={selectedAgent}
+					onchange={handleAgentChange}
+					disabled={!(project?.agents && project.agents.length > 1)}
+				>
+					<option value="">All Agents</option>
+					<hr />
+					{#if project?.agents}
 						{#each project.agents as a (a)}
 							<option value={a}>{a}</option>
 						{/each}
-					</select>
-				</div>
-			{/if}
+					{/if}
+				</select>
+			</div>
 			<div class="filter-picker">
 				<!-- <label for="rating-{projectId}">Rating:</label> -->
 				<select id="rating-{projectId}" value={selectedRating} onchange={handleRatingChange}>
@@ -477,37 +560,6 @@
 		.top-row {
 			flex-direction: column-reverse;
 		}
-	}
-
-	.filters {
-		align-items: center;
-		display: flex;
-		flex-direction: row;
-		gap: 1.5rem;
-	}
-
-	.filter-picker {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-
-	.filter-picker select {
-		min-width: 100px;
-	}
-
-	/*.filter-picker label {
-		text-align: right;
-		width: auto;
-	}*/
-
-	.toggle-label {
-		align-items: center;
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		cursor: pointer;
-		user-select: none;
 	}
 
 	.message {

@@ -91,7 +91,14 @@ export function getProject(
 	page?: number,
 	pageSize?: number,
 	fetchFn?: APIFetch,
-	filters?: { agent?: string; rating?: number; hiddenOnly?: boolean; search?: string }
+	filters?: {
+		agent?: string;
+		rating?: number;
+		hiddenOnly?: boolean;
+		search?: string;
+		start?: number;
+		end?: number;
+	}
 ): Promise<ProjectDetail> {
 	const params = new URLSearchParams();
 	if (page !== undefined) params.set('page', String(page));
@@ -101,6 +108,8 @@ export function getProject(
 		params.set('rating', String(filters.rating));
 	if (filters?.hiddenOnly) params.set('hidden', 'true');
 	if (filters?.search) params.set('search', filters.search);
+	if (filters?.start) params.set('start', String(filters.start));
+	if (filters?.end) params.set('end', String(filters.end));
 	const q = params.size > 0 ? `?${params.toString()}` : '';
 	return api(`/api/v1/projects/${id}${q}`, undefined, fetchFn);
 }
@@ -190,13 +199,17 @@ export function listProjectCommitsPage(
 	pageSize = 10,
 	user = '',
 	agent = '',
-	search = ''
+	search = '',
+	start?: number,
+	end?: number
 ): Promise<ProjectCommitPageResponse> {
 	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 	if (branch) params.set('branch', branch);
 	if (user) params.set('user', user);
 	if (agent) params.set('agent', agent);
 	if (search) params.set('search', search);
+	if (start) params.set('start', String(start));
+	if (end) params.set('end', String(end));
 	params.set('tzOffset', String(new Date().getTimezoneOffset()));
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }

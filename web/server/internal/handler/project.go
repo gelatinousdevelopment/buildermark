@@ -368,6 +368,16 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 			filters.Rating = v
 		}
 	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("start")); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			filters.DateFrom = v
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("end")); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			filters.DateTo = v
+		}
+	}
 
 	project, err := db.GetProjectDetailPage(r.Context(), s.DB, id, page, pageSize, filters)
 	if err != nil {

@@ -21,6 +21,19 @@
 	});
 	const currentHidden = $derived(page.url.searchParams.get('hidden') === 'true');
 
+	const startMs = $derived.by(() => {
+		const raw = page.url.searchParams.get('start');
+		if (!raw) return undefined;
+		const t = new Date(raw).getTime();
+		return Number.isFinite(t) ? t : undefined;
+	});
+	const endMs = $derived.by(() => {
+		const raw = page.url.searchParams.get('end');
+		if (!raw) return undefined;
+		const t = new Date(raw).getTime();
+		return Number.isFinite(t) ? t : undefined;
+	});
+
 	function updateUrl(updates: Record<string, string | null>) {
 		if (!projectId) return;
 		const params = new SvelteURLSearchParams(page.url.searchParams);
@@ -59,12 +72,17 @@
 	function handleHiddenChange(value: boolean) {
 		updateUrl({ hidden: value ? 'true' : null, page: null });
 	}
+
+	function handleDateChange(startIso: string | null, endIso: string | null) {
+		updateUrl({ start: startIso, end: endIso, page: null });
+	}
 </script>
 
 <div class="project-section">
 	<Conversations
 		{projectId}
 		showFilters={true}
+		showDateFilter={true}
 		showFilesColumn={true}
 		page={currentPage}
 		pageSize={40}
@@ -73,10 +91,13 @@
 		showHidden={currentHidden}
 		agent={currentAgent}
 		rating={currentRating}
+		start={startMs}
+		end={endMs}
 		onPageChange={handlePageChange}
 		onAgentChange={handleAgentChange}
 		onRatingChange={handleRatingChange}
 		onHiddenChange={handleHiddenChange}
+		onDateChange={handleDateChange}
 	/>
 </div>
 

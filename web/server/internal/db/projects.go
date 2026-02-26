@@ -65,6 +65,8 @@ type ConversationFilters struct {
 	Rating     int    // 0 = all, -1 = < 5 stars, 1-5 = exact rating
 	HiddenOnly bool   // false = visible, true = hidden only
 	Search     string // optional free-text search against user messages
+	DateFrom   int64  // unix ms lower bound (inclusive), 0 = no filter
+	DateTo     int64  // unix ms upper bound (exclusive), 0 = no filter
 }
 
 type ConversationPagination struct {
@@ -168,6 +170,16 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	} else if filters.Rating >= 1 && filters.Rating <= 5 {
 		filterClauses = append(filterClauses, "c.id IN (SELECT conversation_id FROM ratings WHERE rating = ?)")
 		filterArgs = append(filterArgs, filters.Rating)
+	}
+	if filters.DateFrom > 0 && filters.DateTo > 0 {
+		filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages WHERE timestamp >= ? AND timestamp < ?)")
+		filterArgs = append(filterArgs, filters.DateFrom, filters.DateTo)
+	} else if filters.DateFrom > 0 {
+		filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages WHERE timestamp >= ?)")
+		filterArgs = append(filterArgs, filters.DateFrom)
+	} else if filters.DateTo > 0 {
+		filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages WHERE timestamp < ?)")
+		filterArgs = append(filterArgs, filters.DateTo)
 	}
 	if search := strings.TrimSpace(filters.Search); search != "" {
 		ftsQuery := buildFTSMatchQuery(search)

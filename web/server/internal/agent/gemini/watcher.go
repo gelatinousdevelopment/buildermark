@@ -67,27 +67,31 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 }
 
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
-	n := a.doScan(ctx, since, nil, progress)
+	n := a.doScan(ctx, since, nil, progress, false)
 	log.Printf("gemini watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
 
 // ScanPathsSince scans only session files that resolve to matching project paths.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
-	n := a.doScan(ctx, since, newPathFilter(paths), progress)
+	n := a.doScan(ctx, since, newPathFilter(paths), progress, false)
 	log.Printf("gemini watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
 
 func (a *Agent) scanSince(ctx context.Context, since time.Time, filter pathFilter) {
-	n := a.doScan(ctx, since, filter, nil)
+	n := a.doScan(ctx, since, filter, nil, true)
 	if n > 0 {
 		log.Printf("gemini watcher: initial scan processed %d files", n)
 	}
 }
 
-func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, progress agent.ScanProgressFunc) int {
-	files := a.listSessionFiles(since)
+func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, progress agent.ScanProgressFunc, useModTime bool) int {
+	listSince := time.Time{}
+	if useModTime {
+		listSince = since
+	}
+	files := a.listSessionFiles(listSince)
 	processed := 0
 	for _, path := range files {
 		if progress != nil {
@@ -103,8 +107,9 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, 
 				continue
 			}
 		}
-		a.processSessionFile(ctx, path)
-		processed++
+		if a.processSessionFileSince(ctx, path, since) {
+			processed++
+		}
 	}
 	return processed
 }
@@ -156,12 +161,16 @@ func (a *Agent) listSessionFiles(since time.Time) []string {
 }
 
 func (a *Agent) processSessionFile(ctx context.Context, path string) {
+	_ = a.processSessionFileSince(ctx, path, time.Time{})
+}
+
+func (a *Agent) processSessionFileSince(ctx context.Context, path string, since time.Time) bool {
 	conv, err := readConversation(path)
 	if err != nil {
-		return
+		return false
 	}
 	if conv.SessionID == "" {
-		return
+		return false
 	}
 	sessionModel := strings.TrimSpace(conv.Model)
 
@@ -178,21 +187,11 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 	projectID, err := db.EnsureProject(ctx, a.db, projectPath)
 	if err != nil {
 		log.Printf("gemini watcher: ensure project %q: %v", projectPath, err)
-		return
+		return false
 	}
-
-	if err := db.EnsureConversation(ctx, a.db, conv.SessionID, projectID, a.Name()); err != nil {
-		log.Printf("gemini watcher: ensure conversation %s: %v", conv.SessionID, err)
-		return
-	}
-	if err := db.UpdateConversationProject(ctx, a.db, conv.SessionID, projectID); err != nil {
-		log.Printf("gemini watcher: update project for %s: %v", conv.SessionID, err)
-	}
-
-	if title := readSessionTitle(path); title != "" {
-		if err := db.UpdateConversationTitle(ctx, a.db, conv.SessionID, title); err != nil {
-			log.Printf("gemini watcher: update title for %s: %v", conv.SessionID, err)
-		}
+	cutoffMs := int64(0)
+	if !since.IsZero() {
+		cutoffMs = since.UnixMilli()
 	}
 
 	messages := make([]db.Message, 0, len(conv.Messages))
@@ -221,6 +220,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 
 		ts := parseGeminiTimestamp(m.Timestamp)
 		if ts <= 0 {
+			continue
+		}
+		if cutoffMs > 0 && ts < cutoffMs {
 			continue
 		}
 		messages = append(messages, db.Message{
@@ -268,6 +270,9 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 		if ts <= 0 {
 			continue
 		}
+		if cutoffMs > 0 && ts < cutoffMs {
+			continue
+		}
 		messages = append(messages, db.Message{
 			Timestamp:      ts,
 			ProjectID:      projectID,
@@ -288,6 +293,23 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			}
 		}
 	}
+	if len(messages) == 0 && len(ratingEntries) == 0 {
+		return false
+	}
+
+	if err := db.EnsureConversation(ctx, a.db, conv.SessionID, projectID, a.Name()); err != nil {
+		log.Printf("gemini watcher: ensure conversation %s: %v", conv.SessionID, err)
+		return false
+	}
+	if err := db.UpdateConversationProject(ctx, a.db, conv.SessionID, projectID); err != nil {
+		log.Printf("gemini watcher: update project for %s: %v", conv.SessionID, err)
+	}
+
+	if title := readSessionTitle(path); title != "" {
+		if err := db.UpdateConversationTitle(ctx, a.db, conv.SessionID, title); err != nil {
+			log.Printf("gemini watcher: update title for %s: %v", conv.SessionID, err)
+		}
+	}
 
 	if len(messages) > 0 {
 		messages = appendDiffDBMessages(messages)
@@ -301,6 +323,7 @@ func (a *Agent) processSessionFile(ctx context.Context, path string) {
 			log.Printf("gemini watcher: reconcile rating for session %s: %v", conv.SessionID, err)
 		}
 	}
+	return len(messages) > 0
 }
 
 func readGeminiLogEntries(path, sessionID string) []geminiLogEntry {

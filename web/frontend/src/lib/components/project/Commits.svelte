@@ -60,6 +60,10 @@
 		onCommitsLoaded?: (commitHashes: string[]) => void;
 		searchTerm?: string;
 		defaultToCurrentUser?: boolean;
+		start?: number;
+		end?: number;
+		showDateFilter?: boolean;
+		onDateChange?: (start: string | null, end: string | null) => void;
 	}
 
 	let {
@@ -93,7 +97,11 @@
 		enableRelationshipHover = false,
 		onCommitsLoaded = undefined,
 		searchTerm = '',
-		defaultToCurrentUser = true
+		defaultToCurrentUser = true,
+		start = undefined,
+		end = undefined,
+		showDateFilter = false,
+		onDateChange = undefined
 	}: Props = $props();
 
 	let data: ProjectCommitPageResponse | null = $state(null);
@@ -107,6 +115,8 @@
 	let internalBranch = $state('');
 	let internalUser = $state('');
 	let internalAgent = $state('');
+	let internalStart: number | undefined = $state(undefined);
+	let internalEnd: number | undefined = $state(undefined);
 	let userDefaultApplied = false;
 	let initialized = $state(false);
 	let requestToken = 0;
@@ -133,6 +143,16 @@
 			if (urlAgent !== null) {
 				internalAgent = urlAgent;
 			}
+			const urlStart = params.get('start');
+			const urlEnd = params.get('end');
+			if (urlStart) {
+				const t = new Date(urlStart).getTime();
+				if (Number.isFinite(t)) internalStart = t;
+			}
+			if (urlEnd) {
+				const t = new Date(urlEnd).getTime();
+				if (Number.isFinite(t)) internalEnd = t;
+			}
 		} else {
 			internalPage = page ?? 1;
 		}
@@ -148,10 +168,32 @@
 		if (branch !== undefined) internalBranch = branch;
 	});
 
+	// Reset to page 1 when date filter changes.
+	let lastDateKey = '';
+	$effect(() => {
+		const key = `${effectiveStart}:${effectiveEnd}`;
+		if (lastDateKey && key !== lastDateKey) {
+			internalPage = 1;
+		}
+		lastDateKey = key;
+	});
+
 	const currentPage = $derived(page ?? internalPage);
 	const selectedBranch = $derived(branch ?? internalBranch);
 	const selectedUser = $derived(internalUser);
 	const selectedAgent = $derived(internalAgent);
+	const effectiveStart = $derived(start ?? internalStart);
+	const effectiveEnd = $derived(end ?? internalEnd);
+
+	// Derive a YYYY-MM-DD string for the date input from the effective start.
+	const dateInputValue = $derived.by(() => {
+		if (!effectiveStart) return '';
+		const d = new Date(effectiveStart);
+		const y = d.getFullYear();
+		const m = String(d.getMonth() + 1).padStart(2, '0');
+		const day = String(d.getDate()).padStart(2, '0');
+		return `${y}-${m}-${day}`;
+	});
 	const selectedUserDisplay = $derived.by(() => {
 		if (!selectedUser) return '';
 		if (selectedUser === USER_AND_AGENTS) return 'Me + agents';
@@ -208,7 +250,9 @@
 					pageSize,
 					resolvedUser,
 					selectedAgent,
-					searchTerm.trim()
+					searchTerm.trim(),
+					effectiveStart,
+					effectiveEnd
 				)
 			);
 			if (myToken !== requestToken) return;
@@ -248,7 +292,7 @@
 	$effect(() => {
 		if (!autoload) return;
 		const resolved = resolveUserFilter(selectedUser, data?.currentEmail);
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${searchTerm}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();
@@ -342,6 +386,57 @@
 		internalPage = 1;
 	}
 
+	function handleDateFilterChange(event: Event) {
+		const value = (event.currentTarget as HTMLInputElement).value;
+		if (value) {
+			const [y, m, d] = value.split('-').map(Number);
+			const dayStart = new Date(y, m - 1, d);
+			const dayEnd = new Date(y, m - 1, d + 1);
+			internalStart = dayStart.getTime();
+			internalEnd = dayEnd.getTime();
+			if (syncPaginationWithUrl && browser) {
+				const url = new URL(window.location.href);
+				url.searchParams.set('start', dayStart.toISOString());
+				url.searchParams.set('end', dayEnd.toISOString());
+				url.searchParams.delete('page');
+				window.history.replaceState(window.history.state, '', url);
+			}
+			if (onDateChange) {
+				onDateChange(dayStart.toISOString(), dayEnd.toISOString());
+			}
+		} else {
+			internalStart = undefined;
+			internalEnd = undefined;
+			if (syncPaginationWithUrl && browser) {
+				const url = new URL(window.location.href);
+				url.searchParams.delete('start');
+				url.searchParams.delete('end');
+				url.searchParams.delete('page');
+				window.history.replaceState(window.history.state, '', url);
+			}
+			if (onDateChange) {
+				onDateChange(null, null);
+			}
+		}
+		internalPage = 1;
+	}
+
+	function clearDateFilter() {
+		internalStart = undefined;
+		internalEnd = undefined;
+		if (syncPaginationWithUrl && browser) {
+			const url = new URL(window.location.href);
+			url.searchParams.delete('start');
+			url.searchParams.delete('end');
+			url.searchParams.delete('page');
+			window.history.replaceState(window.history.state, '', url);
+		}
+		if (onDateChange) {
+			onDateChange(null, null);
+		}
+		internalPage = 1;
+	}
+
 	async function handleLoadMore() {
 		if (!projectId || loadingMore) return;
 		loadingMore = true;
@@ -382,11 +477,20 @@
 {:else if !data || visibleCommits.length === 0}
 	<p class="message">No commits found for this project and current git user.</p>
 {:else}
-	{#if showBranchPicker || showUserPicker || showAgentPicker}
+	{#if showBranchPicker || showUserPicker || showAgentPicker || showDateFilter}
 		<div class="top-row">
 			<div class="filters">
+				{#if showDateFilter}
+					<div class="filter-picker date-picker">
+						<input type="date" value={dateInputValue} onchange={handleDateFilterChange} />
+						{#if effectiveStart}
+							<button class="clear-date" onclick={clearDateFilter}>×</button>
+						{/if}
+					</div>
+				{/if}
+
 				{#if showBranchPicker}
-					<div class="branch-picker">
+					<div class="filter-picker branch-picker">
 						<label for="branch-{projectId}">Branch:</label>
 						<select id="branch-{projectId}" value={selectedBranch} onchange={handleBranchChange}>
 							{#each data.branches as b (b)}
@@ -397,7 +501,7 @@
 				{/if}
 
 				{#if showUserPicker && data.users && data.users.length > 0}
-					<div class="user-picker">
+					<div class="filter-picker user-picker">
 						<!-- <label for="user-{projectId}">User:</label> -->
 						<select id="user-{projectId}" value={selectedUser} onchange={handleUserChange}>
 							<option value="">All</option>
@@ -412,7 +516,7 @@
 				{/if}
 
 				{#if showAgentPicker && data.agents && data.agents.length > 0}
-					<div class="agent-picker">
+					<div class="filter-picker agent-picker">
 						<!-- <label for="agent-{projectId}">Agent:</label> -->
 						<select id="agent-{projectId}" value={selectedAgent} onchange={handleAgentChange}>
 							<option value="">All Agents and Manual</option>
@@ -933,14 +1037,6 @@
 		display: flex;
 		flex-direction: row;
 		gap: 1.5rem;
-	}
-
-	.branch-picker,
-	.user-picker,
-	.agent-picker {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
 	}
 
 	.branch-picker select {

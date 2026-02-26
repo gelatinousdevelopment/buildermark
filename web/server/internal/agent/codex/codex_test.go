@@ -183,6 +183,43 @@ func TestWatcherScanSinceFiltersOldFiles(t *testing.T) {
 	}
 }
 
+func TestWatcherScanSinceUsesEventTimestampsEvenWhenFileMtimeIsOld(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+
+	now := time.Now().UTC()
+	events := []rolloutEvent{
+		{
+			Type:       "input",
+			ThreadID:   "thread-recent",
+			WorkingDir: "/proj/recent",
+			Content:    "recent message",
+			Timestamp:  now.Add(-2 * time.Hour).UnixMilli(),
+			Role:       "user",
+		},
+	}
+
+	rolloutPath := filepath.Join(sessionsDir, "2020", "01", "01", "rollout-1000-thread-recent.jsonl")
+	writeRolloutFile(t, rolloutPath, events)
+
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(rolloutPath, oldTime, oldTime); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+
+	a := newAgent(database, sessionsDir, tmpDir)
+	ctx := context.Background()
+	n := a.ScanSince(ctx, time.Now().Add(-24*time.Hour), nil)
+	if n != 1 {
+		t.Fatalf("ScanSince processed %d files, want 1", n)
+	}
+
+	if got := countRows(t, database, "messages"); got != 1 {
+		t.Fatalf("messages: got %d, want 1", got)
+	}
+}
+
 func TestWatcherSkipsFilesWithoutThreadID(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()
