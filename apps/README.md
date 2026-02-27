@@ -34,7 +34,7 @@ The app manages a bundled `buildermark-server` Go binary.
 ### Server Process
 - **Port**: 7022 (hardcoded — agent plugins depend on this)
 - **Launch args**: `-addr :7022 -db <db_path>`
-- **Database path**: `BUILDERMARK_LOCAL_DB_PATH` env var, or platform app data directory + `BuildermarkLocal/local.db`
+- **Database path**: `BUILDERMARK_LOCAL_DB_PATH` env var, or platform app data directory + `Buildermark/local.db`
 - **Health check**: poll `GET http://localhost:7022/api/v1/settings` every 2 seconds
 - **Logging**: stdout and stderr from the server process are captured and forwarded to the platform's logging system
 
@@ -71,7 +71,6 @@ A tabbed settings window with three tabs. The window should resize its height to
 | Options: Start at login | Toggle | Persisted, default `true`. Registers/unregisters with the OS login items system. Must be synced on first launch (not just on change) so the default `true` takes effect immediately. |
 | Hide menu bar icon | Toggle | Persisted, default `false`. Help text: "Relaunch the app for this to take effect" |
 | _helper text_ | Caption | "When hidden, launch app to show settings." |
-| Quit | Button | Stops the server and exits the app |
 
 ### Updates Tab
 | Element | Type | Details |
@@ -97,7 +96,7 @@ Centered vertically:
 
 The app should support auto-updates using a platform-appropriate mechanism:
 - **macOS**: Sparkle (EdDSA-signed appcast at `https://buildermark.dev/appcast.xml`)
-- **Windows**: consider WinSparkle or Squirrel
+- **Windows**: WinSparkle
 - **Linux**: consider AppImage updates or package manager integration
 
 Required configuration:
