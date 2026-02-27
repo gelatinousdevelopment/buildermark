@@ -7,6 +7,7 @@
 	import { listProjectCommitsPage } from '$lib/api';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import type { DailyCommitSummary } from '$lib/types';
+	import { referenceNowDate } from '$lib/utils';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 
@@ -89,7 +90,7 @@
 		const rangeRaw = (searchParams.get('range') ?? '').trim().toLowerCase();
 		const parsedDays = Number.parseInt(rangeRaw.replace(/d$/, ''), 10);
 		const presetDays = isPresetDays(parsedDays) ? parsedDays : DEFAULT_PRESET_DAYS;
-		const now = new Date();
+		const now = referenceNowDate();
 		const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 		const startDate = new Date(
 			endDate.getFullYear(),

@@ -17,6 +17,7 @@ type Server struct {
 	Agents     *agent.Registry // may be nil if no agents are registered
 	DBPath     string          // resolved path to the SQLite database file
 	ListenAddr string          // address the server is listening on
+	ReadOnly   bool
 
 	refreshJobs      *jobTracker
 	coverageJobs     *jobTracker
@@ -91,7 +92,27 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/settings", s.handleGetLocalSettings)
 	mux.Handle("GET /_app/", staticFrontendHandler())
 	mux.HandleFunc("GET /", s.handleDashboard)
-	return corsMiddleware(securityHeadersMiddleware(mux))
+	return corsMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux)))
+}
+
+func (s *Server) readOnlyMiddleware(next http.Handler) http.Handler {
+	if !s.ReadOnly {
+		return next
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+			if r.URL.Path == "/api/v1/ws" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			writeError(w, http.StatusServiceUnavailable, "server is in read-only mode")
+			return
+		default:
+			next.ServeHTTP(w, r)
+		}
+	})
 }
 
 type jsonEnvelope struct {
@@ -136,7 +157,7 @@ func writeSuccess(w http.ResponseWriter, status int, data any) {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		if r.Method == http.MethodOptions {

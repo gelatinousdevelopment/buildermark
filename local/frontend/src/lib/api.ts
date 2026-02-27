@@ -27,6 +27,8 @@ interface Envelope<T> {
 
 type APIFetch = typeof fetch;
 
+const isReadOnlyMode = import.meta.env.PUBLIC_READ_ONLY === 'true';
+
 async function api<T>(path: string, init?: RequestInit, fetchFn: APIFetch = fetch): Promise<T> {
 	const res = await fetchFn(`${API_URL}${path}`, init);
 	const raw = await res.text();
@@ -38,6 +40,14 @@ async function api<T>(path: string, init?: RequestInit, fetchFn: APIFetch = fetc
 		throw new Error(`API returned non-JSON response (${res.status}): ${snippet}`);
 	}
 	if (!envelope.ok) {
+		if (
+			isReadOnlyMode &&
+			browser &&
+			(init?.method ?? 'GET').toUpperCase() !== 'GET' &&
+			(init?.method ?? 'GET').toUpperCase() !== 'HEAD'
+		) {
+			window.alert('This server is running in read-only demo mode.');
+		}
 		throw new Error(envelope.error ?? `API error: ${res.status}`);
 	}
 	return envelope.data as T;
