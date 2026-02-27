@@ -1,15 +1,17 @@
 #
-# Build the Buildermark Windows app.
+# Build the Buildermark Windows app for x64 and ARM64.
 #
 # Prerequisites:
 #   - .NET 8 SDK (https://dotnet.microsoft.com/download/dotnet/8.0)
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Runtime win-x64
+#   powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Runtime win-arm64
 #
-# Environment variables (override defaults):
+# Parameters / environment variables (override defaults):
 #   CONFIGURATION  - Build configuration (default: "Release")
-#   RUNTIME        - Target runtime (default: "win-x64")
+#   RUNTIME        - Target runtime: "win-x64", "win-arm64", or "all" (default: "all")
 #
 
 param(
@@ -20,12 +22,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $Configuration) { $Configuration = "Release" }
-if (-not $Runtime) { $Runtime = "win-x64" }
+if (-not $Runtime) { $Runtime = "all" }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $BuildDir = Join-Path $ProjectDir "build"
-$PublishDir = Join-Path $BuildDir "publish"
 $CsprojPath = Join-Path $ProjectDir "Buildermark" "Buildermark.csproj"
 
 # ---------------------------------------------------------------------------
@@ -44,6 +45,31 @@ function Check-Tool($name, $installHint) {
         Write-Host "  $installHint"
         exit 1
     }
+}
+
+function Build-Runtime($rid) {
+    $PublishDir = Join-Path $BuildDir $rid
+
+    Step "Restoring NuGet packages ($rid)"
+    dotnet restore $CsprojPath --runtime $rid
+
+    Step "Publishing $Configuration ($rid)"
+    dotnet publish $CsprojPath `
+        --configuration $Configuration `
+        --runtime $rid `
+        --self-contained true `
+        --output $PublishDir `
+        -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true
+
+    $ExePath = Join-Path $PublishDir "Buildermark.exe"
+
+    if (-not (Test-Path $ExePath)) {
+        Write-Host "Error: published executable not found at $ExePath" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "  OK: $ExePath" -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------------------
@@ -67,30 +93,17 @@ if (Test-Path $BuildDir) {
 New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
 
 # ---------------------------------------------------------------------------
-# Restore
+# Build
 # ---------------------------------------------------------------------------
 
-Step "Restoring NuGet packages"
-dotnet restore $CsprojPath --runtime $Runtime
+if ($Runtime -eq "all") {
+    $Runtimes = @("win-x64", "win-arm64")
+} else {
+    $Runtimes = @($Runtime)
+}
 
-# ---------------------------------------------------------------------------
-# Publish
-# ---------------------------------------------------------------------------
-
-Step "Publishing $Configuration ($Runtime)"
-dotnet publish $CsprojPath `
-    --configuration $Configuration `
-    --runtime $Runtime `
-    --self-contained true `
-    --output $PublishDir `
-    -p:PublishSingleFile=true `
-    -p:IncludeNativeLibrariesForSelfExtract=true
-
-$ExePath = Join-Path $PublishDir "Buildermark.exe"
-
-if (-not (Test-Path $ExePath)) {
-    Write-Host "Error: published executable not found at $ExePath" -ForegroundColor Red
-    exit 1
+foreach ($rid in $Runtimes) {
+    Build-Runtime $rid
 }
 
 # ---------------------------------------------------------------------------
@@ -98,8 +111,9 @@ if (-not (Test-Path $ExePath)) {
 # ---------------------------------------------------------------------------
 
 Step "Build complete"
-Write-Host "  Executable: $ExePath"
-Write-Host "  Output dir: $PublishDir"
+foreach ($rid in $Runtimes) {
+    $ExePath = Join-Path $BuildDir $rid "Buildermark.exe"
+    Write-Host "  $rid : $ExePath"
+}
 Write-Host ""
-Write-Host "  To run: $ExePath"
-Write-Host "  Place buildermark-server.exe alongside Buildermark.exe before running."
+Write-Host "  Place buildermark-server.exe alongside each Buildermark.exe before running."

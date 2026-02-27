@@ -97,7 +97,7 @@ Centered vertically:
 The app should support auto-updates using a platform-appropriate mechanism:
 - **macOS**: Sparkle (EdDSA-signed appcast at `https://buildermark.dev/appcast.xml`)
 - **Windows**: WinSparkle
-- **Linux**: consider AppImage updates or package manager integration
+- **Linux**: AppImage self-updating
 
 Required configuration:
 - Appcast/feed URL
@@ -123,6 +123,6 @@ Required configuration:
 - Build: `cd apps/windows && powershell -ExecutionPolicy Bypass -File scripts\build.ps1`
 
 ### Linux (not yet implemented)
-- Consider GTK or Qt with `AppIndicator` / `StatusNotifierItem` for system tray
+- Consider GTK with `AppIndicator` / `StatusNotifierItem` for system tray
 - Use `.desktop` file in `~/.config/autostart/` for start-at-login
-- Bundle the server binary in the app directory or distribute via package manager
+- Bundle the server binary in the app directory

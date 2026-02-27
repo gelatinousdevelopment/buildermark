@@ -32,10 +32,24 @@ apps/windows/
 
 ```powershell
 cd apps\windows
+
+# Build both x64 and ARM64 (default)
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+
+# Build only x64
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Runtime win-x64
+
+# Build only ARM64
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Runtime win-arm64
 ```
 
-The build output is a self-contained single-file executable at `build/publish/Buildermark.exe`.
+Build output is organized by architecture:
+
+```
+build/
+├── win-x64/Buildermark.exe
+└── win-arm64/Buildermark.exe
+```
 
 ### Visual Studio
 
@@ -43,21 +57,24 @@ The build output is a self-contained single-file executable at `build/publish/Bu
 2. Set the configuration to **Release**
 3. Build > Publish, or just Build > Build Solution
 
-### Build Environment Variables
+### Build Parameters
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONFIGURATION` | `Release` | Build configuration |
-| `RUNTIME` | `win-x64` | Target runtime identifier |
+| `RUNTIME` | `all` | `win-x64`, `win-arm64`, or `all` (builds both) |
 
 ## Running
 
 1. Build `buildermark-server` (the Go server from `local/server/`) for Windows:
+   ```powershell
+   cd local\server
+   # For x64
+   $env:GOOS="windows"; $env:GOARCH="amd64"; go build -o buildermark-server.exe .
+   # For ARM64
+   $env:GOOS="windows"; $env:GOARCH="arm64"; go build -o buildermark-server.exe .
    ```
-   cd local/server
-   GOOS=windows GOARCH=amd64 go build -o buildermark-server.exe .
-   ```
-2. Place `buildermark-server.exe` alongside `Buildermark.exe` in the publish output directory
+2. Place the matching `buildermark-server.exe` alongside each `Buildermark.exe` in the build output directory
 3. Run `Buildermark.exe`
 
 The app will:
