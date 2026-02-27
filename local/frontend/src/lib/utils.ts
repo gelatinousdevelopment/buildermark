@@ -15,6 +15,34 @@ export function fmtTime(t: string | number): string {
 	return d.toLocaleString();
 }
 
+function parseFrozenNowMs(raw: string | undefined): number | null {
+	if (!raw) return null;
+	const trimmed = raw.trim();
+	if (!trimmed) return null;
+
+	const numeric = Number(trimmed);
+	if (Number.isFinite(numeric) && numeric > 0) {
+		return numeric;
+	}
+
+	const parsed = Date.parse(trimmed);
+	if (Number.isFinite(parsed) && parsed > 0) {
+		return parsed;
+	}
+
+	return null;
+}
+
+const FROZEN_NOW_MS = parseFrozenNowMs(import.meta.env.PUBLIC_FROZEN_DATE);
+
+export function referenceNowMs(): number {
+	return FROZEN_NOW_MS ?? Date.now();
+}
+
+export function referenceNowDate(): Date {
+	return new Date(referenceNowMs());
+}
+
 export function fmtTimeWithSeconds(t: string | number): string {
 	const d = new Date(t);
 	return d.toLocaleString(undefined, {
@@ -31,29 +59,9 @@ export function fmtTimeWithSeconds(t: string | number): string {
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const YEAR_IN_MS = DAY_IN_MS * 365;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getTemporal(): any | null {
-	const temporal = (globalThis as { Temporal?: unknown }).Temporal;
-	if (!temporal || typeof temporal !== 'object') return null;
-	return temporal;
-}
-
 export function formatRelativeOrShortDate(unixMs: number): string {
 	if (!Number.isFinite(unixMs) || unixMs <= 0) return 'Unknown';
-
-	const temporal = getTemporal();
-	if (!temporal?.Instant?.fromEpochMilliseconds || !temporal?.Now?.instant) {
-		return new Date(unixMs).toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	}
-
-	const instant = temporal.Instant.fromEpochMilliseconds(unixMs);
-	const now = temporal.Now.instant();
-	const deltaMs = now.epochMilliseconds - instant.epochMilliseconds;
+	const deltaMs = referenceNowMs() - unixMs;
 	const absDeltaMs = Math.abs(deltaMs);
 
 	if (deltaMs < 1000) {
@@ -73,9 +81,7 @@ export function formatRelativeOrShortDate(unixMs: number): string {
 		return rtf.format(Math.round(-deltaMs / 3600000), 'hour').replace(/\./g, '');
 	}
 
-	const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-	const zoned = instant.toZonedDateTimeISO(zone);
-	return zoned.toLocaleString(undefined, {
+	return new Date(unixMs).toLocaleString(undefined, {
 		month: 'short',
 		day: 'numeric',
 		hour: 'numeric',
@@ -86,18 +92,7 @@ export function formatRelativeOrShortDate(unixMs: number): string {
 
 export function formatFullDateTitle(unixMs: number): string {
 	if (!Number.isFinite(unixMs) || unixMs <= 0) return '';
-
-	const temporal = getTemporal();
-	if (!temporal?.Instant?.fromEpochMilliseconds) {
-		return new Date(unixMs).toLocaleString(undefined, {
-			dateStyle: 'full',
-			timeStyle: 'long'
-		});
-	}
-
-	const instant = temporal.Instant.fromEpochMilliseconds(unixMs);
-	const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-	return instant.toZonedDateTimeISO(zone).toLocaleString(undefined, {
+	return new Date(unixMs).toLocaleString(undefined, {
 		dateStyle: 'full',
 		timeStyle: 'long'
 	});

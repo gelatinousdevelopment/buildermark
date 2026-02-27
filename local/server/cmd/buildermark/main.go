@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -28,6 +29,12 @@ func main() {
 	dbPath := flag.String("db", defaultDB, "path to SQLite database file")
 	addr := flag.String("addr", ":7022", "listen address")
 	flag.Parse()
+
+	readOnly, err := strconv.ParseBool(os.Getenv("READ_ONLY"))
+	if err != nil {
+		log.Printf("warning: invalid READ_ONLY value %q, defaulting to false", os.Getenv("READ_ONLY"))
+		readOnly = false
+	}
 
 	database, err := db.InitDB(*dbPath)
 	if err != nil {
@@ -67,7 +74,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *addr,
-		Handler:      (&handler.Server{DB: database, Agents: registry, DBPath: *dbPath, ListenAddr: *addr}).Routes(),
+		Handler:      (&handler.Server{DB: database, Agents: registry, DBPath: *dbPath, ListenAddr: *addr, ReadOnly: readOnly}).Routes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -78,6 +85,9 @@ func main() {
 
 	go func() {
 		fmt.Printf("Buildermark Local server listening on %s\n", *addr)
+		if readOnly {
+			fmt.Println("READ_ONLY mode enabled: mutating API endpoints are disabled")
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)
 		}
