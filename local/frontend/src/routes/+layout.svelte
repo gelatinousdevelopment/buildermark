@@ -6,6 +6,7 @@
 	import { page } from '$app/state';
 	import { onMount, onDestroy } from 'svelte';
 	import Icon from '$lib/Icon.svelte';
+	import Dialog from '$lib/Dialog.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
@@ -23,6 +24,8 @@
 	});
 
 	let projectId = $derived(page.params.project_id);
+	let showReadOnlyDialog = $state(false);
+	const isReadOnlyDemo = import.meta.env.PUBLIC_READ_ONLY === 'true';
 
 	const projectTabs = [
 		{
@@ -126,6 +129,11 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
+				{#if isReadOnlyDemo}
+					<button class="read-only-pill" onclick={() => (showReadOnlyDialog = true)}>
+						Read-only demo
+					</button>
+				{/if}
 				<a href={resolve('/search')} class="item" title="Search"
 					><Icon name="search" width="19px" /></a
 				>
@@ -158,6 +166,29 @@
 	<div class="dashboard-content">
 		{@render children()}
 	</div>
+
+	<Dialog
+		open={showReadOnlyDialog}
+		title="Read-only demo"
+		onclose={() => (showReadOnlyDialog = false)}
+	>
+		<p>
+			This is a read-only demo of Buildermark Local. You can browse data, but write actions are
+			disabled.
+		</p>
+		<p>
+			Learn more at <a href="https://buildermark.dev" target="_blank">buildermark.dev</a> or view
+			the source on
+			<a href="https://github.com/gelatinousdevelopment/buildermark" target="_blank">GitHub</a>.
+		</p>
+		<p>
+			Need multi-user collaboration and write access? Buildermark Team Server is available for that.
+		</p>
+
+		{#snippet actions()}
+			<button class="bordered small" onclick={() => (showReadOnlyDialog = false)}>Close</button>
+		{/snippet}
+	</Dialog>
 
 	<footer>
 		<div class="content">
@@ -302,6 +333,25 @@
 
 	header nav.right {
 		gap: 1.5rem;
+	}
+
+	header nav.right .read-only-pill {
+		background: var(--accent-color-ultralight);
+		border: 1px solid var(--accent-color);
+		border-radius: 999px;
+		color: var(--accent-color);
+		cursor: pointer;
+		font-size: 0.75rem;
+		font-weight: 700;
+		height: 28px;
+		line-height: 1;
+		padding: 0 0.75rem;
+		text-transform: uppercase;
+	}
+
+	header nav.right .read-only-pill:hover {
+		background: var(--accent-color);
+		color: var(--accent-color-ultralight);
 	}
 
 	header nav a {
