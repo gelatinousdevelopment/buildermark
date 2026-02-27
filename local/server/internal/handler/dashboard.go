@@ -10,10 +10,8 @@ import (
 var frontendFS embed.FS
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
+	// Serve the SPA shell for all unmatched routes;
+	// SvelteKit's client-side router handles routing.
 	html, err := frontendFS.ReadFile("frontend/200.html")
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)

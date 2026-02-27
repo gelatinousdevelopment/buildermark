@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		089C1665A1A04F3BA1000040 /* BuildermarkLocalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000030 /* BuildermarkLocalApp.swift */; };
+		089C1665A1A04F3BA1000040 /* BuildermarkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000030 /* BuildermarkApp.swift */; };
 		089C1665A1A04F3BA1000041 /* ServerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000031 /* ServerManager.swift */; };
 		089C1665A1A04F3BA1000042 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000032 /* SettingsView.swift */; };
 		089C1665A1A04F3BA1000043 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000033 /* Assets.xcassets */; };
@@ -16,12 +16,12 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		089C1665A1A04F3BA1000030 /* BuildermarkLocalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildermarkLocalApp.swift; sourceTree = "<group>"; };
+		089C1665A1A04F3BA1000030 /* BuildermarkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildermarkApp.swift; sourceTree = "<group>"; };
 		089C1665A1A04F3BA1000031 /* ServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerManager.swift; sourceTree = "<group>"; };
 		089C1665A1A04F3BA1000032 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		089C1665A1A04F3BA1000033 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		089C1665A1A04F3BA1000035 /* BuildermarkLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BuildermarkLocal.entitlements; sourceTree = "<group>"; };
-		089C1665A1A04F3BA1000036 /* Buildermark Local.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Buildermark Local.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		089C1665A1A04F3BA1000035 /* Buildermark.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Buildermark.entitlements; sourceTree = "<group>"; };
+		089C1665A1A04F3BA1000036 /* Buildermark.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Buildermark.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -40,7 +40,7 @@
 		089C1665A1A04F3BA1000002 = {
 			isa = PBXGroup;
 			children = (
-				089C1665A1A04F3BA1000050 /* BuildermarkLocal */,
+				089C1665A1A04F3BA1000050 /* Buildermark */,
 				089C1665A1A04F3BA1000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -48,30 +48,30 @@
 		089C1665A1A04F3BA1000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				089C1665A1A04F3BA1000036 /* Buildermark Local.app */,
+				089C1665A1A04F3BA1000036 /* Buildermark.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		089C1665A1A04F3BA1000050 /* BuildermarkLocal */ = {
+		089C1665A1A04F3BA1000050 /* Buildermark */ = {
 			isa = PBXGroup;
 			children = (
-				089C1665A1A04F3BA1000030 /* BuildermarkLocalApp.swift */,
+				089C1665A1A04F3BA1000030 /* BuildermarkApp.swift */,
 				089C1665A1A04F3BA1000031 /* ServerManager.swift */,
 				089C1665A1A04F3BA1000032 /* SettingsView.swift */,
 				089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */,
 				089C1665A1A04F3BA1000033 /* Assets.xcassets */,
-				089C1665A1A04F3BA1000035 /* BuildermarkLocal.entitlements */,
+				089C1665A1A04F3BA1000035 /* Buildermark.entitlements */,
 			);
-			path = BuildermarkLocal;
+			path = Buildermark;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		089C1665A1A04F3BA1000010 /* BuildermarkLocal */ = {
+		089C1665A1A04F3BA1000010 /* Buildermark */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 089C1665A1A04F3BA1000011 /* Build configuration list for PBXNativeTarget "BuildermarkLocal" */;
+			buildConfigurationList = 089C1665A1A04F3BA1000011 /* Build configuration list for PBXNativeTarget "Buildermark" */;
 			buildPhases = (
 				089C1665A1A04F3BA1000020 /* Sources */,
 				089C1665A1A04F3BA1000021 /* Frameworks */,
@@ -81,12 +81,12 @@
 			);
 			dependencies = (
 			);
-			name = BuildermarkLocal;
+			name = Buildermark;
 			packageProductDependencies = (
 				089C1665A1A04F3BA1000061 /* Sparkle */,
 			);
-			productName = BuildermarkLocal;
-			productReference = 089C1665A1A04F3BA1000036 /* Buildermark Local.app */;
+			productName = Buildermark;
+			productReference = 089C1665A1A04F3BA1000036 /* Buildermark.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -104,7 +104,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 089C1665A1A04F3BA1000004 /* Build configuration list for PBXProject "BuildermarkLocal" */;
+			buildConfigurationList = 089C1665A1A04F3BA1000004 /* Build configuration list for PBXProject "Buildermark" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -120,7 +120,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				089C1665A1A04F3BA1000010 /* BuildermarkLocal */,
+				089C1665A1A04F3BA1000010 /* Buildermark */,
 			);
 		};
 /* End PBXProject section */
@@ -141,7 +141,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				089C1665A1A04F3BA1000040 /* BuildermarkLocalApp.swift in Sources */,
+				089C1665A1A04F3BA1000040 /* BuildermarkApp.swift in Sources */,
 				089C1665A1A04F3BA1000041 /* ServerManager.swift in Sources */,
 				089C1665A1A04F3BA1000042 /* SettingsView.swift in Sources */,
 				089C1665A1A04F3BA1000044 /* UpdaterViewModel.swift in Sources */,
@@ -206,13 +206,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = BuildermarkLocal/BuildermarkLocal.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Buildermark/Buildermark.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2P4QNS2Y9Y;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = BuildermarkLocal/Info.plist;
+				INFOPLIST_FILE = Buildermark/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -220,7 +220,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.buildermark.local;
-				PRODUCT_NAME = "Buildermark Local";
+				PRODUCT_NAME = "Buildermark";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -230,13 +230,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = BuildermarkLocal/BuildermarkLocal.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Buildermark/Buildermark.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2P4QNS2Y9Y;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = BuildermarkLocal/Info.plist;
+				INFOPLIST_FILE = Buildermark/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -244,7 +244,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.buildermark.local;
-				PRODUCT_NAME = "Buildermark Local";
+				PRODUCT_NAME = "Buildermark";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -253,7 +253,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		089C1665A1A04F3BA1000004 /* Build configuration list for PBXProject "BuildermarkLocal" */ = {
+		089C1665A1A04F3BA1000004 /* Build configuration list for PBXProject "Buildermark" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				089C1665A1A04F3BA1000005 /* Debug */,
@@ -262,7 +262,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		089C1665A1A04F3BA1000011 /* Build configuration list for PBXNativeTarget "BuildermarkLocal" */ = {
+		089C1665A1A04F3BA1000011 /* Build configuration list for PBXNativeTarget "Buildermark" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				089C1665A1A04F3BA1000012 /* Debug */,

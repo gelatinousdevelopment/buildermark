@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Orchestrate building the full Buildermark Local stack:
+# Orchestrate building the full Buildermark stack:
 #   1. Svelte frontend  (local/frontend)
 #   2. Go server binary  (local/server)  — embeds the frontend build
 #   3. macOS app          (apps/macos)    — embeds the Go binary
@@ -54,7 +54,7 @@ step "Building macOS app"
 
 # Copy the server binary into the exported app bundle so ServerManager.swift
 # can find it via Bundle.main.url(forResource:).
-APP_PATH="$MACOS_DIR/build/export/Buildermark Local.app"
+APP_PATH="$MACOS_DIR/build/export/Buildermark.app"
 cp "$SERVER_DIR/$SERVER_BINARY" "$APP_PATH/Contents/Resources/$SERVER_BINARY"
 
 step "Full build complete"

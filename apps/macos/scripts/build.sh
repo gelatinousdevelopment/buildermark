@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build the Buildermark Local macOS app.
+# Build the Buildermark macOS app.
 #
 # Prerequisites:
 #   - Xcode CLI tools (xcodebuild)
@@ -12,7 +12,7 @@
 # Environment variables (override defaults):
 #   TEAM_ID              - Apple Developer Team ID
 #   DEVELOPER_ID         - Code signing identity (default: "Developer ID Application")
-#   SCHEME               - Xcode scheme (default: "BuildermarkLocal")
+#   SCHEME               - Xcode scheme (default: "Buildermark")
 #   CONFIGURATION        - Build configuration (default: "Release")
 
 set -euo pipefail
@@ -20,15 +20,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
-ARCHIVE_PATH="$BUILD_DIR/BuildermarkLocal.xcarchive"
+ARCHIVE_PATH="$BUILD_DIR/Buildermark.xcarchive"
 EXPORT_DIR="$BUILD_DIR/export"
 
-SCHEME="${SCHEME:-BuildermarkLocal}"
+SCHEME="${SCHEME:-Buildermark}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 DEVELOPER_ID="${DEVELOPER_ID:-Developer ID Application}"
 TEAM_ID="${TEAM_ID:-}"
 
-APP_NAME="Buildermark Local"
+APP_NAME="Buildermark"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -60,7 +60,11 @@ check_tool xcodebuild "Install Xcode Command Line Tools: xcode-select --install"
 # ---------------------------------------------------------------------------
 
 step "Cleaning previous build"
-rm -rf "$BUILD_DIR"
+if [ -d "$BUILD_DIR" ]; then
+    TRASH="$BUILD_DIR.$$"
+    mv "$BUILD_DIR" "$TRASH"
+    rm -rf "$TRASH" &
+fi
 mkdir -p "$BUILD_DIR"
 
 # ---------------------------------------------------------------------------
@@ -68,7 +72,7 @@ mkdir -p "$BUILD_DIR"
 # ---------------------------------------------------------------------------
 
 step "Resolving Swift package dependencies"
-xcodebuild -project "$PROJECT_DIR/BuildermarkLocal.xcodeproj" \
+xcodebuild -project "$PROJECT_DIR/Buildermark.xcodeproj" \
     -scheme "$SCHEME" \
     -resolvePackageDependencies \
     -clonedSourcePackagesDirPath "$BUILD_DIR/SourcePackages"
@@ -80,7 +84,7 @@ xcodebuild -project "$PROJECT_DIR/BuildermarkLocal.xcodeproj" \
 step "Archiving $SCHEME ($CONFIGURATION)"
 
 ARCHIVE_ARGS=(
-    -project "$PROJECT_DIR/BuildermarkLocal.xcodeproj"
+    -project "$PROJECT_DIR/Buildermark.xcodeproj"
     -scheme "$SCHEME"
     -configuration "$CONFIGURATION"
     -archivePath "$ARCHIVE_PATH"

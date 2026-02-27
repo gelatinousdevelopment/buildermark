@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build, package, notarize, and staple the Buildermark Local macOS app.
+# Build, package, notarize, and staple the Buildermark macOS app.
 #
 # Prerequisites:
 #   - Xcode CLI tools (xcodebuild)
@@ -20,7 +20,7 @@
 #   TEAM_ID              - Apple Developer Team ID
 #   DEVELOPER_ID         - Code signing identity (default: "Developer ID Application")
 #   NOTARY_PROFILE       - notarytool keychain profile (default: "BuildermarkNotary")
-#   SCHEME               - Xcode scheme (default: "BuildermarkLocal")
+#   SCHEME               - Xcode scheme (default: "Buildermark")
 #   CONFIGURATION        - Build configuration (default: "Release")
 
 set -euo pipefail
@@ -30,7 +30,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
 EXPORT_DIR="$BUILD_DIR/export"
 DMG_DIR="$BUILD_DIR/dmg"
-DMG_OUTPUT="$BUILD_DIR/BuildermarkLocal.dmg"
+DMG_OUTPUT="$BUILD_DIR/Buildermark.dmg"
 
 NOTARY_PROFILE="${NOTARY_PROFILE:-BuildermarkNotary}"
 
@@ -42,7 +42,7 @@ for arg in "$@"; do
     esac
 done
 
-APP_NAME="Buildermark Local"
+APP_NAME="Buildermark"
 
 # ---------------------------------------------------------------------------
 # Helpers
