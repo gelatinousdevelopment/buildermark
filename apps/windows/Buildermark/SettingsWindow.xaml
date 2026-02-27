@@ -1,0 +1,82 @@
+<Window x:Class="Buildermark.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Buildermark Settings"
+        Width="400" SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Icon="/Resources/buildermark.ico">
+    <TabControl x:Name="TabControl" SelectionChanged="TabControl_SelectionChanged">
+
+        <!-- General Tab -->
+        <TabItem Header="General">
+            <StackPanel Margin="20">
+                <DockPanel Margin="0,0,0,8">
+                    <TextBlock Text="Buildermark:" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock>
+                        <Hyperlink x:Name="ServerLink" Click="ServerLink_Click">
+                            <Run x:Name="ServerLinkText" />
+                        </Hyperlink>
+                    </TextBlock>
+                </DockPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Ellipse x:Name="StatusIndicator" Width="10" Height="10" Margin="0,0,6,0" />
+                    <TextBlock x:Name="StatusText" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Button Content="Restart Server" Click="RestartServer_Click"
+                        HorizontalAlignment="Left" Padding="12,4" Margin="0,0,0,20" />
+
+                <Separator Margin="0,0,0,16" />
+
+                <TextBlock Text="Options:" FontWeight="SemiBold" Margin="0,0,0,8" />
+                <CheckBox x:Name="StartAtLoginCheckBox" Content="Start at login"
+                          Checked="StartAtLogin_Changed" Unchecked="StartAtLogin_Changed"
+                          Margin="0,0,0,8" />
+
+                <CheckBox x:Name="HideIconCheckBox" Content="Hide system tray icon"
+                          Checked="HideIcon_Changed" Unchecked="HideIcon_Changed"
+                          Margin="0,0,0,4" />
+                <TextBlock Text="Relaunch the app for this to take effect."
+                           FontSize="11" Foreground="Gray" Margin="20,0,0,4" />
+                <TextBlock Text="When hidden, launch app to show settings."
+                           FontSize="11" Foreground="Gray" Margin="20,0,0,0" />
+            </StackPanel>
+        </TabItem>
+
+        <!-- Updates Tab -->
+        <TabItem Header="Updates">
+            <StackPanel Margin="20">
+                <CheckBox x:Name="AutoUpdateCheckBox" Content="Automatically check for updates"
+                          Checked="AutoUpdate_Changed" Unchecked="AutoUpdate_Changed"
+                          Margin="0,0,0,16" />
+
+                <Button x:Name="CheckUpdatesButton" Content="Check for Updates..."
+                        Click="CheckUpdates_Click"
+                        HorizontalAlignment="Left" Padding="12,4" />
+            </StackPanel>
+        </TabItem>
+
+        <!-- About Tab -->
+        <TabItem Header="About">
+            <StackPanel Margin="20" HorizontalAlignment="Center">
+                <Image x:Name="AppIconImage" Width="64" Height="64"
+                       HorizontalAlignment="Center" Margin="0,0,0,12" />
+
+                <TextBlock Text="Buildermark" FontSize="18" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,4" />
+
+                <TextBlock x:Name="VersionText" Foreground="Gray"
+                           HorizontalAlignment="Center" Margin="0,0,0,4" />
+
+                <TextBlock x:Name="CopyrightText" FontSize="11" Foreground="Gray"
+                           HorizontalAlignment="Center" Margin="0,0,0,8" />
+
+                <TextBlock HorizontalAlignment="Center">
+                    <Hyperlink Click="WebsiteLink_Click">https://buildermark.dev</Hyperlink>
+                </TextBlock>
+            </StackPanel>
+        </TabItem>
+    </TabControl>
+</Window>

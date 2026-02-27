@@ -113,10 +113,14 @@ Required configuration:
 - `applicationShouldTerminateAfterLastWindowClosed` returns `false`
 - Build: `cd apps/macos && ./scripts/build.sh`
 
-### Windows (not yet implemented)
-- Consider WPF or WinUI with `NotifyIcon` for system tray
-- Use Windows Task Scheduler or registry for start-at-login
-- Bundle the server binary in the app directory
+### Windows (implemented)
+- Built with WPF (.NET 8) targeting Windows 10 (build 19041+) and newer
+- Uses `Hardcodet.NotifyIcon.Wpf` for the system tray icon
+- Uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry key for start-at-login
+- Uses NetSparkle (Sparkle-compatible) for auto-updates with EdDSA signature verification
+- Preferences stored in Windows Registry under `HKCU\Software\Buildermark`
+- Server termination uses `Process.Kill(entireProcessTree: true)` (no SIGTERM on Windows)
+- Build: `cd apps/windows && powershell -ExecutionPolicy Bypass -File scripts\build.ps1`
 
 ### Linux (not yet implemented)
 - Consider GTK or Qt with `AppIndicator` / `StatusNotifierItem` for system tray
