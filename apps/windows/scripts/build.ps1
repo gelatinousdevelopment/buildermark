@@ -83,23 +83,7 @@ $dotnetVersion = dotnet --version
 Write-Host "  .NET SDK: $dotnetVersion"
 
 # ---------------------------------------------------------------------------
-# Clean
-# ---------------------------------------------------------------------------
-
-Step "Cleaning previous build"
-# Stop any running instances that may lock files in the build directory
-Get-Process -Name "Buildermark", "buildermark-server" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-if (Test-Path $BuildDir) {
-    Remove-Item -Recurse -Force $BuildDir
-}
-$ObjDir = Join-Path (Join-Path $ProjectDir "Buildermark") "obj"
-if (Test-Path $ObjDir) {
-    Remove-Item -Recurse -Force $ObjDir
-}
-New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
-
-# ---------------------------------------------------------------------------
-# Build
+# Resolve target runtimes
 # ---------------------------------------------------------------------------
 
 if ($Runtime -eq "all") {
@@ -107,6 +91,31 @@ if ($Runtime -eq "all") {
 } else {
     $Runtimes = @($Runtime)
 }
+
+# ---------------------------------------------------------------------------
+# Clean
+# ---------------------------------------------------------------------------
+
+Step "Cleaning previous build"
+# Stop any running instances that may lock files in the build directory
+Get-Process -Name "Buildermark", "buildermark-server" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Clean obj to avoid stale XAML cache
+$ObjDir = Join-Path (Join-Path $ProjectDir "Buildermark") "obj"
+if (Test-Path $ObjDir) {
+    Remove-Item -Recurse -Force $ObjDir
+}
+# Clean only the runtime-specific build subdirectories, not the entire build dir
+foreach ($rid in $Runtimes) {
+    $RidDir = Join-Path $BuildDir $rid
+    if (Test-Path $RidDir) {
+        Remove-Item -Recurse -Force $RidDir
+    }
+}
+New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
 
 foreach ($rid in $Runtimes) {
     Build-Runtime $rid
