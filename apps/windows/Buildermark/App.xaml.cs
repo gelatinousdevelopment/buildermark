@@ -1,5 +1,9 @@
 using System;
 using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -8,6 +12,9 @@ namespace Buildermark;
 
 public partial class App : Application
 {
+    private const string PipeName = "Buildermark_SingleInstance";
+    private static Mutex? _mutex;
+    private CancellationTokenSource? _pipeCts;
     private TaskbarIcon? _trayIcon;
     private ServerManager? _serverManager;
     private UpdaterManager? _updaterManager;
@@ -21,6 +28,17 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        _mutex = new Mutex(true, PipeName, out bool createdNew);
+        if (!createdNew)
+        {
+            SignalExistingInstance();
+            Shutdown();
+            return;
+        }
+
+        _pipeCts = new CancellationTokenSource();
+        ListenForSecondInstance(_pipeCts.Token);
 
         _serverManager = new ServerManager();
         _updaterManager = new UpdaterManager();
@@ -108,11 +126,43 @@ public partial class App : Application
         Shutdown();
     }
 
+    private static void SignalExistingInstance()
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
+            client.Connect(timeout: 1000);
+            using var writer = new StreamWriter(client);
+            writer.Write("show");
+        }
+        catch { }
+    }
+
+    private async void ListenForSecondInstance(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var server = new NamedPipeServerStream(PipeName, PipeDirection.In, 1,
+                    PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+                await server.WaitForConnectionAsync(ct);
+                Dispatcher.Invoke(ShowSettingsWindow);
+            }
+            catch (OperationCanceledException) { break; }
+            catch { }
+        }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _pipeCts?.Cancel();
+        _pipeCts?.Dispose();
         _serverManager?.Stop();
         _trayIcon?.Dispose();
         _updaterManager?.Dispose();
+        _mutex?.ReleaseMutex();
+        _mutex?.Dispose();
         base.OnExit(e);
     }
 

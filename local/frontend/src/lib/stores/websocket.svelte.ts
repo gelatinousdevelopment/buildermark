@@ -1,4 +1,4 @@
-import { PUBLIC_API_URL } from '$env/static/public';
+import { API_URL } from '$lib/config';
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
@@ -31,8 +31,8 @@ type JobResolver = {
 const _jobWaiters: Map<string, JobResolver[]> = new Map();
 
 export function getWsUrl(): string {
-	if (PUBLIC_API_URL) {
-		return PUBLIC_API_URL.replace(/^http/, 'ws') + '/api/v1/ws';
+	if (API_URL) {
+		return API_URL.replace(/^http/, 'ws') + '/api/v1/ws';
 	}
 	const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 	return `${proto}//${window.location.host}/api/v1/ws`;

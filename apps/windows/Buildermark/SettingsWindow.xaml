@@ -6,7 +6,7 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         Icon="/Resources/buildermark.ico">
-    <TabControl x:Name="TabControl" SelectionChanged="TabControl_SelectionChanged">
+    <TabControl x:Name="TabControl" Margin="8" SelectionChanged="TabControl_SelectionChanged">
 
         <!-- General Tab -->
         <TabItem Header="General">
@@ -30,7 +30,6 @@
 
                 <Separator Margin="0,0,0,16" />
 
-                <TextBlock Text="Options:" FontWeight="SemiBold" Margin="0,0,0,8" />
                 <CheckBox x:Name="StartAtLoginCheckBox" Content="Start at login"
                           Checked="StartAtLogin_Changed" Unchecked="StartAtLogin_Changed"
                           Margin="0,0,0,8" />

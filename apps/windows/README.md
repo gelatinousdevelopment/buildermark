@@ -5,6 +5,7 @@ A Windows system tray application that manages the `buildermark-server` process.
 ## Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (includes the `dotnet` CLI)
+- LLVM MinGW (provides x64 and ARM64 cross-compilers for CGO) — install via `winget install -e --id MartinStorsjo.LLVM-MinGW.UCRT` (restart your shell after installing)
 - Windows 10 (version 2004 / build 19041) or newer
 
 ## Project Structure

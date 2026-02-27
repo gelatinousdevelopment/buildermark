@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,8 +25,36 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
     private Process? _process;
     private Timer? _healthCheckTimer;
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private readonly nint _jobHandle;
     private ServerStatus _status = ServerStatus.Stopped;
     private string _errorMessage = "";
+    private string _lastStderr = "";
+
+    public ServerManager()
+    {
+        _jobHandle = CreateJobObject(nint.Zero, null);
+        if (_jobHandle != nint.Zero)
+        {
+            var info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+            {
+                BasicLimitInformation = new JOBOBJECT_BASIC_LIMIT_INFORMATION
+                {
+                    LimitFlags = 0x2000 // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+                }
+            };
+            int length = Marshal.SizeOf(info);
+            nint ptr = Marshal.AllocHGlobal(length);
+            try
+            {
+                Marshal.StructureToPtr(info, ptr, false);
+                SetInformationJobObject(_jobHandle, 9 /* JobObjectExtendedLimitInformation */, ptr, (uint)length);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+        }
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -56,6 +85,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             return;
 
         Status = ServerStatus.Starting;
+        _lastStderr = "";
 
         var binaryPath = ResolveServerBinary();
         if (binaryPath == null)
@@ -93,7 +123,11 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             _process.ErrorDataReceived += (_, e) =>
             {
                 if (e.Data != null)
+                {
                     Trace.WriteLine($"[server stderr] {e.Data}");
+                    if (!string.IsNullOrWhiteSpace(e.Data))
+                        _lastStderr = e.Data;
+                }
             };
             _process.Exited += (_, _) =>
             {
@@ -106,7 +140,10 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
                 if (exitCode != 0)
                 {
                     Status = ServerStatus.Error;
-                    ErrorMessage = $"Exited ({exitCode})";
+                    var stderr = _lastStderr.Trim();
+                    ErrorMessage = stderr.Length > 0
+                        ? (stderr.Length > 200 ? stderr[..200] : stderr)
+                        : $"Exited ({exitCode})";
                 }
                 else
                 {
@@ -115,6 +152,10 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             };
 
             _process.Start();
+
+            if (_jobHandle != nint.Zero)
+                AssignProcessToJobObject(_jobHandle, _process.Handle);
+
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
 
@@ -239,5 +280,60 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
     {
         Stop();
         _httpClient.Dispose();
+        if (_jobHandle != nint.Zero)
+            CloseHandle(_jobHandle);
+    }
+
+    // -- Win32 Job Object interop --
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint CreateJobObject(nint lpJobAttributes, string? lpName);
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetInformationJobObject(nint hJob, int jobObjectInfoClass, nint lpJobObjectInfo, uint cbJobObjectInfoLength);
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AssignProcessToJobObject(nint hJob, nint hProcess);
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(nint hObject);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public nuint MinimumWorkingSetSize;
+        public nuint MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public nint Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IO_COUNTERS
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    {
+        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+        public IO_COUNTERS IoInfo;
+        public nuint ProcessMemoryLimit;
+        public nuint JobMemoryLimit;
+        public nuint PeakProcessMemoryUsed;
+        public nuint PeakJobMemoryUsed;
     }
 }

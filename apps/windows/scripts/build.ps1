@@ -27,7 +27,7 @@ if (-not $Runtime) { $Runtime = "all" }
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $BuildDir = Join-Path $ProjectDir "build"
-$CsprojPath = Join-Path $ProjectDir "Buildermark" "Buildermark.csproj"
+$CsprojPath = Join-Path (Join-Path $ProjectDir "Buildermark") "Buildermark.csproj"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,8 +87,14 @@ Write-Host "  .NET SDK: $dotnetVersion"
 # ---------------------------------------------------------------------------
 
 Step "Cleaning previous build"
+# Stop any running instances that may lock files in the build directory
+Get-Process -Name "Buildermark", "buildermark-server" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 if (Test-Path $BuildDir) {
     Remove-Item -Recurse -Force $BuildDir
+}
+$ObjDir = Join-Path (Join-Path $ProjectDir "Buildermark") "obj"
+if (Test-Path $ObjDir) {
+    Remove-Item -Recurse -Force $ObjDir
 }
 New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
 
@@ -112,7 +118,7 @@ foreach ($rid in $Runtimes) {
 
 Step "Build complete"
 foreach ($rid in $Runtimes) {
-    $ExePath = Join-Path $BuildDir $rid "Buildermark.exe"
+    $ExePath = Join-Path (Join-Path $BuildDir $rid) "Buildermark.exe"
     Write-Host "  $rid : $ExePath"
 }
 Write-Host ""

@@ -9,8 +9,8 @@
 $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$FrontendDir = Join-Path $RootDir "local" "frontend"
-$ServerDir = Join-Path $RootDir "local" "server"
+$FrontendDir = Join-Path (Join-Path $RootDir "local") "frontend"
+$ServerDir = Join-Path (Join-Path $RootDir "local") "server"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,11 +39,13 @@ Step "Checking system prerequisites"
 Check-Tool "node"   "Install Node.js: https://nodejs.org/"
 Check-Tool "npm"    "Included with Node.js: https://nodejs.org/"
 Check-Tool "go"     "Install Go: https://go.dev/dl/"
+Check-Tool "gcc"    "Install a C compiler (e.g. MSYS2 mingw-w64-ucrt-x86_64-gcc): https://www.msys2.org/"
 Check-Tool "dotnet" "Install .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0"
 
 Write-Host "  Node.js: $(node --version)"
 Write-Host "  npm:     $(npm --version)"
 Write-Host "  Go:      $(go version)"
+Write-Host "  GCC:     $(gcc --version | Select-Object -First 1)"
 Write-Host "  .NET:    $(dotnet --version)"
 
 # ---------------------------------------------------------------------------
@@ -75,7 +77,7 @@ try {
 # ---------------------------------------------------------------------------
 
 Step "Restoring .NET packages"
-$CsprojPath = Join-Path $RootDir "apps" "windows" "Buildermark" "Buildermark.csproj"
+$CsprojPath = Join-Path (Join-Path (Join-Path (Join-Path $RootDir "apps") "windows") "Buildermark") "Buildermark.csproj"
 dotnet restore $CsprojPath
 
 # ---------------------------------------------------------------------------

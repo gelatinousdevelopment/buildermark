@@ -1,4 +1,4 @@
-import { PUBLIC_API_URL } from '$env/static/public';
+import { API_URL } from '$lib/config';
 import type {
 	Project,
 	LocalSettings,
@@ -28,7 +28,7 @@ interface Envelope<T> {
 type APIFetch = typeof fetch;
 
 async function api<T>(path: string, init?: RequestInit, fetchFn: APIFetch = fetch): Promise<T> {
-	const res = await fetchFn(`${PUBLIC_API_URL}${path}`, init);
+	const res = await fetchFn(`${API_URL}${path}`, init);
 	const raw = await res.text();
 	let envelope: Envelope<T> | null = null;
 	try {
