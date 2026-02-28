@@ -66,6 +66,26 @@ step "Verifying Go build (CGO)"
 CGO_ENABLED=1 go build ./...
 
 # ---------------------------------------------------------------------------
+# Cross-compilation (optional)
+# ---------------------------------------------------------------------------
+
+step "Checking cross-compilation toolchains (optional)"
+HOST_ARCH="$(go env GOARCH)"
+if [[ "$HOST_ARCH" == "amd64" ]]; then
+    CROSS_CC="aarch64-linux-gnu-gcc"
+    CROSS_PKG="gcc-aarch64-linux-gnu"
+else
+    CROSS_CC="x86_64-linux-gnu-gcc"
+    CROSS_PKG="gcc-x86-64-linux-gnu"
+fi
+
+if command -v "$CROSS_CC" &>/dev/null; then
+    echo "  $CROSS_CC: OK"
+else
+    echo "  $CROSS_CC: not found (install $CROSS_PKG to cross-compile)"
+fi
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 
@@ -74,5 +94,6 @@ echo "  Frontend deps: $FRONTEND_DIR/node_modules"
 echo "  Go modules:    $(go env GOMODCACHE)"
 echo ""
 echo "  To build everything:  ./scripts/build-linux.sh"
+echo "  To build both archs:  ./scripts/build-linux.sh --arch all"
 echo "  To run the server:    cd local/server && go run ./cmd/buildermark"
 echo "  To run the frontend:  cd local/frontend && npm run dev"

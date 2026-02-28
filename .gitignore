@@ -4,3 +4,4 @@
 .playwright-cli
 /*.png
 .zed/debug
+apps/linux-cli/build/

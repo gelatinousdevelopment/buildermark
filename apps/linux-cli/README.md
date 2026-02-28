@@ -1,23 +1,25 @@
 # Buildermark Linux CLI
 
-A single `buildermark` binary that runs, manages (via systemd), and updates the Buildermark server on Linux.
+A single `buildermark` binary that runs, manages (via systemd), and updates the Buildermark server on Linux. Supports x86_64 (amd64) and aarch64 (arm64).
 
 ## Prerequisites
 
-- **GCC** (or another C compiler) -- required by go-sqlite3
+- **GCC** -- required by go-sqlite3 (CGO)
 - **Go** 1.21+
 - **Node.js** 18+ and npm
 
-On Debian/Ubuntu:
+For cross-compilation, install the appropriate cross-compiler:
 
 ```bash
-sudo apt install build-essential
-```
+# Debian/Ubuntu
+sudo apt install build-essential                # native
+sudo apt install gcc-aarch64-linux-gnu          # cross-compile to arm64
+sudo apt install gcc-x86-64-linux-gnu           # cross-compile to amd64
 
-On Fedora:
-
-```bash
-sudo dnf install gcc
+# Fedora
+sudo dnf install gcc                            # native
+sudo dnf install gcc-aarch64-linux-gnu          # cross-compile to arm64
+sudo dnf install gcc-x86_64-linux-gnu           # cross-compile to amd64
 ```
 
 ## Build
@@ -25,15 +27,19 @@ sudo dnf install gcc
 From the repository root:
 
 ```bash
-./scripts/build-linux.sh [VERSION]
+./scripts/build-linux.sh                          # host architecture only
+./scripts/build-linux.sh --arch all               # both amd64 and arm64
+./scripts/build-linux.sh --arch amd64             # x86_64 only
+./scripts/build-linux.sh --arch arm64             # aarch64 only
+./scripts/build-linux.sh --arch all --version 1.0.0
 ```
 
-The binary is written to `apps/linux-cli/buildermark`.
+Binaries are written to `apps/linux-cli/build/<arch>/buildermark`.
 
 ## Install
 
 ```bash
-cp apps/linux-cli/buildermark ~/.local/bin/buildermark
+cp apps/linux-cli/build/amd64/buildermark ~/.local/bin/buildermark
 buildermark service install
 ```
 
