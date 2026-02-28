@@ -43,6 +43,13 @@
 	let savingOverride = $state(false);
 
 	let hasOverride = $derived.by(() => detail?.commit?.overrideLinePercent != null);
+	let isWorkingCopyUnknown = $derived.by(
+		() =>
+			!!detail?.commit.workingCopy &&
+			!hasOverride &&
+			(detail?.messages.length ?? 0) === 0 &&
+			agentLinesFromAgent === 0
+	);
 	let effectivePercent = $derived.by(() => {
 		if (detail?.commit.overrideLinePercent != null) {
 			return detail.commit.overrideLinePercent;
@@ -258,15 +265,19 @@
 				>
 			</p>
 		{/if}
-		<div class="detail-bar">
-			<AgentPercentageBar
-				agentPercent={effectivePercent}
-				segments={hasOverride ? [] : toBarSegments(detail.commit.agentSegments)}
-				totalLines={agentLinesTotal}
-				showManual={true}
-				height="18px"
-			/>
-		</div>
+		{#if isWorkingCopyUnknown}
+			<p class="unknown-attribution">Agent attribution: Unknown</p>
+		{:else}
+			<div class="detail-bar">
+				<AgentPercentageBar
+					agentPercent={effectivePercent}
+					segments={hasOverride ? [] : toBarSegments(detail.commit.agentSegments)}
+					totalLines={agentLinesTotal}
+					showManual={true}
+					height="18px"
+				/>
+			</div>
+		{/if}
 		<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 
 		<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
@@ -573,6 +584,12 @@
 
 	.detail-bar {
 		max-width: 500px;
+		margin-bottom: 0.75rem;
+	}
+
+	.unknown-attribution {
+		color: var(--color-text-faded);
+		font-size: 0.9rem;
 		margin-bottom: 0.75rem;
 	}
 

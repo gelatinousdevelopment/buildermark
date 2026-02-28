@@ -66,6 +66,7 @@ export interface ConversationWithRatings {
 	parentConversationId: string;
 	hidden: boolean;
 	lastMessageTimestamp: number;
+	userPromptCount: number;
 	ratings: Rating[];
 	filesEdited: string[];
 }

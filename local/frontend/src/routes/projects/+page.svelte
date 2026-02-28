@@ -1,25 +1,28 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { getProject, listProjects } from '$lib/api';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
-	import type { Project, ProjectDetail } from '$lib/types';
 
-	type ProjectRow = {
-		project: Project;
-		conversationData: ProjectDetail | null;
-		conversationError: string | null;
-		lastMessageTimestamp: number;
-	};
+	let { data } = $props();
 
-	let rows: ProjectRow[] = $state([]);
-	let loading = $state(true);
-	let error: string | null = $state(null);
+	let rows = $derived(data.rows);
+	let error = $derived(data.error);
+
+	$effect(() => {
+		if (data.shouldRedirectToImport) {
+			goto(resolve('/projects/import'));
+		}
+	});
+
+	$effect(() => {
+		for (const row of rows) {
+			navStore.setCachedLabel(row.project.id, row.project.label || row.project.path);
+		}
+	});
 
 	// Per-project relationship tracking for hover highlights.
 	const projectCommitHashes = new SvelteMap<string, string[]>();
@@ -45,66 +48,10 @@
 	function projectName(project: { label: string; path: string }): string {
 		return project.label || project.path;
 	}
-
-	function sortRows(a: ProjectRow, b: ProjectRow): number {
-		if (a.lastMessageTimestamp !== b.lastMessageTimestamp) {
-			return b.lastMessageTimestamp - a.lastMessageTimestamp;
-		}
-		return projectName(a.project).localeCompare(projectName(b.project));
-	}
-
-	async function loadTrackedRows() {
-		loading = true;
-		error = null;
-		try {
-			const projects = (await listProjects(false)).filter((project) => project.gitId);
-			if (projects.length === 0) {
-				goto(resolve('/projects/import'));
-				return;
-			}
-			const loadedRows = await Promise.all(
-				projects.map(async (project): Promise<ProjectRow> => {
-					try {
-						const conversationData = await getProject(project.id, 1, 10);
-						const latestConversationTs =
-							conversationData.conversations[0]?.lastMessageTimestamp ?? 0;
-						return {
-							project,
-							conversationData,
-							conversationError: null,
-							lastMessageTimestamp: latestConversationTs
-						};
-					} catch (e) {
-						return {
-							project,
-							conversationData: null,
-							conversationError:
-								e instanceof Error ? e.message : 'Failed to load project conversations',
-							lastMessageTimestamp: 0
-						};
-					}
-				})
-			);
-			rows = loadedRows.sort(sortRows);
-			for (const row of rows) {
-				navStore.setCachedLabel(row.project.id, projectName(row.project));
-			}
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load projects';
-		} finally {
-			loading = false;
-		}
-	}
-
-	onMount(() => {
-		loadTrackedRows();
-	});
 </script>
 
 <div class="limited-content-width">
-	{#if loading}
-		<p class="loading">Loading projects...</p>
-	{:else if error}
+	{#if error}
 		<p class="error">{error}</p>
 	{:else}
 		<div class="projects">

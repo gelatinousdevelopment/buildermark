@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import { getLocalSettings, listProjects, scanHistory } from '$lib/api';
+	import { scanHistory } from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import { settingsStore, type ContentWidth } from '$lib/stores/settings.svelte';
-	import type { LocalSettings, Project } from '$lib/types';
 	import TeamServersSection from '$lib/TeamServersSection.svelte';
+
+	let { data } = $props();
 
 	const contentWidthOptions: { value: ContentWidth; label: string; description: string }[] = [
 		{ value: 'default', label: 'Default', description: '1540px' },
@@ -13,13 +13,11 @@
 		{ value: 'full', label: 'Full', description: '100%' }
 	];
 
-	let projects: Project[] = $state([]);
-	let loadingProjects = $state(true);
-	let projectError: string | null = $state(null);
+	let projects = $derived(data.projects);
+	let projectError = $derived(data.projectError);
+	let localSettings = $derived(data.localSettings);
+	let localSettingsError = $derived(data.localSettingsError);
 
-	let localSettingsLoading = $state(true);
-	let localSettingsError: string | null = $state(null);
-	let localSettings: LocalSettings | null = $state(null);
 	let historyImportDays = $state('7');
 	let importingHistory = $state(false);
 	let historyImportError: string | null = $state(null);
@@ -35,34 +33,6 @@
 
 	function projectName(project: { label: string; path: string }): string {
 		return project.label || project.path;
-	}
-
-	onMount(async () => {
-		await Promise.all([loadProjects(), loadLocalSettings()]);
-	});
-
-	async function loadProjects() {
-		loadingProjects = true;
-		projectError = null;
-		try {
-			projects = (await listProjects(false)).sort((a, b) =>
-				projectName(a).localeCompare(projectName(b))
-			);
-		} catch (e) {
-			projectError = e instanceof Error ? e.message : 'Failed to load projects';
-		} finally {
-			loadingProjects = false;
-		}
-	}
-
-	async function loadLocalSettings() {
-		try {
-			localSettings = await getLocalSettings();
-		} catch (e) {
-			localSettingsError = e instanceof Error ? e.message : 'Failed to load local settings';
-		} finally {
-			localSettingsLoading = false;
-		}
 	}
 
 	function historyImportTimeframe(days: string): string {
@@ -105,9 +75,7 @@
 <div class="settings limited-content-width inset-when-limited-content-width">
 	<h1>Global Settings</h1>
 
-	{#if localSettingsLoading}
-		<p>Loading local settings...</p>
-	{:else if localSettingsError}
+	{#if localSettingsError}
 		<p class="error">{localSettingsError}</p>
 	{:else if localSettings}
 		<div class="ui-section">
@@ -134,9 +102,7 @@
 
 		<div class="tracking-section">
 			<h2>Tracked Projects</h2>
-			{#if loadingProjects}
-				<p>Loading projects...</p>
-			{:else if projectError}
+			{#if projectError}
 				<p class="error">{projectError}</p>
 			{:else if projects.length === 0}
 				<p class="muted">No tracked projects yet.</p>

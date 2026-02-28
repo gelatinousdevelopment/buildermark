@@ -1,23 +1,20 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import {
 		deleteProject,
-		getProject,
 		setProjectLabel,
 		setProjectPath,
 		setProjectOldPaths,
 		setProjectIgnoreDiffPaths,
 		setProjectIgnoreDefaultDiffPaths,
-		listTeamServers,
 		setProjectTeamServer
 	} from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
-	import type { ProjectDetail, TeamServer } from '$lib/types';
 	import Icon from '$lib/Icon.svelte';
 	import Dialog from '$lib/Dialog.svelte';
+
+	let { data } = $props();
 
 	const defaultPaths = [
 		'**/.git/**',
@@ -44,60 +41,41 @@
 		'yarn.lock'
 	];
 
-	let project: ProjectDetail | null = $state(null);
-	let label = $state('');
-	let path = $state('');
-	let oldPaths = $state('');
-	let ignoreDiffPaths = $state('');
-	let ignoreDefaultDiffPaths = $state(true);
+	let project = $derived(data.project);
+	let teamServers = $derived(data.teamServers);
+
+	// svelte-ignore state_referenced_locally — form fields are intentionally initialized once
+	let label = $state(project.label ?? '');
+	// svelte-ignore state_referenced_locally
+	let path = $state(project.path ?? '');
+	// svelte-ignore state_referenced_locally
+	let oldPaths = $state(project.oldPaths ?? '');
+	// svelte-ignore state_referenced_locally
+	let ignoreDiffPaths = $state(project.ignoreDiffPaths ?? '');
+	// svelte-ignore state_referenced_locally
+	let ignoreDefaultDiffPaths = $state(project.ignoreDefaultDiffPaths ?? true);
+	// svelte-ignore state_referenced_locally
+	let teamServerId = $state(project.teamServerId ?? '');
+
 	let showDefaultPaths = $state(false);
-	let loading = $state(true);
 	let saving = $state(false);
 	let error: string | null = $state(null);
 	let notice: string | null = $state(null);
-
-	let teamServers: TeamServer[] = $state([]);
-	let teamServerId = $state('');
 
 	let showDeleteModal = $state(false);
 	let deleteConfirmName = $state('');
 	let deleting = $state(false);
 	let deleteError: string | null = $state(null);
 
-	function getProjectDisplayName(): string {
-		if (!project) return '';
-		return label || path || project.path;
-	}
-
-	function getProjectID(): string {
-		return project ? project.id : '';
-	}
-
-	let projectDisplayName = $derived(getProjectDisplayName());
-	let projectID = $derived(getProjectID());
+	let projectDisplayName = $derived(label || path || project.path);
 	let recomputeStatusMessage = $derived.by(() => {
 		const job = websocketStore.getJob('diff_recompute');
-		if (!job || !projectID) return null;
-		if (job.message?.includes(projectID)) return job.message;
+		if (!job || !project.id) return null;
+		if (job.message?.includes(project.id)) return job.message;
 		return null;
 	});
 
-	async function load() {
-		const id = page.params.project_id;
-		if (!id) throw new Error('Missing project ID');
-		const [proj, servers] = await Promise.all([getProject(id), listTeamServers()]);
-		project = proj;
-		teamServers = servers;
-		label = project.label ?? '';
-		path = project.path ?? '';
-		oldPaths = project.oldPaths ?? '';
-		ignoreDiffPaths = project.ignoreDiffPaths ?? '';
-		ignoreDefaultDiffPaths = project.ignoreDefaultDiffPaths ?? true;
-		teamServerId = project.teamServerId ?? '';
-	}
-
 	async function save() {
-		if (!project) return;
 		saving = true;
 		error = null;
 		notice = null;
@@ -118,7 +96,6 @@
 	}
 
 	async function confirmDeleteProject() {
-		if (!project) return;
 		deleting = true;
 		deleteError = null;
 		try {
@@ -130,25 +107,10 @@
 			deleting = false;
 		}
 	}
-
-	onMount(async () => {
-		try {
-			await load();
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load project settings';
-		} finally {
-			loading = false;
-		}
-	});
 </script>
 
 <div class="page">
-	{#if loading}
-		<p class="loading">Loading settings...</p>
-	{:else if error && !project}
-		<p class="error">{error}</p>
-	{:else if project}
-		<h1>Project Settings</h1>
+	<h1>Project Settings</h1>
 
 		<label class="field-label" for="project-label">Label</label>
 		<input
@@ -246,7 +208,6 @@
 			</p>
 			<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button>
 		</div>
-	{/if}
 </div>
 
 <Dialog open={showDeleteModal} title="Delete Project" onclose={() => (showDeleteModal = false)}>

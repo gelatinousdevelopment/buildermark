@@ -34,6 +34,7 @@
 
 	/** Safe area inset (px) from viewport edges. */
 	const MARGIN = 8; // 0.5rem
+	const MARGIN_RIGHT = MARGIN * 2;
 	const GAP = 6;
 
 	const ALL_POSITIONS: Position[] = ['leading', 'trailing', 'above', 'below'];
@@ -76,7 +77,8 @@
 	function overflow(rect: DOMRect): number {
 		let total = 0;
 		if (rect.left < MARGIN) total += MARGIN - rect.left;
-		if (rect.right > window.innerWidth - MARGIN) total += rect.right - (window.innerWidth - MARGIN);
+		if (rect.right > window.innerWidth - MARGIN_RIGHT)
+			total += rect.right - (window.innerWidth - MARGIN_RIGHT);
 		if (rect.top < MARGIN) total += MARGIN - rect.top;
 		if (rect.bottom > window.innerHeight - MARGIN)
 			total += rect.bottom - (window.innerHeight - MARGIN);
@@ -94,7 +96,8 @@
 		}
 		let dx = 0;
 		if (rect.left < MARGIN) dx = MARGIN - rect.left;
-		else if (rect.right > window.innerWidth - MARGIN) dx = window.innerWidth - MARGIN - rect.right;
+		else if (rect.right > window.innerWidth - MARGIN_RIGHT)
+			dx = window.innerWidth - MARGIN_RIGHT - rect.right;
 		return { dx, dy: 0 };
 	}
 

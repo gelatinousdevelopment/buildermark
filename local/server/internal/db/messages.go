@@ -216,6 +216,23 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 		}
 	}
 
+	// Recalculate user_prompt_count for each affected conversation.
+	updatePromptCountStmt, err := tx.PrepareContext(ctx,
+		`UPDATE conversations SET user_prompt_count = (
+			SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND role = 'user'
+		) WHERE id = ?`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare update user_prompt_count: %w", err)
+	}
+	defer updatePromptCountStmt.Close()
+
+	for conversationID := range conversationIDs {
+		if _, err := updatePromptCountStmt.ExecContext(ctx, conversationID, conversationID); err != nil {
+			return fmt.Errorf("update user_prompt_count: %w", err)
+		}
+	}
+
 	return tx.Commit()
 }
 
