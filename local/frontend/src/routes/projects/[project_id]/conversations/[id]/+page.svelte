@@ -30,7 +30,7 @@
 				content: string;
 				diffMessages: MessageRead[];
 				time: number;
-			};
+		  };
 
 	let { data } = $props();
 
@@ -123,10 +123,7 @@
 		}
 	}
 
-	function activateCombinedDiff(
-		item: { id: string; content: string },
-		expanded: boolean
-	) {
+	function activateCombinedDiff(item: { id: string; content: string }, expanded: boolean) {
 		if (!isWideMode && !expanded) {
 			toggleExpanded(item.id);
 		}
@@ -243,6 +240,14 @@
 		function flushRun() {
 			if (run.length === 0) return;
 
+			const first = run[0];
+			items.push({
+				kind: 'log-group',
+				id: `log-group-${first.id}`,
+				messages: [...run],
+				time: first.timestamp
+			});
+
 			const diffs = run.filter((m) => isDiffMessage(m));
 			if (diffs.length > 0) {
 				items.push({
@@ -254,13 +259,6 @@
 				});
 			}
 
-			const first = run[0];
-			items.push({
-				kind: 'log-group',
-				id: `log-group-${first.id}`,
-				messages: [...run],
-				time: first.timestamp
-			});
 			run = [];
 		}
 
@@ -372,9 +370,7 @@
 					</div>
 				{:else if item.kind === 'combined-diff'}
 					{@const combinedSelected = selectedCombinedDiffId === item.id}
-					{@const combinedExpanded = isWideMode
-						? combinedSelected
-						: expandedMessages.has(item.id)}
+					{@const combinedExpanded = isWideMode ? combinedSelected : expandedMessages.has(item.id)}
 					{@const combinedInteractive = isWideMode || !combinedExpanded}
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 					<div
@@ -385,17 +381,14 @@
 						tabindex={combinedInteractive ? 0 : undefined}
 						onclick={() => activateCombinedDiff(item, combinedExpanded)}
 						onkeydown={combinedInteractive
-							? (e: KeyboardEvent) =>
-									handleCombinedDiffKeydown(e, item, combinedExpanded)
+							? (e: KeyboardEvent) => handleCombinedDiffKeydown(e, item, combinedExpanded)
 							: undefined}
 					>
 						<DiffMessageCard
 							label={item.diffMessages.length > 1 ? 'combined diff' : 'diff'}
 							content={item.content}
 							expanded={combinedExpanded}
-							onToggle={!isWideMode && combinedExpanded
-								? () => toggleExpanded(item.id)
-								: undefined}
+							onToggle={!isWideMode && combinedExpanded ? () => toggleExpanded(item.id) : undefined}
 						/>
 					</div>
 				{:else if item.kind === 'rating'}
@@ -514,11 +507,7 @@
 	<hr class="divider" />
 	<div class="column right">
 		{#if selectedCombinedDiffContent}
-			<DiffMessageCard
-				content={selectedCombinedDiffContent}
-				expanded={true}
-				contentOnly={true}
-			/>
+			<DiffMessageCard content={selectedCombinedDiffContent} expanded={true} contentOnly={true} />
 		{:else if selectedMessage}
 			{#if isDiffMessage(selectedMessage)}
 				<DiffMessageCard
