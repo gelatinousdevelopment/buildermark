@@ -216,35 +216,37 @@
 		<p class="error">{error}</p>
 	{:else if detail}
 		<div class="right">
-			<div class="override-controls">
-				{#if editingOverride}
-					<input
-						type="number"
-						min="0"
-						max="100"
-						step="any"
-						bind:value={overrideInput}
-						class="override-input"
-						disabled={savingOverride}
-						onkeydown={(e) => {
-							if (e.key === 'Enter') saveOverride();
-							if (e.key === 'Escape') editingOverride = false;
-						}}
-					/>
-					<button class="btn-override-action" onclick={saveOverride} disabled={savingOverride}
-						>Save</button
-					>
-					<button
-						class="btn-override-action"
-						onclick={() => (editingOverride = false)}
-						disabled={savingOverride}>Cancel</button
-					>
-				{:else}
-					<button class="btn-override-action" onclick={startEditOverride}>
-						{hasOverride ? 'Edit Override' : 'Override Agent Attribution'}
-					</button>
-				{/if}
-			</div>
+			{#if !detail?.commit.workingCopy}
+				<div class="override-controls">
+					{#if editingOverride}
+						<input
+							type="number"
+							min="0"
+							max="100"
+							step="any"
+							bind:value={overrideInput}
+							class="override-input"
+							disabled={savingOverride}
+							onkeydown={(e) => {
+								if (e.key === 'Enter') saveOverride();
+								if (e.key === 'Escape') editingOverride = false;
+							}}
+						/>
+						<button class="btn-override-action" onclick={saveOverride} disabled={savingOverride}
+							>Save</button
+						>
+						<button
+							class="btn-override-action"
+							onclick={() => (editingOverride = false)}
+							disabled={savingOverride}>Cancel</button
+						>
+					{:else}
+						<button class="btn-override-action" onclick={startEditOverride}>
+							{hasOverride ? 'Edit Override' : 'Override Agent Attribution'}
+						</button>
+					{/if}
+				</div>
+			{/if}
 		</div>
 		<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
 		<p>

@@ -430,7 +430,7 @@
 										<Icon name="document" width="13px" />
 									</div>{/if}{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
 							</a>
-							{#if conv.userPromptCount > 0}
+							{#if conv.userPromptCount > 1}
 								<span class="prompt-count" title="{conv.userPromptCount} user prompts"
 									>{conv.userPromptCount}</span
 								>
@@ -663,6 +663,8 @@
 	}
 
 	.title .title-content {
+		display: flex;
+		flex-direction: row;
 		overflow: hidden;
 	}
 
@@ -693,11 +695,20 @@
 	}
 
 	.prompt-count {
-		color: var(--color-text-faded);
+		color: var(--color-text-secondary);
 		font-size: 0.75rem;
-		font-variant-numeric: tabular-nums;
 		margin-left: 0.4rem;
 		white-space: nowrap;
+
+		aspect-ratio: 1 / 1;
+		background: #eee;
+		background: rgb(0, 0, 0, 0.07);
+		border-radius: 99px;
+		display: block;
+		font-weight: 600;
+		min-width: 1rem;
+		padding: 0.2rem 0.3rem;
+		text-align: center;
 	}
 
 	.title a:hover {
