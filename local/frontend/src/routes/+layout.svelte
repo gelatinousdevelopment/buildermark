@@ -13,7 +13,7 @@
 	import '$lib/stores/settings.svelte';
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 
-	let { children } = $props();
+	let { children, data } = $props();
 
 	onMount(() => {
 		websocketStore.connect();
@@ -26,6 +26,7 @@
 	let projectId = $derived(page.params.project_id);
 	let showReadOnlyDialog = $state(false);
 	const isReadOnlyDemo = import.meta.env.PUBLIC_READ_ONLY === 'true';
+	let bigBrand = $derived(data.projects && data.projects.length == 0);
 
 	const projectTabs = [
 		{
@@ -73,16 +74,20 @@
 >
 
 <div class="site" class:fixed-height={layoutStore.fixedHeight}>
-	<header>
+	<header class:bigBrand>
 		<section>
 			<div class="brand">
-				<a href={resolve('/projects')} class="item"
-					><Icon name="wrench" width="22px" />
-					<div class="text">
+				<a href={resolve('/projects')} class="item wordmark">
+					<Icon name="buildermarkWordmark" width="176px" />
+				</a>
+				<a href={resolve('/projects')} class="item icon">
+					<!-- <Icon name="buildermark" width="28px" /> -->
+					<Icon name="buildermarkTall" width="29px" />
+					<!-- <div class="text">
 						<div class="title">Buildermark</div>
 						<div class="subtitle">Local</div>
-					</div></a
-				>
+					</div> -->
+				</a>
 			</div>
 		</section>
 		<hr class="divider" />
@@ -111,7 +116,7 @@
 							class:selected={isTabSelected(tab.segment)}>{tab.label}</a
 						>
 					{/each}
-				{:else}
+				{:else if !bigBrand}
 					<a href={resolve('/projects')} class="item" class:selected={page.route.id === '/projects'}
 						>Projects</a
 					>
@@ -134,9 +139,11 @@
 						Read-only demo
 					</button>
 				{/if}
-				<a href={resolve('/search')} class="item" title="Search"
-					><Icon name="search" width="19px" /></a
-				>
+				{#if !bigBrand}
+					<a href={resolve('/search')} class="item" title="Search"
+						><Icon name="search" width="19px" /></a
+					>
+				{/if}
 			</nav>
 		</section>
 		<hr class="divider" />
@@ -151,7 +158,7 @@
 		<section>
 			<ServerStatusIndicator />
 		</section>
-		<hr class="divider" />
+		<!-- <hr class="divider" />
 		<section>
 			<nav class="right">
 				<a
@@ -160,7 +167,7 @@
 					title="Buildermark on GitHub"><Icon name="github" width="15px" /></a
 				>
 			</nav>
-		</section>
+		</section> -->
 	</header>
 
 	<div class="dashboard-content">
@@ -224,6 +231,7 @@
 		display: flex;
 		font-size: 1rem;
 		padding: 0;
+		background: var(--color-background-content);
 	}
 
 	header section {
@@ -237,7 +245,7 @@
 		font-size: 1.1rem;
 		font-weight: 400;
 		height: 40px;
-		padding: 0 1.3rem;
+		padding: 0 1rem;
 		white-space: nowrap;
 	}
 
@@ -256,21 +264,45 @@
 		margin: 0;
 		min-width: 0.5px;
 		width: 0.5px;
+
+		/*display: none;*/
 	}
 
 	header .brand {
 		margin: 0;
 		font-weight: 600;
+
+		/*margin-bottom: -1px;*/
+		/*margin-top: 1px;*/
 	}
 
 	header .brand a {
 		align-items: center;
-		color: var(--color-text);
+		color: var(--color-text-secondary);
 		display: flex;
 		flex-direction: row;
 		font-size: 1rem;
 		gap: 0.6rem;
 		text-decoration: none;
+
+		/*color: var(--accent-color);*/
+		/*opacity: 0.7;*/
+		/*padding: 0 2rem;*/
+
+		padding: 0 1.5rem;
+	}
+
+	header .brand a.wordmark {
+		display: none;
+	}
+	header .brand a.icon {
+		display: flex;
+	}
+	header.bigBrand .brand a.wordmark {
+		display: flex;
+	}
+	header.bigBrand .brand a.icon {
+		display: none;
 	}
 
 	header .brand a:hover {
@@ -279,22 +311,33 @@
 		position: relative;
 	}
 
+	header .brand a :global(.icon) {
+		align-items: flex-end;
+	}
+
 	header .brand .text {
 		display: flex;
 		flex-direction: column;
-		gap: 0.1rem;
+		gap: 0rem;
 		justify-content: center;
+
+		/*display: none;*/
 	}
 
 	header .brand .text .title {
-		font-size: 1rem;
-		font-weight: 600;
+		font-size: 1.9rem;
+		font-weight: bold;
+
+		/*font-size: 1rem;*/
+		/*line-height: 1;*/
 	}
 
 	header .brand .text .subtitle {
-		font-size: 0.7rem;
+		font-size: 0.6rem;
 		font-weight: 600;
 		text-transform: uppercase;
+
+		display: none;
 	}
 
 	header nav {
@@ -305,7 +348,7 @@
 
 	header nav.breadcrumbs {
 		gap: 0rem;
-		padding-left: 0.5rem;
+		/*padding-left: 0.5rem;*/
 	}
 
 	header nav.breadcrumbs .chevron-right {

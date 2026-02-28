@@ -33,7 +33,15 @@ struct BuildermarkApp: App {
         ) {
             MenuBarMenu(serverManager: serverManager, updaterViewModel: updaterViewModel)
         } label: {
-            Label("Buildermark", systemImage: "hammer.fill")
+            Label {
+                Text("Buildermark")
+            } icon: {
+                Image("buildermark")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+            }
         }
         .menuBarExtraStyle(.menu)
 

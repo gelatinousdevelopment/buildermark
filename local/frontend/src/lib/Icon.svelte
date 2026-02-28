@@ -11,6 +11,9 @@
 	import userSvg from '$lib/icons/user.svg?raw';
 	import searchSvg from '$lib/icons/search.svg?raw';
 	import infoSvg from '$lib/icons/info.svg?raw';
+	import buildermarkSvg from '$lib/icons/buildermark.svg?raw';
+	import buildermarkWordmarkSvg from '$lib/icons/buildermarkWordmark.svg?raw';
+	import buildermarkTallSvg from '$lib/icons/buildermarkTall.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -29,7 +32,10 @@
 		document: documentSvg,
 		user: userSvg,
 		search: searchSvg,
-		info: infoSvg
+		info: infoSvg,
+		buildermark: buildermarkSvg,
+		buildermarkWordmark: buildermarkWordmarkSvg,
+		buildermarkTall: buildermarkTallSvg
 	};
 </script>
 

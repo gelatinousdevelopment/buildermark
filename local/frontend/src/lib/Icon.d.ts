@@ -13,5 +13,8 @@ declare global {
 		| 'document'
 		| 'user'
 		| 'search'
-		| 'info';
+		| 'info'
+		| 'buildermark'
+		| 'buildermarkWordmark'
+		| 'buildermarkTall';
 }
