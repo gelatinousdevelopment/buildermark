@@ -7,6 +7,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
 	import { isUserPromptMessage, isDiffMessage, messageModel } from '$lib/messageUtils';
+	import { combineDiffs } from '$lib/diffCombiner';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import LogMessageCard from '$lib/components/LogMessageCard.svelte';
 	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
@@ -22,7 +23,14 @@
 
 	type DisplayItem =
 		| TimelineItem
-		| { kind: 'log-group'; id: string; messages: MessageRead[]; time: number };
+		| { kind: 'log-group'; id: string; messages: MessageRead[]; time: number }
+		| {
+				kind: 'combined-diff';
+				id: string;
+				content: string;
+				diffMessages: MessageRead[];
+				time: number;
+			};
 
 	let { data } = $props();
 
@@ -39,6 +47,8 @@
 	let expandedMessages = new SvelteSet<string>();
 	let expandedLogGroups = new SvelteSet<string>();
 	let selectedMessage: MessageRead | null = $state(null);
+	let selectedCombinedDiffId: string | null = $state(null);
+	let selectedCombinedDiffContent: string | null = $state(null);
 	let isWideMode = $state(false);
 	let wideModeQuery: MediaQueryList | null = null;
 	let leftColumn: HTMLDivElement | undefined = $state();
@@ -58,6 +68,8 @@
 			expandedMessages.clear();
 			expandedLogGroups.clear();
 			selectedMessage = null;
+			selectedCombinedDiffId = null;
+			selectedCombinedDiffContent = null;
 			leftColumn?.scrollTo(0, 0);
 		}
 	});
@@ -66,12 +78,31 @@
 	let localRatings: Rating[] = $derived(conversation.ratings);
 
 	function selectMessage(message: MessageRead) {
-		selectedMessage = selectedMessage?.id === message.id ? null : message;
+		if (selectedMessage?.id === message.id) {
+			selectedMessage = null;
+		} else {
+			selectedMessage = message;
+			selectedCombinedDiffId = null;
+			selectedCombinedDiffContent = null;
+		}
+	}
+
+	function selectCombinedDiff(id: string, content: string) {
+		if (selectedCombinedDiffId === id) {
+			selectedCombinedDiffId = null;
+			selectedCombinedDiffContent = null;
+		} else {
+			selectedCombinedDiffId = id;
+			selectedCombinedDiffContent = content;
+			selectedMessage = null;
+		}
 	}
 
 	function clearSelectionOnLeftBackground(e: MouseEvent) {
 		if (e.target !== e.currentTarget) return;
 		selectedMessage = null;
+		selectedCombinedDiffId = null;
+		selectedCombinedDiffContent = null;
 	}
 
 	function updateWideMode(query: MediaQueryList | MediaQueryListEvent) {
@@ -89,6 +120,27 @@
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
 			activateMessage(message, expanded);
+		}
+	}
+
+	function activateCombinedDiff(
+		item: { id: string; content: string },
+		expanded: boolean
+	) {
+		if (!isWideMode && !expanded) {
+			toggleExpanded(item.id);
+		}
+		selectCombinedDiff(item.id, item.content);
+	}
+
+	function handleCombinedDiffKeydown(
+		e: KeyboardEvent,
+		item: { id: string; content: string },
+		expanded: boolean
+	) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			activateCombinedDiff(item, expanded);
 		}
 	}
 
@@ -186,35 +238,50 @@
 
 	let displayItems: DisplayItem[] = $derived.by(() => {
 		const items: DisplayItem[] = [];
-		let logRun: MessageRead[] = [];
+		let run: MessageRead[] = [];
 
-		function flushLogRun() {
-			if (logRun.length === 0) return;
-			const first = logRun[0];
+		function flushRun() {
+			if (run.length === 0) return;
+
+			const diffs = run.filter((m) => isDiffMessage(m));
+			if (diffs.length > 0) {
+				items.push({
+					kind: 'combined-diff',
+					id: `combined-diff-${diffs[0].id}`,
+					content: combineDiffs(diffs),
+					diffMessages: diffs,
+					time: diffs[0].timestamp
+				});
+			}
+
+			const first = run[0];
 			items.push({
 				kind: 'log-group',
 				id: `log-group-${first.id}`,
-				messages: [...logRun],
+				messages: [...run],
 				time: first.timestamp
 			});
-			logRun = [];
+			run = [];
 		}
 
 		for (const item of timeline) {
 			if (item.kind === 'rating') {
-				flushLogRun();
+				flushRun();
 				items.push(item);
 				continue;
 			}
-			if (isUserPromptMessage(item.message) || isDiffMessage(item.message)) {
-				flushLogRun();
+			if (isUserPromptMessage(item.message)) {
+				flushRun();
 				items.push(item);
 				continue;
 			}
-			logRun.push(item.message);
+			// All non-user messages (including diffs) go into the run.
+			// Diffs are combined into a single combined-diff display item;
+			// individual messages (including diffs) remain in the log group.
+			run.push(item.message);
 		}
 
-		flushLogRun();
+		flushRun();
 		return items;
 	});
 
@@ -303,33 +370,31 @@
 					<div class="message user-message" data-message-id={item.message.id}>
 						<UserPromptMessageCard message={item.message} />
 					</div>
-				{:else if item.kind === 'message' && isDiffMessage(item.message)}
-					{@const messageSelected = selectedMessage?.id === item.message.id}
-					{@const diffExpanded = isWideMode
-						? messageSelected
-						: expandedMessages.has(item.message.id)}
-					{@const messageInteractive = isWideMode || !diffExpanded}
+				{:else if item.kind === 'combined-diff'}
+					{@const combinedSelected = selectedCombinedDiffId === item.id}
+					{@const combinedExpanded = isWideMode
+						? combinedSelected
+						: expandedMessages.has(item.id)}
+					{@const combinedInteractive = isWideMode || !combinedExpanded}
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 					<div
 						class="message inline-diff-message"
-						class:message-selected={messageSelected}
-						class:message-collapsed={!diffExpanded}
-						role={messageInteractive ? 'button' : undefined}
-						tabindex={messageInteractive ? 0 : undefined}
-						onclick={() => activateMessage(item.message, diffExpanded)}
-						onkeydown={messageInteractive
-							? (e: KeyboardEvent) => handleMessageActivateKeydown(e, item.message, diffExpanded)
+						class:message-selected={combinedSelected}
+						class:message-collapsed={!combinedExpanded}
+						role={combinedInteractive ? 'button' : undefined}
+						tabindex={combinedInteractive ? 0 : undefined}
+						onclick={() => activateCombinedDiff(item, combinedExpanded)}
+						onkeydown={combinedInteractive
+							? (e: KeyboardEvent) =>
+									handleCombinedDiffKeydown(e, item, combinedExpanded)
 							: undefined}
 					>
 						<DiffMessageCard
-							timestamp={item.message.timestamp}
-							role={item.message.role === 'agent' ? conversation.agent : item.message.role}
-							model={messageModel(item.message)}
-							content={item.message.content}
-							expanded={diffExpanded}
-							subtleAgentTag={true}
-							onToggle={!isWideMode && diffExpanded
-								? () => toggleExpanded(item.message.id)
+							label={item.diffMessages.length > 1 ? 'combined diff' : 'diff'}
+							content={item.content}
+							expanded={combinedExpanded}
+							onToggle={!isWideMode && combinedExpanded
+								? () => toggleExpanded(item.id)
 								: undefined}
 						/>
 					</div>
@@ -448,9 +513,14 @@
 	</div>
 	<hr class="divider" />
 	<div class="column right">
-		{#if selectedMessage}
+		{#if selectedCombinedDiffContent}
+			<DiffMessageCard
+				content={selectedCombinedDiffContent}
+				expanded={true}
+				contentOnly={true}
+			/>
+		{:else if selectedMessage}
 			{#if isDiffMessage(selectedMessage)}
-				<!-- <div class="message right-message"> -->
 				<DiffMessageCard
 					timestamp={selectedMessage.timestamp}
 					role={selectedMessage.role === 'agent' ? conversation?.agent : selectedMessage.role}
@@ -459,11 +529,8 @@
 					expanded={true}
 					contentOnly={true}
 				/>
-				<!-- </div> -->
 			{:else}
-				<!-- <div class="message right-message"> -->
 				<LogMessageCard message={selectedMessage} expanded={true} contentOnly={true} />
-				<!-- </div> -->
 			{/if}
 		{:else}
 			<div class="empty">No message selected</div>
