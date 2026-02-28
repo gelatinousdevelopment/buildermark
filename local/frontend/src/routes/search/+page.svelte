@@ -4,62 +4,19 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { listProjects, listSearchProjects } from '$lib/api';
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
-	import type { Project, ProjectSearchMatch } from '$lib/types';
+	import type { Project } from '$lib/types';
 
-	const currentQuery = $derived(page.url.searchParams.get('q')?.trim() ?? '');
-	const currentProjectId = $derived(page.url.searchParams.get('project') ?? '');
+	let { data } = $props();
+
+	const currentQuery = $derived(data.query);
+	const currentProjectId = $derived(data.projectId);
 
 	let queryInput = $derived(currentQuery);
-	let allProjects: Project[] = $state([]);
-	let results: ProjectSearchMatch[] = $state([]);
-	let loading = $state(false);
-	let error: string | null = $state(null);
-	let initialized = $state(false);
-	let requestToken = 0;
-
-	$effect(() => {
-		if (initialized) return;
-		initialized = true;
-		void loadProjects();
-	});
-
-	$effect(() => {
-		void loadSearchResults(currentQuery, currentProjectId);
-	});
-
-	async function loadProjects() {
-		try {
-			allProjects = await listProjects(false);
-		} catch {
-			allProjects = [];
-		}
-	}
-
-	async function loadSearchResults(query: string, projectId: string) {
-		if (!query) {
-			results = [];
-			error = null;
-			loading = false;
-			return;
-		}
-		const myToken = ++requestToken;
-		loading = true;
-		error = null;
-		try {
-			const loaded = await listSearchProjects(query, projectId);
-			if (myToken !== requestToken) return;
-			results = loaded;
-		} catch (e) {
-			if (myToken !== requestToken) return;
-			error = e instanceof Error ? e.message : 'Failed to search projects';
-			results = [];
-		} finally {
-			if (myToken === requestToken) loading = false;
-		}
-	}
+	let allProjects = $derived(data.allProjects);
+	let results = $derived(data.results);
+	let error = $derived(data.searchError);
 
 	function updateUrl(nextQuery: string, nextProjectId: string) {
 		const params = new SvelteURLSearchParams(page.url.searchParams);
@@ -119,8 +76,6 @@
 
 	{#if !currentQuery}
 		<p class="message">Enter a search term to find matching conversations and commits.</p>
-	{:else if loading}
-		<p class="loading">Searching...</p>
 	{:else if error}
 		<p class="error">{error}</p>
 	{:else if results.length === 0}
@@ -322,7 +277,6 @@
 	}
 
 	.message,
-	.loading,
 	.error {
 		padding: 2rem;
 		text-align: center;

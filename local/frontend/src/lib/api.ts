@@ -53,12 +53,12 @@ async function api<T>(path: string, init?: RequestInit, fetchFn: APIFetch = fetc
 	return envelope.data as T;
 }
 
-export function listProjects(ignored = false): Promise<Project[]> {
-	return api(`/api/v1/projects?ignored=${ignored}`);
+export function listProjects(ignored = false, fetchFn?: APIFetch): Promise<Project[]> {
+	return api(`/api/v1/projects?ignored=${ignored}`, undefined, fetchFn);
 }
 
-export function getLocalSettings(): Promise<LocalSettings> {
-	return api('/api/v1/settings');
+export function getLocalSettings(fetchFn?: APIFetch): Promise<LocalSettings> {
+	return api('/api/v1/settings', undefined, fetchFn);
 }
 
 export function deleteProject(id: string): Promise<void> {
@@ -229,11 +229,15 @@ export function listProjectCommitsPage(
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }
 
-export function listSearchProjects(query: string, projectId = ''): Promise<ProjectSearchMatch[]> {
+export function listSearchProjects(
+	query: string,
+	projectId = '',
+	fetchFn?: APIFetch
+): Promise<ProjectSearchMatch[]> {
 	const params = new URLSearchParams();
 	if (query) params.set('q', query);
 	if (projectId) params.set('projectId', projectId);
-	return api(`/api/v1/search/projects?${params.toString()}`);
+	return api(`/api/v1/search/projects?${params.toString()}`, undefined, fetchFn);
 }
 
 export function getProjectCommitDetail(
@@ -299,8 +303,8 @@ export function importProjects(
 	});
 }
 
-export function listTeamServers(): Promise<TeamServer[]> {
-	return api('/api/v1/team-servers');
+export function listTeamServers(fetchFn?: APIFetch): Promise<TeamServer[]> {
+	return api('/api/v1/team-servers', undefined, fetchFn);
 }
 
 export function createTeamServer(label: string, url: string, apiKey: string): Promise<TeamServer> {
