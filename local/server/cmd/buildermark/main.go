@@ -5,19 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
-	"time"
 
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/claude"
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/codex"
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/gemini"
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/handler"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/cli"
 )
 
 func main() {
@@ -30,78 +22,19 @@ func main() {
 	addr := flag.String("addr", ":7022", "listen address")
 	flag.Parse()
 
-	readOnly, err := strconv.ParseBool(os.Getenv("READ_ONLY"))
-	if err != nil {
-		log.Printf("warning: invalid READ_ONLY value %q, defaulting to false", os.Getenv("READ_ONLY"))
-		readOnly = false
-	}
-
-	database, err := db.InitDB(*dbPath)
-	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
-	}
-	defer database.Close()
-
-	registry := agent.NewRegistry()
-
-	claudeAgent, err := claude.New(database)
-	if err != nil {
-		log.Printf("warning: claude agent disabled: %v", err)
-	} else {
-		registry.Register(claudeAgent)
-	}
-
-	codexAgent, err := codex.New(database)
-	if err != nil {
-		log.Printf("warning: codex agent disabled: %v", err)
-	} else {
-		registry.Register(codexAgent)
-	}
-
-	geminiAgent, err := gemini.New(database)
-	if err != nil {
-		log.Printf("warning: gemini agent disabled: %v", err)
-	} else {
-		registry.Register(geminiAgent)
-	}
-
-	watchCtx, watchCancel := context.WithCancel(context.Background())
-	defer watchCancel()
-
-	for _, w := range registry.Watchers() {
-		go w.Run(watchCtx)
-	}
-
-	srv := &http.Server{
-		Addr:         *addr,
-		Handler:      (&handler.Server{DB: database, Agents: registry, DBPath: *dbPath, ListenAddr: *addr, ReadOnly: readOnly}).Routes(),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
-
 	go func() {
-		fmt.Printf("Buildermark Local server listening on %s\n", *addr)
-		if readOnly {
-			fmt.Println("READ_ONLY mode enabled: mutating API endpoints are disabled")
-		}
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %v", err)
-		}
+		<-done
+		fmt.Println()
+		log.Println("shutting down...")
+		cancel()
 	}()
 
-	<-done
-	log.Println("shutting down...")
-	watchCancel()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("shutdown: %v", err)
+	if err := cli.RunServer(ctx, cli.RunOptions{DBPath: *dbPath, Addr: *addr}); err != nil {
+		log.Fatalf("error: %v", err)
 	}
-	log.Println("server stopped")
 }

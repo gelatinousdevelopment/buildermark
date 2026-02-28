@@ -1,0 +1,23 @@
+# Buildermark Local Server — systemd user unit
+#
+# This is a reference template. The `buildermark service install` command
+# generates and installs a unit file automatically.
+#
+# Manual installation:
+#   cp buildermark.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now buildermark
+
+[Unit]
+Description=Buildermark Local Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/buildermark run
+Restart=always
+RestartSec=3
+Environment=BUILDERMARK_LOCAL_DB_PATH=%h/.buildermark/local.db
+
+[Install]
+WantedBy=default.target
