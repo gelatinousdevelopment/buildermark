@@ -100,8 +100,8 @@
 	--color-modal-bg: light-dark(#fff, #2e2e32);
 
 	/* Spinner */
-	--color-spinner-border: light-dark(#bbb, #555);
-	--color-spinner-top: light-dark(#333, #ddd);
+	--color-spinner-border: transparent;
+	--color-spinner-top: light-dark(#fff, #ddd);
 
 	/* Buttons */
 	--color-button-bg: light-dark(#f5f5f5, #333);
@@ -221,6 +221,10 @@ button.bordered {
 	line-height: 1.4;
 	padding: 0.5rem 1em;
 	text-decoration: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5em;
 }
 
 a.bordered.small,

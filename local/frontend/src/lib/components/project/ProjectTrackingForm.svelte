@@ -258,12 +258,13 @@
 	}
 
 	.spinner {
-		width: 0.8rem;
-		height: 0.8rem;
+		width: 0.6rem;
+		height: 0.6rem;
 		border: 2px solid var(--color-spinner-border);
 		border-top-color: var(--color-spinner-top);
 		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
+		animation: spin 0.3s linear infinite;
+		display: inline-block;
 	}
 
 	.import-status {
