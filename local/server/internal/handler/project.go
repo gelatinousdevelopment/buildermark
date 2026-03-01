@@ -108,6 +108,16 @@ func (s *Server) handleSetProjectPath(w http.ResponseWriter, r *http.Request) {
 	if handleProjectSetterError(w, db.SetProjectPath(r.Context(), s.DB, id, body.Path), "path") {
 		return
 	}
+
+	// Best-effort: update git remote URL for the new path
+	remote := ""
+	if out, err := runGit(r.Context(), body.Path, "remote", "get-url", "origin"); err == nil {
+		remote = strings.TrimSpace(out)
+	}
+	if err := db.UpdateProjectRemote(r.Context(), s.DB, id, remote); err != nil {
+		log.Printf("warning: failed to update remote for project %s: %v", id, err)
+	}
+
 	writeSuccess(w, http.StatusOK, nil)
 }
 
