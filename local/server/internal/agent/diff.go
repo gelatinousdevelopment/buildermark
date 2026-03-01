@@ -84,8 +84,10 @@ func ExtractReliableDiffFromJSON(raw string) (string, bool) {
 	if diff, ok := extractStructuredPatchDiffFromValue(value); ok && len(diff) > len(best) {
 		best = diff
 	}
-	if diff, ok := extractOldNewEditDiffFromValue(value); ok && len(diff) > len(best) {
-		best = diff
+	if best == "" { // only try oldNewEdit if nothing better found
+		if diff, ok := extractOldNewEditDiffFromValue(value); ok && len(diff) > len(best) {
+			best = diff
+		}
 	}
 	if best == "" {
 		if diff, ok := extractFileSnapshotDiffFromValue(value); ok {
@@ -99,6 +101,11 @@ func ExtractReliableDiffFromJSON(raw string) (string, bool) {
 	return best, true
 }
 
+func isToolUseBlock(m map[string]any) bool {
+	typ, _ := m["type"].(string)
+	return typ == "tool_use"
+}
+
 func extractOldNewEditDiffFromValue(v any) (string, bool) {
 	best := ""
 
@@ -106,6 +113,9 @@ func extractOldNewEditDiffFromValue(v any) (string, bool) {
 	walk = func(node any, inheritedCWD string) {
 		switch x := node.(type) {
 		case map[string]any:
+			if isToolUseBlock(x) {
+				return // skip — the tool_result will have better data
+			}
 			cwd := inheritedCWD
 			if s, ok := x["cwd"].(string); ok {
 				if trimmed := strings.TrimSpace(s); trimmed != "" {
@@ -236,6 +246,9 @@ func extractStructuredPatchDiffFromValue(v any) (string, bool) {
 	walk = func(node any, inheritedCWD string) {
 		switch x := node.(type) {
 		case map[string]any:
+			if isToolUseBlock(x) {
+				return // skip — the tool_result will have better data
+			}
 			cwd := inheritedCWD
 			if s, ok := x["cwd"].(string); ok {
 				if trimmed := strings.TrimSpace(s); trimmed != "" {
@@ -270,6 +283,9 @@ func extractFileSnapshotDiffFromValue(v any) (string, bool) {
 	walk = func(node any, inheritedCWD string) {
 		switch x := node.(type) {
 		case map[string]any:
+			if isToolUseBlock(x) {
+				return // skip — the tool_result will have better data
+			}
 			cwd := inheritedCWD
 			if s, ok := x["cwd"].(string); ok {
 				if trimmed := strings.TrimSpace(s); trimmed != "" {

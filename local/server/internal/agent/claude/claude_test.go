@@ -194,7 +194,7 @@ func TestScanProjectFilesSinceIngestsMinimalSummaryLine(t *testing.T) {
 	}
 }
 
-func TestScanProjectFilesDerivesDiffFromToolUseEdit(t *testing.T) {
+func TestScanProjectFilesDerivesDiffFromToolUseResult(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()
 	histPath := filepath.Join(tmpDir, "history.jsonl")
@@ -209,7 +209,7 @@ func TestScanProjectFilesDerivesDiffFromToolUseEdit(t *testing.T) {
 	sessionID := "sess-edit-raw"
 	lines := []string{
 		`{"type":"user","timestamp":"2026-02-22T11:51:25.292Z","sessionId":"sess-edit-raw","cwd":"/proj/a","message":{"role":"user","content":"apply change"}}`,
-		`{"type":"assistant","timestamp":"2026-02-22T11:51:35.482Z","sessionId":"sess-edit-raw","cwd":"/proj/a","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/proj/a/local/frontend/src/lib/messageUtils.ts","old_string":"old line","new_string":"new line"}}]}}`,
+		`{"type":"tool_result","timestamp":"2026-02-22T11:51:35.482Z","sessionId":"sess-edit-raw","cwd":"/proj/a","toolUseResult":{"filePath":"local/frontend/src/lib/messageUtils.ts","oldString":"old line","newString":"new line"}}`,
 	}
 	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("write project conversation: %v", err)
@@ -226,7 +226,7 @@ func TestScanProjectFilesDerivesDiffFromToolUseEdit(t *testing.T) {
 		t.Fatalf("count derived diff messages: %v", err)
 	}
 	if derivedCount == 0 {
-		t.Fatal("expected derived diff message for Edit payload")
+		t.Fatal("expected derived diff message for toolUseResult payload")
 	}
 }
 

@@ -259,7 +259,7 @@ func TestExtractReliableDiffFromJSONPrefersRealDiffOverSnapshot(t *testing.T) {
 	}
 }
 
-func TestExtractReliableDiffFromJSONClaudeEditOldNewString(t *testing.T) {
+func TestExtractReliableDiffFromJSONSkipsToolUseBlock(t *testing.T) {
 	repo := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
 		t.Fatalf("mkdir .git: %v", err)
@@ -280,13 +280,68 @@ func TestExtractReliableDiffFromJSONClaudeEditOldNewString(t *testing.T) {
 	}`, cwd, filePath)
 
 	diff, ok := ExtractReliableDiffFromJSON(raw)
-	if !ok || diff == "" {
-		t.Fatal("expected diff from Claude Edit old/new string payload")
+	if ok || diff != "" {
+		t.Fatalf("expected tool_use block to be skipped, got ok=%v diff=%q", ok, diff)
 	}
-	if !strings.Contains(diff, "diff --git a/local/frontend/src/lib/messageUtils.ts b/local/frontend/src/lib/messageUtils.ts") {
+}
+
+func TestExtractReliableDiffFromJSONToolUseResultNotSkipped(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := repo
+	filePath := filepath.Join(repo, "web", "frontend", "src", "lib", "messageUtils.ts")
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"toolUseResult":{
+			"filePath":%q,
+			"oldString":"export function renderMarkdown(content: string): string {\n\treturn marked.parse(content, { gfm: true, breaks: true }) as string;\n}",
+			"newString":"marked.use({\n\trenderer: {\n\t\thtml(token) {\n\t\t\treturn escapeHtml(token.text);\n\t\t}\n\t}\n});\n\nexport function renderMarkdown(content: string): string {\n\treturn marked.parse(content, { gfm: true, breaks: true }) as string;\n}"
+		}
+	}`, cwd, filePath)
+
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from toolUseResult old/new string payload")
+	}
+	if !strings.Contains(diff, "diff --git a/web/frontend/src/lib/messageUtils.ts b/web/frontend/src/lib/messageUtils.ts") {
 		t.Fatalf("missing expected file path in extracted diff: %q", diff)
 	}
 	if !strings.Contains(diff, "+marked.use({") {
 		t.Fatalf("missing expected added content in extracted diff: %q", diff)
+	}
+}
+
+func TestExtractReliableDiffFromJSONStructuredPatchPriorityOverOldNew(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := repo
+	filePath := filepath.Join(repo, "web", "frontend", "src", "app.ts")
+	// JSON with both structuredPatch and oldString/newString at the toolUseResult level.
+	// structuredPatch has correct line offsets; oldNewEdit would produce @@ -1.
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"toolUseResult":{
+			"filePath":%q,
+			"oldString":"old line\n",
+			"newString":"new line\nand another\n",
+			"structuredPatch":[
+				{"oldStart":42,"oldLines":3,"newStart":42,"newLines":4,"lines":[" ctx","-old line","+new line","+and another"," more"]}
+			]
+		}
+	}`, cwd, filePath)
+
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff when both structuredPatch and oldNewEdit are present")
+	}
+	if !strings.Contains(diff, "@@ -42,3 +42,4 @@") {
+		t.Fatalf("expected structuredPatch line offsets to win, got: %q", diff)
+	}
+	if strings.Contains(diff, "@@ -1,") {
+		t.Fatalf("oldNewEdit @@ -1 offset should not appear, got: %q", diff)
 	}
 }
