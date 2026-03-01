@@ -1130,6 +1130,32 @@ func TestReadFirstPromptSkipsToolResultUserEntries(t *testing.T) {
 	}
 }
 
+func TestReadFirstPromptSkipsSkillExpansion(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	projectPath := "/proj/d"
+	sessionID := "sess-skill-exp"
+	dirName := "-proj-d"
+	convDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(convDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convPath := filepath.Join(convDir, sessionID+".jsonl")
+	lines := []string{
+		`{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/bbrate\n\nThe user wants to rate this conversation."}}`,
+		`{"type":"user","timestamp":"2026-01-01T00:00:01.000Z","message":{"content":"real prompt"}}`,
+	}
+	if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\n", joinLines(lines))), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	text, _ := readFirstPrompt(tmpDir, projectPath, sessionID)
+	if text != "real prompt" {
+		t.Errorf("text = %q, want %q", text, "real prompt")
+	}
+}
+
 func TestProcessEntriesDoesNotDuplicateFirstPrompt(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()
@@ -2096,6 +2122,38 @@ func TestReadConversationLogEntriesSkipsSystemMessages(t *testing.T) {
 	}
 	if entries[0].Content != "This is a real user message" {
 		t.Errorf("content = %q, want %q", entries[0].Content, "This is a real user message")
+	}
+}
+
+func TestReadConversationLogEntriesSkillExpansionStoredAsAgent(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/proj/test"
+	sessionID := "sess-1"
+
+	convPath := conversationPath(home, projectPath, sessionID)
+	if err := os.MkdirAll(filepath.Dir(convPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	lines := []string{
+		// Skill expansion prompt injected by Claude Code
+		fmt.Sprintf(`{"type":"user","timestamp":"2026-02-18T10:00:00.000Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/bbrate\n\nThe user wants to rate this conversation."}}`, sessionID, projectPath),
+		// Real user message
+		fmt.Sprintf(`{"type":"user","timestamp":"2026-02-18T10:00:01.000Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"real user prompt"}}`, sessionID, projectPath),
+	}
+	if err := os.WriteFile(convPath, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	entries := readConversationLogEntries(home, projectPath, sessionID)
+	if len(entries) != 2 {
+		t.Fatalf("entries len = %d, want 2", len(entries))
+	}
+	if entries[0].Role != "agent" {
+		t.Errorf("skill expansion role = %q, want %q", entries[0].Role, "agent")
+	}
+	if entries[1].Role != "user" {
+		t.Errorf("real user role = %q, want %q", entries[1].Role, "user")
 	}
 }
 

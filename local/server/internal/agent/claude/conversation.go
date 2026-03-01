@@ -97,7 +97,7 @@ func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
 		}
 
 		text := extractUserText(entry.Message.Content)
-		if text == "" || isSystemMessage(text) {
+		if text == "" || isSystemMessage(text) || isSkillExpansion(text) {
 			return
 		}
 
@@ -334,8 +334,10 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 		role := "agent"
 		if entry.Type == "user" {
 			role = "user"
-			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" || isAssistantAuthoredConversationEntry(entry) {
+			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" || isAssistantAuthoredConversationEntry(entry) || isSkillExpansion(content) {
 				// Claude logs tool_result as type=user; this is assistant-produced output.
+				// Skill expansions (injected prompts starting with "Base directory for
+				// this skill:") are system-generated, not typed by the user.
 				role = "agent"
 			}
 		}
@@ -357,6 +359,13 @@ func isAssistantAuthoredConversationEntry(entry conversationEntry) bool {
 		entry.IsSidechain &&
 		strings.EqualFold(strings.TrimSpace(entry.UserType), "external") &&
 		strings.TrimSpace(entry.AgentID) != ""
+}
+
+// isSkillExpansion returns true when content is a system-injected skill
+// expansion prompt (e.g. the expanded SKILL.md injected by Claude Code when
+// the user runs /bbrate). These are not user-authored messages.
+func isSkillExpansion(content string) bool {
+	return strings.HasPrefix(strings.TrimSpace(content), "Base directory for this skill:")
 }
 
 func listProjectConversationFiles(home string) []string {
