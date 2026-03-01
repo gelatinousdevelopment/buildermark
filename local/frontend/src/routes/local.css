@@ -168,6 +168,7 @@ a:active {
 .limited-content-width {
 	max-width: var(--content-width);
 	margin: 0 auto;
+	width: inherit;
 }
 
 .inset-when-limited-content-width {

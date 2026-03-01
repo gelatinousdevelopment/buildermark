@@ -197,7 +197,6 @@
 		min-height: 16rem;
 		padding: 1rem 0 0.7rem 0;
 		flex: 1;
-		max-width: 50%;
 	}
 
 	.project .column .heading {
