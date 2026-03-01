@@ -24,7 +24,7 @@ SERVER_DIR="$ROOT_DIR/local/server"
 BUILD_DIR="$ROOT_DIR/apps/linux-cli/build"
 
 ARCH="${ARCH:-}"
-VERSION="${VERSION:-dev}"
+VERSION="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

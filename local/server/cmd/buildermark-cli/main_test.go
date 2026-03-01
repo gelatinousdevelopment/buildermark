@@ -71,3 +71,10 @@ func TestRun_UpdateNoArgs(t *testing.T) {
 		t.Errorf("run([update]) = %d, want 1", got)
 	}
 }
+
+func TestRun_UpdateModeNoArgs(t *testing.T) {
+	got := run([]string{"update", "mode"})
+	if got != 0 {
+		t.Errorf("run([update mode]) = %d, want 0", got)
+	}
+}

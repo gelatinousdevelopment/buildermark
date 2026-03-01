@@ -83,7 +83,7 @@ Commands:
   service uninstall Remove systemd user service
   update check     Check for available updates
   update apply     Download and install an update
-  update mode      Set update mode (auto, check, off)
+  update mode      Get or set update mode (auto, check, off)
   version          Print version
   help             Show this help
 `)
@@ -264,13 +264,18 @@ func runUpdate(args []string) int {
 		return 0
 
 	case "mode":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: buildermark update mode <auto|check|off>")
-			return 1
-		}
 		dir := configDir()
 		if dir == "" {
 			return 1
+		}
+		if len(args) < 2 {
+			cfg, err := cli.LoadConfig(dir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				return 1
+			}
+			fmt.Println(cfg.UpdateMode)
+			return 0
 		}
 		if err := cli.RunUpdateSetMode(dir, args[1]); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
