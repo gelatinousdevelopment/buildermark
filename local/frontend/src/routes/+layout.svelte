@@ -315,30 +315,24 @@
 		align-items: flex-end;
 	}
 
-	header .brand .text {
+	/*header .brand .text {
 		display: flex;
 		flex-direction: column;
 		gap: 0rem;
 		justify-content: center;
-
-		/*display: none;*/
 	}
 
 	header .brand .text .title {
 		font-size: 1.9rem;
 		font-weight: bold;
-
-		/*font-size: 1rem;*/
-		/*line-height: 1;*/
 	}
 
 	header .brand .text .subtitle {
 		font-size: 0.6rem;
 		font-weight: 600;
 		text-transform: uppercase;
-
 		display: none;
-	}
+	}*/
 
 	header nav {
 		align-items: center;

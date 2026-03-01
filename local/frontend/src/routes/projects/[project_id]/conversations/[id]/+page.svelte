@@ -109,20 +109,6 @@
 		isWideMode = query.matches;
 	}
 
-	function activateMessage(message: MessageRead, expanded: boolean) {
-		if (!isWideMode && !expanded) {
-			toggleExpanded(message.id);
-		}
-		selectMessage(message);
-	}
-
-	function handleMessageActivateKeydown(e: KeyboardEvent, message: MessageRead, expanded: boolean) {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			activateMessage(message, expanded);
-		}
-	}
-
 	function activateCombinedDiff(item: { id: string; content: string }, expanded: boolean) {
 		if (!isWideMode && !expanded) {
 			toggleExpanded(item.id);

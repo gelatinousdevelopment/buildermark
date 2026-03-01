@@ -44,7 +44,7 @@
 	let project = $derived(data.project);
 	let teamServers = $derived(data.teamServers);
 
-	// svelte-ignore state_referenced_locally — form fields are intentionally initialized once
+	// svelte-ignore state_referenced_locally
 	let label = $state(project.label ?? '');
 	// svelte-ignore state_referenced_locally
 	let path = $state(project.path ?? '');
@@ -112,102 +112,102 @@
 <div class="page">
 	<h1>Project Settings</h1>
 
-		<label class="field-label" for="project-label">Label</label>
-		<input
-			id="project-label"
-			class="project-label"
-			type="text"
-			bind:value={label}
-			placeholder="Project label"
-		/>
+	<label class="field-label" for="project-label">Label</label>
+	<input
+		id="project-label"
+		class="project-label"
+		type="text"
+		bind:value={label}
+		placeholder="Project label"
+	/>
 
-		<label class="field-label" for="project-path">Path</label>
-		<input
-			id="project-path"
-			type="text"
-			bind:value={path}
-			placeholder="/path/to/project"
-			class="mono-input"
-		/>
+	<label class="field-label" for="project-path">Path to Git Repository</label>
+	<input
+		id="project-path"
+		type="text"
+		bind:value={path}
+		placeholder="/path/to/project"
+		class="mono-input"
+	/>
 
-		<label class="field-label" for="team-server-select">Team Server</label>
-		<select id="team-server-select" bind:value={teamServerId} class="team-server-select">
-			<option value="">None</option>
-			{#each teamServers as server (server.id)}
-				<option value={server.id}>{server.label}</option>
+	<label class="field-label" for="team-server-select">Team Server</label>
+	<select id="team-server-select" bind:value={teamServerId} class="team-server-select">
+		<option value="">None</option>
+		{#each teamServers as server (server.id)}
+			<option value={server.id}>{server.label}</option>
+		{/each}
+	</select>
+
+	<br />
+
+	<label class="field-label" for="ignore-diff-paths">Ignore Paths for Diff Matching</label>
+	<div class="defaults-row">
+		<label class="checkbox-label">
+			<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
+			Ignore default paths
+		</label>
+		<button
+			class="info-btn"
+			title="Show default paths"
+			onclick={() => (showDefaultPaths = !showDefaultPaths)}
+		>
+			<Icon name="info" width="15px" />
+		</button>
+	</div>
+	{#if showDefaultPaths}
+		<ul class="default-paths-list">
+			{#each defaultPaths as p (p)}
+				<li><code>{p}</code></li>
 			{/each}
-		</select>
+		</ul>
+	{/if}
+	<p class="hint">One glob path per line.</p>
+	<textarea
+		id="ignore-diff-paths"
+		bind:value={ignoreDiffPaths}
+		rows="4"
+		spellcheck="false"
+		placeholder="Glob patterns, one per line"
+	></textarea>
 
-		<br />
+	<br />
+	<br />
 
-		<label class="field-label" for="ignore-diff-paths">Ignore Paths for Diff Matching</label>
-		<div class="defaults-row">
-			<label class="checkbox-label">
-				<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
-				Ignore default paths
-			</label>
-			<button
-				class="info-btn"
-				title="Show default paths"
-				onclick={() => (showDefaultPaths = !showDefaultPaths)}
-			>
-				<Icon name="info" width="15px" />
-			</button>
-		</div>
-		{#if showDefaultPaths}
-			<ul class="default-paths-list">
-				{#each defaultPaths as p (p)}
-					<li><code>{p}</code></li>
-				{/each}
-			</ul>
+	<label class="field-label" for="old-paths">Old Filesystem Paths</label>
+	<p class="hint">
+		Match conversations created from previous project locations. One absolute path per line.
+	</p>
+	<textarea
+		id="old-paths"
+		bind:value={oldPaths}
+		rows="4"
+		spellcheck="false"
+		placeholder="/old/path/to/repo"
+	></textarea>
+
+	<div class="actions">
+		<button class="bordered prominent" disabled={saving} onclick={save}
+			>{saving ? 'Saving...' : 'Save Settings'}</button
+		>
+		{#if notice}
+			<span class="notice">{notice}</span>
 		{/if}
-		<p class="hint">One glob path per line.</p>
-		<textarea
-			id="ignore-diff-paths"
-			bind:value={ignoreDiffPaths}
-			rows="10"
-			spellcheck="false"
-			placeholder="Glob patterns, one per line"
-		></textarea>
+		{#if recomputeStatusMessage}
+			<span class="notice">{recomputeStatusMessage}</span>
+		{/if}
+	</div>
+	{#if error}
+		<p class="error">{error}</p>
+	{/if}
 
-		<br />
-		<br />
-
-		<label class="field-label" for="old-paths">Old Filesystem Paths</label>
-		<p class="hint">
-			Match conversations created from previous project locations. One absolute path per line.
+	<div class="danger-zone">
+		<h2>Danger Zone</h2>
+		<p class="danger-description">
+			Permanently delete this project and all its data, including conversations, messages, ratings,
+			and commits.
 		</p>
-		<textarea
-			id="old-paths"
-			bind:value={oldPaths}
-			rows="4"
-			spellcheck="false"
-			placeholder="/old/path/to/repo"
-		></textarea>
-
-		<div class="actions">
-			<button class="bordered prominent" disabled={saving} onclick={save}
-				>{saving ? 'Saving...' : 'Save Settings'}</button
-			>
-			{#if notice}
-				<span class="notice">{notice}</span>
-			{/if}
-			{#if recomputeStatusMessage}
-				<span class="notice">{recomputeStatusMessage}</span>
-			{/if}
-		</div>
-		{#if error}
-			<p class="error">{error}</p>
-		{/if}
-
-		<div class="danger-zone">
-			<h2>Danger Zone</h2>
-			<p class="danger-description">
-				Permanently delete this project and all its data, including conversations, messages,
-				ratings, and commits.
-			</p>
-			<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button>
-		</div>
+		<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button>
+	</div>
 </div>
 
 <Dialog open={showDeleteModal} title="Delete Project" onclose={() => (showDeleteModal = false)}>
