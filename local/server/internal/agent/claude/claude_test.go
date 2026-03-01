@@ -2244,3 +2244,46 @@ func TestProcessEntriesSkipsNoiseHistoryEntries(t *testing.T) {
 		t.Fatalf("message count = %d, want 2 (only real messages)", count)
 	}
 }
+
+func TestIsAssistantAuthoredHistoryEntrySkillExpansion(t *testing.T) {
+	tests := []struct {
+		name string
+		entry historyEntry
+		want  bool
+	}{
+		{
+			name: "skill expansion prompt",
+			entry: historyEntry{
+				Type:    "user",
+				Display: "Base directory for this skill: /home/user/project/plugins/claudecode/skills/bbrate\n\nThe user wants to rate this conversation.",
+			},
+			want: true,
+		},
+		{
+			name: "regular user prompt",
+			entry: historyEntry{
+				Type:    "user",
+				Display: "Implement the feature",
+			},
+			want: false,
+		},
+		{
+			name: "assistant entry",
+			entry: historyEntry{
+				Type:    "assistant",
+				Display: "Here is my response",
+			},
+			want: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isAssistantAuthoredHistoryEntry(tc.entry)
+			if got != tc.want {
+				t.Errorf("isAssistantAuthoredHistoryEntry() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+

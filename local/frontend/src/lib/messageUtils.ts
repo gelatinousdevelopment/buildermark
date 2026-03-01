@@ -29,7 +29,7 @@ export function normalizeEscapedNewlines(content: string): string {
 export function isUserPromptMessage(message: MessageRead): boolean {
 	if (message.role !== 'user') return false;
 	const trimmed = message.content.trimStart();
-	if (trimmed.startsWith('/bbrate') || trimmed.startsWith('$bbrate')) return false;
+	if (trimmed.startsWith('/') || trimmed.startsWith('$bb')) return false;
 	return true;
 }
 
@@ -55,7 +55,7 @@ export function messageTypeLabel(message: MessageRead): string {
 	try {
 		const obj = JSON.parse(message.rawJson) as Record<string, unknown>;
 		const t = typeof obj.type === 'string' ? obj.type : '';
-		if (t) return t;
+		if (t && t !== 'user') return t;
 	} catch {
 		// ignore parse failures
 	}

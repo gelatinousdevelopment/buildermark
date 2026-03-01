@@ -4,11 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 )
-
-var pastedTextRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 
 // Conversation represents a row in the conversations table.
 type Conversation struct {
@@ -199,9 +196,6 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 			continue
 		}
 		if msg.Role == "user" && (trimmed == "/clear" || trimmed == "/new") {
-			continue
-		}
-		if msg.Role == "user" && pastedTextRe.MatchString(trimmed) {
 			continue
 		}
 		filtered = append(filtered, msg)
@@ -412,9 +406,6 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 				continue
 			}
 			if trimmed == "/clear" || trimmed == "/new" {
-				continue
-			}
-			if pastedTextRe.MatchString(trimmed) {
 				continue
 			}
 			detail.UserMessages = append(detail.UserMessages, m)

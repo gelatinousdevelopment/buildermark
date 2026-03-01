@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,8 @@ import (
 
 const claudeWatcherSourceKindHistoryFile = "history_file"
 const claudeWatcherSourceKindProjectFile = "project_file"
+
+var unresolvedPasteRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 
 // Run performs an initial scan (last 1 week) then polls for new data until ctx is cancelled.
 func (a *Agent) Run(ctx context.Context) {
@@ -788,6 +791,11 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				continue
 			}
 			if strings.TrimSpace(display) != "" && isSystemMessage(strings.TrimSpace(display)) {
+				continue
+			}
+			// Skip user messages with unresolved paste placeholders — the conversation
+			// file will have the fully resolved version.
+			if role == "user" && unresolvedPasteRe.MatchString(display) {
 				continue
 			}
 

@@ -219,7 +219,10 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	// Recalculate user_prompt_count for each affected conversation.
 	updatePromptCountStmt, err := tx.PrepareContext(ctx,
 		`UPDATE conversations SET user_prompt_count = (
-			SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND role = 'user'
+			SELECT COUNT(*) FROM messages
+			WHERE conversation_id = ? AND role = 'user'
+			AND TRIM(content) NOT LIKE '/%'
+			AND TRIM(content) NOT LIKE '$bb%'
 		) WHERE id = ?`,
 	)
 	if err != nil {

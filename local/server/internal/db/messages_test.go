@@ -696,3 +696,36 @@ func TestDeduplicateMessages(t *testing.T) {
 		}
 	}
 }
+
+func TestInsertMessagesExcludesBbCommandsFromPromptCount(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	messages := []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real user prompt", RawJSON: `{"type":"user"}`},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/bbrate 5", RawJSON: `{"type":"user"}`},
+		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "$bbrate 3 good work", RawJSON: `{"type":"user"}`},
+		{Timestamp: 4000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "agent response", RawJSON: `{"type":"assistant"}`},
+		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/clear ", RawJSON: `{"type":"user"}`},
+		{Timestamp: 6000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/help", RawJSON: `{"type":"user"}`},
+	}
+	if err := InsertMessages(ctx, db, messages); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var promptCount int
+	if err := db.QueryRow("SELECT user_prompt_count FROM conversations WHERE id = ?", "conv-1").Scan(&promptCount); err != nil {
+		t.Fatalf("query user_prompt_count: %v", err)
+	}
+	if promptCount != 1 {
+		t.Errorf("user_prompt_count = %d, want 1 (only 'real user prompt')", promptCount)
+	}
+}

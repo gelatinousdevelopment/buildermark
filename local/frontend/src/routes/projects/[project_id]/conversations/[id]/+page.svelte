@@ -548,11 +548,11 @@
 	}
 
 	.column.right .empty {
-		/*align-self: center;*/
+		font-size: 1.3rem;
 		justify-self: center;
 		margin-top: 40vh;
 		opacity: 0.4;
-		font-size: 1.3rem;
+		text-align: center;
 	}
 
 	.column.left .inline-diff-message :global(.message-content),
