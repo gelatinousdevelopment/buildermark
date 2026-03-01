@@ -31,10 +31,11 @@
 	let positioned = $state(false);
 	let fixedLeft = $state(0);
 	let fixedTop = $state(0);
+	let bridgeRight = $state(-200);
 
 	/** Safe area inset (px) from viewport edges. */
 	const MARGIN = 8; // 0.5rem
-	const MARGIN_RIGHT = MARGIN * 2;
+	const MARGIN_RIGHT = MARGIN;
 	const GAP = 6;
 
 	const ALL_POSITIONS: Position[] = ['leading', 'trailing', 'above', 'below'];
@@ -152,6 +153,9 @@
 		const el = popoverEl;
 		const wrapRect = wrapperEl.getBoundingClientRect();
 
+		// Clamp bridge right extent so it doesn't overflow the viewport
+		bridgeRight = Math.max(-200, -(window.innerWidth - MARGIN_RIGHT - wrapRect.right));
+
 		// Lock document scroll during measurement to prevent jitter when
 		// the unconstrained popover would extend beyond the viewport.
 		const prevOverflow = document.documentElement.style.overflow;
@@ -237,7 +241,12 @@
 >
 	{@render children()}
 	{#if visible}
-		<div class="popover-bridge {resolvedPosition}"></div>
+		<div
+			class="popover-bridge {resolvedPosition}"
+			style:right={resolvedPosition === 'above' || resolvedPosition === 'below'
+				? `${bridgeRight}px`
+				: null}
+		></div>
 		<div
 			class="popover-bubble {resolvedPosition}"
 			class:fixed
@@ -264,6 +273,7 @@
 	.popover-bridge {
 		position: absolute;
 		z-index: 9;
+		display: none;
 	}
 
 	.popover-bridge.above {
