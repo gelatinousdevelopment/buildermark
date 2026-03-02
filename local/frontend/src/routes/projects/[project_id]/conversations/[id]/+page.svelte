@@ -52,6 +52,7 @@
 	let isWideMode = $state(false);
 	let wideModeQuery: MediaQueryList | null = null;
 	let leftColumn: HTMLDivElement | undefined = $state();
+	let mergeDiffsEnabled: boolean = $state(true);
 
 	// Reset UI state when conversation changes (e.g. navigating parent/child links).
 	let lastConversationId = '';
@@ -239,7 +240,7 @@
 				items.push({
 					kind: 'combined-diff',
 					id: `combined-diff-${diffs[0].id}`,
-					content: combineDiffs(diffs),
+					content: combineDiffs(diffs, mergeDiffsEnabled),
 					diffMessages: diffs,
 					time: diffs[0].timestamp
 				});
