@@ -126,3 +126,12 @@ Required configuration:
 - Consider GTK with `AppIndicator` / `StatusNotifierItem` for system tray
 - Use `.desktop` file in `~/.config/autostart/` for start-at-login
 - Bundle the server binary in the app directory
+
+## Homebrew distribution
+
+Homebrew distribution files live in `apps/homebrew`:
+
+- `apps/homebrew/Casks/buildermark.rb` for the macOS GUI app (`Buildermark.app` in DMG form)
+- `apps/homebrew/Formula/buildermark-linux.rb` for the Linux CLI (`buildermark` binary in tar.gz form)
+
+This lets us distribute the existing apps as-is via Homebrew (cask for macOS GUI, formula for Linux CLI) without rewriting either app.
