@@ -22,6 +22,7 @@ export interface TeamServer {
 export interface AgentConversationSearchPath {
 	agent: string;
 	path: string;
+	exists: boolean;
 }
 
 export interface LocalSettings {
@@ -29,6 +30,7 @@ export interface LocalSettings {
 	dbPath: string;
 	listenAddr: string;
 	conversationSearchPaths: AgentConversationSearchPath[];
+	extraAgentHomes: string[];
 }
 
 export interface ProjectDetail {

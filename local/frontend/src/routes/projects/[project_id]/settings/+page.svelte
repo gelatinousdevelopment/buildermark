@@ -140,6 +140,11 @@
 
 	<br />
 
+	<p class="hint">
+		Need to track conversations from other user folders or mounted filesystems? Configure that in
+		<a href={resolve('/settings')}>Global Settings</a>.
+	</p>
+
 	<label class="field-label" for="ignore-diff-paths">Ignore Paths for Diff Matching</label>
 	<div class="defaults-row">
 		<label class="checkbox-label">

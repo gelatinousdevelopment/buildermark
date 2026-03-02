@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { scanHistory } from '$lib/api';
+	import { scanHistory, updateLocalSettings } from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import { settingsStore, type ContentWidth } from '$lib/stores/settings.svelte';
 	import TeamServersSection from '$lib/TeamServersSection.svelte';
@@ -15,8 +15,13 @@
 
 	let projects = $derived(data.projects);
 	let projectError = $derived(data.projectError);
-	let localSettings = $derived(data.localSettings);
+	let localSettings = $state(data.localSettings);
 	let localSettingsError = $derived(data.localSettingsError);
+
+	let extraAgentHomesText = $state(data.localSettings?.extraAgentHomes?.join('\n') ?? '');
+	let savingAgentHomes = $state(false);
+	let agentHomesNotice: string | null = $state(null);
+	let agentHomesError: string | null = $state(null);
 
 	let historyImportDays = $state('7');
 	let importingHistory = $state(false);
@@ -47,6 +52,30 @@
 			return 'All';
 		}
 		return `${days} days`;
+	}
+
+	const missingSearchPaths = $derived(
+		localSettings?.conversationSearchPaths.filter((entry) => !entry.exists) ?? []
+	);
+
+	async function saveAgentHomes() {
+		savingAgentHomes = true;
+		agentHomesNotice = null;
+		agentHomesError = null;
+		try {
+			const homes = extraAgentHomesText
+				.split('\n')
+				.map((line) => line.trim())
+				.filter(Boolean);
+			const updated = await updateLocalSettings(homes);
+			localSettings = updated;
+			extraAgentHomesText = updated.extraAgentHomes.join('\n');
+			agentHomesNotice = 'Saved. Restart the server to apply watcher changes.';
+		} catch (e) {
+			agentHomesError = e instanceof Error ? e.message : 'Failed to save extra agent homes';
+		} finally {
+			savingAgentHomes = false;
+		}
 	}
 
 	async function importHistory() {
@@ -137,6 +166,33 @@
 
 		<div class="local-info">
 			<h2>Local Environment</h2>
+			<label class="label" for="extra-agent-homes">Extra Agent Home Folders</label>
+			<p class="muted">
+				One path per line. You can enter user home folders (or .claude/.codex/.gemini folders) from
+				mounted filesystems or other local accounts.
+			</p>
+			<textarea
+				id="extra-agent-homes"
+				rows="4"
+				bind:value={extraAgentHomesText}
+				placeholder="/mnt/vm/home/dev"
+				class="mono-area"
+			></textarea>
+			<div class="actions">
+				<button class="bordered small" onclick={saveAgentHomes} disabled={savingAgentHomes}>
+					{savingAgentHomes ? 'Saving...' : 'Save Agent Folders'}
+				</button>
+			</div>
+			{#if agentHomesError}<p class="error">{agentHomesError}</p>{/if}
+			{#if agentHomesNotice}<p class="status">{agentHomesNotice}</p>{/if}
+			{#if missingSearchPaths.length > 0}
+				<p class="muted">Some configured agent folders are not currently found:</p>
+				<ul>
+					{#each missingSearchPaths as entry (entry.agent + entry.path)}
+						<li><code>{entry.path}</code> ({entry.agent})</li>
+					{/each}
+				</ul>
+			{/if}
 			<table class="data bordered striped hoverable" style:max-width="50rem">
 				<tbody>
 					<tr>
@@ -152,7 +208,9 @@
 								{#each localSettings.conversationSearchPaths as entry, index (index)}
 									<div class="search-path-entry">
 										<span class="agent">{entry.agent}</span>
-										<span class="path">{entry.path}</span>
+										<span class="path">{entry.path}</span>{#if !entry.exists}<span class="muted">
+												(not found)</span
+											>{/if}
 									</div>
 								{/each}
 							{/if}
@@ -228,6 +286,12 @@
 		color: var(--color-text-secondary);
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
+	}
+
+	.mono-area {
+		font-family:
+			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+			monospace;
 	}
 
 	.path {

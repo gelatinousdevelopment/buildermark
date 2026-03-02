@@ -9,7 +9,8 @@ import (
 
 // Config holds persistent CLI settings.
 type Config struct {
-	UpdateMode string `json:"updateMode"` // "auto", "check", or "off"
+	UpdateMode      string   `json:"updateMode"` // "auto", "check", or "off"
+	ExtraAgentHomes []string `json:"extraAgentHomes,omitempty"`
 }
 
 // DefaultConfig returns a Config with default values.

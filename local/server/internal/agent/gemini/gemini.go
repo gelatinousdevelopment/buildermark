@@ -22,12 +22,17 @@ func New(database *sql.DB) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NewForHome(database, home), nil
+}
+
+// NewForHome creates a Gemini CLI agent for the provided home directory.
+func NewForHome(database *sql.DB, home string) *Agent {
 	return &Agent{
 		db:       database,
 		tmpDir:   filepath.Join(home, ".gemini", "tmp"),
 		home:     home,
 		interval: 2 * time.Second,
-	}, nil
+	}
 }
 
 // newAgent is an internal constructor for testing with custom paths.
