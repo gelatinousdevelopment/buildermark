@@ -13,6 +13,7 @@
 		089C1665A1A04F3BA1000043 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000033 /* Assets.xcassets */; };
 		089C1665A1A04F3BA1000044 /* UpdaterViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */; };
 		089C1665A1A04F3BA1000045 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 089C1665A1A04F3BA1000061 /* Sparkle */; };
+		089C1665A1A04F3BA1000046 /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 089C1665A1A04F3BA1000038 /* PluginManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +24,7 @@
 		089C1665A1A04F3BA1000035 /* Buildermark.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Buildermark.entitlements; sourceTree = "<group>"; };
 		089C1665A1A04F3BA1000036 /* Buildermark.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Buildermark.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterViewModel.swift; sourceTree = "<group>"; };
+		089C1665A1A04F3BA1000038 /* PluginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,6 +59,7 @@
 			isa = PBXGroup;
 			children = (
 				089C1665A1A04F3BA1000030 /* BuildermarkApp.swift */,
+				089C1665A1A04F3BA1000038 /* PluginManager.swift */,
 				089C1665A1A04F3BA1000031 /* ServerManager.swift */,
 				089C1665A1A04F3BA1000032 /* SettingsView.swift */,
 				089C1665A1A04F3BA1000037 /* UpdaterViewModel.swift */,
@@ -145,6 +148,7 @@
 				089C1665A1A04F3BA1000041 /* ServerManager.swift in Sources */,
 				089C1665A1A04F3BA1000042 /* SettingsView.swift in Sources */,
 				089C1665A1A04F3BA1000044 /* UpdaterViewModel.swift in Sources */,
+				089C1665A1A04F3BA1000046 /* PluginManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

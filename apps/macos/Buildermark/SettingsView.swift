@@ -4,11 +4,15 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var serverManager: ServerManager
     @ObservedObject var updaterViewModel: UpdaterViewModel
+    @ObservedObject var pluginManager: PluginManager
 
     var body: some View {
         TabView {
             GeneralTab(serverManager: serverManager)
                 .tabItem { Label("General", systemImage: "gear") }
+
+            PluginsTab(pluginManager: pluginManager)
+                .tabItem { Label("Plugins", systemImage: "puzzlepiece.extension") }
 
             UpdatesTab(updaterViewModel: updaterViewModel)
                 .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
@@ -79,6 +83,59 @@ private struct GeneralTab: View {
         } catch {
             // Silently handle — the toggle still reflects the user's intent
         }
+    }
+}
+
+// MARK: - Plugins Tab
+
+private struct PluginsTab: View {
+    @ObservedObject var pluginManager: PluginManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(pluginManager.plugins.enumerated()), id: \.element.id) { index, plugin in
+                if index > 0 {
+                    Divider()
+                        .padding(.vertical, 8)
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(plugin.name)
+                            .fontWeight(.medium)
+
+                        HStack(spacing: 4) {
+                            Image(
+                                systemName: pluginManager.isInstalled(plugin)
+                                    ? "checkmark.circle.fill" : "circle"
+                            )
+                            .foregroundStyle(
+                                pluginManager.isInstalled(plugin) ? .green : .secondary
+                            )
+                            .font(.caption)
+
+                            Text(pluginManager.isInstalled(plugin) ? "Installed" : "Not Installed")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer()
+
+                    Button(pluginManager.isInstalled(plugin) ? "Uninstall" : "Install") {
+                        if pluginManager.isInstalled(plugin) {
+                            pluginManager.uninstall(plugin)
+                        } else {
+                            pluginManager.install(plugin)
+                        }
+                    }
+                    .controlSize(.small)
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 24)
+        .frame(width: 300)
     }
 }
 
