@@ -11,6 +11,7 @@ struct BuildermarkApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var serverManager = ServerManager()
     @StateObject private var updaterViewModel = UpdaterViewModel()
+    @StateObject private var pluginManager = PluginManager()
 
     @AppStorage("hideMenuBarIcon") private var hideMenuBarIcon = false
 
@@ -46,7 +47,7 @@ struct BuildermarkApp: App {
         .menuBarExtraStyle(.menu)
 
         Settings {
-            SettingsView(serverManager: serverManager, updaterViewModel: updaterViewModel)
+            SettingsView(serverManager: serverManager, updaterViewModel: updaterViewModel, pluginManager: pluginManager)
         }
     }
 }
