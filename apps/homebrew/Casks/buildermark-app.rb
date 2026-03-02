@@ -1,4 +1,4 @@
-cask "buildermark" do
+cask "buildermark-app" do
   version "1.0.0"
 
   on_arm do

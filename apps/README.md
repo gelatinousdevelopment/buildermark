@@ -129,9 +129,9 @@ Required configuration:
 
 ## Homebrew distribution
 
-Homebrew distribution files live in `apps/homebrew`:
+Homebrew distribution files live in `apps/homebrew` and support a single install command:
 
-- `apps/homebrew/Casks/buildermark.rb` for the macOS GUI app (`Buildermark.app` in DMG form)
-- `apps/homebrew/Formula/buildermark-linux.rb` for the Linux CLI (`buildermark` binary in tar.gz form)
+- `brew install buildermark` installs the right package for the current platform (macOS app bundle from DMG, Linux CLI from tarball) via `apps/homebrew/Formula/buildermark.rb`.
+- `apps/homebrew/Casks/buildermark-app.rb` is an optional explicit cask for macOS GUI installs.
 
-This lets us distribute the existing apps as-is via Homebrew (cask for macOS GUI, formula for Linux CLI) without rewriting either app.
+This lets us distribute the existing apps as-is via Homebrew without rewriting either app.
