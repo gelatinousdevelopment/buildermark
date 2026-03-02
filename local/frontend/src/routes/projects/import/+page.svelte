@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { discoverImportableProjects, importProjects } from '$lib/api';
 	import ProjectOnboarding from '$lib/components/project/ProjectOnboarding.svelte';
@@ -66,6 +66,7 @@
 			if (result.state === 'error') {
 				saveSelectionError = result.message;
 			} else {
+				await invalidateAll();
 				goto(resolve('/projects'));
 			}
 		} catch (e) {
