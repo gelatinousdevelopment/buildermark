@@ -112,106 +112,123 @@
 <div class="page">
 	<h1>Project Settings</h1>
 
-	<label class="field-label" for="project-label">Label</label>
-	<input
-		id="project-label"
-		class="project-label"
-		type="text"
-		bind:value={label}
-		placeholder="Project label"
-	/>
+	<div class="columns">
+		<div class="column">
+			<div class="section">
+				<label class="field-label" for="project-label">Project Name</label>
+				<input
+					id="project-label"
+					class="project-label"
+					type="text"
+					bind:value={label}
+					placeholder="Project label"
+				/>
 
-	<label class="field-label" for="project-path">Path to Git Repository</label>
-	<input
-		id="project-path"
-		type="text"
-		bind:value={path}
-		placeholder="/path/to/project"
-		class="mono-input"
-	/>
+				<label class="field-label" for="project-path">Path to Git Repository</label>
+				<input
+					id="project-path"
+					type="text"
+					bind:value={path}
+					placeholder="/path/to/project"
+					class="mono-input"
+				/>
+			</div>
 
-	<label class="field-label" for="team-server-select">Team Server</label>
-	<select id="team-server-select" bind:value={teamServerId} class="team-server-select">
-		<option value="">None</option>
-		{#each teamServers as server (server.id)}
-			<option value={server.id}>{server.label}</option>
-		{/each}
-	</select>
+			<div class="section">
+				<h2>Ignore Paths for Diff Matching</h2>
+				<div class="defaults-row">
+					<label class="checkbox-label">
+						<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
+						Ignore default paths
+					</label>
+					<button
+						class="info-btn"
+						title="Show default paths"
+						onclick={() => (showDefaultPaths = !showDefaultPaths)}
+					>
+						<Icon name="info" width="15px" />
+					</button>
+				</div>
+				{#if showDefaultPaths}
+					<ul class="default-paths-list">
+						{#each defaultPaths as p (p)}
+							<li><code>{p}</code></li>
+						{/each}
+					</ul>
+				{/if}
+				<p class="hint">One glob path per line.</p>
+				<textarea
+					id="ignore-diff-paths"
+					bind:value={ignoreDiffPaths}
+					rows="4"
+					spellcheck="false"
+					placeholder="Glob patterns, one per line"
+				></textarea>
+			</div>
 
-	<br />
+			<div class="section">
+				<h2>Old Filesystem Paths</h2>
+				<p class="hint">
+					Match conversations created from previous project locations. One absolute path per line.
+				</p>
+				<textarea
+					id="old-paths"
+					bind:value={oldPaths}
+					rows="4"
+					spellcheck="false"
+					placeholder="/old/path/to/repo"
+				></textarea>
+			</div>
 
-	<p class="hint">
-		Need to track conversations from other user folders or mounted filesystems? Configure that in
-		<a href={resolve('/settings')}>Global Settings</a>.
-	</p>
+			<div class="section">
+				<h2>Alternate Coding Agent Paths</h2>
+				<p class="hint">
+					Need to track conversations from other user folders or mounted filesystems? Configure that
+					in <a href={resolve('/settings')}>Global Settings</a>.
+				</p>
+			</div>
 
-	<label class="field-label" for="ignore-diff-paths">Ignore Paths for Diff Matching</label>
-	<div class="defaults-row">
-		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
-			Ignore default paths
-		</label>
-		<button
-			class="info-btn"
-			title="Show default paths"
-			onclick={() => (showDefaultPaths = !showDefaultPaths)}
-		>
-			<Icon name="info" width="15px" />
-		</button>
-	</div>
-	{#if showDefaultPaths}
-		<ul class="default-paths-list">
-			{#each defaultPaths as p (p)}
-				<li><code>{p}</code></li>
-			{/each}
-		</ul>
-	{/if}
-	<p class="hint">One glob path per line.</p>
-	<textarea
-		id="ignore-diff-paths"
-		bind:value={ignoreDiffPaths}
-		rows="4"
-		spellcheck="false"
-		placeholder="Glob patterns, one per line"
-	></textarea>
+			<div class="actions">
+				<button class="bordered prominent" disabled={saving} onclick={save}
+					>{saving ? 'Saving...' : 'Save Settings'}</button
+				>
+				{#if notice}
+					<span class="notice">{notice}</span>
+				{/if}
+				{#if recomputeStatusMessage}
+					<span class="notice">{recomputeStatusMessage}</span>
+				{/if}
+			</div>
+			{#if error}
+				<p class="error">{error}</p>
+			{/if}
 
-	<br />
-	<br />
+			<br />
 
-	<label class="field-label" for="old-paths">Old Filesystem Paths</label>
-	<p class="hint">
-		Match conversations created from previous project locations. One absolute path per line.
-	</p>
-	<textarea
-		id="old-paths"
-		bind:value={oldPaths}
-		rows="4"
-		spellcheck="false"
-		placeholder="/old/path/to/repo"
-	></textarea>
+			<div class="danger-zone">
+				<h2>Danger Zone</h2>
+				<p class="danger-description">
+					Permanently delete this project and all its data, including conversations, messages,
+					ratings, and commits.
+				</p>
+				<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button>
+			</div>
+		</div>
 
-	<div class="actions">
-		<button class="bordered prominent" disabled={saving} onclick={save}
-			>{saving ? 'Saving...' : 'Save Settings'}</button
-		>
-		{#if notice}
-			<span class="notice">{notice}</span>
-		{/if}
-		{#if recomputeStatusMessage}
-			<span class="notice">{recomputeStatusMessage}</span>
-		{/if}
-	</div>
-	{#if error}
-		<p class="error">{error}</p>
-	{/if}
+		<hr class="divider" />
 
-	<div class="danger-zone">
-		<h2>Danger Zone</h2>
-		<p class="danger-description">
-			Permanently delete this project and all its data, including conversations, messages, ratings,
-			and commits.
-		</p>
-		<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button>
+		<div class="column">
+			<div class="section">
+				<h2>Team Server</h2>
+				<select id="team-server-select" bind:value={teamServerId} class="team-server-select">
+					<option value="">None</option>
+					{#each teamServers as server (server.id)}
+						<option value={server.id}>{server.label}</option>
+					{/each}
+				</select>
+				<div class="hint">Coming soon.</div>
+			</div>
+		</div>
 	</div>
 </div>
 
@@ -247,13 +264,56 @@
 
 <style>
 	.page {
-		max-width: 700px;
-		padding: 1.5rem;
+		padding: 0rem;
 	}
 
 	h1 {
-		margin: 0 0 1rem;
+		margin: 0;
 		font-size: 1.2rem;
+		padding: 1.5rem;
+	}
+
+	h2 {
+		color: var(--accent-color-darkest);
+		margin: 0.5rem 0;
+		font-size: 1rem;
+	}
+
+	.columns {
+		display: flex;
+		flex-direction: row;
+		gap: 0rem;
+		flex: 1;
+		border-top: 0.5px solid var(--color-divider);
+	}
+
+	.column {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2rem;
+		padding: 1.5rem 2rem;
+	}
+
+	hr.divider {
+		background: var(--color-divider);
+		border: 0;
+		margin: 0;
+		min-width: 0.5px;
+		width: 0.5px;
+	}
+
+	.section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	@media (max-width: 1200px) {
+		.columns {
+			flex-direction: column;
+		}
 	}
 
 	.defaults-row {
@@ -298,7 +358,7 @@
 
 	.field-label {
 		display: block;
-		margin-bottom: 0.35rem;
+		margin: 0.5rem 0;
 		font-weight: 600;
 	}
 
@@ -311,7 +371,6 @@
 		color: var(--color-text);
 		border-radius: 4px;
 		box-sizing: border-box;
-		margin-bottom: 1rem;
 	}
 
 	input[type='text'].project-label {
@@ -331,7 +390,6 @@
 		color: var(--color-text);
 		border-radius: 4px;
 		min-width: 200px;
-		margin-bottom: 1rem;
 	}
 
 	textarea {
@@ -349,8 +407,8 @@
 	}
 
 	.hint {
-		margin-top: 0.35rem;
-		font-size: 0.8rem;
+		margin: 0 0 0.3rem 0;
+		font-size: 1rem;
 		color: var(--color-text-faded);
 	}
 
@@ -358,7 +416,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
-		margin-top: 0.9rem;
 	}
 
 	.notice {
@@ -367,8 +424,7 @@
 	}
 
 	.danger-zone {
-		margin-top: 2.5rem;
-		padding-top: 1.5rem;
+		padding-top: 1rem;
 		border-top: 0.5px solid var(--color-divider);
 	}
 

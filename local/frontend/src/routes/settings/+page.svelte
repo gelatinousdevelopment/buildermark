@@ -107,177 +107,235 @@
 	{#if localSettingsError}
 		<p class="error">{localSettingsError}</p>
 	{:else if localSettings}
-		<div class="ui-section">
-			<h2>User Interface</h2>
-			<p class="label">Page Max Width</p>
-			<fieldset class="radio-group">
-				{#each contentWidthOptions as option (option.value)}
-					<label class="radio-option">
-						<input
-							type="radio"
-							name="content-width"
-							value={option.value}
-							checked={settingsStore.contentWidth === option.value}
-							onchange={() => (settingsStore.contentWidth = option.value)}
-						/>
-						<span class="radio-label">{option.label}</span>
-						<span class="radio-description">{option.description}</span>
-					</label>
-				{/each}
-			</fieldset>
-		</div>
-
-		<TeamServersSection />
-
-		<div class="tracking-section">
-			<h2>Tracked Projects</h2>
-			{#if projectError}
-				<p class="error">{projectError}</p>
-			{:else if projects.length === 0}
-				<p class="muted">No tracked projects yet.</p>
-			{:else}
-				<table class="data bordered striped hoverable" style:max-width="50rem">
-					<tbody>
-						{#each projects as project (project.id)}
-							<tr>
-								<td>
-									<a
-										href={resolve('/projects/[project_id]', {
-											project_id: project.id
-										})}
-										class="project-name">{projectName(project)}</a
-									>
-								</td>
-								<td>
-									<a
-										href={resolve('/projects/[project_id]/settings', {
-											project_id: project.id
-										})}
-										class="project-name">Settings</a
-									>
-								</td>
-								<td><span class="project-path">{project.path}</span></td>
-							</tr>
+		<div class="columns">
+			<div class="column">
+				<div class="section">
+					<h2>User Interface</h2>
+					<p class="label">Page Max Width</p>
+					<fieldset class="radio-group">
+						{#each contentWidthOptions as option (option.value)}
+							<label class="radio-option">
+								<input
+									type="radio"
+									name="content-width"
+									value={option.value}
+									checked={settingsStore.contentWidth === option.value}
+									onchange={() => (settingsStore.contentWidth = option.value)}
+								/>
+								<span class="radio-label">{option.label}</span>
+								<span class="radio-description">{option.description}</span>
+							</label>
 						{/each}
-					</tbody>
-				</table>
-			{/if}
-		</div>
+					</fieldset>
+				</div>
 
-		<div class="local-info">
-			<h2>Local Environment</h2>
-			<label class="label" for="extra-agent-homes">Extra Agent Home Folders</label>
-			<p class="muted">
-				One path per line. You can enter user home folders (or .claude/.codex/.gemini folders) from
-				mounted filesystems or other local accounts.
-			</p>
-			<textarea
-				id="extra-agent-homes"
-				rows="4"
-				bind:value={extraAgentHomesText}
-				placeholder="/mnt/vm/home/dev"
-				class="mono-area"
-			></textarea>
-			<div class="actions">
-				<button class="bordered small" onclick={saveAgentHomes} disabled={savingAgentHomes}>
-					{savingAgentHomes ? 'Saving...' : 'Save Agent Folders'}
-				</button>
-			</div>
-			{#if agentHomesError}<p class="error">{agentHomesError}</p>{/if}
-			{#if agentHomesNotice}<p class="status">{agentHomesNotice}</p>{/if}
-			{#if missingSearchPaths.length > 0}
-				<p class="muted">Some configured agent folders are not currently found:</p>
-				<ul>
-					{#each missingSearchPaths as entry (entry.agent + entry.path)}
-						<li><code>{entry.path}</code> ({entry.agent})</li>
-					{/each}
-				</ul>
-			{/if}
-			<table class="data bordered striped hoverable" style:max-width="50rem">
-				<tbody>
-					<tr>
-						<td class="label-cell">Home Folder</td>
-						<td class="path">{localSettings.homePath}</td>
-					</tr>
-					<tr>
-						<td class="label-cell">Agent Search Paths</td>
-						<td>
-							{#if localSettings.conversationSearchPaths.length === 0}
-								<span class="muted">No agent watchers are currently registered.</span>
+				<div class="section">
+					<h2>Local Environment</h2>
+					<table class="data bordered striped hoverable">
+						<tbody>
+							<tr>
+								<td class="label-cell">Home Folder</td>
+								<td class="path">{localSettings.homePath}</td>
+							</tr>
+							<tr>
+								<td class="label-cell">Agent Search Paths</td>
+								<td>
+									{#if localSettings.conversationSearchPaths.length === 0}
+										<span class="muted">No agent watchers are currently registered.</span>
+									{:else}
+										{#each localSettings.conversationSearchPaths as entry, index (index)}
+											<div class="search-path-entry">
+												<span class="agent">{entry.agent}</span>
+												<span class="path">{entry.path}</span>{#if !entry.exists}<span
+														class="muted"
+													>
+														(not found)</span
+													>{/if}
+											</div>
+										{/each}
+									{/if}
+								</td>
+							</tr>
+							<tr>
+								<td class="label-cell">Sqlite Database</td>
+								<td class="path">{localSettings.dbPath}</td>
+							</tr>
+							<tr>
+								<td class="label-cell">Server Port</td>
+								<td class="path">{localSettings.listenAddr}</td>
+							</tr>
+						</tbody>
+					</table>
+					<br />
+					<label class="label" for="extra-agent-homes">Extra Agent Home Folders</label>
+					<p class="muted">
+						One path per line. You can enter user home folders (or .claude/.codex/.gemini folders)
+						from mounted filesystems or other local accounts.
+					</p>
+					<textarea
+						id="extra-agent-homes"
+						rows="4"
+						bind:value={extraAgentHomesText}
+						placeholder="/mnt/vm/home/dev"
+						class="mono-area full-width"
+					></textarea>
+					<div class="actions">
+						<button class="bordered small" onclick={saveAgentHomes} disabled={savingAgentHomes}>
+							{savingAgentHomes ? 'Saving...' : 'Save Agent Folders'}
+						</button>
+					</div>
+					{#if agentHomesError}<p class="error">{agentHomesError}</p>{/if}
+					{#if agentHomesNotice}<p class="status">{agentHomesNotice}</p>{/if}
+					{#if missingSearchPaths.length > 0}
+						<p class="muted">Some configured agent folders are not currently found:</p>
+						<ul>
+							{#each missingSearchPaths as entry (entry.agent + entry.path)}
+								<li><code>{entry.path}</code> ({entry.agent})</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+
+				<div class="section">
+					<h2>Re-import Conversation History</h2>
+					<p class="muted">This may take a while.</p>
+					<div class="history-import-controls">
+						<label for="history-days-select">Import window</label>
+						<select
+							id="history-days-select"
+							bind:value={historyImportDays}
+							disabled={importingHistory}
+						>
+							{#each historyImportDayOptions as option (option)}
+								<option value={option}>{historyOptionLabel(option)}</option>
+							{/each}
+						</select>
+						<button
+							class="bordered small import-btn"
+							onclick={importHistory}
+							disabled={importingHistory}
+						>
+							{#if importingHistory}
+								<span class="spinner" aria-hidden="true"></span>
+								Importing...
 							{:else}
-								{#each localSettings.conversationSearchPaths as entry, index (index)}
-									<div class="search-path-entry">
-										<span class="agent">{entry.agent}</span>
-										<span class="path">{entry.path}</span>{#if !entry.exists}<span class="muted">
-												(not found)</span
-											>{/if}
-									</div>
-								{/each}
+								Import
 							{/if}
-						</td>
-					</tr>
-					<tr>
-						<td class="label-cell">Sqlite Database</td>
-						<td class="path">{localSettings.dbPath}</td>
-					</tr>
-					<tr>
-						<td class="label-cell">Server Port</td>
-						<td class="path">{localSettings.listenAddr}</td>
-					</tr>
-				</tbody>
-			</table>
+						</button>
+					</div>
+					{#if importingHistory && importStatusMessage}
+						<p class="import-status">{importStatusMessage}</p>
+					{/if}
+					{#if historyImportError}
+						<p class="error">{historyImportError}</p>
+					{:else if historyImportResult}
+						<p class="status">{historyImportResult}</p>
+					{/if}
+				</div>
+			</div>
+
+			<hr class="divider" />
+
+			<div class="column">
+				<div class="section">
+					<h2>Tracked Projects</h2>
+					{#if projectError}
+						<p class="error">{projectError}</p>
+					{:else if projects.length === 0}
+						<p class="muted">No tracked projects yet.</p>
+					{:else}
+						<table class="data bordered striped hoverable">
+							<tbody>
+								{#each projects as project (project.id)}
+									<tr>
+										<td>
+											<a
+												href={resolve('/projects/[project_id]', {
+													project_id: project.id
+												})}
+												class="project-name">{projectName(project)}</a
+											>
+										</td>
+										<td>
+											<a
+												href={resolve('/projects/[project_id]/settings', {
+													project_id: project.id
+												})}
+												class="project-name">Settings</a
+											>
+										</td>
+										<td><span class="project-path">{project.path}</span></td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					{/if}
+				</div>
+
+				<div class="section">
+					<TeamServersSection />
+				</div>
+			</div>
 		</div>
 	{/if}
-
-	<div class="history-import">
-		<h2>Re-import Conversation History</h2>
-		<p class="muted">This may take a while.</p>
-		<div class="history-import-controls">
-			<label for="history-days-select">Import window</label>
-			<select id="history-days-select" bind:value={historyImportDays} disabled={importingHistory}>
-				{#each historyImportDayOptions as option (option)}
-					<option value={option}>{historyOptionLabel(option)}</option>
-				{/each}
-			</select>
-			<button class="bordered small import-btn" onclick={importHistory} disabled={importingHistory}>
-				{#if importingHistory}
-					<span class="spinner" aria-hidden="true"></span>
-					Importing...
-				{:else}
-					Import
-				{/if}
-			</button>
-		</div>
-		{#if importingHistory && importStatusMessage}
-			<p class="import-status">{importStatusMessage}</p>
-		{/if}
-		{#if historyImportError}
-			<p class="error">{historyImportError}</p>
-		{:else if historyImportResult}
-			<p class="status">{historyImportResult}</p>
-		{/if}
-	</div>
 </div>
 
 <style>
 	.settings {
 		background: var(--color-background-content);
-		padding: 1rem;
+		padding: 0rem;
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
 	}
 
 	h1 {
 		margin: 0;
-		font-size: 1.25rem;
+		font-size: 1.2rem;
+		padding: 1.5rem;
 	}
 
 	h2 {
 		color: var(--accent-color-darkest);
-		margin-top: 1rem;
+		margin: 0.5rem 0;
 		font-size: 1rem;
+	}
+
+	.columns {
+		display: flex;
+		flex-direction: row;
+		gap: 0rem;
+		flex: 1;
+		border-top: 0.5px solid var(--color-divider);
+	}
+
+	.column {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2rem;
+		padding: 1.5rem 2rem;
+	}
+
+	hr.divider {
+		background: var(--color-divider);
+		border: 0;
+		margin: 0;
+		min-width: 0.5px;
+		width: 0.5px;
+	}
+
+	.section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	@media (max-width: 1200px) {
+		.columns {
+			flex-direction: column;
+		}
 	}
 
 	.label {
@@ -285,13 +343,17 @@
 		font-size: 0.9rem;
 		color: var(--color-text-secondary);
 		text-transform: uppercase;
-		letter-spacing: 0.02em;
 	}
 
 	.mono-area {
 		font-family:
 			ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
 			monospace;
+	}
+
+	.full-width {
+		width: 100%;
+		box-sizing: border-box;
 	}
 
 	.path {
@@ -304,12 +366,7 @@
 	.muted {
 		color: var(--color-text-faded);
 		font-size: 0.85rem;
-	}
-
-	.tracking-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
+		margin: 0;
 	}
 
 	.label-cell {
