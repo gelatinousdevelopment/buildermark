@@ -14,11 +14,13 @@
 	import buildermarkSvg from '$lib/icons/buildermark.svg?raw';
 	import buildermarkWordmarkSvg from '$lib/icons/buildermarkWordmark.svg?raw';
 	import buildermarkTallSvg from '$lib/icons/buildermarkTall.svg?raw';
+	import buildermarkTallAnimatedSvg from '$lib/icons/buildermarkTallAnimated.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
 	export let height: string = '100%';
 	export let fillColor: string | undefined = undefined;
+	export let overflow: string = 'visible';
 
 	const icons: { [key in Icon]: string } = {
 		gridLine2: gridLine2Svg,
@@ -35,12 +37,13 @@
 		info: infoSvg,
 		buildermark: buildermarkSvg,
 		buildermarkWordmark: buildermarkWordmarkSvg,
-		buildermarkTall: buildermarkTallSvg
+		buildermarkTall: buildermarkTallSvg,
+		buildermarkTallAnimated: buildermarkTallAnimatedSvg
 	};
 </script>
 
 {#if name && icons[name]}
-	<div class="icon" style:width style:height style:--fill-color={fillColor}>
+	<div class="icon" style:width style:height style:--fill-color={fillColor} style:overflow>
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html icons[name]}
 	</div>
@@ -59,7 +62,6 @@
 	}
 	.icon :global(svg) {
 		height: auto !important;
-		overflow: visible;
 		width: 100% !important;
 	}
 	.icon :global(svg *) {

@@ -15,9 +15,24 @@
 
 	let { children, data } = $props();
 
+	let animatedEl: HTMLDivElement;
+	let svgTemplate: Node;
+
 	onMount(() => {
 		websocketStore.connect();
+		const svg = animatedEl?.querySelector('svg');
+		if (svg) {
+			svgTemplate = svg.cloneNode(true);
+		}
 	});
+
+	function restartAnimation() {
+		if (!svgTemplate || !animatedEl) return;
+		const current = animatedEl.querySelector('svg');
+		if (current) {
+			current.replaceWith(svgTemplate.cloneNode(true));
+		}
+	}
 
 	onDestroy(() => {
 		websocketStore.disconnect();
@@ -80,9 +95,12 @@
 				<a href={resolve('/projects')} class="item wordmark">
 					<Icon name="buildermarkWordmark" width="176px" />
 				</a>
-				<a href={resolve('/projects')} class="item icon">
+				<a href={resolve('/projects')} class="item icon" onmouseenter={restartAnimation}>
 					<!-- <Icon name="buildermark" width="28px" /> -->
-					<Icon name="buildermarkTall" width="29px" />
+					<div class="static"><Icon name="buildermarkTall" width="29px" /></div>
+					<div class="animated" bind:this={animatedEl}>
+						<Icon name="buildermarkTallAnimated" width="29px" overflow="hidden" />
+					</div>
 					<!-- <div class="text">
 						<div class="title">Buildermark</div>
 						<div class="subtitle">Local</div>
@@ -297,11 +315,19 @@
 	}
 	header .brand a.icon {
 		display: flex;
+		align-items: flex-end;
 	}
 	header.bigBrand .brand a.wordmark {
 		display: flex;
 	}
 	header.bigBrand .brand a.icon {
+		display: none;
+	}
+
+	header .brand a.icon .static {
+		display: block;
+	}
+	header .brand a.icon .animated {
 		display: none;
 	}
 
@@ -311,7 +337,16 @@
 		position: relative;
 	}
 
-	header .brand a :global(.icon) {
+	header .brand a.icon:hover .static {
+		display: none;
+	}
+	header .brand a.icon:hover .animated {
+		display: block;
+	}
+
+	header .brand a :global(.icon),
+	header .brand a .static,
+	header .brand a .animated {
 		align-items: flex-end;
 	}
 

@@ -16,5 +16,6 @@ declare global {
 		| 'info'
 		| 'buildermark'
 		| 'buildermarkWordmark'
-		| 'buildermarkTall';
+		| 'buildermarkTall'
+		| 'buildermarkTallAnimated';
 }
