@@ -1,3 +1,4 @@
+import { browser } from '$app/environment';
 import { API_URL } from '$lib/config';
 import type {
 	Project,
@@ -61,6 +62,13 @@ export function getLocalSettings(fetchFn?: APIFetch): Promise<LocalSettings> {
 	return api('/api/v1/settings', undefined, fetchFn);
 }
 
+export function updateLocalSettings(extraAgentHomes: string[]): Promise<LocalSettings> {
+	return api('/api/v1/settings', {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ extraAgentHomes })
+	});
+}
 export function deleteProject(id: string): Promise<void> {
 	return api(`/api/v1/projects/${id}`, { method: 'DELETE' });
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -33,27 +34,42 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	}
 	defer database.Close()
 
+	configDir, err := DefaultConfigDir()
+	if err != nil {
+		return fmt.Errorf("resolve config dir: %w", err)
+	}
+	cfg, err := LoadConfig(configDir)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
 	registry := agent.NewRegistry()
 
-	claudeAgent, err := claude.New(database)
+	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Printf("warning: claude agent disabled: %v", err)
-	} else {
-		registry.Register(claudeAgent)
+		return fmt.Errorf("determine home directory: %w", err)
+	}
+	homes := []string{home}
+	seen := map[string]struct{}{home: {}}
+	for _, candidate := range cfg.ExtraAgentHomes {
+		if candidate == "" {
+			continue
+		}
+		clean := filepath.Clean(candidate)
+		if filepath.Base(clean) == ".claude" || filepath.Base(clean) == ".codex" || filepath.Base(clean) == ".gemini" {
+			clean = filepath.Dir(clean)
+		}
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		homes = append(homes, clean)
 	}
 
-	codexAgent, err := codex.New(database)
-	if err != nil {
-		log.Printf("warning: codex agent disabled: %v", err)
-	} else {
-		registry.Register(codexAgent)
-	}
-
-	geminiAgent, err := gemini.New(database)
-	if err != nil {
-		log.Printf("warning: gemini agent disabled: %v", err)
-	} else {
-		registry.Register(geminiAgent)
+	for _, watchHome := range homes {
+		registry.Register(claude.NewForHome(database, watchHome))
+		registry.Register(codex.NewForHome(database, watchHome))
+		registry.Register(gemini.NewForHome(database, watchHome))
 	}
 
 	watchCtx, watchCancel := context.WithCancel(ctx)
@@ -65,7 +81,7 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 
 	srv := &http.Server{
 		Addr:         opts.Addr,
-		Handler:      (&handler.Server{DB: database, Agents: registry, DBPath: opts.DBPath, ListenAddr: opts.Addr, ReadOnly: readOnly}).Routes(),
+		Handler:      (&handler.Server{DB: database, Agents: registry, DBPath: opts.DBPath, ListenAddr: opts.Addr, ReadOnly: readOnly, ConfigDir: configDir}).Routes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

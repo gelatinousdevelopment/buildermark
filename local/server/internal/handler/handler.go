@@ -18,6 +18,7 @@ type Server struct {
 	DBPath     string          // resolved path to the SQLite database file
 	ListenAddr string          // address the server is listening on
 	ReadOnly   bool
+	ConfigDir  string
 
 	refreshJobs      *jobTracker
 	coverageJobs     *jobTracker
@@ -90,6 +91,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/projects/{id}/team-server", s.handleSetProjectTeamServer)
 	mux.HandleFunc("POST /api/v1/history/scan", s.handleHistoryScan)
 	mux.HandleFunc("GET /api/v1/settings", s.handleGetLocalSettings)
+	mux.HandleFunc("PUT /api/v1/settings", s.handlePutLocalSettings)
 	mux.Handle("GET /_app/", staticFrontendHandler())
 	mux.HandleFunc("GET /", s.handleDashboard)
 	return corsMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux)))

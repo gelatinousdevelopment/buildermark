@@ -23,12 +23,17 @@ func New(database *sql.DB) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NewForHome(database, home), nil
+}
+
+// NewForHome creates a Claude Code agent for the provided home directory.
+func NewForHome(database *sql.DB, home string) *Agent {
 	return &Agent{
 		db:       database,
 		path:     filepath.Join(home, ".claude", "history.jsonl"),
 		home:     home,
 		interval: 2 * time.Second,
-	}, nil
+	}
 }
 
 // newAgent is an internal constructor for testing with custom paths.
