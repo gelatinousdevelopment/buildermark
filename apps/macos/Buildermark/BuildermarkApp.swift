@@ -101,6 +101,7 @@ private struct SettingsLauncher: View {
 struct MenuBarMenu: View {
     @ObservedObject var serverManager: ServerManager
     @ObservedObject var updaterViewModel: UpdaterViewModel
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Label(serverManager.statusText, systemImage: serverManager.statusIcon)
@@ -116,8 +117,9 @@ struct MenuBarMenu: View {
 
         Divider()
 
-        SettingsLink {
-            Text("Settings\u{2026}")
+        Button("Settings\u{2026}") {
+            openSettings()
+            NSApp.activate(ignoringOtherApps: true)
         }
         .keyboardShortcut(",")
 
