@@ -26,10 +26,16 @@ var unresolvedPasteRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("claude watcher: starting, monitoring %s", a.path)
 
+	scanWindow := agent.DefaultScanWindow
+	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.db, a.Name()); err == nil {
+		scanWindow = agent.StartupScanWindow(latestMs)
+	}
+	log.Printf("claude watcher: startup scan window %s", scanWindow)
+
 	trackedFilter := a.trackedProjectFilter(ctx)
 	start := time.Now()
-	a.scanSinceFiltered(ctx, time.Now().Add(-agent.DefaultScanWindow), trackedFilter)
-	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-agent.DefaultScanWindow), true, trackedFilter, nil)
+	a.scanSinceFiltered(ctx, time.Now().Add(-scanWindow), trackedFilter)
+	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-scanWindow), true, trackedFilter, nil)
 	log.Printf("claude watcher: startup scan duration %s", time.Since(start))
 	if projectScanCount > 0 {
 		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
@@ -140,7 +146,7 @@ func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter p
 // start from the end of the file.
 func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter) int {
 	startOffset := int64(0)
-	if updateOffset && filter == nil {
+	if updateOffset {
 		startOffset = a.restoreHistoryOffset(ctx)
 	}
 

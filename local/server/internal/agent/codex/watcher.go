@@ -58,9 +58,15 @@ type sessionFileInfo struct {
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("codex watcher: starting, monitoring %s", a.sessionsDir)
 
+	scanWindow := agent.DefaultScanWindow
+	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.db, a.Name()); err == nil {
+		scanWindow = agent.StartupScanWindow(latestMs)
+	}
+	log.Printf("codex watcher: startup scan window %s", scanWindow)
+
 	trackedFilter := a.trackedProjectFilter(ctx)
 	start := time.Now()
-	a.scanSinceFiltered(ctx, time.Now().Add(-agent.DefaultScanWindow), trackedFilter)
+	a.scanSinceFiltered(ctx, time.Now().Add(-scanWindow), trackedFilter)
 	log.Printf("codex watcher: startup scan duration %s", time.Since(start))
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)

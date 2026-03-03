@@ -5,6 +5,73 @@ import (
 	"testing"
 )
 
+func TestLatestWatcherScanTimestamp(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	// No rows — should return 0.
+	ts, err := LatestWatcherScanTimestamp(ctx, database, "claude")
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestamp (empty): %v", err)
+	}
+	if ts != 0 {
+		t.Fatalf("expected 0 for empty table, got %d", ts)
+	}
+
+	// Insert two rows with different updated_at_ms.
+	if err := UpsertWatcherScanState(ctx, database, WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  "history_file",
+		SourceKey:   "/tmp/a",
+		UpdatedAtMs: 1000,
+	}); err != nil {
+		t.Fatalf("insert row 1: %v", err)
+	}
+	if err := UpsertWatcherScanState(ctx, database, WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  "project_file",
+		SourceKey:   "/tmp/b",
+		UpdatedAtMs: 5000,
+	}); err != nil {
+		t.Fatalf("insert row 2: %v", err)
+	}
+	// Different agent — should not affect claude's result.
+	if err := UpsertWatcherScanState(ctx, database, WatcherScanState{
+		Agent:       "codex",
+		SourceKind:  "session_file",
+		SourceKey:   "/tmp/c",
+		UpdatedAtMs: 9999,
+	}); err != nil {
+		t.Fatalf("insert codex row: %v", err)
+	}
+
+	ts, err = LatestWatcherScanTimestamp(ctx, database, "claude")
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestamp: %v", err)
+	}
+	if ts != 5000 {
+		t.Fatalf("expected 5000, got %d", ts)
+	}
+
+	// Verify codex returns its own max.
+	ts, err = LatestWatcherScanTimestamp(ctx, database, "codex")
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestamp (codex): %v", err)
+	}
+	if ts != 9999 {
+		t.Fatalf("expected 9999, got %d", ts)
+	}
+
+	// Non-existent agent returns 0.
+	ts, err = LatestWatcherScanTimestamp(ctx, database, "gemini")
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestamp (gemini): %v", err)
+	}
+	if ts != 0 {
+		t.Fatalf("expected 0 for non-existent agent, got %d", ts)
+	}
+}
+
 func TestWatcherScanStateCRUD(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()

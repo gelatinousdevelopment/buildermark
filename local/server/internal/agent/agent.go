@@ -20,6 +20,25 @@ var DefaultScanWindow = func() time.Duration {
 	return 90 * 24 * time.Hour
 }()
 
+// StartupScanWindow computes a scan window based on how recently the server
+// last ran. If latestMs > 0, the window is time.Since(latest) + 5 min buffer,
+// capped at DefaultScanWindow and floored at 1 min. If latestMs == 0 (first
+// run), it returns DefaultScanWindow.
+func StartupScanWindow(latestMs int64) time.Duration {
+	if latestMs <= 0 {
+		return DefaultScanWindow
+	}
+	elapsed := time.Since(time.UnixMilli(latestMs))
+	window := elapsed + 5*time.Minute
+	if window < time.Minute {
+		window = time.Minute
+	}
+	if window > DefaultScanWindow {
+		window = DefaultScanWindow
+	}
+	return window
+}
+
 // Agent is the base interface every coding agent must implement.
 type Agent interface {
 	Name() string // e.g. "claude", "codex"

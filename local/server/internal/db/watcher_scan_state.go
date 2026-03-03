@@ -78,6 +78,20 @@ func UpsertWatcherScanState(ctx context.Context, database *sql.DB, st WatcherSca
 	return nil
 }
 
+// LatestWatcherScanTimestamp returns the most recent updated_at_ms across all
+// scan state rows for the given agent. Returns 0 if no rows exist.
+func LatestWatcherScanTimestamp(ctx context.Context, database *sql.DB, agent string) (int64, error) {
+	var ts sql.NullInt64
+	err := database.QueryRowContext(ctx, `SELECT MAX(updated_at_ms) FROM watcher_scan_state WHERE agent = ?`, agent).Scan(&ts)
+	if err != nil {
+		return 0, fmt.Errorf("latest watcher scan timestamp: %w", err)
+	}
+	if !ts.Valid {
+		return 0, nil
+	}
+	return ts.Int64, nil
+}
+
 func DeleteWatcherScanState(ctx context.Context, database *sql.DB, agent, sourceKind, sourceKey string) error {
 	res, err := database.ExecContext(ctx, `DELETE FROM watcher_scan_state WHERE agent = ? AND source_kind = ? AND source_key = ?`, agent, sourceKind, sourceKey)
 	if err != nil {

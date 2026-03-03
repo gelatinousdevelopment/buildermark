@@ -20,8 +20,20 @@ type processedFile struct {
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("gemini watcher: starting, monitoring %s", a.tmpDir)
 
+	scanWindow := agent.DefaultScanWindow
+	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.db, a.Name()); err == nil {
+		scanWindow = agent.StartupScanWindow(latestMs)
+	}
+	log.Printf("gemini watcher: startup scan window %s", scanWindow)
+
 	trackedFilter := a.trackedProjectFilter(ctx)
-	a.scanSince(ctx, time.Now().Add(-agent.DefaultScanWindow), trackedFilter)
+	a.scanSince(ctx, time.Now().Add(-scanWindow), trackedFilter)
+	// Write a scan marker so future restarts can compute a narrow window.
+	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: "scan_marker",
+		SourceKey:  "startup",
+	})
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
 
