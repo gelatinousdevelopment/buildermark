@@ -70,6 +70,7 @@ type ConversationFilters struct {
 	Search     string // optional free-text search against user messages
 	DateFrom   int64  // unix ms lower bound (inclusive), 0 = no filter
 	DateTo     int64  // unix ms upper bound (exclusive), 0 = no filter
+	Order      string // "asc" for oldest first, default "desc" for newest first
 }
 
 type ConversationPagination struct {
@@ -237,13 +238,17 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	}
 
 	// Fetch conversations for this project ordered by latest activity.
+	orderDir := "DESC"
+	if filters.Order == "asc" {
+		orderDir = "ASC"
+	}
 	selectArgs := append([]any{projectID, hidden}, filterArgs...)
 	selectArgs = append(selectArgs, limit, offset)
 	convRows, err := db.QueryContext(ctx,
 		`SELECT c.id, c.agent, c.title, c.parent_conversation_id, c.hidden, c.ended_at, c.user_prompt_count
 		 FROM conversations c
 		 WHERE c.project_id = ? AND c.hidden = ?`+filterWhere+`
-		 ORDER BY c.ended_at DESC, c.id DESC
+		 ORDER BY c.ended_at `+orderDir+`, c.id `+orderDir+`
 		 LIMIT ? OFFSET ?`,
 		selectArgs...,
 	)

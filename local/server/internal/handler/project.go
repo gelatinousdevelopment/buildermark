@@ -336,6 +336,9 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 			filters.DateTo = v
 		}
 	}
+	if order := strings.TrimSpace(r.URL.Query().Get("order")); order == "asc" {
+		filters.Order = "asc"
+	}
 
 	project, err := db.GetProjectDetailPage(r.Context(), s.DB, id, page, pageSize, filters)
 	if err != nil {
