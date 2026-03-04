@@ -165,7 +165,7 @@ func TestExtractReliableDiffFromStructuredPatchJSON(t *testing.T) {
 	if !ok || diff == "" {
 		t.Fatal("expected diff from structuredPatch JSON")
 	}
-	if !strings.Contains(diff, "diff --git a/local/frontend/src/app.ts b/local/frontend/src/app.ts") {
+	if !strings.Contains(diff, "diff --git a/web/frontend/src/app.ts b/web/frontend/src/app.ts") {
 		t.Fatalf("expected repo-relative path variant in diff, got: %q", diff)
 	}
 	if got := strings.Count(diff, "diff --git "); got != 1 {

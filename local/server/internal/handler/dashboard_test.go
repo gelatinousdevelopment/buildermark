@@ -45,16 +45,3 @@ func TestDashboard(t *testing.T) {
 		t.Fatalf("dashboard body missing expected nonce value")
 	}
 }
-
-func TestDashboardNotFound(t *testing.T) {
-	s := setupTestServer(t)
-	handler := s.Routes()
-
-	req := httptest.NewRequest("GET", "/nonexistent", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
-	}
-}

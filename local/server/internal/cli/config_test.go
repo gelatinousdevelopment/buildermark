@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -53,7 +54,7 @@ func TestLoadConfig_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig() error: %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("LoadConfig() = %+v, want %+v", got, want)
 	}
 }
@@ -81,7 +82,7 @@ func TestSaveConfig_CreatesDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig() error: %v", err)
 	}
-	if got != cfg {
+	if !reflect.DeepEqual(got, cfg) {
 		t.Errorf("round-trip got %+v, want %+v", got, cfg)
 	}
 }
