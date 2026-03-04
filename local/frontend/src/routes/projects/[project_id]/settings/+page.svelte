@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import {
 		deleteProject,
+		refreshProjectCommits,
 		setProjectLabel,
 		setProjectPath,
 		setProjectOldPaths,
@@ -62,6 +63,9 @@
 	let error: string | null = $state(null);
 	let notice: string | null = $state(null);
 
+	let refreshing = $state(false);
+	let refreshNotice: string | null = $state(null);
+
 	let showDeleteModal = $state(false);
 	let deleteConfirmName = $state('');
 	let deleting = $state(false);
@@ -92,6 +96,19 @@
 			error = e instanceof Error ? e.message : 'Failed to save settings';
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function refreshCommits() {
+		refreshing = true;
+		refreshNotice = null;
+		try {
+			const res = await refreshProjectCommits(project.id);
+			refreshNotice = res.queued ? 'Refresh queued.' : 'Refresh already in progress.';
+		} catch (e) {
+			refreshNotice = e instanceof Error ? e.message : 'Failed to refresh commits';
+		} finally {
+			refreshing = false;
 		}
 	}
 
@@ -203,7 +220,21 @@
 				<p class="error">{error}</p>
 			{/if}
 
-			<br />
+			<div class="advanced-zone">
+				<h2>Advanced Actions</h2>
+				<p class="advanced-description">
+					Re-scan and recompute commit attribution for this project. This is typically not necessary
+					as commits are refreshed automatically.
+				</p>
+				<div class="actions">
+					<button class="bordered" disabled={refreshing} onclick={refreshCommits}
+						>{refreshing ? 'Refreshing...' : 'Refresh Commits'}</button
+					>
+					{#if refreshNotice}
+						<span class="notice">{refreshNotice}</span>
+					{/if}
+				</div>
+			</div>
 
 			<div class="danger-zone">
 				<h2>Danger Zone</h2>
@@ -421,6 +452,22 @@
 	.notice {
 		font-size: 0.85rem;
 		color: var(--color-notice);
+	}
+
+	.advanced-zone {
+		padding-top: 1rem;
+		border-top: 0.5px solid var(--color-divider);
+	}
+
+	.advanced-zone h2 {
+		margin: 0 0 0.5rem;
+		font-size: 1rem;
+	}
+
+	.advanced-description {
+		margin: 0 0 0.75rem;
+		font-size: 0.85rem;
+		color: var(--color-text-faded);
 	}
 
 	.danger-zone {

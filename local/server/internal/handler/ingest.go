@@ -345,7 +345,7 @@ func ingestCommits(
 		cleanDiff := stripBinaryDiffs(rawDiff)
 
 		// Compute coverage using the unified=0 diff for token matching.
-		tokenDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-w", "--ignore-blank-lines", gc.Hash)
+		tokenDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", gc.Hash)
 		if err != nil {
 			tokenDiff = ""
 		}

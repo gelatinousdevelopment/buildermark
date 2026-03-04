@@ -14,7 +14,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 6
+	currentCommitCoverageVersion = 7
 	maxFormattingWindowLines     = 5
 )
 
