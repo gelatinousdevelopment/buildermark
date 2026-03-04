@@ -42,8 +42,10 @@
 		onAgentChange?: FilterChangeHandler;
 		onRatingChange?: FilterChangeHandler;
 		onHiddenChange?: HiddenChangeHandler;
+		onOrderChange?: FilterChangeHandler;
 		agent?: string;
 		rating?: number;
+		order?: string;
 		autoload?: boolean;
 		useLoadQueue?: boolean;
 		loadPriority?: number;
@@ -78,8 +80,10 @@
 		onAgentChange,
 		onRatingChange,
 		onHiddenChange,
+		onOrderChange,
 		agent = undefined,
 		rating = undefined,
+		order = undefined,
 		autoload = true,
 		useLoadQueue = false,
 		loadPriority = 0,
@@ -102,6 +106,7 @@
 	let internalAgent = $state('');
 	let internalRating = $state(0);
 	let internalShowHidden = $state(false);
+	let internalOrder = $state('desc');
 	let internalStart: number | undefined = $state(undefined);
 	let internalEnd: number | undefined = $state(undefined);
 	let detailed = $state(false);
@@ -122,6 +127,7 @@
 		internalAgent = agent ?? '';
 		internalRating = rating ?? 0;
 		internalShowHidden = showHidden ?? false;
+		internalOrder = order ?? 'desc';
 		loading = autoload && !initialData;
 	});
 
@@ -141,10 +147,15 @@
 		if (showHidden !== undefined) internalShowHidden = showHidden;
 	});
 
+	$effect(() => {
+		if (order !== undefined) internalOrder = order;
+	});
+
 	const currentPage = $derived(page ?? internalPage);
 	const selectedAgent = $derived(agent ?? internalAgent);
 	const selectedRating = $derived(rating ?? internalRating);
 	const currentShowHidden = $derived(showHidden ?? internalShowHidden);
+	const selectedOrder = $derived(order ?? internalOrder);
 	const effectiveStart = $derived(start ?? internalStart);
 	const effectiveEnd = $derived(end ?? internalEnd);
 
@@ -181,6 +192,7 @@
 				search?: string;
 				start?: number;
 				end?: number;
+				order?: string;
 			} = {};
 			if (selectedAgent) filters.agent = selectedAgent;
 			if (selectedRating !== 0) filters.rating = selectedRating;
@@ -188,6 +200,7 @@
 			if (searchTerm.trim()) filters.search = searchTerm.trim();
 			if (effectiveStart) filters.start = effectiveStart;
 			if (effectiveEnd) filters.end = effectiveEnd;
+			if (selectedOrder === 'asc') filters.order = 'asc';
 			const detail = await withOptionalQueue(
 				() => getProject(projectId, requestedPage, requestedPageSize, undefined, filters),
 				useLoadQueue,
@@ -211,7 +224,7 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${currentShowHidden}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedAgent}:${selectedRating}:${currentShowHidden}:${selectedOrder}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadProjectData();
@@ -284,6 +297,15 @@
 		}
 	}
 
+	function handleOrderChange(event: Event) {
+		const value = (event.currentTarget as HTMLSelectElement).value;
+		internalOrder = value;
+		internalPage = 1;
+		if (onOrderChange) {
+			onOrderChange(value);
+		}
+	}
+
 	function handleDateFilterChange(range: { from: number; to: number } | null) {
 		if (range) {
 			internalStart = range.from;
@@ -341,6 +363,12 @@
 					<option value={3}>3</option>
 					<option value={2}>2</option>
 					<option value={1}>1</option>
+				</select>
+			</div>
+			<div class="filter-picker">
+				<select id="order-{projectId}" value={selectedOrder} onchange={handleOrderChange}>
+					<option value="desc">Newest First</option>
+					<option value="asc">Oldest First</option>
 				</select>
 			</div>
 			<label class="toggle-label">

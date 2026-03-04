@@ -456,6 +456,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 
 	agentFilter := strings.TrimSpace(r.URL.Query().Get("agent"))
 	searchTerm := strings.TrimSpace(r.URL.Query().Get("search"))
+	orderAsc := strings.TrimSpace(r.URL.Query().Get("order")) == "asc"
 
 	// Optional date range filter (unix ms).
 	var dateFromSec, dateToSec int64
@@ -648,7 +649,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 
 	// Query the page of commits using hash-based query.
-	dbCommits, err := db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, allHashes, userEmails, pageSize, offset)
+	dbCommits, err := db.ListCommitsByHashesAndUserOrdered(r.Context(), s.DB, repoProject.ID, allHashes, userEmails, pageSize, offset, orderAsc)
 	if err != nil {
 		log.Printf("error listing commits from db for %s: %v", repoProject.Path, err)
 		writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -711,7 +712,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		for _, c := range branchCommits {
 			dateFilteredHashes = append(dateFilteredHashes, c.CommitHash)
 		}
-		dbCommits, err = db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, dateFilteredHashes, nil, pageSize, offset)
+		dbCommits, err = db.ListCommitsByHashesAndUserOrdered(r.Context(), s.DB, repoProject.ID, dateFilteredHashes, nil, pageSize, offset, orderAsc)
 		if err != nil {
 			log.Printf("error listing date-filtered commits for %s: %v", repoProject.Path, err)
 			writeError(w, http.StatusInternalServerError, "failed to list commits")
@@ -770,7 +771,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		if offset < 0 {
 			offset = 0
 		}
-		dbCommits, err = db.ListCommitsByHashesAndUser(r.Context(), s.DB, repoProject.ID, filteredHashes, userEmails, pageSize, offset)
+		dbCommits, err = db.ListCommitsByHashesAndUserOrdered(r.Context(), s.DB, repoProject.ID, filteredHashes, userEmails, pageSize, offset, orderAsc)
 		if err != nil {
 			log.Printf("error listing agent-filtered commits for %s: %v", repoProject.Path, err)
 			writeError(w, http.StatusInternalServerError, "failed to list commits")

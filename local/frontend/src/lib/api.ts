@@ -117,6 +117,7 @@ export function getProject(
 		search?: string;
 		start?: number;
 		end?: number;
+		order?: string;
 	}
 ): Promise<ProjectDetail> {
 	const params = new URLSearchParams();
@@ -129,6 +130,7 @@ export function getProject(
 	if (filters?.search) params.set('search', filters.search);
 	if (filters?.start) params.set('start', String(filters.start));
 	if (filters?.end) params.set('end', String(filters.end));
+	if (filters?.order === 'asc') params.set('order', 'asc');
 	const q = params.size > 0 ? `?${params.toString()}` : '';
 	return api(`/api/v1/projects/${id}${q}`, undefined, fetchFn);
 }
@@ -222,7 +224,8 @@ export function listProjectCommitsPage(
 	start?: number,
 	end?: number,
 	dailyWindowDays?: number,
-	dailyWindowEnd?: number
+	dailyWindowEnd?: number,
+	order?: string
 ): Promise<ProjectCommitPageResponse> {
 	const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
 	if (branch) params.set('branch', branch);
@@ -233,6 +236,7 @@ export function listProjectCommitsPage(
 	if (end) params.set('end', String(end));
 	if (dailyWindowDays) params.set('dailyWindowDays', String(dailyWindowDays));
 	if (dailyWindowEnd) params.set('dailyWindowEnd', String(dailyWindowEnd));
+	if (order === 'asc') params.set('order', 'asc');
 	params.set('tzOffset', String(new Date().getTimezoneOffset()));
 	return api(`/api/v1/projects/${projectId}/commits?${params.toString()}`);
 }

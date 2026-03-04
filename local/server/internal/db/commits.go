@@ -678,6 +678,12 @@ func GetCommitByProjectAndHash(ctx context.Context, db *sql.DB, projectID, commi
 // ListCommitsByHashes returns commits matching the given hashes for a project,
 // ordered by authored_at DESC. DiffContent is omitted.
 func ListCommitsByHashes(ctx context.Context, db *sql.DB, projectID string, hashes []string, limit, offset int) ([]Commit, error) {
+	return ListCommitsByHashesOrdered(ctx, db, projectID, hashes, limit, offset, false)
+}
+
+// ListCommitsByHashesOrdered returns commits matching the given hashes for a project.
+// When orderAsc is true, results are ordered oldest first; otherwise newest first.
+func ListCommitsByHashesOrdered(ctx context.Context, db *sql.DB, projectID string, hashes []string, limit, offset int, orderAsc bool) ([]Commit, error) {
 	if len(hashes) == 0 {
 		return []Commit{}, nil
 	}
@@ -687,18 +693,24 @@ func ListCommitsByHashes(ctx context.Context, db *sql.DB, projectID string, hash
 
 	// For small hash lists, use a single query.
 	if len(hashes) <= sqliteBatchSize {
-		return listCommitsByHashesSingle(ctx, db, projectID, hashes, nil, limit, offset)
+		return listCommitsByHashesSingle(ctx, db, projectID, hashes, nil, limit, offset, orderAsc)
 	}
 
 	// For large hash lists, batch and merge in Go.
-	return listCommitsByHashesBatched(ctx, db, projectID, hashes, nil, sqliteBatchSize, limit, offset)
+	return listCommitsByHashesBatched(ctx, db, projectID, hashes, nil, sqliteBatchSize, limit, offset, orderAsc)
 }
 
 // ListCommitsByHashesAndUser returns commits matching hashes filtered by user emails.
 // When userEmails is empty, no user filter is applied.
 func ListCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, limit, offset int) ([]Commit, error) {
+	return ListCommitsByHashesAndUserOrdered(ctx, db, projectID, hashes, userEmails, limit, offset, false)
+}
+
+// ListCommitsByHashesAndUserOrdered returns commits matching hashes filtered by user emails.
+// When orderAsc is true, results are ordered oldest first; otherwise newest first.
+func ListCommitsByHashesAndUserOrdered(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, limit, offset int, orderAsc bool) ([]Commit, error) {
 	if len(userEmails) == 0 {
-		return ListCommitsByHashes(ctx, db, projectID, hashes, limit, offset)
+		return ListCommitsByHashesOrdered(ctx, db, projectID, hashes, limit, offset, orderAsc)
 	}
 	if len(hashes) == 0 {
 		return []Commit{}, nil
@@ -714,12 +726,12 @@ func ListCommitsByHashesAndUser(ctx context.Context, db *sql.DB, projectID strin
 	}
 
 	if len(hashes) <= hashBatchSize {
-		return listCommitsByHashesSingle(ctx, db, projectID, hashes, userEmails, limit, offset)
+		return listCommitsByHashesSingle(ctx, db, projectID, hashes, userEmails, limit, offset, orderAsc)
 	}
-	return listCommitsByHashesBatched(ctx, db, projectID, hashes, userEmails, hashBatchSize, limit, offset)
+	return listCommitsByHashesBatched(ctx, db, projectID, hashes, userEmails, hashBatchSize, limit, offset, orderAsc)
 }
 
-func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, limit, offset int) ([]Commit, error) {
+func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, limit, offset int, orderAsc bool) ([]Commit, error) {
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(hashes)), ",")
 	userClause := ""
 	if len(userEmails) == 1 {
@@ -727,14 +739,18 @@ func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string
 	} else if len(userEmails) > 1 {
 		userClause = " AND user_email IN (" + strings.TrimSuffix(strings.Repeat("?,", len(userEmails)), ",") + ")"
 	}
+	orderDir := "DESC"
+	if orderAsc {
+		orderDir = "ASC"
+	}
 	query := fmt.Sprintf(
 		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
 		        lines_total, chars_total, lines_from_agent, chars_from_agent, lines_added, lines_removed, coverage_version, override_line_percent
 		 FROM commits
 		 WHERE project_id = ? AND commit_hash IN (%s)%s
-		 ORDER BY authored_at DESC
+		 ORDER BY authored_at %s
 		 LIMIT ? OFFSET ?`,
-		placeholders, userClause,
+		placeholders, userClause, orderDir,
 	)
 	args := make([]any, 0, 1+len(hashes)+len(userEmails)+2)
 	args = append(args, projectID)
@@ -768,7 +784,7 @@ func listCommitsByHashesSingle(ctx context.Context, db *sql.DB, projectID string
 	return commits, rows.Err()
 }
 
-func listCommitsByHashesBatched(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, hashBatchSize, limit, offset int) ([]Commit, error) {
+func listCommitsByHashesBatched(ctx context.Context, db *sql.DB, projectID string, hashes []string, userEmails []string, hashBatchSize, limit, offset int, orderAsc bool) ([]Commit, error) {
 	// Collect all matching commits across batches, then sort and paginate in Go.
 	var all []Commit
 	for i := 0; i < len(hashes); i += hashBatchSize {
@@ -776,15 +792,19 @@ func listCommitsByHashesBatched(ctx context.Context, db *sql.DB, projectID strin
 		if end > len(hashes) {
 			end = len(hashes)
 		}
-		batch, err := listCommitsByHashesSingle(ctx, db, projectID, hashes[i:end], userEmails, end-i, 0)
+		batch, err := listCommitsByHashesSingle(ctx, db, projectID, hashes[i:end], userEmails, end-i, 0, orderAsc)
 		if err != nil {
 			return nil, err
 		}
 		all = append(all, batch...)
 	}
 
-	// Sort by authored_at DESC.
-	sortCommitsDesc(all)
+	// Sort by authored_at.
+	if orderAsc {
+		sortCommitsAsc(all)
+	} else {
+		sortCommitsDesc(all)
+	}
 
 	// Apply offset and limit.
 	if offset >= len(all) {
@@ -800,6 +820,14 @@ func listCommitsByHashesBatched(ctx context.Context, db *sql.DB, projectID strin
 func sortCommitsDesc(commits []Commit) {
 	for i := 1; i < len(commits); i++ {
 		for j := i; j > 0 && commits[j].AuthoredAt > commits[j-1].AuthoredAt; j-- {
+			commits[j], commits[j-1] = commits[j-1], commits[j]
+		}
+	}
+}
+
+func sortCommitsAsc(commits []Commit) {
+	for i := 1; i < len(commits); i++ {
+		for j := i; j > 0 && commits[j].AuthoredAt < commits[j-1].AuthoredAt; j-- {
 			commits[j], commits[j-1] = commits[j-1], commits[j]
 		}
 	}

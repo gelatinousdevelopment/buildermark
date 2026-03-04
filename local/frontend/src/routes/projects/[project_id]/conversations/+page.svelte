@@ -20,6 +20,7 @@
 		return Number.isInteger(parsed) ? parsed : 0;
 	});
 	const currentHidden = $derived(page.url.searchParams.get('hidden') === 'true');
+	const currentOrder = $derived(page.url.searchParams.get('order') === 'asc' ? 'asc' : 'desc');
 
 	const startMs = $derived.by(() => {
 		const raw = page.url.searchParams.get('start');
@@ -76,6 +77,10 @@
 	function handleDateChange(startIso: string | null, endIso: string | null) {
 		updateUrl({ start: startIso, end: endIso, page: null });
 	}
+
+	function handleOrderChange(value: string) {
+		updateUrl({ order: value === 'asc' ? 'asc' : null, page: null });
+	}
 </script>
 
 <div class="project-section">
@@ -91,12 +96,14 @@
 		showHidden={currentHidden}
 		agent={currentAgent}
 		rating={currentRating}
+		order={currentOrder}
 		start={startMs}
 		end={endMs}
 		onPageChange={handlePageChange}
 		onAgentChange={handleAgentChange}
 		onRatingChange={handleRatingChange}
 		onHiddenChange={handleHiddenChange}
+		onOrderChange={handleOrderChange}
 		onDateChange={handleDateChange}
 	/>
 </div>

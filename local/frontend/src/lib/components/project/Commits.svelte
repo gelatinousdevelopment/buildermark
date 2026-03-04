@@ -28,6 +28,7 @@
 
 	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type BranchChangeHandler = (branch: string) => void | Promise<void>;
+	type FilterChangeHandler = (value: string) => void | Promise<void>;
 
 	interface Props {
 		projectId: string;
@@ -52,6 +53,8 @@
 		syncPaginationWithUrl?: boolean;
 		onPageChange?: PageChangeHandler;
 		onBranchChange?: BranchChangeHandler;
+		onOrderChange?: FilterChangeHandler;
+		order?: string;
 		autoload?: boolean;
 		useLoadQueue?: boolean;
 		loadPriority?: number;
@@ -89,6 +92,8 @@
 		syncPaginationWithUrl = false,
 		onPageChange,
 		onBranchChange,
+		onOrderChange,
+		order = undefined,
 		autoload = true,
 		useLoadQueue = false,
 		loadPriority = 0,
@@ -114,6 +119,7 @@
 	let internalBranch = $state('');
 	let internalUser = $state('');
 	let internalAgent = $state('');
+	let internalOrder = $state('desc');
 	let internalStart: number | undefined = $state(undefined);
 	let internalEnd: number | undefined = $state(undefined);
 	let userDefaultApplied = false;
@@ -142,6 +148,10 @@
 			if (urlAgent !== null) {
 				internalAgent = urlAgent;
 			}
+			const urlOrder = params.get('order');
+			if (urlOrder === 'asc') {
+				internalOrder = 'asc';
+			}
 			const urlStart = params.get('start');
 			const urlEnd = params.get('end');
 			if (urlStart) {
@@ -156,6 +166,7 @@
 			internalPage = page ?? 1;
 		}
 		internalBranch = branch ?? '';
+		if (order !== undefined) internalOrder = order;
 		loading = autoload;
 	});
 
@@ -165,6 +176,10 @@
 
 	$effect(() => {
 		if (branch !== undefined) internalBranch = branch;
+	});
+
+	$effect(() => {
+		if (order !== undefined) internalOrder = order;
 	});
 
 	// Reset to page 1 when date filter changes.
@@ -181,6 +196,7 @@
 	const selectedBranch = $derived(branch ?? internalBranch);
 	const selectedUser = $derived(internalUser);
 	const selectedAgent = $derived(internalAgent);
+	const selectedOrder = $derived(order ?? internalOrder);
 	const effectiveStart = $derived(start ?? internalStart);
 	const effectiveEnd = $derived(end ?? internalEnd);
 
@@ -240,7 +256,10 @@
 						selectedAgent,
 						searchTerm.trim(),
 						effectiveStart,
-						effectiveEnd
+						effectiveEnd,
+						undefined,
+						undefined,
+						selectedOrder
 					),
 				useLoadQueue,
 				loadPriority
@@ -282,7 +301,7 @@
 	$effect(() => {
 		if (!autoload) return;
 		const resolved = resolveUserFilter(selectedUser, data?.currentEmail);
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${selectedOrder}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();
@@ -374,6 +393,25 @@
 			window.history.replaceState(window.history.state, '', url);
 		}
 		internalPage = 1;
+	}
+
+	function handleOrderChange(event: Event) {
+		const value = (event.currentTarget as HTMLSelectElement).value;
+		internalOrder = value;
+		if (syncPaginationWithUrl && browser) {
+			const url = new URL(window.location.href);
+			if (value === 'asc') {
+				url.searchParams.set('order', 'asc');
+			} else {
+				url.searchParams.delete('order');
+			}
+			url.searchParams.delete('page');
+			window.history.replaceState(window.history.state, '', url);
+		}
+		internalPage = 1;
+		if (onOrderChange) {
+			onOrderChange(value);
+		}
 	}
 
 	function handleDateFilterChange(range: { from: number; to: number } | null) {
@@ -497,6 +535,13 @@
 						</select>
 					</div>
 				{/if}
+
+				<div class="filter-picker">
+					<select id="order-{projectId}" value={selectedOrder} onchange={handleOrderChange}>
+						<option value="desc">Newest First</option>
+						<option value="asc">Oldest First</option>
+					</select>
+				</div>
 			</div>
 		</div>
 	{/if}
