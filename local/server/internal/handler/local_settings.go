@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
 
 type localSettingsResponse struct {
@@ -82,6 +85,16 @@ func (s *Server) handlePutLocalSettings(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return
 	}
+
+	// Reload watchers for any newly added homes and trigger a scan.
+	if s.ReloadWatchers != nil {
+		if newHomes := s.ReloadWatchers(); len(newHomes) > 0 {
+			if s.importMu.TryLock() {
+				go s.runHistoryScanJob(time.Now().Add(-agent.DefaultScanWindow), "")
+			}
+		}
+	}
+
 	s.handleGetLocalSettings(w, r)
 }
 

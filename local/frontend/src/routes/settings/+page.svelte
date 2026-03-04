@@ -70,7 +70,7 @@
 			const updated = await updateLocalSettings(homes);
 			localSettings = updated;
 			extraAgentHomesText = updated.extraAgentHomes.join('\n');
-			agentHomesNotice = 'Saved. Restart the server to apply watcher changes.';
+			agentHomesNotice = 'Saved. Watchers updated.';
 		} catch (e) {
 			agentHomesError = e instanceof Error ? e.message : 'Failed to save extra agent homes';
 		} finally {

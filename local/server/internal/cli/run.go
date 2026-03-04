@@ -49,27 +49,26 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	if err != nil {
 		return fmt.Errorf("determine home directory: %w", err)
 	}
-	homes := []string{home}
-	seen := map[string]struct{}{home: {}}
-	for _, candidate := range cfg.ExtraAgentHomes {
-		if candidate == "" {
-			continue
-		}
-		clean := filepath.Clean(candidate)
-		if filepath.Base(clean) == ".claude" || filepath.Base(clean) == ".codex" || filepath.Base(clean) == ".gemini" {
-			clean = filepath.Dir(clean)
-		}
-		if _, ok := seen[clean]; ok {
-			continue
-		}
-		seen[clean] = struct{}{}
-		homes = append(homes, clean)
+
+	watchedHomes := map[string]struct{}{home: {}}
+	registerHome := func(h string) {
+		registry.Register(claude.NewForHome(database, h))
+		registry.Register(codex.NewForHome(database, h))
+		registry.Register(gemini.NewForHome(database, h))
 	}
 
-	for _, watchHome := range homes {
-		registry.Register(claude.NewForHome(database, watchHome))
-		registry.Register(codex.NewForHome(database, watchHome))
-		registry.Register(gemini.NewForHome(database, watchHome))
+	// Register the primary home and extra homes from config.
+	registerHome(home)
+	for _, candidate := range cfg.ExtraAgentHomes {
+		clean := normalizeHomePath(candidate)
+		if clean == "" {
+			continue
+		}
+		if _, ok := watchedHomes[clean]; ok {
+			continue
+		}
+		watchedHomes[clean] = struct{}{}
+		registerHome(clean)
 	}
 
 	watchCtx, watchCancel := context.WithCancel(ctx)
@@ -79,9 +78,43 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		go w.Run(watchCtx)
 	}
 
+	hsrv := &handler.Server{DB: database, Agents: registry, DBPath: opts.DBPath, ListenAddr: opts.Addr, ReadOnly: readOnly, ConfigDir: configDir}
+
+	// ReloadWatchers reads the current config and starts watchers for any
+	// homes that aren't already being watched. Returns the new home paths.
+	hsrv.ReloadWatchers = func() []string {
+		latestCfg, err := LoadConfig(configDir)
+		if err != nil {
+			log.Printf("reload watchers: failed to load config: %v", err)
+			return nil
+		}
+		var added []string
+		for _, candidate := range latestCfg.ExtraAgentHomes {
+			clean := normalizeHomePath(candidate)
+			if clean == "" {
+				continue
+			}
+			if _, ok := watchedHomes[clean]; ok {
+				continue
+			}
+			watchedHomes[clean] = struct{}{}
+			registerHome(clean)
+			added = append(added, clean)
+		}
+		// Start the newly registered watchers.
+		watchers := registry.Watchers()
+		for _, w := range watchers[len(watchers)-len(added)*3:] {
+			go w.Run(watchCtx)
+		}
+		if len(added) > 0 {
+			log.Printf("reload watchers: started watchers for %d new home(s)", len(added))
+		}
+		return added
+	}
+
 	srv := &http.Server{
 		Addr:         opts.Addr,
-		Handler:      (&handler.Server{DB: database, Agents: registry, DBPath: opts.DBPath, ListenAddr: opts.Addr, ReadOnly: readOnly, ConfigDir: configDir}).Routes(),
+		Handler:      hsrv.Routes(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -117,4 +150,17 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	}
 	log.Println("server stopped")
 	return nil
+}
+
+// normalizeHomePath cleans a candidate home path, stripping any trailing
+// agent-specific directory (e.g. ".claude"). Returns "" for empty input.
+func normalizeHomePath(candidate string) string {
+	if candidate == "" {
+		return ""
+	}
+	clean := filepath.Clean(candidate)
+	if filepath.Base(clean) == ".claude" || filepath.Base(clean) == ".codex" || filepath.Base(clean) == ".gemini" {
+		clean = filepath.Dir(clean)
+	}
+	return clean
 }

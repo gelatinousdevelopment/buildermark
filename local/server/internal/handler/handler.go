@@ -20,6 +20,12 @@ type Server struct {
 	ReadOnly   bool
 	ConfigDir  string
 
+	// ReloadWatchers is called after settings change to start watchers for
+	// any newly added agent homes. It returns the list of new home paths
+	// that were added (empty if none). The caller can use these to trigger
+	// an immediate scan.
+	ReloadWatchers func() []string
+
 	refreshJobs      *jobTracker
 	coverageJobs     *jobTracker
 	visibilityJobs   *jobTracker
