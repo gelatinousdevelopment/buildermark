@@ -70,6 +70,51 @@ func conversationPath(home, projectPath, sessionID string) string {
 	return filepath.Join(home, ".claude", "projects", dirName, sessionID+".jsonl")
 }
 
+// findConversationPath returns the conversation file path for a session,
+// falling back to scanning for worktree-prefixed directories if the canonical
+// path doesn't exist. This handles cases where the conversation was created
+// under a worktree-encoded directory name.
+func findConversationPath(home, projectPath, sessionID string) string {
+	canonical := conversationPath(home, projectPath, sessionID)
+	if _, err := os.Stat(canonical); err == nil {
+		return canonical
+	}
+
+	if found := findWorktreePrefixedFile(home, projectPath, sessionID+".jsonl"); found != "" {
+		return found
+	}
+
+	return canonical
+}
+
+// findWorktreePrefixedFile scans ~/.claude/projects/ for directories prefixed
+// with the project's encoded name (worktree directories) that contain the given
+// file. Returns the full path if found, empty string otherwise.
+func findWorktreePrefixedFile(home, projectPath, fileName string) string {
+	prefix := claudeProjectDirName(projectPath)
+	projectsDir := filepath.Join(home, ".claude", "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		return ""
+	}
+
+	for _, d := range entries {
+		if !d.IsDir() {
+			continue
+		}
+		name := d.Name()
+		if name == prefix || !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		candidate := filepath.Join(projectsDir, name, fileName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	return ""
+}
+
 func scanConversationFile(path string, fn func(line string, entry conversationEntry)) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -102,7 +147,7 @@ func scanConversationFile(path string, fn func(line string, entry conversationEn
 // omits the initial prompt (e.g. plan-mode auto-submissions). This function
 // extracts that missing first prompt.
 func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
-	convPath := conversationPath(home, projectPath, sessionID)
+	convPath := findConversationPath(home, projectPath, sessionID)
 	var firstText string
 	var firstTS int64
 
@@ -307,7 +352,7 @@ func parseProjectConversationLine(line string) (historyEntry, bool) {
 }
 
 func readConversationLogEntries(home, projectPath, sessionID string) []conversationLogEntry {
-	convPath := conversationPath(home, projectPath, sessionID)
+	convPath := findConversationPath(home, projectPath, sessionID)
 	result := make([]conversationLogEntry, 0, 64)
 	lastTS := int64(0)
 
@@ -451,7 +496,7 @@ func readSessionTitle(home, projectPath, sessionID string) string {
 // readSummaryFromConversationFile scans the conversation JSONL for
 // type="summary" entries and returns the last non-empty summary found.
 func readSummaryFromConversationFile(home, projectPath, sessionID string) string {
-	convPath := conversationPath(home, projectPath, sessionID)
+	convPath := findConversationPath(home, projectPath, sessionID)
 	var lastSummary string
 
 	scanConversationFile(convPath, func(_ string, entry conversationEntry) {
@@ -470,8 +515,14 @@ func readSummaryFromConversationFile(home, projectPath, sessionID string) string
 func readSessionSummaryFromIndex(home, projectPath, sessionID string) string {
 	dirName := claudeProjectDirName(projectPath)
 
-	// Try sessions-index.json first.
+	// Try sessions-index.json in the canonical directory first, then scan for
+	// worktree-prefixed directories.
 	indexPath := filepath.Join(home, ".claude", "projects", dirName, "sessions-index.json")
+	if _, err := os.Stat(indexPath); err != nil {
+		if found := findWorktreePrefixedFile(home, projectPath, "sessions-index.json"); found != "" {
+			indexPath = found
+		}
+	}
 	if data, err := os.ReadFile(indexPath); err == nil {
 		var idx sessionsIndex
 		if err := json.Unmarshal(data, &idx); err == nil {

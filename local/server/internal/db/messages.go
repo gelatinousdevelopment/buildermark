@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/gitutil"
 )
 
 // Message holds the data for a single conversation message to be inserted.
@@ -28,9 +30,14 @@ type Message struct {
 func RepoLabel(path string) string {
 	dir := filepath.Clean(path)
 	for {
-		if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			// .git can be a directory (normal repo) or a file (worktree/submodule).
-			_ = info
+		gitPath := filepath.Join(dir, ".git")
+		if info, err := os.Stat(gitPath); err == nil {
+			// If .git is a file, check if it's a worktree pointing to a parent repo.
+			if !info.IsDir() {
+				if parentRoot, ok := gitutil.ResolveWorktreeParent(gitPath); ok {
+					return filepath.Base(parentRoot)
+				}
+			}
 			return filepath.Base(dir)
 		}
 		parent := filepath.Dir(dir)
@@ -53,12 +60,20 @@ func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error)
 		return existingID, nil
 	}
 
+	// Exact match on canonical path.
 	err := db.QueryRowContext(ctx, "SELECT id FROM projects WHERE path = ?", path).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 	if err != sql.ErrNoRows {
 		return "", fmt.Errorf("query project: %w", err)
+	}
+
+	// Check if the path is a subdirectory of an existing project.
+	if existingID, err := findProjectIDByParentPath(ctx, db, path); err != nil {
+		return "", fmt.Errorf("query project by parent path: %w", err)
+	} else if existingID != "" {
+		return existingID, nil
 	}
 
 	id = newID()
@@ -89,7 +104,12 @@ func findProjectIDByOldPath(ctx context.Context, db *sql.DB, path string) (strin
 			return "", err
 		}
 		for _, oldPath := range strings.Split(oldPaths, "\n") {
-			if strings.TrimSpace(oldPath) == path {
+			oldPath = strings.TrimSpace(oldPath)
+			if oldPath == "" {
+				continue
+			}
+			// Exact match or subdirectory of an old path.
+			if path == oldPath || strings.HasPrefix(path, oldPath+string(filepath.Separator)) {
 				return id, nil
 			}
 		}
@@ -100,11 +120,38 @@ func findProjectIDByOldPath(ctx context.Context, db *sql.DB, path string) (strin
 	return "", nil
 }
 
+// findProjectIDByParentPath checks if the given path is a subdirectory of any
+// existing project's canonical path.
+func findProjectIDByParentPath(ctx context.Context, db *sql.DB, path string) (string, error) {
+	rows, err := db.QueryContext(ctx, "SELECT id, path FROM projects")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id, projectPath string
+		if err := rows.Scan(&id, &projectPath); err != nil {
+			return "", err
+		}
+		projectPath = strings.TrimSpace(projectPath)
+		if projectPath == "" {
+			continue
+		}
+		if strings.HasPrefix(path, projectPath+string(filepath.Separator)) {
+			return id, nil
+		}
+	}
+	return "", rows.Err()
+}
+
 // EnsureConversation inserts a conversation if it doesn't already exist.
+// If the conversation exists but is linked to a different (possibly stale)
+// project, the project_id is updated to the current value.
 func EnsureConversation(ctx context.Context, db *sql.DB, conversationID, projectID, agent string) error {
 	_, err := db.ExecContext(ctx,
-		"INSERT OR IGNORE INTO conversations (id, project_id, agent) VALUES (?, ?, ?)",
-		conversationID, projectID, agent,
+		"INSERT INTO conversations (id, project_id, agent) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET project_id = ? WHERE project_id <> ?",
+		conversationID, projectID, agent, projectID, projectID,
 	)
 	if err != nil {
 		return fmt.Errorf("insert conversation: %w", err)

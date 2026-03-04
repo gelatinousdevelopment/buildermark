@@ -10,6 +10,7 @@ export interface Project {
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
 	teamServerId: string;
+	gitWorktreePaths: string;
 }
 
 export interface TeamServer {
@@ -51,6 +52,7 @@ export interface ProjectDetail {
 	ignoreDiffPaths: string;
 	ignoreDefaultDiffPaths: boolean;
 	teamServerId: string;
+	gitWorktreePaths: string;
 	agents: string[];
 	conversationPagination: ConversationPagination;
 	conversations: ConversationWithRatings[];

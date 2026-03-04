@@ -1,10 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/gitutil"
 )
 
 // FindGitRoot walks up from the given path to find the nearest directory
@@ -27,6 +31,9 @@ func FindGitRoot(path string) (string, bool) {
 	for {
 		gitPath := filepath.Join(dir, ".git")
 		if _, err := os.Stat(gitPath); err == nil {
+			if parentRoot, ok := gitutil.ResolveWorktreeParent(gitPath); ok {
+				return parentRoot, true
+			}
 			return dir, true
 		}
 		parent := filepath.Dir(dir)
@@ -35,6 +42,27 @@ func FindGitRoot(path string) (string, bool) {
 		}
 		dir = parent
 	}
+}
+
+// ListGitWorktrees runs `git worktree list --porcelain` and returns the paths
+// of all worktrees for the given repository.
+func ListGitWorktrees(repoPath string) []string {
+	cmd := exec.Command("git", "-C", repoPath, "worktree", "list", "--porcelain")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var paths []string
+	for _, line := range strings.Split(string(bytes.TrimSpace(out)), "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			p := strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+			if p != "" {
+				paths = append(paths, p)
+			}
+		}
+	}
+	return paths
 }
 
 // GitRootCache caches git root lookups to avoid repeated filesystem walks.

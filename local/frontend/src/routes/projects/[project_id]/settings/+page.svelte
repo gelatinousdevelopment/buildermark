@@ -197,6 +197,24 @@
 				></textarea>
 			</div>
 
+			{#if project.gitWorktreePaths}
+				<div class="section">
+					<h2>Git Worktree Paths</h2>
+					<p class="hint">
+						Auto-detected git worktrees. Conversations from these paths are included in this
+						project.
+					</p>
+					<textarea
+						id="git-worktree-paths"
+						value={project.gitWorktreePaths}
+						rows={Math.min(project.gitWorktreePaths.split('\n').length, 6)}
+						spellcheck="false"
+						readonly
+						class="readonly-textarea"
+					></textarea>
+				</div>
+			{/if}
+
 			<div class="section">
 				<h2>Alternate Coding Agent Paths</h2>
 				<p class="hint">
@@ -324,7 +342,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2rem;
-		padding: 1.5rem 2rem;
+		padding: 1rem 1.5rem 1.5rem 1.5rem;
 	}
 
 	hr.divider {
@@ -435,6 +453,11 @@
 		color: var(--color-text);
 		border-radius: 4px;
 		box-sizing: border-box;
+	}
+
+	.readonly-textarea {
+		opacity: 0.7;
+		cursor: default;
 	}
 
 	.hint {

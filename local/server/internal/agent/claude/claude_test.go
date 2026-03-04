@@ -2524,3 +2524,57 @@ func TestScanSinceSkipsUntrackedProjects(t *testing.T) {
 	}
 }
 
+func TestFindConversationPathWorktreeFallback(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/Users/test/myrepo"
+	sessionID := "abc-123"
+
+	// Create a worktree-prefixed directory with the session file.
+	// The canonical dir is "-Users-test-myrepo", the worktree dir adds more.
+	canonicalDir := claudeProjectDirName(projectPath)
+	worktreeDir := canonicalDir + "--claude-worktrees-wt1"
+	wtPath := filepath.Join(home, ".claude", "projects", worktreeDir)
+	if err := os.MkdirAll(wtPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sessionFile := filepath.Join(wtPath, sessionID+".jsonl")
+	if err := os.WriteFile(sessionFile, []byte(`{"type":"summary","summary":"test"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The canonical path doesn't exist.
+	canonical := conversationPath(home, projectPath, sessionID)
+	if _, err := os.Stat(canonical); err == nil {
+		t.Fatal("canonical path should not exist for this test")
+	}
+
+	// findConversationPath should find the worktree-prefixed file.
+	got := findConversationPath(home, projectPath, sessionID)
+	if got != sessionFile {
+		t.Errorf("got %q, want %q", got, sessionFile)
+	}
+}
+
+func TestFindConversationPathCanonical(t *testing.T) {
+	home := t.TempDir()
+	projectPath := "/Users/test/myrepo"
+	sessionID := "def-456"
+
+	// Create the canonical directory with the session file.
+	canonicalDir := claudeProjectDirName(projectPath)
+	dirPath := filepath.Join(home, ".claude", "projects", canonicalDir)
+	if err := os.MkdirAll(dirPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessionFile := filepath.Join(dirPath, sessionID+".jsonl")
+	if err := os.WriteFile(sessionFile, []byte(`{"type":"summary","summary":"test"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := findConversationPath(home, projectPath, sessionID)
+	if got != sessionFile {
+		t.Errorf("got %q, want %q", got, sessionFile)
+	}
+}
+

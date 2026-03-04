@@ -312,7 +312,7 @@
 		-webkit-backdrop-filter: blur(10px);
 		border: 0.5px solid var(--color-popover-border);
 		border-radius: 8px;
-		box-shadow: 0 1px 3px var(--color-popover-shadow);
+		box-shadow: 0 2px 8px var(--color-popover-shadow);
 		z-index: 10;
 		white-space: nowrap;
 		overflow-y: auto;

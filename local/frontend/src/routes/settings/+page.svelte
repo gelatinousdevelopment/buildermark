@@ -234,7 +234,7 @@
 					></textarea>
 					<br />
 					<div class="actions">
-						<button class="bordered small" onclick={saveSettings} disabled={savingSettings}>
+						<button class="bordered prominent" onclick={saveSettings} disabled={savingSettings}>
 							{savingSettings ? 'Saving...' : 'Save Settings'}
 						</button>
 					</div>
@@ -361,7 +361,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2rem;
-		padding: 1.5rem 2rem;
+		padding: 1rem 1.5rem 1.5rem 1.5rem;
 	}
 
 	hr.divider {
@@ -532,5 +532,19 @@
 
 	.radio-description {
 		color: var(--color-text-faded);
+	}
+
+	textarea {
+		width: 100%;
+		max-width: 100%;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+		font-size: 0.9rem;
+		line-height: 1.45;
+		padding: 0.65rem;
+		border: 1px solid var(--color-border-input);
+		background: var(--color-background-surface);
+		color: var(--color-text);
+		border-radius: 4px;
+		box-sizing: border-box;
 	}
 </style>

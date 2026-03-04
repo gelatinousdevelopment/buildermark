@@ -264,7 +264,7 @@ func findProjectGroupByProjectID(groups []projectGroup, projectID string) (proje
 
 func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*db.Project, error) {
 	var p db.Project
-	err := database.QueryRowContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, ignored, ignore_diff_paths, ignore_default_diff_paths, team_server_id FROM projects WHERE id = ?", projectID).Scan(
+	err := database.QueryRowContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, ignored, ignore_diff_paths, ignore_default_diff_paths, team_server_id, git_worktree_paths FROM projects WHERE id = ?", projectID).Scan(
 		&p.ID,
 		&p.Path,
 		&p.OldPaths,
@@ -276,6 +276,7 @@ func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*d
 		&p.IgnoreDiffPaths,
 		&p.IgnoreDefaultDiffPaths,
 		&p.TeamServerID,
+		&p.GitWorktreePaths,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil

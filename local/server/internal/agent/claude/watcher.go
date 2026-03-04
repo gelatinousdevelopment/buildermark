@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sort"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -44,6 +45,7 @@ func (a *Agent) Run(ctx context.Context) {
 	a.backfillParentConversations(ctx)
 	a.backfillGitIDs(ctx)
 	a.backfillLabels(ctx)
+	a.backfillGitWorktreePaths(ctx)
 
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
@@ -277,6 +279,19 @@ func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
 		}
 		if path != "" && path != "." {
 			out[path] = struct{}{}
+
+			// Include worktree paths (populated at startup by backfillGitWorktreePaths)
+			// so conversations in external worktrees pass the filter during polling.
+			for _, wt := range strings.Split(p.GitWorktreePaths, "\n") {
+				wt = strings.TrimSpace(wt)
+				if wt == "" {
+					continue
+				}
+				wt = filepath.Clean(wt)
+				if wt != "" && wt != "." {
+					out[wt] = struct{}{}
+				}
+			}
 		}
 		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
 			oldPath = strings.TrimSpace(oldPath)
@@ -636,6 +651,96 @@ func (a *Agent) backfillLabels(ctx context.Context) {
 	if updated > 0 {
 		log.Printf("claude watcher: backfilled %d project labels", updated)
 	}
+}
+
+// backfillGitWorktreePaths refreshes git_worktree_paths for all tracked projects.
+// It discovers worktrees from two sources:
+// 1. `git worktree list` (active worktrees)
+// 2. Claude's ~/.claude/projects/ directory names (historical worktrees that may have been cleaned up)
+func (a *Agent) backfillGitWorktreePaths(ctx context.Context) {
+	projects, err := db.ListProjects(ctx, a.db, false)
+	if err != nil {
+		log.Printf("claude watcher: list projects for worktree backfill: %v", err)
+		return
+	}
+
+	// Build a set of worktree paths from Claude's project directories.
+	claudeWorktrees := discoverClaudeWorktreePaths(a.home)
+
+	updated := 0
+	for _, p := range projects {
+		seen := make(map[string]struct{})
+		cleanPath := filepath.Clean(p.Path)
+
+		// Source 1: active git worktrees.
+		for _, wt := range agent.ListGitWorktrees(p.Path) {
+			wt = filepath.Clean(wt)
+			if wt != cleanPath {
+				seen[wt] = struct{}{}
+			}
+		}
+
+		// Source 2: worktree paths from Claude's project directory names.
+		if paths, ok := claudeWorktrees[cleanPath]; ok {
+			for _, wt := range paths {
+				seen[wt] = struct{}{}
+			}
+		}
+
+		var sorted []string
+		for wt := range seen {
+			sorted = append(sorted, wt)
+		}
+		sort.Strings(sorted)
+		newVal := strings.Join(sorted, "\n")
+		if newVal != p.GitWorktreePaths {
+			if err := db.UpdateProjectGitWorktreePaths(ctx, a.db, p.ID, newVal); err != nil {
+				log.Printf("claude watcher: update git_worktree_paths for %s: %v", p.ID, err)
+				continue
+			}
+			updated++
+		}
+	}
+	if updated > 0 {
+		log.Printf("claude watcher: backfilled %d project git_worktree_paths", updated)
+	}
+}
+
+// discoverClaudeWorktreePaths scans ~/.claude/projects/ for directories with
+// the --claude-worktrees- marker and returns a map from parent project path
+// to worktree paths.
+func discoverClaudeWorktreePaths(home string) map[string][]string {
+	projectsDir := filepath.Join(home, ".claude", "projects")
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		return nil
+	}
+
+	result := make(map[string][]string)
+	for _, d := range entries {
+		if !d.IsDir() {
+			continue
+		}
+		name := d.Name()
+		idx := strings.Index(name, worktreeDirMarker)
+		if idx < 0 {
+			continue
+		}
+		// Decode the parent project path from the directory prefix.
+		parentDirName := name[:idx]
+		parentPath := strings.ReplaceAll(parentDirName, "-", "/")
+
+		// Decode the worktree suffix to reconstruct the full worktree path.
+		// The full directory name is the encoded path including /.claude/worktrees/<name>,
+		// so we can reconstruct the worktree path from it.
+		wtSuffix := name[idx:]
+		// --claude-worktrees-<name> → /.claude/worktrees/<name>
+		wtSuffix = strings.Replace(wtSuffix, "--claude-worktrees-", "/.claude/worktrees/", 1)
+		wtPath := parentPath + wtSuffix
+
+		result[parentPath] = append(result[parentPath], wtPath)
+	}
+	return result
 }
 
 // backfillGitIDs finds all projects without a git_id and attempts to
