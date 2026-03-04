@@ -12,6 +12,7 @@
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import '$lib/stores/settings.svelte';
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
+	import Popover from '$lib/components/Popover.svelte';
 
 	let { children, data } = $props();
 
@@ -95,17 +96,18 @@
 				<a href={resolve('/projects')} class="item wordmark">
 					<Icon name="buildermarkWordmark" width="176px" />
 				</a>
-				<a href={resolve('/projects')} class="item icon" onmouseenter={restartAnimation}>
-					<!-- <Icon name="buildermark" width="28px" /> -->
-					<div class="static"><Icon name="buildermarkTall" width="29px" /></div>
-					<div class="animated" bind:this={animatedEl}>
-						<Icon name="buildermarkTallAnimated" width="29px" overflow="hidden" />
-					</div>
-					<!-- <div class="text">
-						<div class="title">Buildermark</div>
-						<div class="subtitle">Local</div>
-					</div> -->
-				</a>
+				<Popover position="below" padding="1rem 1.5rem">
+					{#snippet popover()}
+						<span class="logo-popover-text">Buildermark Local</span>
+					{/snippet}
+					<a href={resolve('/projects')} class="item icon" onmouseenter={restartAnimation}>
+						<!-- <Icon name="buildermark" width="28px" /> -->
+						<div class="static"><Icon name="buildermarkTall" width="29px" /></div>
+						<div class="animated" bind:this={animatedEl}>
+							<Icon name="buildermarkTallAnimated" width="29px" overflow="hidden" />
+						</div>
+					</a>
+				</Popover>
 			</div>
 		</section>
 		<hr class="divider" />
@@ -149,25 +151,30 @@
 		</section>
 		<!-- <hr class="divider" /> -->
 		<section style:flex="1"></section>
-		<hr class="divider" />
-		<section>
-			<nav class="right">
-				{#if isReadOnlyDemo}
+		{#if isReadOnlyDemo}
+			<hr class="divider" />
+			<section>
+				<nav class="right">
 					<button class="read-only-pill" onclick={() => (showReadOnlyDialog = true)}>
 						Read-only demo
 					</button>
-				{/if}
-				{#if !bigBrand}
+				</nav>
+			</section>
+		{/if}
+		{#if !bigBrand}
+			<hr class="divider" />
+			<section>
+				<nav class="right">
 					<a href={resolve('/search')} class="item" title="Search"
 						><Icon name="search" width="19px" /></a
 					>
-				{/if}
-			</nav>
-		</section>
+				</nav>
+			</section>
+		{/if}
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href={resolve('/settings')} class="item" title="Global Settings"
+				<a href={resolve('/settings')} class="item" title="Buildermark Local Settings"
 					><Icon name="gear" width="17px" /></a
 				>
 			</nav>
@@ -335,6 +342,11 @@
 		background: var(--accent-color);
 		color: var(--accent-color-ultralight);
 		position: relative;
+	}
+
+	.logo-popover-text {
+		font-size: 1.2rem;
+		font-weight: bold;
 	}
 
 	header .brand a.icon:hover .static {

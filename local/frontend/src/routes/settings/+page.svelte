@@ -102,7 +102,7 @@
 </script>
 
 <div class="settings limited-content-width inset-when-limited-content-width">
-	<h1>Global Settings</h1>
+	<h1>Buildermark Local Settings</h1>
 
 	{#if localSettingsError}
 		<p class="error">{localSettingsError}</p>

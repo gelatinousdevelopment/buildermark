@@ -332,8 +332,16 @@
 	<div class="top-row">
 		<div class="filters">
 			{#if showDateFilter}
+				<div class="filter-picker">
+					<select id="order-{projectId}" value={selectedOrder} onchange={handleOrderChange}>
+						<option value="desc">Newest First</option>
+						<option value="asc">Oldest First</option>
+					</select>
+				</div>
+
 				<DateFilterPicker start={effectiveStart} onchange={handleDateFilterChange} />
 			{/if}
+
 			<div class="filter-picker">
 				<!-- <label for="agent-{projectId}">Agent:</label> -->
 				<select
@@ -351,6 +359,7 @@
 					{/if}
 				</select>
 			</div>
+
 			<div class="filter-picker">
 				<!-- <label for="rating-{projectId}">Rating:</label> -->
 				<select id="rating-{projectId}" value={selectedRating} onchange={handleRatingChange}>
@@ -365,16 +374,12 @@
 					<option value={1}>1</option>
 				</select>
 			</div>
-			<div class="filter-picker">
-				<select id="order-{projectId}" value={selectedOrder} onchange={handleOrderChange}>
-					<option value="desc">Newest First</option>
-					<option value="asc">Oldest First</option>
-				</select>
-			</div>
+
 			<label class="toggle-label">
 				<input type="checkbox" bind:checked={detailed} />
 				Show prompts and ratings
 			</label>
+
 			<label class="toggle-label">
 				<input type="checkbox" checked={currentShowHidden} onchange={handleHiddenChange} />
 				Show hidden

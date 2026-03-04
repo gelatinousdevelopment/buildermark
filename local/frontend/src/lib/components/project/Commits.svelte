@@ -493,6 +493,13 @@
 		<div class="top-row">
 			<div class="filters">
 				{#if showDateFilter}
+					<div class="filter-picker">
+						<select id="order-{projectId}" value={selectedOrder} onchange={handleOrderChange}>
+							<option value="desc">Newest First</option>
+							<option value="asc">Oldest First</option>
+						</select>
+					</div>
+
 					<DateFilterPicker start={effectiveStart} onchange={handleDateFilterChange} />
 				{/if}
 
@@ -535,13 +542,6 @@
 						</select>
 					</div>
 				{/if}
-
-				<div class="filter-picker">
-					<select id="order-{projectId}" value={selectedOrder} onchange={handleOrderChange}>
-						<option value="desc">Newest First</option>
-						<option value="asc">Oldest First</option>
-					</select>
-				</div>
 			</div>
 		</div>
 	{/if}

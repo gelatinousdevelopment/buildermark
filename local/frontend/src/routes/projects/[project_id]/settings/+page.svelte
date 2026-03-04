@@ -201,7 +201,7 @@
 				<h2>Alternate Coding Agent Paths</h2>
 				<p class="hint">
 					Need to track conversations from other user folders or mounted filesystems? Configure that
-					in <a href={resolve('/settings')}>Global Settings</a>.
+					in <a href={resolve('/settings')}>Buildermark Local Settings</a>.
 				</p>
 			</div>
 
