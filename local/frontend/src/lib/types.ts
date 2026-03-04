@@ -31,6 +31,8 @@ export interface LocalSettings {
 	listenAddr: string;
 	conversationSearchPaths: AgentConversationSearchPath[];
 	extraAgentHomes: string[];
+	extraLocalUserEmails: string[];
+	commitSortOrder: string;
 }
 
 export interface ProjectDetail {
@@ -149,6 +151,7 @@ export interface ProjectCommitPageResponse {
 	agentFilter: string;
 	currentUser: string;
 	currentEmail: string;
+	extraLocalUserEmails?: string[];
 	project: Project;
 	refresh?: CommitRefreshState;
 	summary: ProjectCommitSummary;

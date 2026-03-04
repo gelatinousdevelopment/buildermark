@@ -42,6 +42,29 @@ func commitMatchesIdentity(c gitCommit, identity gitIdentity) bool {
 	return false
 }
 
+func dbCommitMatchesIdentity(c db.Commit, identity gitIdentity) bool {
+	if identity.Email != "" {
+		return strings.EqualFold(strings.TrimSpace(c.UserEmail), identity.Email)
+	}
+	if identity.Name != "" {
+		return strings.TrimSpace(c.UserName) == identity.Name
+	}
+	return false
+}
+
+func commitMatchesExpandedIdentity(authorEmail string, identity gitIdentity, extraEmails []string) bool {
+	email := strings.TrimSpace(authorEmail)
+	if identity.Email != "" && strings.EqualFold(email, identity.Email) {
+		return true
+	}
+	for _, extra := range extraEmails {
+		if strings.EqualFold(email, extra) {
+			return true
+		}
+	}
+	return false
+}
+
 func listCommitsByIdentity(ctx context.Context, path, branch string, identity gitIdentity) ([]gitCommit, error) {
 	out, err := runGit(ctx, path,
 		"log", branch,

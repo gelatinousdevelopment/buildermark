@@ -16,9 +16,9 @@
 	import Icon from '$lib/Icon.svelte';
 	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
+	import { settingsStore, type CommitSortOrder } from '$lib/stores/settings.svelte';
 	import { formatRelativeOrShortDate, formatFullDateTitle, commitUrl } from '$lib/utils';
 
-	const AGENT_EMAILS = ['noreply@anthropic.com'];
 	const USER_AND_AGENTS = '@me+agents';
 
 	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
@@ -119,7 +119,7 @@
 	let internalBranch = $state('');
 	let internalUser = $state('');
 	let internalAgent = $state('');
-	let internalOrder = $state('desc');
+	let internalOrder = $state(settingsStore.commitSortOrder);
 	let internalStart: number | undefined = $state(undefined);
 	let internalEnd: number | undefined = $state(undefined);
 	let userDefaultApplied = false;
@@ -166,7 +166,7 @@
 			internalPage = page ?? 1;
 		}
 		internalBranch = branch ?? '';
-		if (order !== undefined) internalOrder = order;
+		if (order !== undefined) internalOrder = order as CommitSortOrder;
 		loading = autoload;
 	});
 
@@ -179,7 +179,7 @@
 	});
 
 	$effect(() => {
-		if (order !== undefined) internalOrder = order;
+		if (order !== undefined) internalOrder = order as CommitSortOrder;
 	});
 
 	// Reset to page 1 when date filter changes.
@@ -202,7 +202,7 @@
 
 	const selectedUserDisplay = $derived.by(() => {
 		if (!selectedUser) return '';
-		if (selectedUser === USER_AND_AGENTS) return 'Me + agents';
+		if (selectedUser === USER_AND_AGENTS) return 'Local User';
 		const match = data?.users?.find((u) => u.email === selectedUser);
 		return match?.name || selectedUser;
 	});
@@ -228,10 +228,14 @@
 		}
 	}
 
-	function resolveUserFilter(raw: string, currentEmail: string | undefined): string {
+	function resolveUserFilter(
+		raw: string,
+		currentEmail: string | undefined,
+		extraEmails: string[]
+	): string {
 		if (raw !== USER_AND_AGENTS) return raw;
 		if (!currentEmail) return '';
-		return [currentEmail, ...AGENT_EMAILS].join(',');
+		return [currentEmail, ...extraEmails].join(',');
 	}
 
 	async function loadCommitsData() {
@@ -244,7 +248,11 @@
 		error = null;
 		try {
 			const pageNum = Math.max(1, currentPage);
-			const resolvedUser = resolveUserFilter(selectedUser, data?.currentEmail);
+			const resolvedUser = resolveUserFilter(
+				selectedUser,
+				data?.currentEmail,
+				data?.extraLocalUserEmails ?? []
+			);
 			const loaded = await withOptionalQueue(
 				() =>
 					listProjectCommitsPage(
@@ -269,14 +277,14 @@
 			if (branch === undefined && !internalBranch && loaded.branch) {
 				internalBranch = loaded.branch;
 			}
-			// Default to the current git user on first load.
+			// Default to "Local User" filter on first load.
 			if (defaultToCurrentUser && !userDefaultApplied && loaded.currentEmail) {
 				userDefaultApplied = true;
 				if (!internalUser) {
-					internalUser = loaded.currentEmail;
+					internalUser = USER_AND_AGENTS;
 					if (syncPaginationWithUrl && browser) {
 						const url = new URL(window.location.href);
-						url.searchParams.set('user', loaded.currentEmail);
+						url.searchParams.set('user', USER_AND_AGENTS);
 						window.history.replaceState(window.history.state, '', url);
 					}
 					return; // effect will re-fire with user filter
@@ -300,7 +308,11 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const resolved = resolveUserFilter(selectedUser, data?.currentEmail);
+		const resolved = resolveUserFilter(
+			selectedUser,
+			data?.currentEmail,
+			data?.extraLocalUserEmails ?? []
+		);
 		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${selectedOrder}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
@@ -396,8 +408,9 @@
 	}
 
 	function handleOrderChange(event: Event) {
-		const value = (event.currentTarget as HTMLSelectElement).value;
+		const value = (event.currentTarget as HTMLSelectElement).value as CommitSortOrder;
 		internalOrder = value;
+		settingsStore.commitSortOrder = value;
 		if (syncPaginationWithUrl && browser) {
 			const url = new URL(window.location.href);
 			if (value === 'asc') {
@@ -520,7 +533,7 @@
 						<select id="user-{projectId}" value={selectedUser} onchange={handleUserChange}>
 							<option value="">All</option>
 							<hr />
-							<option value={USER_AND_AGENTS}>Current user and cloud agents</option>
+							<option value={USER_AND_AGENTS}>Local User</option>
 							<hr />
 							{#each data.users as a (a.email)}
 								<option value={a.email}>{a.name} ({a.email})</option>

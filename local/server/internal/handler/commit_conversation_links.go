@@ -104,11 +104,26 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 
+	// Resolve identity + extra emails for filtering.
+	repoProject, repoErr := resolveRepoProject(r.Context(), group)
+	var identity *gitIdentity
+	var extraEmails []string
+	if repoErr == nil {
+		if id, err := resolveGitIdentity(r.Context(), repoProject.Path); err == nil {
+			identity = &id
+		}
+		extraEmails = s.loadExtraLocalUserEmails()
+	}
+
 	// Build bidirectional maps using diff-matching attribution.
 	c2c := make(map[string][]string)
 	c2commit := make(map[string][]string)
 
 	for _, commit := range commits {
+		// Skip attribution for commits not matching the local user identity.
+		if identity != nil && !commitMatchesExpandedIdentity(commit.UserEmail, *identity, extraEmails) {
+			continue
+		}
 		tokens := parseUnifiedDiffTokens(commit.DiffContent, ignorePatterns)
 		if len(tokens) == 0 {
 			continue

@@ -62,11 +62,22 @@ export function getLocalSettings(fetchFn?: APIFetch): Promise<LocalSettings> {
 	return api('/api/v1/settings', undefined, fetchFn);
 }
 
-export function updateLocalSettings(extraAgentHomes: string[]): Promise<LocalSettings> {
+export function updateLocalSettings(
+	extraAgentHomes: string[],
+	extraLocalUserEmails?: string[]
+): Promise<LocalSettings> {
 	return api('/api/v1/settings', {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ extraAgentHomes })
+		body: JSON.stringify({ extraAgentHomes, extraLocalUserEmails })
+	});
+}
+
+export function updateCommitSortOrder(order: string): Promise<LocalSettings> {
+	return api('/api/v1/settings', {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ commitSortOrder: order })
 	});
 }
 export function deleteProject(id: string): Promise<void> {

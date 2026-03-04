@@ -4,10 +4,12 @@
 	import Conversations from '$lib/components/project/Conversations.svelte';
 	import Commits from '$lib/components/project/Commits.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
 	import { dateStringToUnixMsRange } from '$lib/utils';
 
 	const projectId = $derived(page.params.project_id ?? '');
+	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.commitSortOrder);
 	const selectedDate = $derived(projectDateFilterStore.selectedDate);
 	const dateRange = $derived.by(() => {
 		if (!selectedDate) return null;
@@ -50,6 +52,7 @@
 			showRatingsColumn={true}
 			enableRelationshipHover={true}
 			onConversationsLoaded={handleConversationsLoaded}
+			{order}
 			start={dateRange?.from}
 			end={dateRange?.to}
 		/>
@@ -73,6 +76,7 @@
 			showBranch={false}
 			enableRelationshipHover={true}
 			onCommitsLoaded={handleCommitsLoaded}
+			{order}
 			start={dateRange?.from}
 			end={dateRange?.to}
 		/>
@@ -138,6 +142,7 @@
 	.more {
 		margin-top: 0.75rem;
 		margin-left: 1rem;
+		width: fit-content;
 	}
 
 	@media (max-width: 1023px) {

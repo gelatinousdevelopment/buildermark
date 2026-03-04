@@ -1,19 +1,23 @@
 import { browser } from '$app/environment';
+import { updateCommitSortOrder } from '$lib/api';
 
 const STORAGE_KEY = 'buildermark_local_settings';
 
 export type ContentWidth = 'default' | 'wider' | 'full';
+export type CommitSortOrder = 'desc' | 'asc';
 
 interface Settings {
 	commits_chart_scale_by_lines: boolean;
 	commits_chart_stretch_bars: boolean;
 	content_width: ContentWidth;
+	commit_sort_order: CommitSortOrder;
 }
 
 const defaults: Settings = {
 	commits_chart_scale_by_lines: false,
 	commits_chart_stretch_bars: false,
-	content_width: 'default'
+	content_width: 'default',
+	commit_sort_order: 'desc'
 };
 
 function load(): Settings {
@@ -31,7 +35,8 @@ function currentSettings(): Settings {
 	return {
 		commits_chart_scale_by_lines: _commitsChartScaleByLines,
 		commits_chart_stretch_bars: _commitsChartStretchBars,
-		content_width: _contentWidth
+		content_width: _contentWidth,
+		commit_sort_order: _commitSortOrder
 	};
 }
 
@@ -58,6 +63,7 @@ const initial = load();
 let _commitsChartScaleByLines = $state(initial.commits_chart_scale_by_lines);
 let _commitsChartStretchBars = $state(initial.commits_chart_stretch_bars);
 let _contentWidth = $state(initial.content_width);
+let _commitSortOrder: CommitSortOrder = $state(initial.commit_sort_order);
 
 applyContentWidth(initial.content_width);
 
@@ -68,6 +74,7 @@ if (browser) {
 		_commitsChartScaleByLines = updated.commits_chart_scale_by_lines;
 		_commitsChartStretchBars = updated.commits_chart_stretch_bars;
 		_contentWidth = updated.content_width;
+		_commitSortOrder = updated.commit_sort_order;
 		applyContentWidth(updated.content_width);
 	});
 }
@@ -94,5 +101,19 @@ export const settingsStore = {
 		_contentWidth = v;
 		applyContentWidth(v);
 		save();
+	},
+	get commitSortOrder(): CommitSortOrder {
+		return _commitSortOrder;
+	},
+	set commitSortOrder(v: CommitSortOrder) {
+		_commitSortOrder = v;
+		save();
+		updateCommitSortOrder(v).catch(() => {});
+	},
+	initCommitSortOrder(order: string) {
+		if (order === 'asc' || order === 'desc') {
+			_commitSortOrder = order;
+			save();
+		}
 	}
 };

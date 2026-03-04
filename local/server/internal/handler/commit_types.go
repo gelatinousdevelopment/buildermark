@@ -111,20 +111,21 @@ type commitAttribution struct {
 }
 
 type projectCommitPageResponse struct {
-	Branch       string                  `json:"branch"`
-	Branches     []string                `json:"branches"`
-	Users        []db.UserInfo           `json:"users"`
-	UserFilter   string                  `json:"userFilter"`
-	Agents       []string                `json:"agents"`
-	AgentFilter  string                  `json:"agentFilter"`
-	CurrentUser  string                  `json:"currentUser"`
-	CurrentEmail string                  `json:"currentEmail"`
-	Project      db.Project              `json:"project"`
-	Refresh      commitRefreshState      `json:"refresh"`
-	Summary      projectCommitSummary    `json:"summary"`
-	DailySummary []dailyCommitSummary    `json:"dailySummary"`
-	Pagination   projectCommitPagination `json:"pagination"`
-	Commits      []projectCommitCoverage `json:"commits"`
+	Branch               string                  `json:"branch"`
+	Branches             []string                `json:"branches"`
+	Users                []db.UserInfo           `json:"users"`
+	UserFilter           string                  `json:"userFilter"`
+	Agents               []string                `json:"agents"`
+	AgentFilter          string                  `json:"agentFilter"`
+	CurrentUser          string                  `json:"currentUser"`
+	CurrentEmail         string                  `json:"currentEmail"`
+	ExtraLocalUserEmails []string                `json:"extraLocalUserEmails"`
+	Project              db.Project              `json:"project"`
+	Refresh              commitRefreshState      `json:"refresh"`
+	Summary              projectCommitSummary    `json:"summary"`
+	DailySummary         []dailyCommitSummary    `json:"dailySummary"`
+	Pagination           projectCommitPagination `json:"pagination"`
+	Commits              []projectCommitCoverage `json:"commits"`
 }
 
 type commitRefreshState struct {

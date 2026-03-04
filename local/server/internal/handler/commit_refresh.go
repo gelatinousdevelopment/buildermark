@@ -63,7 +63,8 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 		log.Printf("warning: commit sync state upsert (running) failed: %v", err)
 	}
 
-	err := IngestDefaultCommits(ctx, s.DB, &repoProject, group, identity, branch)
+	extraEmails := s.loadExtraLocalUserEmails()
+	err := IngestDefaultCommits(ctx, s.DB, &repoProject, group, identity, extraEmails, branch)
 	if err == nil {
 		branchHashes, hashErr := listBranchCommitHashes(ctx, repoProject.Path, branch)
 		if hashErr != nil {
@@ -73,7 +74,7 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 			if staleErr != nil {
 				err = staleErr
 			} else if staleCoverage {
-				_, err = recomputeCommitCoverageForProject(ctx, s.DB, &repoProject, group, branch)
+				_, err = recomputeCommitCoverageForProject(ctx, s.DB, &repoProject, group, branch, &identity, extraEmails)
 			}
 		}
 	}

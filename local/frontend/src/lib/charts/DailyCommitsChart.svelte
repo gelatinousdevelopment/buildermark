@@ -619,6 +619,10 @@
 		outline-offset: -1px;
 	}
 
+	.dc-col:hover .dc-bar {
+		filter: brightness(1.05);
+	}
+
 	.dc-bar-area {
 		height: 114px;
 	}

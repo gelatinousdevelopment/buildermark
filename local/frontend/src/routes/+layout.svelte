@@ -10,17 +10,26 @@
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
-	import '$lib/stores/settings.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import { listProjects } from '$lib/api';
+	import type { Project } from '$lib/types';
 
 	let { children, data } = $props();
 
 	let animatedEl: HTMLDivElement;
 	let svgTemplate: Node;
+	let projects: Project[] = $state([]);
 
 	onMount(() => {
 		websocketStore.connect();
+		if (data.localSettings?.commitSortOrder) {
+			settingsStore.initCommitSortOrder(data.localSettings.commitSortOrder);
+		}
+		listProjects()
+			.then((p) => (projects = p))
+			.catch(() => {});
 		const svg = animatedEl?.querySelector('svg');
 		if (svg) {
 			svgTemplate = svg.cloneNode(true);
@@ -96,9 +105,22 @@
 				<a href={resolve('/projects')} class="item wordmark">
 					<Icon name="buildermarkWordmark" width="176px" />
 				</a>
-				<Popover position="below" padding="1rem 1.5rem">
+				<Popover position="below" padding="1.3rem 1.5rem 1rem 1.3rem">
 					{#snippet popover()}
 						<span class="logo-popover-text">Buildermark Local</span>
+						{#if projects.length > 0}
+							<ul class="logo-popover-projects">
+								{#each projects as project (project.id)}
+									<li>
+										<a
+											href={resolve('/projects/[project_id]', {
+												project_id: project.id
+											})}>{project.label || project.path}</a
+										>
+									</li>
+								{/each}
+							</ul>
+						{/if}
 					{/snippet}
 					<a href={resolve('/projects')} class="item icon" onmouseenter={restartAnimation}>
 						<!-- <Icon name="buildermark" width="28px" /> -->
@@ -349,6 +371,33 @@
 		font-weight: bold;
 	}
 
+	.logo-popover-projects {
+		list-style: none;
+		margin: 0.5rem 0 0 0;
+		padding: 0;
+		gap: 0;
+	}
+
+	.logo-popover-projects li {
+		margin: 0;
+		padding: 0.2rem 0;
+	}
+
+	.logo-popover-projects li a {
+		color: var(--color-link);
+		display: block;
+		font-size: 1.1rem;
+		font-weight: normal;
+		padding: 0.2rem 0;
+		text-decoration: none;
+	}
+
+	.logo-popover-projects li a:hover {
+		background: none;
+		color: var(--color-link-hover);
+		text-decoration: underline;
+	}
+
 	header .brand a.icon:hover .static {
 		display: none;
 	}
@@ -381,6 +430,15 @@
 		display: none;
 	}*/
 
+	/*hr.divider:has(~ section > .breadcrumbs > a:first-of-type) {
+		opacity: 1;
+		transition: opacity 0.15s ease-in-out;
+	}
+
+	hr.divider:has(~ section > .breadcrumbs > a.selected:first-of-type) {
+		opacity: 0;
+	}*/
+
 	header nav {
 		align-items: center;
 		display: flex;
@@ -389,7 +447,7 @@
 
 	header nav.breadcrumbs {
 		gap: 0rem;
-		/*padding-left: 0.5rem;*/
+		padding-left: 0.5rem;
 	}
 
 	header nav.breadcrumbs .chevron-right {

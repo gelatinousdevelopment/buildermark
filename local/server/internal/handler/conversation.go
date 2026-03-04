@@ -419,5 +419,7 @@ func (s *Server) recomputeCommitCoverageForHashes(
 		return 0, err
 	}
 
-	return recomputeCommitCoverageForProjectHashes(ctx, s.DB, repoProject, group, hashes, progress)
+	identity, _ := resolveGitIdentity(ctx, repoProject.Path)
+	extraEmails := s.loadExtraLocalUserEmails()
+	return recomputeCommitCoverageForProjectHashes(ctx, s.DB, repoProject, group, hashes, progress, &identity, extraEmails)
 }

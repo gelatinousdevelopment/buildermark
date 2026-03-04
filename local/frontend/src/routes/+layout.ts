@@ -1,11 +1,16 @@
-import { listProjects } from '$lib/api';
+import { getLocalSettings, listProjects } from '$lib/api';
+import type { LocalSettings } from '$lib/types';
 
 export const ssr = false;
 export const prerender = false;
 
 export const load = async () => {
-	const projects = (await listProjects(false)).filter((project) => project.gitId);
+	const [projects, localSettings] = await Promise.all([
+		listProjects(false).then((p) => p.filter((project) => project.gitId)),
+		getLocalSettings().catch((): LocalSettings | null => null)
+	]);
 	return {
-		projects
+		projects,
+		localSettings
 	};
 };

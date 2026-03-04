@@ -273,7 +273,6 @@
 	.popover-bridge {
 		position: absolute;
 		z-index: 9;
-		display: none;
 	}
 
 	.popover-bridge.above {

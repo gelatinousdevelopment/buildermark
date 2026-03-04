@@ -58,7 +58,7 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 		}
 
 		// Trigger default ingestion if needed.
-		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, branch); err != nil {
+		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, s.loadExtraLocalUserEmails(), branch); err != nil {
 			log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
 		}
 
@@ -830,16 +830,17 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	_ = refreshQueued
 
 	writeSuccess(w, http.StatusOK, projectCommitPageResponse{
-		Branch:       branch,
-		Branches:     branches,
-		Users:        users,
-		UserFilter:   strings.Join(userEmails, ","),
-		Agents:       agents,
-		AgentFilter:  agentFilter,
-		CurrentUser:  identity.Name,
-		CurrentEmail: identity.Email,
-		Project:      *project,
-		Refresh:      makeCommitRefreshState(syncState, staleCoverage),
+		Branch:               branch,
+		Branches:             branches,
+		Users:                users,
+		UserFilter:           strings.Join(userEmails, ","),
+		Agents:               agents,
+		AgentFilter:          agentFilter,
+		CurrentUser:          identity.Name,
+		CurrentEmail:         identity.Email,
+		ExtraLocalUserEmails: s.loadExtraLocalUserEmails(),
+		Project:              *project,
+		Refresh:              makeCommitRefreshState(syncState, staleCoverage),
 		Summary:      summarizeCommitCoverage(allCoverage),
 		DailySummary: buildDailySummaryWindow(
 			allCoverage,
@@ -884,7 +885,9 @@ func (s *Server) runCommitIngestion(repoProject db.Project, group projectGroup, 
 		})
 	}
 
-	if _, err := ingestMissingCommits(ctx, s.DB, &repoProject, group, branch, missingHashes); err != nil {
+	identity, _ := resolveGitIdentity(ctx, repoProject.Path)
+	extraEmails := s.loadExtraLocalUserEmails()
+	if _, err := ingestMissingCommits(ctx, s.DB, &repoProject, group, branch, missingHashes, &identity, extraEmails); err != nil {
 		log.Printf("async commit ingestion failed for %s: %v", repoProject.Path, err)
 		if s.ws != nil {
 			s.ws.broadcastEvent("job_status", jobStatusEvent{

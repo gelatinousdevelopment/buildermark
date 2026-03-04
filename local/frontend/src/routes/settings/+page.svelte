@@ -2,7 +2,11 @@
 	import { resolve } from '$app/paths';
 	import { scanHistory, updateLocalSettings } from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
-	import { settingsStore, type ContentWidth } from '$lib/stores/settings.svelte';
+	import {
+		settingsStore,
+		type ContentWidth,
+		type CommitSortOrder
+	} from '$lib/stores/settings.svelte';
 	import TeamServersSection from '$lib/TeamServersSection.svelte';
 
 	let { data } = $props();
@@ -13,15 +17,21 @@
 		{ value: 'full', label: 'Full', description: '100%' }
 	];
 
+	const commitSortOrderOptions: { value: CommitSortOrder; label: string }[] = [
+		{ value: 'desc', label: 'Newest First' },
+		{ value: 'asc', label: 'Oldest First' }
+	];
+
 	let projects = $derived(data.projects);
 	let projectError = $derived(data.projectError);
 	let localSettings = $state(data.localSettings);
 	let localSettingsError = $derived(data.localSettingsError);
 
 	let extraAgentHomesText = $state(data.localSettings?.extraAgentHomes?.join('\n') ?? '');
-	let savingAgentHomes = $state(false);
-	let agentHomesNotice: string | null = $state(null);
-	let agentHomesError: string | null = $state(null);
+	let extraLocalUserEmailsText = $state(data.localSettings?.extraLocalUserEmails?.join('\n') ?? '');
+	let savingSettings = $state(false);
+	let settingsNotice: string | null = $state(null);
+	let settingsError: string | null = $state(null);
 
 	let historyImportDays = $state('7');
 	let importingHistory = $state(false);
@@ -58,23 +68,28 @@
 		localSettings?.conversationSearchPaths.filter((entry) => !entry.exists) ?? []
 	);
 
-	async function saveAgentHomes() {
-		savingAgentHomes = true;
-		agentHomesNotice = null;
-		agentHomesError = null;
+	async function saveSettings() {
+		savingSettings = true;
+		settingsNotice = null;
+		settingsError = null;
 		try {
 			const homes = extraAgentHomesText
 				.split('\n')
 				.map((line) => line.trim())
 				.filter(Boolean);
-			const updated = await updateLocalSettings(homes);
+			const emails = extraLocalUserEmailsText
+				.split('\n')
+				.map((line) => line.trim())
+				.filter(Boolean);
+			const updated = await updateLocalSettings(homes, emails);
 			localSettings = updated;
 			extraAgentHomesText = updated.extraAgentHomes.join('\n');
-			agentHomesNotice = 'Saved. Watchers updated.';
+			extraLocalUserEmailsText = updated.extraLocalUserEmails.join('\n');
+			settingsNotice = 'Saved. Watchers updated.';
 		} catch (e) {
-			agentHomesError = e instanceof Error ? e.message : 'Failed to save extra agent homes';
+			settingsError = e instanceof Error ? e.message : 'Failed to save settings';
 		} finally {
-			savingAgentHomes = false;
+			savingSettings = false;
 		}
 	}
 
@@ -124,6 +139,23 @@
 								/>
 								<span class="radio-label">{option.label}</span>
 								<span class="radio-description">{option.description}</span>
+							</label>
+						{/each}
+					</fieldset>
+
+					<br />
+					<p class="label">Default Commit Sort</p>
+					<fieldset class="radio-group">
+						{#each commitSortOrderOptions as option (option.value)}
+							<label class="radio-option">
+								<input
+									type="radio"
+									name="commit-sort-order"
+									value={option.value}
+									checked={settingsStore.commitSortOrder === option.value}
+									onchange={() => (settingsStore.commitSortOrder = option.value)}
+								/>
+								<span class="radio-label">{option.label}</span>
 							</label>
 						{/each}
 					</fieldset>
@@ -179,13 +211,6 @@
 						placeholder="/mnt/vm/home/dev"
 						class="mono-area full-width"
 					></textarea>
-					<div class="actions">
-						<button class="bordered small" onclick={saveAgentHomes} disabled={savingAgentHomes}>
-							{savingAgentHomes ? 'Saving...' : 'Save Agent Folders'}
-						</button>
-					</div>
-					{#if agentHomesError}<p class="error">{agentHomesError}</p>{/if}
-					{#if agentHomesNotice}<p class="status">{agentHomesNotice}</p>{/if}
 					{#if missingSearchPaths.length > 0}
 						<p class="muted">Some configured agent folders are not currently found:</p>
 						<ul>
@@ -194,9 +219,30 @@
 							{/each}
 						</ul>
 					{/if}
+					<br />
+					<label class="label" for="extra-local-user-emails">Extra Local User Emails</label>
+					<p class="muted">
+						One email per line. Commits by these email addresses are treated as local user commits.
+						Default: noreply@anthropic.com
+					</p>
+					<textarea
+						id="extra-local-user-emails"
+						rows="4"
+						bind:value={extraLocalUserEmailsText}
+						placeholder="noreply@anthropic.com"
+						class="mono-area full-width"
+					></textarea>
+					<br />
+					<div class="actions">
+						<button class="bordered small" onclick={saveSettings} disabled={savingSettings}>
+							{savingSettings ? 'Saving...' : 'Save Settings'}
+						</button>
+					</div>
+					{#if settingsError}<p class="error">{settingsError}</p>{/if}
+					{#if settingsNotice}<p class="status">{settingsNotice}</p>{/if}
 				</div>
 
-				<div class="section">
+				<div class="section import-history">
 					<h2>Re-import Conversation History</h2>
 					<p class="muted">This may take a while.</p>
 					<div class="history-import-controls">
@@ -329,13 +375,27 @@
 	.section {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.2rem;
 	}
 
 	@media (max-width: 1200px) {
 		.columns {
 			flex-direction: column;
 		}
+	}
+
+	.section.import-history {
+		border-top: 0.5px solid var(--color-divider);
+		padding: 0.5rem 0;
+	}
+
+	ul {
+		margin: 0.5rem;
+		padding: 0 1rem;
+	}
+
+	ul li {
+		font-size: 0.9rem;
 	}
 
 	.label {

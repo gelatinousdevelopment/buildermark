@@ -233,7 +233,9 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 		label := db.RepoLabel(repoProject.Path)
 		broadcast("running", fmt.Sprintf("Ingesting commits for %s (%d/%d)...", label, i+1, len(projectIDs)))
 
-		ingested, err := IngestCommitsForWindow(ctx, s.DB, repoProject, group, branch, since, includeAll)
+		identity, _ := resolveGitIdentity(ctx, repoProject.Path)
+		extraEmails := s.loadExtraLocalUserEmails()
+		ingested, err := IngestCommitsForWindow(ctx, s.DB, repoProject, group, branch, since, includeAll, &identity, extraEmails)
 		if err != nil {
 			log.Printf("error ingesting commits for %s: %v", repoProject.Path, err)
 			broadcast("error", fmt.Sprintf("Failed to ingest commits for %s", label))

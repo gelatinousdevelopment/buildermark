@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
@@ -17,11 +18,15 @@ type localSettingsResponse struct {
 	ListenAddr              string            `json:"listenAddr"`
 	ConversationSearchPaths []agentSearchPath `json:"conversationSearchPaths"`
 	ExtraAgentHomes         []string          `json:"extraAgentHomes"`
+	ExtraLocalUserEmails    []string          `json:"extraLocalUserEmails"`
+	CommitSortOrder         string            `json:"commitSortOrder"`
 }
 
 type localConfigFile struct {
-	UpdateMode      string   `json:"updateMode"`
-	ExtraAgentHomes []string `json:"extraAgentHomes,omitempty"`
+	UpdateMode           string   `json:"updateMode"`
+	ExtraAgentHomes      []string `json:"extraAgentHomes,omitempty"`
+	ExtraLocalUserEmails []string `json:"extraLocalUserEmails,omitempty"`
+	CommitSortOrder      string   `json:"commitSortOrder,omitempty"`
 }
 
 type agentSearchPath struct {
@@ -51,12 +56,19 @@ func (s *Server) handleGetLocalSettings(w http.ResponseWriter, r *http.Request) 
 		dbPath = abs
 	}
 
+	commitSortOrder := cfg.CommitSortOrder
+	if commitSortOrder != "asc" && commitSortOrder != "desc" {
+		commitSortOrder = "desc"
+	}
+
 	writeSuccess(w, http.StatusOK, localSettingsResponse{
 		HomePath:                home,
 		DBPath:                  dbPath,
 		ListenAddr:              s.ListenAddr,
 		ConversationSearchPaths: paths,
 		ExtraAgentHomes:         extraHomes,
+		ExtraLocalUserEmails:    effectiveExtraLocalUserEmails(cfg),
+		CommitSortOrder:         commitSortOrder,
 	})
 }
 
@@ -65,7 +77,9 @@ func (s *Server) handlePutLocalSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req struct {
-		ExtraAgentHomes []string `json:"extraAgentHomes"`
+		ExtraAgentHomes      []string `json:"extraAgentHomes"`
+		ExtraLocalUserEmails []string `json:"extraLocalUserEmails"`
+		CommitSortOrder      *string  `json:"commitSortOrder"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -81,6 +95,12 @@ func (s *Server) handlePutLocalSettings(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	cfg.ExtraAgentHomes = normalizeHomeEntries(req.ExtraAgentHomes)
+	cfg.ExtraLocalUserEmails = normalizeEmailEntries(req.ExtraLocalUserEmails)
+	if req.CommitSortOrder != nil {
+		if *req.CommitSortOrder == "asc" || *req.CommitSortOrder == "desc" {
+			cfg.CommitSortOrder = *req.CommitSortOrder
+		}
+	}
 	if err := saveLocalConfigFile(s.ConfigDir, cfg); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return
@@ -170,6 +190,43 @@ func collectConversationSearchPaths(home string, extraHomes []string) []agentSea
 		return paths[i].Agent < paths[j].Agent
 	})
 	return paths
+}
+
+func effectiveExtraLocalUserEmails(cfg localConfigFile) []string {
+	if len(cfg.ExtraLocalUserEmails) > 0 {
+		return cfg.ExtraLocalUserEmails
+	}
+	return []string{"noreply@anthropic.com"}
+}
+
+func normalizeEmailEntries(raw []string) []string {
+	result := make([]string, 0, len(raw))
+	seen := map[string]struct{}{}
+	for _, candidate := range raw {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		lower := strings.ToLower(candidate)
+		if _, ok := seen[lower]; ok {
+			continue
+		}
+		seen[lower] = struct{}{}
+		result = append(result, candidate)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func (s *Server) loadExtraLocalUserEmails() []string {
+	if s.ConfigDir == "" {
+		return []string{"noreply@anthropic.com"}
+	}
+	cfg, err := loadLocalConfigFile(s.ConfigDir)
+	if err != nil {
+		return []string{"noreply@anthropic.com"}
+	}
+	return effectiveExtraLocalUserEmails(cfg)
 }
 
 func conversationSearchPathForAgent(home, agentName string) string {

@@ -100,7 +100,7 @@ func (s *Server) handleIngestMoreCommits(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ingested, reachedRoot, err := ingestMoreCommitsForProject(r.Context(), s.DB, repoProject, group, identity, branch, req.Count)
+	ingested, reachedRoot, err := ingestMoreCommitsForProject(r.Context(), s.DB, repoProject, group, identity, s.loadExtraLocalUserEmails(), branch, req.Count)
 	if err != nil {
 		log.Printf("error ingesting commits for %s: %v", projectID, err)
 		writeError(w, http.StatusInternalServerError, "failed to ingest commits")
@@ -156,7 +156,8 @@ func (s *Server) handleRecomputeCommitCoverage(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	n, err := recomputeCommitCoverageForProject(r.Context(), s.DB, repoProject, group, branch)
+	identity, _ := resolveGitIdentity(r.Context(), repoProject.Path)
+	n, err := recomputeCommitCoverageForProject(r.Context(), s.DB, repoProject, group, branch, &identity, s.loadExtraLocalUserEmails())
 	if err != nil {
 		log.Printf("error recomputing commit coverage for %s: %v", projectID, err)
 		writeError(w, http.StatusInternalServerError, "failed to recompute commit coverage")
@@ -178,6 +179,7 @@ func ingestMoreCommitsForProject(
 	repoProject *db.Project,
 	group projectGroup,
 	identity gitIdentity,
+	extraEmails []string,
 	branch string,
 	count int,
 ) (int, bool, error) {
@@ -234,7 +236,7 @@ func ingestMoreCommitsForProject(
 		return 0, true, nil
 	}
 
-	ingested, err := ingestCommits(ctx, database, repoProject, group, branch, toIngest)
+	ingested, err := ingestCommits(ctx, database, repoProject, group, branch, toIngest, &identity, extraEmails)
 	if err != nil {
 		return 0, false, err
 	}
@@ -257,6 +259,7 @@ func IngestDefaultCommits(
 	repoProject *db.Project,
 	group projectGroup,
 	identity gitIdentity,
+	extraEmails []string,
 	branch string,
 ) error {
 	commits, err := listBranchCommits(ctx, repoProject.Path, branch, maxCommitsPerProject)
@@ -271,7 +274,7 @@ func IngestDefaultCommits(
 	if start < 0 {
 		start = 0
 	}
-	_, err = ingestCommits(ctx, database, repoProject, group, branch, commits[start:])
+	_, err = ingestCommits(ctx, database, repoProject, group, branch, commits[start:], &identity, extraEmails)
 	return err
 }
 
@@ -285,6 +288,8 @@ func IngestCommitsForWindow(
 	branch string,
 	since time.Time,
 	includeAll bool,
+	identity *gitIdentity,
+	extraEmails []string,
 ) (int, error) {
 	commits, err := listBranchCommits(ctx, repoProject.Path, branch, 0)
 	if err != nil {
@@ -306,7 +311,7 @@ func IngestCommitsForWindow(
 		}
 	}
 
-	return ingestCommits(ctx, database, repoProject, group, branch, toIngest)
+	return ingestCommits(ctx, database, repoProject, group, branch, toIngest, identity, extraEmails)
 }
 
 func ingestCommits(
@@ -316,6 +321,8 @@ func ingestCommits(
 	group projectGroup,
 	branch string,
 	toIngest []gitCommit,
+	identity *gitIdentity,
+	extraEmails []string,
 ) (int, error) {
 	if len(toIngest) == 0 {
 		return 0, nil
@@ -354,7 +361,8 @@ func ingestCommits(
 
 		matchedLines := 0
 		matchedChars := 0
-		if len(commitTokens) > 0 && len(messages) > 0 {
+		matchesIdentity := identity == nil || commitMatchesExpandedIdentity(gc.UserEmail, *identity, extraEmails)
+		if matchesIdentity && len(commitTokens) > 0 && len(messages) > 0 {
 			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
 			_, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
@@ -436,6 +444,8 @@ func ingestMissingCommits(
 	group projectGroup,
 	branch string,
 	missingHashes []string,
+	identity *gitIdentity,
+	extraEmails []string,
 ) (int, error) {
 	if len(missingHashes) == 0 {
 		return 0, nil
@@ -451,7 +461,7 @@ func ingestMissingCommits(
 	if len(commits) == 0 {
 		return 0, nil
 	}
-	return ingestCommits(ctx, database, repoProject, group, branch, commits)
+	return ingestCommits(ctx, database, repoProject, group, branch, commits, identity, extraEmails)
 }
 
 func recomputeCommitCoverageForProject(
@@ -460,8 +470,10 @@ func recomputeCommitCoverageForProject(
 	repoProject *db.Project,
 	group projectGroup,
 	branch string,
+	identity *gitIdentity,
+	extraEmails []string,
 ) (int, error) {
-	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, nil)
+	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, nil, identity, extraEmails)
 }
 
 // recomputeSingleCommit recomputes coverage for one commit.
@@ -471,6 +483,8 @@ func recomputeSingleCommit(
 	c db.Commit,
 	ignorePatterns []string,
 	messages []messageDiff,
+	identity *gitIdentity,
+	extraEmails []string,
 ) (db.Commit, map[string]agentStats, error) {
 	cleanDiff := c.DiffContent
 	rawDiff, rawErr := runGit(ctx, repoPath, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
@@ -485,12 +499,24 @@ func recomputeSingleCommit(
 	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
 	totalLines, totalChars := tokenTotals(commitTokens)
 
+	matchesIdent := identity == nil || commitMatchesExpandedIdentity(c.UserEmail, *identity, extraEmails)
+
+	matchedLines := 0
+	matchedChars := 0
+	var files []commitFileCoverage
+	fallbackLines := 0
+	fallbackChars := 0
+
 	windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
 	windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
-	_, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-	files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
-	matchedLines += fallbackLines
-	matchedChars += fallbackChars
+	if matchesIdent {
+		var fileAgent map[string]commitFileCoverage
+		var remainingNorms map[string]int
+		_, matchedLines, matchedChars, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		files, fallbackLines, fallbackChars = summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		matchedLines += fallbackLines
+		matchedChars += fallbackChars
+	}
 
 	recompAdded, recompRemoved := countDiffAddedRemoved(cleanDiff)
 	updated := db.Commit{
@@ -565,6 +591,8 @@ func recomputeCommitCoverageForProjectHashes(
 	group projectGroup,
 	hashes []string,
 	progress func(message string, processed int),
+	identity *gitIdentity,
+	extraEmails []string,
 ) (int, error) {
 	if len(hashes) == 0 {
 		return 0, nil
@@ -601,7 +629,7 @@ func recomputeCommitCoverageForProjectHashes(
 		if progress != nil {
 			progress(fmt.Sprintf("Recomputing commit %s...", c.CommitHash), len(updatedCommits))
 		}
-		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages)
+		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
 		if err != nil {
 			continue
 		}
@@ -624,6 +652,8 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 	group projectGroup,
 	branch string,
 	changedPatterns []string,
+	identity *gitIdentity,
+	extraEmails []string,
 ) (int, error) {
 	// Get branch hashes and query DB by hash list so recompute works across branches.
 	branchHashes, err := listBranchCommitHashes(ctx, repoProject.Path, branch)
@@ -685,7 +715,7 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 	perCommitAgent := make(map[string]map[string]agentStats)
 
 	for _, c := range commits {
-		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages)
+		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
 		if err != nil {
 			continue
 		}
