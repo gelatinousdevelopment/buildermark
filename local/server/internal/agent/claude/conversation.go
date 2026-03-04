@@ -43,8 +43,30 @@ type conversationLogEntry struct {
 	RawJSON   string
 }
 
+// worktreePathMarker identifies /.claude/worktrees/ in filesystem paths (from cwd fields).
+const worktreePathMarker = "/.claude/worktrees/"
+
+// worktreeDirMarker identifies --claude-worktrees- in encoded directory names.
+const worktreeDirMarker = "--claude-worktrees-"
+
+// normalizeWorktreePath detects /.claude/worktrees/ in a filesystem path and
+// returns the parent repo prefix. This handles worktree cwd values without
+// relying on filesystem walking.
+func normalizeWorktreePath(path string) string {
+	if idx := strings.Index(path, worktreePathMarker); idx >= 0 {
+		return path[:idx]
+	}
+	return path
+}
+
+// claudeProjectDirName encodes a project path into a directory name matching
+// Claude Code's actual encoding: both "/" and "." are replaced with "-".
+func claudeProjectDirName(projectPath string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(projectPath, "/", "-"), ".", "-")
+}
+
 func conversationPath(home, projectPath, sessionID string) string {
-	dirName := strings.ReplaceAll(projectPath, "/", "-")
+	dirName := claudeProjectDirName(projectPath)
 	return filepath.Join(home, ".claude", "projects", dirName, sessionID+".jsonl")
 }
 
@@ -446,7 +468,7 @@ func readSummaryFromConversationFile(home, projectPath, sessionID string) string
 // readSessionSummaryFromIndex reads Claude's sessions-index.json and returns
 // the summary for a session if available.
 func readSessionSummaryFromIndex(home, projectPath, sessionID string) string {
-	dirName := strings.ReplaceAll(projectPath, "/", "-")
+	dirName := claudeProjectDirName(projectPath)
 
 	// Try sessions-index.json first.
 	indexPath := filepath.Join(home, ".claude", "projects", dirName, "sessions-index.json")

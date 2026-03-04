@@ -178,7 +178,14 @@ func TestWatcherScanSinceUsesMessageTimestampsEvenWhenFileMtimeIsOld(t *testing.
 	}
 
 	a := newAgent(database, tmpDir, tmpDir)
-	n := a.ScanSince(context.Background(), time.Now().Add(-24*time.Hour), nil)
+	ctx := context.Background()
+
+	// Pre-create the project so it is tracked.
+	if _, err := db.EnsureProject(ctx, database, "/proj/gemini"); err != nil {
+		t.Fatalf("ensure project: %v", err)
+	}
+
+	n := a.ScanSince(ctx, time.Now().Add(-24*time.Hour), nil)
 	if n != 1 {
 		t.Fatalf("ScanSince processed %d files, want 1", n)
 	}

@@ -96,12 +96,47 @@ func TestRegistryResolver(t *testing.T) {
 func TestRegistryReRegister(t *testing.T) {
 	r := NewRegistry()
 
-	r.Register(&stubAgent{name: "a"})
+	w1 := &stubWatcherAgent{name: "a"}
+	r.Register(w1)
 	r.Register(&stubAgent{name: "b"})
-	r.Register(&stubAgent{name: "a"}) // re-register
+	w2 := &stubWatcherAgent{name: "a"}
+	r.Register(w2) // second agent with same name
 
 	names := r.Names()
 	if len(names) != 2 {
-		t.Errorf("Names() len = %d, want 2 (no duplicates)", len(names))
+		t.Errorf("Names() len = %d, want 2 (deduplicated)", len(names))
+	}
+
+	// Both watchers with name "a" should be returned.
+	watchers := r.Watchers()
+	if len(watchers) != 2 {
+		t.Errorf("Watchers() len = %d, want 2", len(watchers))
+	}
+}
+
+func TestRegistryMultipleWatchersSameName(t *testing.T) {
+	r := NewRegistry()
+
+	w1 := &stubWatcherAgent{name: "claude"}
+	w2 := &stubWatcherAgent{name: "claude"}
+	r.Register(w1)
+	r.Register(w2)
+
+	names := r.Names()
+	if len(names) != 1 {
+		t.Errorf("Names() len = %d, want 1", len(names))
+	}
+	if names[0] != "claude" {
+		t.Errorf("Names()[0] = %q, want %q", names[0], "claude")
+	}
+
+	watchers := r.Watchers()
+	if len(watchers) != 2 {
+		t.Fatalf("Watchers() len = %d, want 2", len(watchers))
+	}
+
+	// Get returns the first registered.
+	if got := r.Get("claude"); got != w1 {
+		t.Errorf("Get(claude) returned second agent, want first")
 	}
 }

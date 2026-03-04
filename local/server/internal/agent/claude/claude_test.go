@@ -611,6 +611,11 @@ func TestWatcherScanSinceAPI(t *testing.T) {
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
 
+	// Pre-create the project so it is tracked.
+	if _, err := db.EnsureProject(ctx, database, "/proj/a"); err != nil {
+		t.Fatalf("ensure project: %v", err)
+	}
+
 	count := a.ScanSince(ctx, now.Add(-30*24*time.Hour), nil)
 	if count != 2 {
 		t.Errorf("ScanSince returned %d, want 2", count)
@@ -2245,6 +2250,147 @@ func TestProcessEntriesSkipsNoiseHistoryEntries(t *testing.T) {
 	}
 }
 
+func TestNormalizeWorktreePath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "worktree path",
+			path: "/Users/dave/github/buildermark/.claude/worktrees/svelte-best-practices",
+			want: "/Users/dave/github/buildermark",
+		},
+		{
+			name: "normal path",
+			path: "/Users/dave/github/buildermark",
+			want: "/Users/dave/github/buildermark",
+		},
+		{
+			name: "empty string",
+			path: "",
+			want: "",
+		},
+		{
+			name: "worktree with nested name",
+			path: "/home/user/repo/.claude/worktrees/fix-bug-123",
+			want: "/home/user/repo",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := normalizeWorktreePath(tc.path)
+			if got != tc.want {
+				t.Errorf("normalizeWorktreePath(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProjectPathFromConversationFileWorktree(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "worktree directory",
+			path: "/home/user/.claude/projects/-Users-dave-github-buildermark--claude-worktrees-svelte-best-practices/sess.jsonl",
+			want: "/Users/dave/github/buildermark",
+		},
+		{
+			name: "normal directory",
+			path: "/home/user/.claude/projects/-Users-dave-github-buildermark/sess.jsonl",
+			want: "/Users/dave/github/buildermark",
+		},
+		{
+			name: "empty dir",
+			path: "sess.jsonl",
+			want: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := projectPathFromConversationFile(tc.path)
+			if got != tc.want {
+				t.Errorf("projectPathFromConversationFile(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClaudeProjectDirName(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "slashes only",
+			path: "/proj/test",
+			want: "-proj-test",
+		},
+		{
+			name: "dots and slashes",
+			path: "/Users/dave/.claude/projects",
+			want: "-Users-dave--claude-projects",
+		},
+		{
+			name: "dotfile in path",
+			path: "/home/user/.config/app",
+			want: "-home-user--config-app",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := claudeProjectDirName(tc.path)
+			if got != tc.want {
+				t.Errorf("claudeProjectDirName(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProcessEntriesWorktreeProject(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	worktreePath := "/Users/dave/github/buildermark/.claude/worktrees/svelte-best-practices"
+	parentPath := "/Users/dave/github/buildermark"
+
+	writeEntries(t, histPath, []historyEntry{
+		{Display: "hello from worktree", Timestamp: 1000, SessionID: "sess-wt-1", Project: worktreePath, Type: "user"},
+		{Display: "hello from parent", Timestamp: 2000, SessionID: "sess-parent-1", Project: parentPath, Type: "user"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+	a.scanSince(ctx, time.Time{})
+
+	// Both sessions should be linked to the same parent project (1 project, not 2).
+	if n := countRows(t, database, "projects"); n != 1 {
+		t.Errorf("projects = %d, want 1", n)
+	}
+
+	// Verify the project path is the parent, not the worktree.
+	var projectPath string
+	err := database.QueryRow("SELECT path FROM projects LIMIT 1").Scan(&projectPath)
+	if err != nil {
+		t.Fatalf("query project path: %v", err)
+	}
+	if projectPath != parentPath {
+		t.Errorf("project path = %q, want %q", projectPath, parentPath)
+	}
+
+	if n := countRows(t, database, "conversations"); n != 2 {
+		t.Errorf("conversations = %d, want 2", n)
+	}
+}
+
 func TestIsAssistantAuthoredHistoryEntrySkillExpansion(t *testing.T) {
 	tests := []struct {
 		name string
@@ -2284,6 +2430,97 @@ func TestIsAssistantAuthoredHistoryEntrySkillExpansion(t *testing.T) {
 				t.Errorf("isAssistantAuthoredHistoryEntry() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestScanSinceUpdatesScanTimestamp(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	now := time.Now()
+	entries := []historyEntry{
+		{
+			Display:   "hello",
+			Timestamp: now.UnixMilli(),
+			SessionID: "sess-ts",
+			Project:   "/proj/ts",
+		},
+	}
+	writeHistoryFile(t, histPath, entries)
+
+	a := newAgent(database, histPath, tmpDir)
+	ctx := context.Background()
+
+	// Pre-create the project so it is tracked.
+	if _, err := db.EnsureProject(ctx, database, "/proj/ts"); err != nil {
+		t.Fatalf("ensure project: %v", err)
+	}
+
+	// Before scan, latest timestamp should be 0.
+	tsBefore, err := db.LatestWatcherScanTimestamp(ctx, database, a.Name())
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestamp before: %v", err)
+	}
+	if tsBefore != 0 {
+		t.Fatalf("expected 0 before scan, got %d", tsBefore)
+	}
+
+	n := a.ScanSince(ctx, now.Add(-time.Hour), nil)
+	if n == 0 {
+		t.Fatal("ScanSince returned 0, expected at least 1")
+	}
+
+	// After scan, latest timestamp should be > 0.
+	tsAfter, err := db.LatestWatcherScanTimestamp(ctx, database, a.Name())
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestamp after: %v", err)
+	}
+	if tsAfter == 0 {
+		t.Fatal("expected non-zero timestamp after ScanSince, got 0")
+	}
+}
+
+func TestScanSinceSkipsUntrackedProjects(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	histPath := filepath.Join(tmpDir, "history.jsonl")
+
+	ctx := context.Background()
+
+	// Pre-create only projectA in the DB so it is "tracked".
+	projectA := "/proj/tracked"
+	projectB := "/proj/untracked"
+	if _, err := db.EnsureProject(ctx, database, projectA); err != nil {
+		t.Fatalf("ensure tracked project: %v", err)
+	}
+
+	now := time.Now().UnixMilli()
+	writeHistoryFile(t, histPath, []historyEntry{
+		{Display: "msg-a", Timestamp: now, SessionID: "sess-a", Project: projectA, Type: "user"},
+		{Display: "msg-b", Timestamp: now + 1, SessionID: "sess-b", Project: projectB, Type: "user"},
+	})
+
+	a := newAgent(database, histPath, tmpDir)
+	n := a.ScanSince(ctx, time.UnixMilli(now-1000), nil)
+
+	// Only the tracked project's entry should have been imported.
+	if n != 1 {
+		t.Fatalf("ScanSince = %d, want 1 (only tracked project)", n)
+	}
+
+	// Verify only one project exists (the pre-created tracked one).
+	if cnt := countRows(t, database, "projects"); cnt != 1 {
+		t.Fatalf("projects = %d, want 1", cnt)
+	}
+
+	// Verify only sess-a conversation was created.
+	var convCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = ?", "sess-b").Scan(&convCount); err != nil {
+		t.Fatalf("query conversations: %v", err)
+	}
+	if convCount != 0 {
+		t.Fatalf("untracked project conversation should not exist, got %d", convCount)
 	}
 }
 

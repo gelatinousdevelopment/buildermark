@@ -2,34 +2,34 @@ package agent
 
 // Registry manages registered coding agents.
 type Registry struct {
-	agents map[string]Agent
-	order  []string // preserves registration order
+	agents []Agent
 }
 
 // NewRegistry creates an empty agent registry.
 func NewRegistry() *Registry {
-	return &Registry{agents: make(map[string]Agent)}
+	return &Registry{}
 }
 
 // Register adds an agent to the registry.
 func (r *Registry) Register(a Agent) {
-	name := a.Name()
-	if _, exists := r.agents[name]; !exists {
-		r.order = append(r.order, name)
-	}
-	r.agents[name] = a
+	r.agents = append(r.agents, a)
 }
 
-// Get returns the agent with the given name, or nil.
+// Get returns the first agent with the given name, or nil.
 func (r *Registry) Get(name string) Agent {
-	return r.agents[name]
+	for _, a := range r.agents {
+		if a.Name() == name {
+			return a
+		}
+	}
+	return nil
 }
 
 // Watchers returns all registered agents that implement Watcher.
 func (r *Registry) Watchers() []Watcher {
 	var ws []Watcher
-	for _, name := range r.order {
-		if w, ok := r.agents[name].(Watcher); ok {
+	for _, a := range r.agents {
+		if w, ok := a.(Watcher); ok {
 			ws = append(ws, w)
 		}
 	}
@@ -40,30 +40,37 @@ func (r *Registry) Watchers() []Watcher {
 // candidate local project paths.
 func (r *Registry) ProjectPathDiscoverers() []ProjectPathDiscoverer {
 	var ds []ProjectPathDiscoverer
-	for _, name := range r.order {
-		if d, ok := r.agents[name].(ProjectPathDiscoverer); ok {
+	for _, a := range r.agents {
+		if d, ok := a.(ProjectPathDiscoverer); ok {
 			ds = append(ds, d)
 		}
 	}
 	return ds
 }
 
-// Resolver returns the SessionResolver for the given agent name, or nil.
+// Resolver returns the SessionResolver for the first agent matching the given
+// name, or nil.
 func (r *Registry) Resolver(name string) SessionResolver {
-	a, ok := r.agents[name]
-	if !ok {
-		return nil
+	for _, a := range r.agents {
+		if a.Name() == name {
+			if sr, ok := a.(SessionResolver); ok {
+				return sr
+			}
+		}
 	}
-	sr, ok := a.(SessionResolver)
-	if !ok {
-		return nil
-	}
-	return sr
+	return nil
 }
 
-// Names returns the names of all registered agents in registration order.
+// Names returns the deduplicated names of all registered agents in registration order.
 func (r *Registry) Names() []string {
-	out := make([]string, len(r.order))
-	copy(out, r.order)
+	seen := make(map[string]struct{})
+	var out []string
+	for _, a := range r.agents {
+		name := a.Name()
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			out = append(out, name)
+		}
+	}
 	return out
 }

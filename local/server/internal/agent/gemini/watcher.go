@@ -79,7 +79,13 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 }
 
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
-	n := a.doScan(ctx, since, nil, progress, false)
+	filter := a.trackedProjectFilter(ctx)
+	n := a.doScan(ctx, since, filter, progress, false)
+	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: "scan_marker",
+		SourceKey:  "startup",
+	})
 	log.Printf("gemini watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
@@ -87,6 +93,11 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 // ScanPathsSince scans only session files that resolve to matching project paths.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
 	n := a.doScan(ctx, since, newPathFilter(paths), progress, false)
+	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: "scan_marker",
+		SourceKey:  "startup",
+	})
 	log.Printf("gemini watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }

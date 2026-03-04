@@ -200,11 +200,11 @@ func TestHistoryScanStartedResponse(t *testing.T) {
 		t.Error("started should be true")
 	}
 
-	// Wait for the background scan to finish and verify watcher was called via ScanPathsSince.
+	// Wait for the background scan to finish and verify watcher was called via ScanSince (unfiltered).
 	waitForImportUnlock(s)
-	_, scanPathsCount, _, _ := w.snapshot()
-	if scanPathsCount != 1 {
-		t.Errorf("watcher scanPathsCount = %d, want 1", scanPathsCount)
+	scanCount, _, _, _ := w.snapshot()
+	if scanCount != 1 {
+		t.Errorf("watcher scanCount = %d, want 1", scanCount)
 	}
 }
 
@@ -229,13 +229,13 @@ func TestHistoryScanMultipleWatchers(t *testing.T) {
 	// Wait for the background scan to complete.
 	waitForImportUnlock(s)
 
-	_, pathsCount1, _, _ := w1.snapshot()
-	_, pathsCount2, _, _ := w2.snapshot()
-	if pathsCount1 != 1 {
-		t.Errorf("w1 scanPathsCount = %d, want 1", pathsCount1)
+	scanCount1, _, _, _ := w1.snapshot()
+	scanCount2, _, _, _ := w2.snapshot()
+	if scanCount1 != 1 {
+		t.Errorf("w1 scanCount = %d, want 1", scanCount1)
 	}
-	if pathsCount2 != 1 {
-		t.Errorf("w2 scanPathsCount = %d, want 1", pathsCount2)
+	if scanCount2 != 1 {
+		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
 	}
 }
 
@@ -259,13 +259,13 @@ func TestHistoryScanSpecificAgent(t *testing.T) {
 	// Wait for the background scan to complete.
 	waitForImportUnlock(s)
 
-	_, pathsCount1, _, _ := w1.snapshot()
-	_, pathsCount2, _, _ := w2.snapshot()
-	if pathsCount1 != 0 {
-		t.Errorf("w1 scanPathsCount = %d, want 0 (should not be scanned)", pathsCount1)
+	scanCount1, _, _, _ := w1.snapshot()
+	scanCount2, _, _, _ := w2.snapshot()
+	if scanCount1 != 0 {
+		t.Errorf("w1 scanCount = %d, want 0 (should not be scanned)", scanCount1)
 	}
-	if pathsCount2 != 1 {
-		t.Errorf("w2 scanPathsCount = %d, want 1", pathsCount2)
+	if scanCount2 != 1 {
+		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
 	}
 }
 
@@ -287,12 +287,11 @@ func TestHistoryScanNoProjects(t *testing.T) {
 
 	waitForImportUnlock(s)
 
-	scanCount, scanPathsCount, _, _ := w.snapshot()
-	if scanCount != 0 {
-		t.Errorf("watcher scanCount = %d, want 0 (no projects to scan)", scanCount)
-	}
-	if scanPathsCount != 0 {
-		t.Errorf("watcher scanPathsCount = %d, want 0 (no projects to scan)", scanPathsCount)
+	// With no path filter, the scan always runs even without existing projects
+	// (it may discover new projects from conversation history).
+	scanCount, _, _, _ := w.snapshot()
+	if scanCount != 1 {
+		t.Errorf("watcher scanCount = %d, want 1", scanCount)
 	}
 }
 
@@ -378,6 +377,36 @@ func TestHistoryScanRetainsExistingConversationsAndMessages(t *testing.T) {
 	}
 	if msgAfter != msgBefore {
 		t.Fatalf("message count after = %d, want %d", msgAfter, msgBefore)
+	}
+}
+
+func TestHistoryScanMultipleWatchersSameName(t *testing.T) {
+	w1 := &mockWatcher{name: "claude"}
+	w2 := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w1, w2)
+	addTestProject(t, s, "/tmp/test-project")
+	handler := s.Routes()
+
+	// Filter by agent "claude" — both watchers should be scanned.
+	body, _ := json.Marshal(map[string]any{"agent": "claude"})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+
+	waitForImportUnlock(s)
+
+	scanCount1, _, _, _ := w1.snapshot()
+	scanCount2, _, _, _ := w2.snapshot()
+	if scanCount1 != 1 {
+		t.Errorf("w1 scanCount = %d, want 1", scanCount1)
+	}
+	if scanCount2 != 1 {
+		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
 	}
 }
 

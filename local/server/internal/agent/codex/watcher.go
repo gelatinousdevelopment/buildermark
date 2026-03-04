@@ -110,7 +110,13 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 
 // ScanSince walks the sessions directory and imports entries from files modified after since.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
-	n := a.doScan(ctx, since, nil, false, progress)
+	filter := a.trackedProjectFilter(ctx)
+	n := a.doScan(ctx, since, filter, false, progress)
+	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: "scan_marker",
+		SourceKey:  "reimport",
+	})
 	log.Printf("codex watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
@@ -118,6 +124,11 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 // ScanPathsSince scans only session files associated with matching working directories.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
 	n := a.doScan(ctx, since, newPathFilter(paths), false, progress)
+	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: "scan_marker",
+		SourceKey:  "reimport",
+	})
 	log.Printf("codex watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }

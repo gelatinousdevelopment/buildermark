@@ -111,9 +111,11 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 // ScanSince reads the entire file and imports entries with timestamps after
 // the given cutoff. This is used by the API to trigger a historical scan.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
-	n := a.doScan(ctx, since, false, nil)
-	n += a.scanProjectFilesSince(ctx, since, false, nil, progress)
+	filter := a.trackedProjectFilter(ctx)
+	n := a.doScan(ctx, since, false, filter)
+	n += a.scanProjectFilesSince(ctx, since, false, filter, progress)
 	a.backfillParentConversations(ctx)
+	a.persistHistoryOffset(ctx, a.offset)
 	log.Printf("claude watcher: manual scan processed %d entries (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
@@ -124,6 +126,7 @@ func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []str
 	n := a.doScan(ctx, since, false, filter)
 	n += a.scanProjectFilesSince(ctx, since, false, filter, progress)
 	a.backfillParentConversations(ctx)
+	a.persistHistoryOffset(ctx, a.offset)
 	log.Printf("claude watcher: manual path scan processed %d entries (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
 }
@@ -432,6 +435,9 @@ func projectPathFromConversationFile(path string) string {
 	if dirName == "" || dirName == "." {
 		return ""
 	}
+	if idx := strings.Index(dirName, worktreeDirMarker); idx >= 0 {
+		dirName = dirName[:idx]
+	}
 	return strings.ReplaceAll(dirName, "-", "/")
 }
 
@@ -690,7 +696,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			continue
 		}
 
-		normalizedProject := gitRootCache.Resolve(g.project)
+		normalizedProject := gitRootCache.Resolve(normalizeWorktreePath(g.project))
 		projectID := projectIDCache[normalizedProject]
 		if projectID == "" {
 			var err error
