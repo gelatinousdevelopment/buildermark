@@ -343,6 +343,21 @@
 			{/if}
 
 			<div class="filter-picker">
+				<!-- <label for="rating-{projectId}">Rating:</label> -->
+				<select id="rating-{projectId}" value={selectedRating} onchange={handleRatingChange}>
+					<option value={0}>All Ratings</option>
+					<hr />
+					<option value={-1}>&lt; 5 Stars</option>
+					<hr />
+					<option value={5}>5</option>
+					<option value={4}>4</option>
+					<option value={3}>3</option>
+					<option value={2}>2</option>
+					<option value={1}>1</option>
+				</select>
+			</div>
+
+			<div class="filter-picker">
 				<!-- <label for="agent-{projectId}">Agent:</label> -->
 				<select
 					id="agent-{projectId}"
@@ -357,21 +372,6 @@
 							<option value={a}>{a}</option>
 						{/each}
 					{/if}
-				</select>
-			</div>
-
-			<div class="filter-picker">
-				<!-- <label for="rating-{projectId}">Rating:</label> -->
-				<select id="rating-{projectId}" value={selectedRating} onchange={handleRatingChange}>
-					<option value={0}>All Ratings</option>
-					<hr />
-					<option value={-1}>&lt; 5 Stars</option>
-					<hr />
-					<option value={5}>5</option>
-					<option value={4}>4</option>
-					<option value={3}>3</option>
-					<option value={2}>2</option>
-					<option value={1}>1</option>
 				</select>
 			</div>
 
@@ -568,6 +568,14 @@
 		.top-row {
 			flex-direction: column-reverse;
 		}
+	}
+
+	.filters {
+		align-items: center;
+		display: flex;
+		flex-direction: row;
+		flex-wrap: wrap;
+		gap: 1.5rem;
 	}
 
 	.message {

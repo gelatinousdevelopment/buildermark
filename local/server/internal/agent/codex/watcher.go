@@ -59,19 +59,19 @@ func (a *Agent) Run(ctx context.Context) {
 	log.Printf("codex watcher: starting, monitoring %s", a.sessionsDir)
 
 	scanWindow := agent.DefaultScanWindow
-	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.db, a.Name()); err == nil {
+	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.DB, a.Name()); err == nil {
 		scanWindow = agent.StartupScanWindow(latestMs)
 	}
 	log.Printf("codex watcher: startup scan window %s", scanWindow)
 
-	trackedFilter := a.trackedProjectFilter(ctx)
+	trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	start := time.Now()
 	a.scanSinceFiltered(ctx, time.Now().Add(-scanWindow), trackedFilter)
 	log.Printf("codex watcher: startup scan duration %s", time.Since(start))
-	a.backfillGitIDs(ctx)
-	a.backfillLabels(ctx)
+	a.BackfillGitIDs(ctx)
+	a.BackfillLabels(ctx)
 
-	ticker := time.NewTicker(a.interval)
+	ticker := time.NewTicker(a.Interval)
 	defer ticker.Stop()
 
 	seen := make(map[string]processedFile)
@@ -82,9 +82,9 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("codex watcher: stopped")
 			return
 		case <-ticker.C:
-			trackedFilter = a.trackedProjectFilter(ctx)
+			trackedFilter = agent.TrackedProjectFilter(ctx, a.DB, nil)
 			a.pollFiltered(ctx, seen, trackedFilter)
-			a.backfillGitIDs(ctx)
+			a.BackfillGitIDs(ctx)
 		}
 	}
 }
@@ -110,9 +110,9 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 
 // ScanSince walks the sessions directory and imports entries from files modified after since.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
-	filter := a.trackedProjectFilter(ctx)
+	filter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	n := a.doScan(ctx, since, filter, false, progress)
-	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:      a.Name(),
 		SourceKind: "scan_marker",
 		SourceKey:  "reimport",
@@ -123,8 +123,8 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 
 // ScanPathsSince scans only session files associated with matching working directories.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
-	n := a.doScan(ctx, since, newPathFilter(paths), false, progress)
-	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+	n := a.doScan(ctx, since, agent.NewPathFilter(paths), false, progress)
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:      a.Name(),
 		SourceKind: "scan_marker",
 		SourceKey:  "reimport",
@@ -138,7 +138,7 @@ func (a *Agent) scanSince(ctx context.Context, since time.Time) {
 	a.scanSinceFiltered(ctx, since, nil)
 }
 
-func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter pathFilter) {
+func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter agent.PathFilter) {
 	n := a.doScan(ctx, since, filter, true, nil)
 	if n > 0 {
 		log.Printf("codex watcher: initial scan processed %d files", n)
@@ -146,7 +146,7 @@ func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter p
 }
 
 // doScan walks the sessions directory and processes files modified after since.
-func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, useCheckpoint bool, progress agent.ScanProgressFunc) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, filter agent.PathFilter, useCheckpoint bool, progress agent.ScanProgressFunc) int {
 	listSince := since
 	if !useCheckpoint {
 		// Manual scans prioritize correctness: inspect all session files and
@@ -162,13 +162,13 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, 
 		}
 		if filter != nil {
 			workingDir := readWorkingDir(fi.path)
-			if !filter.match(workingDir) {
+			if !filter.Match(workingDir) {
 				continue
 			}
 		}
 
 		if useCheckpoint {
-			st, err := db.GetWatcherScanState(ctx, a.db, a.Name(), codexWatcherSourceKindSessionFile, fi.path)
+			st, err := db.GetWatcherScanState(ctx, a.DB, a.Name(), codexWatcherSourceKindSessionFile, fi.path)
 			if err == nil && st != nil && st.FileSize == fi.size && st.FileMtimeMs == fi.modTime.UnixMilli() {
 				continue
 			}
@@ -178,7 +178,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, 
 			continue
 		}
 		if useCheckpoint {
-			_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+			_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 				Agent:       a.Name(),
 				SourceKind:  codexWatcherSourceKindSessionFile,
 				SourceKey:   fi.path,
@@ -197,7 +197,7 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
 	a.pollFiltered(ctx, seen, nil)
 }
 
-func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile, filter pathFilter) {
+func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile, filter agent.PathFilter) {
 	filepath.Walk(a.sessionsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
@@ -213,7 +213,7 @@ func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile,
 
 		if filter != nil {
 			workingDir := readWorkingDir(path)
-			if !filter.match(workingDir) {
+			if !filter.Match(workingDir) {
 				seen[path] = processedFile{modTime: modTime}
 				return nil
 			}
@@ -221,7 +221,7 @@ func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile,
 
 		a.processSessionFile(ctx, path, nil)
 		seen[path] = processedFile{modTime: modTime}
-		_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+		_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 			Agent:       a.Name(),
 			SourceKind:  codexWatcherSourceKindSessionFile,
 			SourceKey:   path,
@@ -294,77 +294,6 @@ func readWorkingDir(path string) string {
 	return ""
 }
 
-type pathFilter map[string]struct{}
-
-func newPathFilter(paths []string) pathFilter {
-	out := make(pathFilter)
-	for _, p := range paths {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		p = filepath.Clean(p)
-		if p == "." {
-			continue
-		}
-		out[p] = struct{}{}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func (f pathFilter) match(projectPath string) bool {
-	if f == nil {
-		return true
-	}
-	if len(f) == 0 {
-		return false
-	}
-	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
-	if projectPath == "" {
-		return false
-	}
-	for p := range f {
-		if projectPath == p {
-			return true
-		}
-		if strings.HasPrefix(projectPath, p+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
-}
-
-func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
-	projects, err := db.ListProjects(ctx, a.db, false)
-	if err != nil {
-		return make(pathFilter)
-	}
-	out := make(pathFilter)
-	for _, p := range projects {
-		path := strings.TrimSpace(p.Path)
-		if path != "" {
-			path = filepath.Clean(path)
-		}
-		if path != "" && path != "." {
-			out[path] = struct{}{}
-		}
-		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
-			oldPath = strings.TrimSpace(oldPath)
-			if oldPath == "" {
-				continue
-			}
-			oldPath = filepath.Clean(oldPath)
-			if oldPath == "." {
-				continue
-			}
-			out[oldPath] = struct{}{}
-		}
-	}
-	return out
-}
 
 // processSessionFile parses a single rollout JSONL file and imports its data.
 func (a *Agent) processSessionFile(ctx context.Context, path string, projectCache map[string]string) {
@@ -433,7 +362,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			if meta.Cwd != "" && workingDir == "" {
 				workingDir = meta.Cwd
 			}
-			if m := firstNonEmpty(strings.TrimSpace(meta.Model), strings.TrimSpace(meta.ModelSlug)); m != "" {
+			if m := agent.FirstNonEmpty(strings.TrimSpace(meta.Model), strings.TrimSpace(meta.ModelSlug)); m != "" {
 				currentModel = m
 			}
 			messages = append(messages, db.Message{
@@ -452,7 +381,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			if turnCtx.Cwd != "" && workingDir == "" {
 				workingDir = turnCtx.Cwd
 			}
-			if m := firstNonEmpty(strings.TrimSpace(turnCtx.Model), strings.TrimSpace(turnCtx.ModelSlug)); m != "" {
+			if m := agent.FirstNonEmpty(strings.TrimSpace(turnCtx.Model), strings.TrimSpace(turnCtx.ModelSlug)); m != "" {
 				currentModel = m
 			}
 			messages = append(messages, db.Message{
@@ -468,7 +397,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			if err := json.Unmarshal(event.Payload, &item); err != nil {
 				continue
 			}
-			if m := firstNonEmpty(strings.TrimSpace(item.Model), strings.TrimSpace(item.ModelSlug)); m != "" {
+			if m := agent.FirstNonEmpty(strings.TrimSpace(item.Model), strings.TrimSpace(item.ModelSlug)); m != "" {
 				currentModel = m
 			}
 			role := "agent"
@@ -655,7 +584,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			messages[i].Role = "agent"
 		}
 	}
-	messages = appendDiffDBMessages(messages)
+	messages = agent.AppendDiffDBMessages(messages)
 	normalizeMessageTimestamps(messages)
 	if cutoffMs > 0 {
 		filteredMessages := make([]db.Message, 0, len(messages))
@@ -703,7 +632,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 	}
 	if projectID == "" {
 		var err error
-		projectID, err = db.EnsureProject(ctx, a.db, workingDir)
+		projectID, err = db.EnsureProject(ctx, a.DB, workingDir)
 		if err != nil {
 			log.Printf("codex watcher: ensure project %q: %v", workingDir, err)
 			return false
@@ -713,7 +642,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 		}
 	}
 
-	if err := db.EnsureConversation(ctx, a.db, threadID, projectID, a.Name()); err != nil {
+	if err := db.EnsureConversation(ctx, a.DB, threadID, projectID, a.Name()); err != nil {
 		log.Printf("codex watcher: ensure conversation %s: %v", threadID, err)
 		return false
 	}
@@ -727,10 +656,10 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 		if titlePrompt == "" {
 			titlePrompt = firstLegacyUser
 		}
-		title = titleFromPrompt(titlePrompt)
+		title = agent.TitleFromPrompt(titlePrompt)
 	}
 	if title != "" {
-		if err := db.UpdateConversationTitle(ctx, a.db, threadID, title); err != nil {
+		if err := db.UpdateConversationTitle(ctx, a.DB, threadID, title); err != nil {
 			log.Printf("codex watcher: update title for %s: %v", threadID, err)
 		}
 	}
@@ -742,14 +671,14 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 	}
 
 	if len(messages) > 0 {
-		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
+		if err := db.InsertMessages(ctx, a.DB, messages); err != nil {
 			log.Printf("codex watcher: insert messages for session %s: %v", threadID, err)
 		}
 	}
 
 	// Reconcile orphaned ratings.
 	for _, z := range ratingEntries {
-		if err := db.ReconcileOrphanedRating(ctx, a.db, z.rating, z.note, z.timestamp, threadID); err != nil {
+		if err := db.ReconcileOrphanedRating(ctx, a.DB, z.rating, z.note, z.timestamp, threadID); err != nil {
 			log.Printf("codex watcher: reconcile rating for session %s: %v", threadID, err)
 		}
 	}
@@ -817,54 +746,6 @@ func threadIDFromFilename(name string) string {
 	return name
 }
 
-// backfillLabels updates project labels from the last path component to the
-// git repository root directory name for projects whose label was auto-generated.
-func (a *Agent) backfillLabels(ctx context.Context) {
-	projects, err := db.ListAllProjects(ctx, a.db)
-	if err != nil {
-		log.Printf("codex watcher: list projects for label backfill: %v", err)
-		return
-	}
-
-	updated := 0
-	for _, p := range projects {
-		repoName := db.RepoLabel(p.Path)
-		if repoName != p.Label && p.Label == filepath.Base(p.Path) {
-			if err := db.SetProjectLabel(ctx, a.db, p.ID, repoName); err != nil {
-				log.Printf("codex watcher: update label for %s: %v", p.ID, err)
-				continue
-			}
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("codex watcher: backfilled %d project labels", updated)
-	}
-}
-
-// backfillGitIDs finds all projects without a git_id and attempts to
-// resolve it from the git root commit.
-func (a *Agent) backfillGitIDs(ctx context.Context) {
-	projects, err := db.ListProjectsWithoutGitID(ctx, a.db)
-	if err != nil {
-		log.Printf("codex watcher: list projects without git_id: %v", err)
-		return
-	}
-
-	updated := 0
-	for _, p := range projects {
-		if gitID := resolveGitID(p.Path); gitID != "" {
-			if err := db.UpdateProjectGitID(ctx, a.db, p.ID, gitID); err != nil {
-				log.Printf("codex watcher: update git_id for %s: %v", p.ID, err)
-				continue
-			}
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("codex watcher: backfilled %d project git_ids", updated)
-	}
-}
 
 // parseRatingDisplay parses "$bb 4 optional note" into (4, "optional note").
 // Returns (-1, "") if the format is invalid.
@@ -903,21 +784,12 @@ func parseRatingDisplay(display string) (int, string) {
 	return rating, note
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v)
-		}
-	}
-	return ""
-}
-
 func normalizeSummaryTitle(summary string) string {
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
 		return ""
 	}
-	title := titleFromPrompt(summary)
+	title := agent.TitleFromPrompt(summary)
 	if title == "" {
 		return ""
 	}
@@ -937,7 +809,7 @@ func extractCodexModelFromRawLine(line string) string {
 		return ""
 	}
 
-	if model := firstNonEmpty(
+	if model := agent.FirstNonEmpty(
 		stringValue(obj["model"]),
 		stringValue(obj["model_slug"]),
 		stringValue(obj["modelName"]),
@@ -950,7 +822,7 @@ func extractCodexModelFromRawLine(line string) string {
 	if payload == nil {
 		return ""
 	}
-	return firstNonEmpty(
+	return agent.FirstNonEmpty(
 		stringValue(payload["model"]),
 		stringValue(payload["model_slug"]),
 		stringValue(payload["modelName"]),

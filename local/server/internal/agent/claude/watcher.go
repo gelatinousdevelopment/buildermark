@@ -28,7 +28,7 @@ func (a *Agent) Run(ctx context.Context) {
 	log.Printf("claude watcher: starting, monitoring %s", a.path)
 
 	scanWindow := agent.DefaultScanWindow
-	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.db, a.Name()); err == nil {
+	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.DB, a.Name()); err == nil {
 		scanWindow = agent.StartupScanWindow(latestMs)
 	}
 	log.Printf("claude watcher: startup scan window %s", scanWindow)
@@ -43,11 +43,11 @@ func (a *Agent) Run(ctx context.Context) {
 	}
 	a.backfillTitles(ctx)
 	a.backfillParentConversations(ctx)
-	a.backfillGitIDs(ctx)
-	a.backfillLabels(ctx)
+	a.BackfillGitIDs(ctx)
+	a.BackfillLabels(ctx)
 	a.backfillGitWorktreePaths(ctx)
 
-	ticker := time.NewTicker(a.interval)
+	ticker := time.NewTicker(a.Interval)
 	defer ticker.Stop()
 
 	for {
@@ -59,7 +59,7 @@ func (a *Agent) Run(ctx context.Context) {
 			trackedFilter = a.trackedProjectFilter(ctx)
 			a.pollFiltered(ctx, trackedFilter)
 			a.pollProjectFiles(ctx, trackedFilter)
-			a.backfillGitIDs(ctx)
+			a.BackfillGitIDs(ctx)
 		}
 	}
 }
@@ -91,7 +91,7 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 		_ = f.Close()
 	}
 
-	paths := listProjectConversationFiles(a.home)
+	paths := listProjectConversationFiles(a.Home)
 	for _, p := range paths {
 		info, err := os.Stat(p)
 		if err != nil || info.ModTime().Before(since) {
@@ -124,7 +124,7 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 
 // ScanPathsSince scans only entries for matching project paths.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
-	filter := newPathFilter(paths)
+	filter := agent.NewPathFilter(paths)
 	n := a.doScan(ctx, since, false, filter)
 	n += a.scanProjectFilesSince(ctx, since, false, filter, progress)
 	a.backfillParentConversations(ctx)
@@ -139,7 +139,7 @@ func (a *Agent) scanSince(ctx context.Context, since time.Time) {
 	a.scanSinceFiltered(ctx, since, nil)
 }
 
-func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter pathFilter) {
+func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter agent.PathFilter) {
 	n := a.doScan(ctx, since, true, filter)
 	if n > 0 {
 		log.Printf("claude watcher: initial scan processed %d entries", n)
@@ -149,7 +149,7 @@ func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter p
 // doScan reads the entire file and processes entries newer than the cutoff.
 // If updateOffset is true, it advances the file offset so subsequent polls
 // start from the end of the file.
-func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, filter agent.PathFilter) int {
 	startOffset := int64(0)
 	if updateOffset {
 		startOffset = a.restoreHistoryOffset(ctx)
@@ -160,7 +160,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, 
 	var filtered []historyEntry
 	for _, e := range entries {
 		if e.Timestamp >= cutoffMs {
-			if filter != nil && !filter.match(e.Project) {
+			if filter != nil && !filter.Match(e.Project) {
 				continue
 			}
 			filtered = append(filtered, e)
@@ -176,48 +176,6 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, 
 	return len(filtered)
 }
 
-type pathFilter map[string]struct{}
-
-func newPathFilter(paths []string) pathFilter {
-	out := make(pathFilter)
-	for _, p := range paths {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		p = filepath.Clean(p)
-		if p == "." {
-			continue
-		}
-		out[p] = struct{}{}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func (f pathFilter) match(projectPath string) bool {
-	if f == nil {
-		return true
-	}
-	if len(f) == 0 {
-		return false
-	}
-	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
-	if projectPath == "" {
-		return false
-	}
-	for p := range f {
-		if projectPath == p {
-			return true
-		}
-		if strings.HasPrefix(projectPath, p+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
-}
 
 // poll reads new data appended since the last read. If the file shrank
 // (rotation), it resets and rescans from the beginning.
@@ -225,7 +183,7 @@ func (a *Agent) poll(ctx context.Context) {
 	a.pollFiltered(ctx, nil)
 }
 
-func (a *Agent) pollFiltered(ctx context.Context, filter pathFilter) {
+func (a *Agent) pollFiltered(ctx context.Context, filter agent.PathFilter) {
 	info, err := os.Stat(a.path)
 	if err != nil {
 		return
@@ -246,7 +204,7 @@ func (a *Agent) pollFiltered(ctx context.Context, filter pathFilter) {
 		if filter != nil {
 			filtered = filtered[:0]
 			for _, e := range entries {
-				if filter.match(e.Project) {
+				if filter.Match(e.Project) {
 					filtered = append(filtered, e)
 				}
 			}
@@ -259,57 +217,30 @@ func (a *Agent) pollFiltered(ctx context.Context, filter pathFilter) {
 	a.persistHistoryOffset(ctx, newOffset)
 }
 
-func (a *Agent) pollProjectFiles(ctx context.Context, filter pathFilter) {
+func (a *Agent) pollProjectFiles(ctx context.Context, filter agent.PathFilter) {
 	n := a.scanProjectFilesSince(ctx, time.Time{}, true, filter, nil)
 	if n > 0 {
 		log.Printf("claude watcher: project poll processed %d entries", n)
 	}
 }
 
-func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
-	projects, err := db.ListProjects(ctx, a.db, false)
-	if err != nil {
-		return make(pathFilter)
-	}
-	out := make(pathFilter)
-	for _, p := range projects {
-		path := strings.TrimSpace(p.Path)
-		if path != "" {
-			path = filepath.Clean(path)
-		}
-		if path != "" && path != "." {
-			out[path] = struct{}{}
-
-			// Include worktree paths (populated at startup by backfillGitWorktreePaths)
-			// so conversations in external worktrees pass the filter during polling.
-			for _, wt := range strings.Split(p.GitWorktreePaths, "\n") {
-				wt = strings.TrimSpace(wt)
-				if wt == "" {
-					continue
-				}
-				wt = filepath.Clean(wt)
-				if wt != "" && wt != "." {
-					out[wt] = struct{}{}
-				}
+func (a *Agent) trackedProjectFilter(ctx context.Context) agent.PathFilter {
+	return agent.TrackedProjectFilter(ctx, a.DB, func(p db.Project) []string {
+		// Include worktree paths (populated at startup by backfillGitWorktreePaths)
+		// so conversations in external worktrees pass the filter during polling.
+		var extra []string
+		for _, wt := range strings.Split(p.GitWorktreePaths, "\n") {
+			wt = strings.TrimSpace(wt)
+			if wt != "" {
+				extra = append(extra, wt)
 			}
 		}
-		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
-			oldPath = strings.TrimSpace(oldPath)
-			if oldPath == "" {
-				continue
-			}
-			oldPath = filepath.Clean(oldPath)
-			if oldPath == "." {
-				continue
-			}
-			out[oldPath] = struct{}{}
-		}
-	}
-	return out
+		return extra
+	})
 }
 
-func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter pathFilter, progress agent.ScanProgressFunc) int {
-	paths := listProjectConversationFiles(a.home)
+func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter agent.PathFilter, progress agent.ScanProgressFunc) int {
+	paths := listProjectConversationFiles(a.Home)
 	if len(paths) == 0 {
 		return 0
 	}
@@ -332,7 +263,7 @@ func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, upda
 				if e.Timestamp < cutoffMs {
 					continue
 				}
-				if filter != nil && !filter.match(e.Project) {
+				if filter != nil && !filter.Match(e.Project) {
 					continue
 				}
 				filtered = append(filtered, e)
@@ -457,7 +388,7 @@ func projectPathFromConversationFile(path string) string {
 }
 
 func (a *Agent) restoreProjectFileOffset(ctx context.Context, path string) int64 {
-	st, err := db.GetWatcherScanState(ctx, a.db, a.Name(), claudeWatcherSourceKindProjectFile, path)
+	st, err := db.GetWatcherScanState(ctx, a.DB, a.Name(), claudeWatcherSourceKindProjectFile, path)
 	if err != nil || st == nil {
 		return 0
 	}
@@ -483,7 +414,7 @@ func (a *Agent) persistProjectFileOffset(ctx context.Context, path string, offse
 	if err != nil {
 		return
 	}
-	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:       a.Name(),
 		SourceKind:  claudeWatcherSourceKindProjectFile,
 		SourceKey:   path,
@@ -541,7 +472,7 @@ func (a *Agent) readFrom(offset int64) ([]historyEntry, int64) {
 }
 
 func (a *Agent) restoreHistoryOffset(ctx context.Context) int64 {
-	st, err := db.GetWatcherScanState(ctx, a.db, a.Name(), claudeWatcherSourceKindHistoryFile, a.path)
+	st, err := db.GetWatcherScanState(ctx, a.DB, a.Name(), claudeWatcherSourceKindHistoryFile, a.path)
 	if err != nil || st == nil {
 		return 0
 	}
@@ -568,7 +499,7 @@ func (a *Agent) persistHistoryOffset(ctx context.Context, offset int64) {
 		return
 	}
 
-	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:       a.Name(),
 		SourceKind:  claudeWatcherSourceKindHistoryFile,
 		SourceKey:   a.path,
@@ -581,7 +512,7 @@ func (a *Agent) persistHistoryOffset(ctx context.Context, offset int64) {
 // backfillTitles finds all conversations with empty titles and attempts to
 // populate them from Claude's sessions-index.json files.
 func (a *Agent) backfillTitles(ctx context.Context) {
-	untitled, err := db.ListUntitledConversations(ctx, a.db, a.Name())
+	untitled, err := db.ListUntitledConversations(ctx, a.DB, a.Name())
 	if err != nil {
 		log.Printf("claude watcher: list untitled conversations: %v", err)
 		return
@@ -589,8 +520,8 @@ func (a *Agent) backfillTitles(ctx context.Context) {
 
 	updated := 0
 	for _, u := range untitled {
-		if title := readSessionTitle(a.home, u.ProjectPath, u.ID); title != "" {
-			if err := db.UpdateConversationTitle(ctx, a.db, u.ID, title); err != nil {
+		if title := readSessionTitle(a.Home, u.ProjectPath, u.ID); title != "" {
+			if err := db.UpdateConversationTitle(ctx, a.DB, u.ID, title); err != nil {
 				log.Printf("claude watcher: backfill title for %s: %v", u.ID, err)
 				continue
 			}
@@ -605,7 +536,7 @@ func (a *Agent) backfillTitles(ctx context.Context) {
 // backfillParentConversations finds conversations with no parent set and
 // attempts to detect a parent session ID from their conversation log files.
 func (a *Agent) backfillParentConversations(ctx context.Context) {
-	parentless, err := db.ListParentlessConversations(ctx, a.db, a.Name())
+	parentless, err := db.ListParentlessConversations(ctx, a.DB, a.Name())
 	if err != nil {
 		log.Printf("claude watcher: list parentless conversations: %v", err)
 		return
@@ -613,10 +544,10 @@ func (a *Agent) backfillParentConversations(ctx context.Context) {
 
 	updated := 0
 	for _, u := range parentless {
-		entries := readConversationLogEntries(a.home, u.ProjectPath, u.ID)
+		entries := readConversationLogEntries(a.Home, u.ProjectPath, u.ID)
 		parentSessionID := extractParentSessionID(entries)
 		if parentSessionID != "" && parentSessionID != u.ID {
-			if err := db.UpdateConversationParent(ctx, a.db, u.ID, parentSessionID); err != nil {
+			if err := db.UpdateConversationParent(ctx, a.DB, u.ID, parentSessionID); err != nil {
 				log.Printf("claude watcher: backfill parent for %s: %v", u.ID, err)
 				continue
 			}
@@ -628,44 +559,20 @@ func (a *Agent) backfillParentConversations(ctx context.Context) {
 	}
 }
 
-// backfillLabels updates project labels from the last path component to the
-// git repository root directory name for projects whose label was auto-generated.
-func (a *Agent) backfillLabels(ctx context.Context) {
-	projects, err := db.ListAllProjects(ctx, a.db)
-	if err != nil {
-		log.Printf("claude watcher: list projects for label backfill: %v", err)
-		return
-	}
-
-	updated := 0
-	for _, p := range projects {
-		repoName := db.RepoLabel(p.Path)
-		if repoName != p.Label && p.Label == filepath.Base(p.Path) {
-			if err := db.SetProjectLabel(ctx, a.db, p.ID, repoName); err != nil {
-				log.Printf("claude watcher: update label for %s: %v", p.ID, err)
-				continue
-			}
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("claude watcher: backfilled %d project labels", updated)
-	}
-}
 
 // backfillGitWorktreePaths refreshes git_worktree_paths for all tracked projects.
 // It discovers worktrees from two sources:
 // 1. `git worktree list` (active worktrees)
 // 2. Claude's ~/.claude/projects/ directory names (historical worktrees that may have been cleaned up)
 func (a *Agent) backfillGitWorktreePaths(ctx context.Context) {
-	projects, err := db.ListProjects(ctx, a.db, false)
+	projects, err := db.ListProjects(ctx, a.DB, false)
 	if err != nil {
 		log.Printf("claude watcher: list projects for worktree backfill: %v", err)
 		return
 	}
 
 	// Build a set of worktree paths from Claude's project directories.
-	claudeWorktrees := discoverClaudeWorktreePaths(a.home)
+	claudeWorktrees := discoverClaudeWorktreePaths(a.Home)
 
 	updated := 0
 	for _, p := range projects {
@@ -694,7 +601,7 @@ func (a *Agent) backfillGitWorktreePaths(ctx context.Context) {
 		sort.Strings(sorted)
 		newVal := strings.Join(sorted, "\n")
 		if newVal != p.GitWorktreePaths {
-			if err := db.UpdateProjectGitWorktreePaths(ctx, a.db, p.ID, newVal); err != nil {
+			if err := db.UpdateProjectGitWorktreePaths(ctx, a.DB, p.ID, newVal); err != nil {
 				log.Printf("claude watcher: update git_worktree_paths for %s: %v", p.ID, err)
 				continue
 			}
@@ -743,29 +650,6 @@ func discoverClaudeWorktreePaths(home string) map[string][]string {
 	return result
 }
 
-// backfillGitIDs finds all projects without a git_id and attempts to
-// resolve it from the git root commit.
-func (a *Agent) backfillGitIDs(ctx context.Context) {
-	projects, err := db.ListProjectsWithoutGitID(ctx, a.db)
-	if err != nil {
-		log.Printf("claude watcher: list projects without git_id: %v", err)
-		return
-	}
-
-	updated := 0
-	for _, p := range projects {
-		if gitID := resolveGitID(p.Path); gitID != "" {
-			if err := db.UpdateProjectGitID(ctx, a.db, p.ID, gitID); err != nil {
-				log.Printf("claude watcher: update git_id for %s: %v", p.ID, err)
-				continue
-			}
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("claude watcher: backfilled %d project git_ids", updated)
-	}
-}
 
 // processEntries groups entries by sessionId and upserts projects,
 // conversations, and messages for each session.
@@ -805,7 +689,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		projectID := projectIDCache[normalizedProject]
 		if projectID == "" {
 			var err error
-			projectID, err = db.EnsureProject(ctx, a.db, normalizedProject)
+			projectID, err = db.EnsureProject(ctx, a.DB, normalizedProject)
 			if err != nil {
 				log.Printf("claude watcher: ensure project %q: %v", normalizedProject, err)
 				continue
@@ -813,18 +697,18 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			projectIDCache[normalizedProject] = projectID
 		}
 
-		if err := db.EnsureConversation(ctx, a.db, sid, projectID, a.Name()); err != nil {
+		if err := db.EnsureConversation(ctx, a.DB, sid, projectID, a.Name()); err != nil {
 			log.Printf("claude watcher: ensure conversation %s: %v", sid, err)
 			continue
 		}
 
 		cacheKey := g.project + "\n" + sid
 		if _, ok := conversationLogCache[cacheKey]; !ok {
-			conversationLogCache[cacheKey] = readConversationLogEntries(a.home, g.project, sid)
+			conversationLogCache[cacheKey] = readConversationLogEntries(a.Home, g.project, sid)
 		}
 		parentSessionID := extractParentSessionID(conversationLogCache[cacheKey])
 		if parentSessionID != "" && parentSessionID != sid {
-			db.UpdateConversationParent(ctx, a.db, sid, parentSessionID)
+			db.UpdateConversationParent(ctx, a.DB, sid, parentSessionID)
 		}
 
 		if _, ok := sessionTitleCache[cacheKey]; !ok {
@@ -836,10 +720,10 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				}
 			}
 			if title == "" {
-				title = readSummaryFromConversationFile(a.home, g.project, sid)
+				title = readSummaryFromConversationFile(a.Home, g.project, sid)
 			}
 			if title == "" {
-				title = readSessionSummaryFromIndex(a.home, g.project, sid)
+				title = readSessionSummaryFromIndex(a.Home, g.project, sid)
 			}
 			if title == "" {
 				title = titleFromConversationLogs(conversationLogCache[cacheKey])
@@ -848,7 +732,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 		}
 
 		if title := sessionTitleCache[cacheKey]; title != "" {
-			if err := db.UpdateConversationTitle(ctx, a.db, sid, title); err != nil {
+			if err := db.UpdateConversationTitle(ctx, a.DB, sid, title); err != nil {
 				log.Printf("claude watcher: update title for %s: %v", sid, err)
 			}
 		}
@@ -900,7 +784,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				display = strings.TrimSpace(e.Summary)
 			}
 			if len(e.PastedContents) > 0 {
-				display = resolvePastedContents(a.home, display, e.PastedContents)
+				display = resolvePastedContents(a.Home, display, e.PastedContents)
 			}
 
 			// Skip entries with no content and system/meta messages.
@@ -984,7 +868,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 
 		messages = appendDiffDBMessages(messages)
 
-		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
+		if err := db.InsertMessages(ctx, a.DB, messages); err != nil {
 			log.Printf("claude watcher: insert messages for session %s: %v", sid, err)
 		}
 
@@ -998,7 +882,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if rating < 0 {
 				continue
 			}
-			if err := db.ReconcileOrphanedRating(ctx, a.db, rating, note, e.Timestamp, sid); err != nil {
+			if err := db.ReconcileOrphanedRating(ctx, a.DB, rating, note, e.Timestamp, sid); err != nil {
 				log.Printf("claude watcher: reconcile rating for session %s: %v", sid, err)
 			}
 		}
@@ -1057,7 +941,7 @@ func titleFromConversationLogs(entries []conversationLogEntry) string {
 	if text == "" {
 		return ""
 	}
-	return titleFromPrompt(text)
+	return agent.TitleFromPrompt(text)
 }
 
 func mapRoleModel(role, model string) string {

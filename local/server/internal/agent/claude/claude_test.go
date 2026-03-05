@@ -318,7 +318,7 @@ func TestAppendDiffEntries(t *testing.T) {
 		},
 	}
 
-	out := appendDiffEntries(entries)
+	out := agent.AppendDiffEntries(entries)
 	if len(out) != 2 {
 		t.Fatalf("len(out) = %d, want 2", len(out))
 	}
@@ -342,7 +342,7 @@ func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
 		},
 	}
 
-	out := appendDiffEntries(entries)
+	out := agent.AppendDiffEntries(entries)
 	if len(out) != 2 {
 		t.Fatalf("len(out) = %d, want 2", len(out))
 	}
@@ -1281,8 +1281,8 @@ func TestReadSessionTitleFallbackTruncatesLongPrompt(t *testing.T) {
 	}
 
 	title := readSessionTitle(tmpDir, projectPath, "sess-long")
-	if len(title) > maxTitleLen+3 {
-		t.Errorf("title length = %d, want <= %d", len(title), maxTitleLen+3)
+	if len(title) > agent.MaxTitleLen+3 {
+		t.Errorf("title length = %d, want <= %d", len(title), agent.MaxTitleLen+3)
 	}
 	if !strings.HasSuffix(title, "...") {
 		t.Errorf("expected truncated title to end with '...', got %q", title[len(title)-10:])
@@ -1347,9 +1347,9 @@ func TestTitleFromPrompt(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := titleFromPrompt(tt.input)
+			got := agent.TitleFromPrompt(tt.input)
 			if got != tt.want {
-				t.Errorf("titleFromPrompt() = %q, want %q", got, tt.want)
+				t.Errorf("agent.TitleFromPrompt() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -2199,10 +2199,8 @@ func TestProcessEntriesSkipsNoiseHistoryEntries(t *testing.T) {
 	histPath := filepath.Join(tmpDir, "history.jsonl")
 
 	a := &Agent{
-		db:       database,
-		path:     histPath,
-		home:     tmpDir,
-		interval: time.Hour,
+		Base: agent.NewBase(database, tmpDir, "claude"),
+		path: histPath,
 	}
 
 	projectPath := "/proj/test"

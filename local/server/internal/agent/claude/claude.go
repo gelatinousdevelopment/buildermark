@@ -4,17 +4,24 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
-	"time"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+)
+
+// Compile-time interface assertions.
+var (
+	_ agent.Watcher               = (*Agent)(nil)
+	_ agent.PathFilteredWatcher   = (*Agent)(nil)
+	_ agent.ProjectPathDiscoverer = (*Agent)(nil)
+	_ agent.SessionResolver       = (*Agent)(nil)
 )
 
 // Agent implements the agent.Watcher and agent.SessionResolver interfaces
 // for Claude Code.
 type Agent struct {
-	db       *sql.DB
-	path     string // full path to history.jsonl
-	home     string // user home dir (for paste-cache resolution)
-	offset   int64
-	interval time.Duration
+	agent.Base
+	path   string // full path to history.jsonl
+	offset int64
 }
 
 // New creates a Claude Code agent that monitors ~/.claude/history.jsonl.
@@ -29,22 +36,15 @@ func New(database *sql.DB) (*Agent, error) {
 // NewForHome creates a Claude Code agent for the provided home directory.
 func NewForHome(database *sql.DB, home string) *Agent {
 	return &Agent{
-		db:       database,
-		path:     filepath.Join(home, ".claude", "history.jsonl"),
-		home:     home,
-		interval: 2 * time.Second,
+		Base: agent.NewBase(database, home, "claude"),
+		path: filepath.Join(home, ".claude", "history.jsonl"),
 	}
 }
 
 // newAgent is an internal constructor for testing with custom paths.
 func newAgent(database *sql.DB, path, home string) *Agent {
 	return &Agent{
-		db:       database,
-		path:     path,
-		home:     home,
-		interval: 2 * time.Second,
+		Base: agent.NewBase(database, home, "claude"),
+		path: path,
 	}
 }
-
-// Name returns "claude".
-func (a *Agent) Name() string { return "claude" }

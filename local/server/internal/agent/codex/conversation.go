@@ -6,11 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
-)
 
-// maxTitleLen is the maximum character length for a title derived from the first prompt.
-const maxTitleLen = 1000
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+)
 
 // readSessionTitle returns a title for the given session by finding the rollout
 // file and extracting the first user prompt. Codex doesn't have a
@@ -49,7 +47,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 				continue
 			}
 			if text := strings.TrimSpace(msg.Message); text != "" {
-				return titleFromPrompt(text)
+				return agent.TitleFromPrompt(text)
 			}
 
 		case "response_item":
@@ -68,7 +66,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 			if event.Role == "user" {
 				text := strings.TrimSpace(event.Content)
 				if text != "" {
-					return titleFromPrompt(text)
+					return agent.TitleFromPrompt(text)
 				}
 			}
 
@@ -79,7 +77,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 					if c.Type == "text" || c.Type == "input_text" {
 						text := strings.TrimSpace(c.Text)
 						if text != "" {
-							return titleFromPrompt(text)
+							return agent.TitleFromPrompt(text)
 						}
 					}
 				}
@@ -88,24 +86,10 @@ func readSessionTitle(sessionsDir, threadID string) string {
 	}
 
 	if firstResponseItemUser != "" {
-		return titleFromPrompt(firstResponseItemUser)
+		return agent.TitleFromPrompt(firstResponseItemUser)
 	}
 
 	return ""
-}
-
-// titleFromPrompt extracts a title from a user prompt by taking the first
-// maxTitleLen characters from the prompt (including new lines), appending an
-// ellipsis when truncated.
-func titleFromPrompt(text string) string {
-	return truncateTitle(strings.TrimSpace(text))
-}
-
-func truncateTitle(s string) string {
-	if utf8.RuneCountInString(s) > maxTitleLen {
-		return string([]rune(s)[:maxTitleLen]) + "..."
-	}
-	return s
 }
 
 // findSessionFile searches the sessions directory for a rollout file containing

@@ -243,7 +243,7 @@ func TestAppendDiffEntries(t *testing.T) {
 		},
 	}
 
-	out := appendDiffEntries(entries)
+	out := agent.AppendDiffEntries(entries)
 	if len(out) != 2 {
 		t.Fatalf("len(out) = %d, want 2", len(out))
 	}
@@ -267,7 +267,7 @@ func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
 		},
 	}
 
-	out := appendDiffEntries(entries)
+	out := agent.AppendDiffEntries(entries)
 	if len(out) != 2 {
 		t.Fatalf("len(out) = %d, want 2", len(out))
 	}

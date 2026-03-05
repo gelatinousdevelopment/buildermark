@@ -21,23 +21,23 @@ func (a *Agent) Run(ctx context.Context) {
 	log.Printf("gemini watcher: starting, monitoring %s", a.tmpDir)
 
 	scanWindow := agent.DefaultScanWindow
-	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.db, a.Name()); err == nil {
+	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.DB, a.Name()); err == nil {
 		scanWindow = agent.StartupScanWindow(latestMs)
 	}
 	log.Printf("gemini watcher: startup scan window %s", scanWindow)
 
-	trackedFilter := a.trackedProjectFilter(ctx)
+	trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	a.scanSince(ctx, time.Now().Add(-scanWindow), trackedFilter)
 	// Write a scan marker so future restarts can compute a narrow window.
-	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:      a.Name(),
 		SourceKind: "scan_marker",
 		SourceKey:  "startup",
 	})
-	a.backfillGitIDs(ctx)
-	a.backfillLabels(ctx)
+	a.BackfillGitIDs(ctx)
+	a.BackfillLabels(ctx)
 
-	ticker := time.NewTicker(a.interval)
+	ticker := time.NewTicker(a.Interval)
 	defer ticker.Stop()
 
 	seen := make(map[string]processedFile)
@@ -48,9 +48,9 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("gemini watcher: stopped")
 			return
 		case <-ticker.C:
-			trackedFilter = a.trackedProjectFilter(ctx)
+			trackedFilter = agent.TrackedProjectFilter(ctx, a.DB, nil)
 			a.poll(ctx, seen, trackedFilter)
-			a.backfillGitIDs(ctx)
+			a.BackfillGitIDs(ctx)
 		}
 	}
 }
@@ -79,9 +79,9 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 }
 
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
-	filter := a.trackedProjectFilter(ctx)
+	filter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	n := a.doScan(ctx, since, filter, progress, false)
-	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:      a.Name(),
 		SourceKind: "scan_marker",
 		SourceKey:  "startup",
@@ -92,8 +92,8 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 
 // ScanPathsSince scans only session files that resolve to matching project paths.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
-	n := a.doScan(ctx, since, newPathFilter(paths), progress, false)
-	_ = db.UpsertWatcherScanState(ctx, a.db, db.WatcherScanState{
+	n := a.doScan(ctx, since, agent.NewPathFilter(paths), progress, false)
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:      a.Name(),
 		SourceKind: "scan_marker",
 		SourceKey:  "startup",
@@ -102,14 +102,14 @@ func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []str
 	return n
 }
 
-func (a *Agent) scanSince(ctx context.Context, since time.Time, filter pathFilter) {
+func (a *Agent) scanSince(ctx context.Context, since time.Time, filter agent.PathFilter) {
 	n := a.doScan(ctx, since, filter, nil, true)
 	if n > 0 {
 		log.Printf("gemini watcher: initial scan processed %d files", n)
 	}
 }
 
-func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, progress agent.ScanProgressFunc, useModTime bool) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, filter agent.PathFilter, progress agent.ScanProgressFunc, useModTime bool) int {
 	listSince := time.Time{}
 	if useModTime {
 		listSince = since
@@ -126,7 +126,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, 
 				continue
 			}
 			projectPath := a.resolveProjectPath(conv)
-			if !filter.match(projectPath) {
+			if !filter.Match(projectPath) {
 				continue
 			}
 		}
@@ -137,7 +137,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter pathFilter, 
 	return processed
 }
 
-func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter pathFilter) {
+func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter agent.PathFilter) {
 	filepath.Walk(a.tmpDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
@@ -153,7 +153,7 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter 
 
 		if filter != nil {
 			conv, err := readConversation(path)
-			if err != nil || !filter.match(a.resolveProjectPath(conv)) {
+			if err != nil || !filter.Match(a.resolveProjectPath(conv)) {
 				seen[path] = processedFile{modTime: modTime}
 				return nil
 			}
@@ -207,7 +207,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, since 
 		}
 	}
 
-	projectID, err := db.EnsureProject(ctx, a.db, projectPath)
+	projectID, err := db.EnsureProject(ctx, a.DB, projectPath)
 	if err != nil {
 		log.Printf("gemini watcher: ensure project %q: %v", projectPath, err)
 		return false
@@ -236,7 +236,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, since 
 		}
 		msgModel := ""
 		if role == "agent" {
-			msgModel = firstNonEmpty(strings.TrimSpace(m.Model), strings.TrimSpace(m.ModelName), sessionModel)
+			msgModel = agent.FirstNonEmpty(strings.TrimSpace(m.Model), strings.TrimSpace(m.ModelName), sessionModel)
 		}
 
 		rawJSON, _ := json.Marshal(m)
@@ -285,7 +285,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, since 
 		}
 		msgModel := ""
 		if role == "agent" {
-			msgModel = firstNonEmpty(strings.TrimSpace(entry.Model), strings.TrimSpace(entry.ModelName), sessionModel)
+			msgModel = agent.FirstNonEmpty(strings.TrimSpace(entry.Model), strings.TrimSpace(entry.ModelName), sessionModel)
 		}
 
 		rawJSON, _ := json.Marshal(entry)
@@ -320,29 +320,29 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, since 
 		return false
 	}
 
-	if err := db.EnsureConversation(ctx, a.db, conv.SessionID, projectID, a.Name()); err != nil {
+	if err := db.EnsureConversation(ctx, a.DB, conv.SessionID, projectID, a.Name()); err != nil {
 		log.Printf("gemini watcher: ensure conversation %s: %v", conv.SessionID, err)
 		return false
 	}
-	if err := db.UpdateConversationProject(ctx, a.db, conv.SessionID, projectID); err != nil {
+	if err := db.UpdateConversationProject(ctx, a.DB, conv.SessionID, projectID); err != nil {
 		log.Printf("gemini watcher: update project for %s: %v", conv.SessionID, err)
 	}
 
 	if title := readSessionTitle(path); title != "" {
-		if err := db.UpdateConversationTitle(ctx, a.db, conv.SessionID, title); err != nil {
+		if err := db.UpdateConversationTitle(ctx, a.DB, conv.SessionID, title); err != nil {
 			log.Printf("gemini watcher: update title for %s: %v", conv.SessionID, err)
 		}
 	}
 
 	if len(messages) > 0 {
-		messages = appendDiffDBMessages(messages)
-		if err := db.InsertMessages(ctx, a.db, messages); err != nil {
+		messages = agent.AppendDiffDBMessages(messages)
+		if err := db.InsertMessages(ctx, a.DB, messages); err != nil {
 			log.Printf("gemini watcher: insert messages for session %s: %v", conv.SessionID, err)
 		}
 	}
 
 	for _, z := range ratingEntries {
-		if err := db.ReconcileOrphanedRating(ctx, a.db, z.rating, z.note, z.timestamp, conv.SessionID); err != nil {
+		if err := db.ReconcileOrphanedRating(ctx, a.DB, z.rating, z.note, z.timestamp, conv.SessionID); err != nil {
 			log.Printf("gemini watcher: reconcile rating for session %s: %v", conv.SessionID, err)
 		}
 	}
@@ -368,133 +368,4 @@ func readGeminiLogEntries(path, sessionID string) []geminiLogEntry {
 		result = append(result, entry)
 	}
 	return result
-}
-
-type pathFilter map[string]struct{}
-
-func newPathFilter(paths []string) pathFilter {
-	out := make(pathFilter)
-	for _, p := range paths {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		p = filepath.Clean(p)
-		if p == "." {
-			continue
-		}
-		out[p] = struct{}{}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func (f pathFilter) match(projectPath string) bool {
-	if f == nil {
-		return true
-	}
-	if len(f) == 0 {
-		return false
-	}
-	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
-	if projectPath == "" {
-		return false
-	}
-	for p := range f {
-		if projectPath == p {
-			return true
-		}
-		if strings.HasPrefix(projectPath, p+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
-}
-
-func (a *Agent) trackedProjectFilter(ctx context.Context) pathFilter {
-	projects, err := db.ListProjects(ctx, a.db, false)
-	if err != nil {
-		return make(pathFilter)
-	}
-	out := make(pathFilter)
-	for _, p := range projects {
-		path := strings.TrimSpace(p.Path)
-		if path != "" {
-			path = filepath.Clean(path)
-		}
-		if path != "" && path != "." {
-			out[path] = struct{}{}
-		}
-		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
-			oldPath = strings.TrimSpace(oldPath)
-			if oldPath == "" {
-				continue
-			}
-			oldPath = filepath.Clean(oldPath)
-			if oldPath == "." {
-				continue
-			}
-			out[oldPath] = struct{}{}
-		}
-	}
-	return out
-}
-
-// backfillLabels updates project labels from the last path component to the
-// git repository root directory name for projects whose label was auto-generated.
-func (a *Agent) backfillLabels(ctx context.Context) {
-	projects, err := db.ListAllProjects(ctx, a.db)
-	if err != nil {
-		log.Printf("gemini watcher: list projects for label backfill: %v", err)
-		return
-	}
-
-	updated := 0
-	for _, p := range projects {
-		repoName := db.RepoLabel(p.Path)
-		if repoName != p.Label && p.Label == filepath.Base(p.Path) {
-			if err := db.SetProjectLabel(ctx, a.db, p.ID, repoName); err != nil {
-				log.Printf("gemini watcher: update label for %s: %v", p.ID, err)
-				continue
-			}
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("gemini watcher: backfilled %d project labels", updated)
-	}
-}
-
-func (a *Agent) backfillGitIDs(ctx context.Context) {
-	projects, err := db.ListProjectsWithoutGitID(ctx, a.db)
-	if err != nil {
-		log.Printf("gemini watcher: list projects without git_id: %v", err)
-		return
-	}
-
-	updated := 0
-	for _, p := range projects {
-		if gitID := resolveGitID(p.Path); gitID != "" {
-			if err := db.UpdateProjectGitID(ctx, a.db, p.ID, gitID); err != nil {
-				log.Printf("gemini watcher: update git_id for %s: %v", p.ID, err)
-				continue
-			}
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("gemini watcher: backfilled %d project git_ids", updated)
-	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		v = strings.TrimSpace(v)
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

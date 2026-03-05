@@ -38,7 +38,7 @@ func (a *Agent) resolveHashFromKnownProjects(hash string) string {
 	seen := map[string]struct{}{}
 
 	for _, ignored := range []bool{false, true} {
-		projects, err := db.ListProjects(ctx, a.db, ignored)
+		projects, err := db.ListProjects(ctx, a.DB, ignored)
 		if err != nil {
 			continue
 		}

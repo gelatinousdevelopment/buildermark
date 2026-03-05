@@ -259,7 +259,7 @@ func TestAppendDiffEntries(t *testing.T) {
 		},
 	}
 
-	out := appendDiffEntries(entries)
+	out := agent.AppendDiffEntries(entries)
 	if len(out) != 2 {
 		t.Fatalf("len(out) = %d, want 2", len(out))
 	}
@@ -283,7 +283,7 @@ func TestAppendDiffEntriesFromRawJSON(t *testing.T) {
 		},
 	}
 
-	out := appendDiffEntries(entries)
+	out := agent.AppendDiffEntries(entries)
 	if len(out) != 2 {
 		t.Fatalf("len(out) = %d, want 2", len(out))
 	}
@@ -922,9 +922,9 @@ func TestTitleFromPrompt(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := titleFromPrompt(tt.input)
+		got := agent.TitleFromPrompt(tt.input)
 		if got != tt.want {
-			t.Errorf("titleFromPrompt(%q) = %q, want %q", tt.input[:min(len(tt.input), 30)], got, tt.want)
+			t.Errorf("agent.TitleFromPrompt(%q) = %q, want %q", tt.input[:min(len(tt.input), 30)], got, tt.want)
 		}
 	}
 }

@@ -1,4 +1,4 @@
-package claude
+package agent
 
 import (
 	"os"
@@ -25,7 +25,7 @@ func TestResolveGitID(t *testing.T) {
 		}
 	}
 
-	gitID := resolveGitID(dir)
+	gitID := ResolveGitID(dir)
 	if gitID == "" {
 		t.Fatal("expected non-empty git ID")
 	}
@@ -37,14 +37,14 @@ func TestResolveGitID(t *testing.T) {
 func TestResolveGitIDNonGitDir(t *testing.T) {
 	dir := t.TempDir()
 
-	gitID := resolveGitID(dir)
+	gitID := ResolveGitID(dir)
 	if gitID != "" {
 		t.Errorf("expected empty git ID for non-git dir, got %q", gitID)
 	}
 }
 
 func TestResolveGitIDNonexistentPath(t *testing.T) {
-	gitID := resolveGitID(filepath.Join(t.TempDir(), "nonexistent"))
+	gitID := ResolveGitID(filepath.Join(t.TempDir(), "nonexistent"))
 	if gitID != "" {
 		t.Errorf("expected empty git ID for nonexistent path, got %q", gitID)
 	}

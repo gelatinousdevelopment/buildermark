@@ -72,7 +72,7 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 
 	log.Printf("claude session: matched entry with sessionId=%s", sessionID)
 
-	entries := collectSessionEntries(a.home, a.path, sessionID)
+	entries := collectSessionEntries(a.Home, a.path, sessionID)
 
 	project := ""
 	if len(entries) > 0 {
@@ -201,7 +201,7 @@ func collectSessionEntries(home, path, sessionID string) []agent.Entry {
 		})
 	}
 
-	return appendDiffEntries(entries)
+	return agent.AppendDiffEntries(entries)
 }
 
 func historyEntryModel(e historyEntry) string {

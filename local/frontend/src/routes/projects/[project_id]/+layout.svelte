@@ -295,15 +295,6 @@
 
 	.content {
 		background: var(--color-background-content);
-		/*padding: 1rem;*/
-
-		/*background: var(--color-background-content);
-		border-radius: 10px;
-		border: 0.5px solid var(--color-divider);
-		box-sizing: border-box;
-		margin: 2rem auto;
-		transition: all 200ms;
-		width: 100%;*/
 	}
 
 	.container.fixed-height {

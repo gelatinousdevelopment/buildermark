@@ -529,7 +529,7 @@
 
 				{#if showUserPicker && data.users && data.users.length > 0}
 					<div class="filter-picker user-picker">
-						<!-- <label for="user-{projectId}">User:</label> -->
+						<label for="user-{projectId}">User:</label>
 						<select id="user-{projectId}" value={selectedUser} onchange={handleUserChange}>
 							<option value="">All</option>
 							<hr />
@@ -544,7 +544,7 @@
 
 				{#if showAgentPicker && data.agents && data.agents.length > 0}
 					<div class="filter-picker agent-picker">
-						<!-- <label for="agent-{projectId}">Agent:</label> -->
+						<label for="agent-{projectId}">Agent:</label>
 						<select id="agent-{projectId}" value={selectedAgent} onchange={handleAgentChange}>
 							<option value="">All Agents and Manual</option>
 							<option value="manual">Manual</option>
@@ -1063,6 +1063,7 @@
 		align-items: center;
 		display: flex;
 		flex-direction: row;
+		flex-wrap: wrap;
 		gap: 1.5rem;
 	}
 
@@ -1071,11 +1072,11 @@
 	}
 
 	.user-picker select {
-		width: 280px;
+		width: 200px;
 	}
 
 	.agent-picker select {
-		width: 200px;
+		width: 160px;
 	}
 
 	.branch-picker label {

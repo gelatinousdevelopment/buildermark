@@ -7,11 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
-)
 
-// maxTitleLen is the maximum character length for a title derived from the first prompt.
-const maxTitleLen = 1000
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+)
 
 // readSessionTitle returns a title for the given session by extracting the
 // first user prompt from the session file.
@@ -25,21 +23,10 @@ func readSessionTitle(path string) string {
 			continue
 		}
 		if text := extractMessageText(m); text != "" {
-			return titleFromPrompt(text)
+			return agent.TitleFromPrompt(text)
 		}
 	}
 	return ""
-}
-
-func titleFromPrompt(text string) string {
-	return truncateTitle(strings.TrimSpace(text))
-}
-
-func truncateTitle(s string) string {
-	if utf8.RuneCountInString(s) > maxTitleLen {
-		return string([]rune(s)[:maxTitleLen]) + "..."
-	}
-	return s
 }
 
 func readConversation(path string) (*geminiConversation, error) {

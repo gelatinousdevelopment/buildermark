@@ -1,11 +1,12 @@
-package gemini
+package agent
 
 import (
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
-func appendDiffEntries(entries []agent.Entry) []agent.Entry {
+// AppendDiffEntries scans entries for embedded diffs and appends synthetic
+// diff-only entries after each match. Used during session resolution.
+func AppendDiffEntries(entries []Entry) []Entry {
 	if len(entries) == 0 {
 		return entries
 	}
@@ -15,12 +16,12 @@ func appendDiffEntries(entries []agent.Entry) []agent.Entry {
 		usedTimestamps[e.Timestamp] = struct{}{}
 	}
 
-	out := make([]agent.Entry, 0, len(entries))
+	out := make([]Entry, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, e)
-		diff, ok := agent.ExtractReliableDiff(e.Display)
+		diff, ok := ExtractReliableDiff(e.Display)
 		if !ok {
-			diff, ok = agent.ExtractReliableDiffFromJSON(e.RawJSON)
+			diff, ok = ExtractReliableDiffFromJSON(e.RawJSON)
 		}
 		if !ok {
 			continue
@@ -35,20 +36,22 @@ func appendDiffEntries(entries []agent.Entry) []agent.Entry {
 		}
 		usedTimestamps[ts] = struct{}{}
 
-		out = append(out, agent.Entry{
+		out = append(out, Entry{
 			Timestamp: ts,
 			SessionID: e.SessionID,
 			Project:   e.Project,
 			Role:      e.Role,
 			Model:     e.Model,
-			Display:   agent.FormatDiffMessage(diff),
+			Display:   FormatDiffMessage(diff),
 			RawJSON:   `{"source":"derived_diff"}`,
 		})
 	}
 	return out
 }
 
-func appendDiffDBMessages(messages []db.Message) []db.Message {
+// AppendDiffDBMessages scans messages for embedded diffs and appends synthetic
+// diff-only messages after each match. Used during watcher imports.
+func AppendDiffDBMessages(messages []db.Message) []db.Message {
 	if len(messages) == 0 {
 		return messages
 	}
@@ -61,9 +64,9 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 	out := make([]db.Message, 0, len(messages))
 	for _, m := range messages {
 		out = append(out, m)
-		diff, ok := agent.ExtractReliableDiff(m.Content)
+		diff, ok := ExtractReliableDiff(m.Content)
 		if !ok {
-			diff, ok = agent.ExtractReliableDiffFromJSON(m.RawJSON)
+			diff, ok = ExtractReliableDiffFromJSON(m.RawJSON)
 		}
 		if !ok {
 			continue
@@ -84,7 +87,7 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 			ConversationID: m.ConversationID,
 			Role:           m.Role,
 			Model:          m.Model,
-			Content:        agent.FormatDiffMessage(diff),
+			Content:        FormatDiffMessage(diff),
 			RawJSON:        `{"source":"derived_diff"}`,
 		})
 	}

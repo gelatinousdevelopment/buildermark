@@ -181,7 +181,7 @@ func (a *Agent) collectSessionEntries(path string) ([]agent.Entry, string, strin
 		}
 		model := ""
 		if role == "agent" {
-			model = firstNonEmpty(strings.TrimSpace(m.Model), strings.TrimSpace(m.ModelName), strings.TrimSpace(conv.Model))
+			model = agent.FirstNonEmpty(strings.TrimSpace(m.Model), strings.TrimSpace(m.ModelName), strings.TrimSpace(conv.Model))
 		}
 
 		rawJSON, _ := json.Marshal(m)
@@ -202,7 +202,7 @@ func (a *Agent) collectSessionEntries(path string) ([]agent.Entry, string, strin
 		})
 	}
 
-	return appendDiffEntries(entries), project, conv.SessionID
+	return agent.AppendDiffEntries(entries), project, conv.SessionID
 }
 
 func min(a, b int) int {

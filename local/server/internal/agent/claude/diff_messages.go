@@ -5,49 +5,9 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
-func appendDiffEntries(entries []agent.Entry) []agent.Entry {
-	if len(entries) == 0 {
-		return entries
-	}
-
-	usedTimestamps := make(map[int64]struct{}, len(entries))
-	for _, e := range entries {
-		usedTimestamps[e.Timestamp] = struct{}{}
-	}
-
-	out := make([]agent.Entry, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, e)
-		diff, ok := agent.ExtractReliableDiff(e.Display)
-		if !ok {
-			diff, ok = agent.ExtractReliableDiffFromJSON(e.RawJSON)
-		}
-		if !ok {
-			continue
-		}
-
-		ts := e.Timestamp + 1
-		for {
-			if _, exists := usedTimestamps[ts]; !exists {
-				break
-			}
-			ts++
-		}
-		usedTimestamps[ts] = struct{}{}
-
-		out = append(out, agent.Entry{
-			Timestamp: ts,
-			SessionID: e.SessionID,
-			Project:   e.Project,
-			Role:      e.Role,
-			Model:     e.Model,
-			Display:   agent.FormatDiffMessage(diff),
-			RawJSON:   `{"source":"derived_diff"}`,
-		})
-	}
-	return out
-}
-
+// appendDiffDBMessages is Claude-specific because it also uses snapshot-based
+// diff derivation (deriveClaudeSnapshotDiff) and deduplication. Codex and
+// Gemini use agent.AppendDiffDBMessages instead.
 func appendDiffDBMessages(messages []db.Message) []db.Message {
 	if len(messages) == 0 {
 		return messages

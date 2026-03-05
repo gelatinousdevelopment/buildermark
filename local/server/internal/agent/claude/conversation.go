@@ -10,7 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
 
 // conversationEntry represents a single entry in a Claude conversation JSONL file.
@@ -468,9 +469,6 @@ type sessionsIndexEntry struct {
 	Summary   string `json:"summary"`
 }
 
-// maxTitleLen is the maximum character length for a title derived from the first prompt.
-const maxTitleLen = 1000
-
 // readSessionTitle returns a title for the given session. Priority:
 // 1. Inline summary from conversation JSONL (type="summary" entries)
 // 2. Claude's sessions-index.json
@@ -490,7 +488,7 @@ func readSessionTitle(home, projectPath, sessionID string) string {
 		return ""
 	}
 
-	return titleFromPrompt(text)
+	return agent.TitleFromPrompt(text)
 }
 
 // readSummaryFromConversationFile scans the conversation JSONL for
@@ -538,19 +536,6 @@ func readSessionSummaryFromIndex(home, projectPath, sessionID string) string {
 	return ""
 }
 
-// titleFromPrompt extracts a title from a user prompt by taking the first
-// maxTitleLen characters from the prompt (including new lines), appending an
-// ellipsis when truncated.
-func titleFromPrompt(text string) string {
-	return truncateTitle(strings.TrimSpace(text))
-}
-
-func truncateTitle(s string) string {
-	if utf8.RuneCountInString(s) > maxTitleLen {
-		return string([]rune(s)[:maxTitleLen]) + "..."
-	}
-	return s
-}
 
 var parentSessionIDRe = regexp.MustCompile(`/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl`)
 
