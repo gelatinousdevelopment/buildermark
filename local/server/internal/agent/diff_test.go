@@ -74,6 +74,33 @@ func TestExtractReliableDiffFromCustomToolApplyPatchJSON(t *testing.T) {
 	}
 }
 
+func TestExtractReliableDiffFromCustomToolApplyPatchJSONWithAbsolutePathUsesCWD(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	filePath := filepath.Join(repo, "local", "server", "internal", "db", "projects.go")
+	raw := fmt.Sprintf(`{
+		"cwd":%q,
+		"type":"response_item",
+		"payload":{
+			"type":"custom_tool_call",
+			"name":"apply_patch",
+			"input":"*** Begin Patch\n*** Update File: %s\n@@\n-old\n+new\n*** End Patch\n"
+		}
+	}`, repo, strings.ReplaceAll(filePath, `\`, `\\`))
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from custom_tool_call apply_patch JSON with absolute path")
+	}
+	if !strings.Contains(diff, "diff --git a/local/server/internal/db/projects.go b/local/server/internal/db/projects.go") {
+		t.Fatalf("expected repo-relative diff header, got: %q", diff)
+	}
+	if strings.Contains(diff, "diff --git a//") {
+		t.Fatalf("unexpected absolute-path diff header, got: %q", diff)
+	}
+}
+
 func TestExtractReliableDiffFromApplyPatchMultipleSections(t *testing.T) {
 	input := "*** Begin Patch\n*** Update File: a.txt\n@@\n-old-a\n+new-a\n*** Update File: b.txt\n@@\n-old-b\n+new-b\n*** End Patch\n"
 	diff, ok := ExtractReliableDiff(input)
@@ -343,5 +370,46 @@ func TestExtractReliableDiffFromJSONStructuredPatchPriorityOverOldNew(t *testing
 	}
 	if strings.Contains(diff, "@@ -1,") {
 		t.Fatalf("oldNewEdit @@ -1 offset should not appear, got: %q", diff)
+	}
+}
+
+func TestExtractReliableDiffsFromJSONReturnsMultipleDiffs(t *testing.T) {
+	raw := `{
+		"one":"diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old-a\n+new-a\n",
+		"two":"diff --git a/b.txt b/b.txt\n--- a/b.txt\n+++ b/b.txt\n@@ -1 +1 @@\n-old-b\n+new-b\n"
+	}`
+	diffs := ExtractReliableDiffsFromJSON(raw)
+	if got := len(diffs); got != 2 {
+		t.Fatalf("len(diffs) = %d, want 2", got)
+	}
+	joined := strings.Join(diffs, "\n")
+	if !strings.Contains(joined, "a/a.txt") || !strings.Contains(joined, "b/b.txt") {
+		t.Fatalf("expected both diffs in output, got: %q", joined)
+	}
+}
+
+func TestExtractReliableDiffFromJSONAbsolutePathWithoutCWDUsesGitRoot(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	filePath := filepath.Join(repo, "src", "main.go")
+	raw := fmt.Sprintf(`{
+		"toolUseResult":{
+			"filePath":%q,
+			"structuredPatch":[
+				{"oldStart":1,"oldLines":1,"newStart":1,"newLines":1,"lines":["-old","+new"]}
+			]
+		}
+	}`, filePath)
+	diff, ok := ExtractReliableDiffFromJSON(raw)
+	if !ok || diff == "" {
+		t.Fatal("expected diff from structuredPatch payload")
+	}
+	if !strings.Contains(diff, "diff --git a/src/main.go b/src/main.go") {
+		t.Fatalf("expected git-root relative path, got: %q", diff)
+	}
+	if strings.Contains(diff, "diff --git a/"+strings.TrimPrefix(strings.ReplaceAll(filePath, "\\", "/"), "/")) {
+		t.Fatalf("unexpected absolute-path fallback selected first: %q", diff)
 	}
 }

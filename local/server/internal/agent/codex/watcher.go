@@ -446,6 +446,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			if strings.TrimSpace(content) == "" {
 				content = summarizeCodexEvent(event.Type, event.Payload, item.Type)
 			}
+			rawJSON := enrichCodexRawJSON(line, workingDir)
 
 			isResponseItemUser := item.Type == "message" && item.Role == "user"
 
@@ -455,7 +456,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 				MessageType: messageType,
 				Model:       currentModel,
 				Content:     content,
-				RawJSON:     line,
+				RawJSON:     rawJSON,
 			})
 			if isResponseItemUser {
 				responseItemUserIdx = append(responseItemUserIdx, len(messages)-1)
@@ -611,7 +612,10 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			messages[i].Role = "agent"
 		}
 	}
-	messages = agent.AppendDiffDBMessages(messages)
+	messages = agent.AppendDiffDBMessagesWithOptions(messages, agent.DiffAppendOptions{
+		Deduplicate:     true,
+		UseAllJSONDiffs: true,
+	})
 	normalizeMessageTimestamps(messages)
 	if cutoffMs > 0 {
 		filteredMessages := make([]db.Message, 0, len(messages))
@@ -868,4 +872,27 @@ func extractCodexModelFromRawLine(line string) string {
 func stringValue(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+func enrichCodexRawJSON(rawLine string, cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return rawLine
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(rawLine), &obj); err != nil {
+		return rawLine
+	}
+
+	if existing, ok := obj["cwd"].(string); ok && strings.TrimSpace(existing) != "" {
+		return rawLine
+	}
+	obj["cwd"] = cwd
+
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return rawLine
+	}
+	return string(b)
 }

@@ -101,6 +101,18 @@ func TestHistoryScan(t *testing.T) {
 			wantOK:     true,
 		},
 		{
+			name:       "sync scan",
+			body:       map[string]any{"sync": true},
+			wantStatus: http.StatusOK,
+			wantOK:     true,
+		},
+		{
+			name:       "replace derived diffs requires scope",
+			body:       map[string]any{"replaceDerivedDiffs": true, "agent": "codex"},
+			wantStatus: http.StatusBadRequest,
+			wantOK:     false,
+		},
+		{
 			name:       "invalid timeframe",
 			body:       map[string]any{"timeframe": "not-a-duration"},
 			wantStatus: http.StatusBadRequest,
@@ -152,6 +164,53 @@ func TestHistoryScan(t *testing.T) {
 				waitForImportUnlock(s)
 			}
 		})
+	}
+}
+
+func TestHistoryScanSyncResponseIncludesCount(t *testing.T) {
+	w := &mockWatcher{name: "codex"}
+	s := setupTestServerWithWatcher(t, w)
+	addTestProject(t, s, "/tmp/test-project")
+	handler := s.Routes()
+
+	body, _ := json.Marshal(map[string]any{
+		"sync":      true,
+		"agent":     "codex",
+		"timeframe": "720h",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Started          bool `json:"started"`
+			Completed        bool `json:"completed"`
+			EntriesProcessed int  `json:"entriesProcessed"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatal("expected ok=true")
+	}
+	if !env.Data.Started || !env.Data.Completed {
+		t.Fatalf("unexpected sync flags: started=%v completed=%v", env.Data.Started, env.Data.Completed)
+	}
+	if env.Data.EntriesProcessed != 10 {
+		t.Fatalf("entriesProcessed = %d, want 10", env.Data.EntriesProcessed)
+	}
+
+	scanCount, _, _, _ := w.snapshot()
+	if scanCount != 1 {
+		t.Fatalf("watcher scanCount = %d, want 1", scanCount)
 	}
 }
 
@@ -266,6 +325,122 @@ func TestHistoryScanSpecificAgent(t *testing.T) {
 	}
 	if scanCount2 != 1 {
 		t.Errorf("w2 scanCount = %d, want 1", scanCount2)
+	}
+}
+
+func TestHistoryScanSpecificProjectUsesPathScan(t *testing.T) {
+	w := &mockWatcher{name: "codex"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/test-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"agent":     "codex",
+		"projectId": projectID,
+		"sync":      true,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	scanCount, scanPathsCount, _, lastPaths := w.snapshot()
+	if scanCount != 0 {
+		t.Fatalf("scanCount = %d, want 0", scanCount)
+	}
+	if scanPathsCount != 1 {
+		t.Fatalf("scanPathsCount = %d, want 1", scanPathsCount)
+	}
+	if len(lastPaths) != 1 || lastPaths[0] != "/tmp/test-project" {
+		t.Fatalf("lastPaths = %#v, want [/tmp/test-project]", lastPaths)
+	}
+}
+
+func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing.T) {
+	w := &mockWatcher{name: "codex"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/test-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	otherProjectID, err := db.EnsureProject(ctx, s.DB, "/tmp/other-project")
+	if err != nil {
+		t.Fatalf("EnsureProject other: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-codex", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation codex: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-claude", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation claude: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-other", otherProjectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation other: %v", err)
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-codex", Role: "agent", Content: "```diff\none\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1001, ProjectID: projectID, ConversationID: "conv-codex", Role: "user", Content: "keep", RawJSON: `{"type":"user"}`},
+		{Timestamp: 1002, ProjectID: projectID, ConversationID: "conv-claude", Role: "agent", Content: "```diff\ntwo\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1003, ProjectID: otherProjectID, ConversationID: "conv-other", Role: "agent", Content: "```diff\nthree\n```", RawJSON: `{"source":"derived_diff"}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"agent":               "codex",
+		"projectId":           projectID,
+		"replaceDerivedDiffs": true,
+		"sync":                true,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var scopedDerived int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{"source":"derived_diff"}'`, "conv-codex").Scan(&scopedDerived); err != nil {
+		t.Fatalf("count scoped derived: %v", err)
+	}
+	if scopedDerived != 0 {
+		t.Fatalf("scopedDerived = %d, want 0", scopedDerived)
+	}
+
+	var keptSource int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json <> '{"source":"derived_diff"}'`, "conv-codex").Scan(&keptSource); err != nil {
+		t.Fatalf("count kept source: %v", err)
+	}
+	if keptSource != 1 {
+		t.Fatalf("keptSource = %d, want 1", keptSource)
+	}
+
+	var otherDerived int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{"source":"derived_diff"}'`, "conv-claude").Scan(&otherDerived); err != nil {
+		t.Fatalf("count claude derived: %v", err)
+	}
+	if otherDerived != 1 {
+		t.Fatalf("claude derived = %d, want 1", otherDerived)
+	}
+
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{"source":"derived_diff"}'`, "conv-other").Scan(&otherDerived); err != nil {
+		t.Fatalf("count other project derived: %v", err)
+	}
+	if otherDerived != 1 {
+		t.Fatalf("other project derived = %d, want 1", otherDerived)
 	}
 }
 

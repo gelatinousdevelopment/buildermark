@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/pmezard/go-difflib/difflib"
@@ -19,35 +20,16 @@ func ExtractReliableDiff(content string) (string, bool) {
 		return "", false
 	}
 
-	blocks := extractFencedDiffBlocks(content)
-	if len(blocks) > 0 {
-		accepted := make([]string, 0, len(blocks))
-		for _, block := range blocks {
-			block = strings.TrimSpace(block)
-			if block == "" {
-				continue
-			}
-			if !looksLikeUnifiedDiff(block) {
-				continue
-			}
-			accepted = append(accepted, block)
-		}
-		if len(accepted) == 0 {
-			return "", false
-		}
-		return strings.Join(accepted, "\n\n"), true
+	if diff, ok := extractDirectUnifiedDiff(content); ok {
+		return diff, true
 	}
-
-	if !looksLikeUnifiedDiff(content) {
-		if converted, ok := extractApplyPatchDiff(content); ok {
-			return converted, true
-		}
-		if converted, ok := extractShellHeredocWriteDiff(content); ok {
-			return converted, true
-		}
-		return "", false
+	if converted, ok := extractApplyPatchDiff(content); ok {
+		return converted, true
 	}
-	return content, true
+	if converted, ok := extractShellHeredocWriteDiff(content); ok {
+		return converted, true
+	}
+	return "", false
 }
 
 func FormatDiffMessage(diff string) string {
@@ -61,44 +43,74 @@ func FormatDiffMessage(diff string) string {
 // ExtractReliableDiffFromJSON scans all string fields in a JSON document and
 // returns the largest reliable unified diff found.
 func ExtractReliableDiffFromJSON(raw string) (string, bool) {
+	diffs := ExtractReliableDiffsFromJSON(raw)
+	if len(diffs) == 0 {
+		return "", false
+	}
+	best := diffs[0]
+	for _, diff := range diffs[1:] {
+		if len(diff) > len(best) {
+			best = diff
+		}
+	}
+	return best, true
+}
+
+// ExtractReliableDiffsFromJSON scans all string fields in a JSON document and
+// returns all reliable unified diffs found in stable order (deduplicated).
+func ExtractReliableDiffsFromJSON(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", false
+		return nil
 	}
 
 	var value any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
-		return "", false
+		return nil
 	}
 
-	best := ""
+	out := make([]string, 0, 4)
+	seen := make(map[string]struct{}, 8)
+	add := func(diff string) {
+		diff = strings.TrimSpace(diff)
+		if diff == "" {
+			return
+		}
+		if _, exists := seen[diff]; exists {
+			return
+		}
+		seen[diff] = struct{}{}
+		out = append(out, diff)
+	}
+
 	walkStrings(value, func(s string) {
-		diff, ok := ExtractReliableDiff(s)
+		diff, ok := extractDirectUnifiedDiff(s)
 		if !ok {
 			return
 		}
-		if len(diff) > len(best) {
-			best = diff
-		}
+		add(diff)
 	})
-	if diff, ok := extractStructuredPatchDiffFromValue(value); ok && len(diff) > len(best) {
-		best = diff
+
+	for _, diff := range extractStructuredPatchDiffsFromValue(value) {
+		add(diff)
 	}
-	if best == "" { // only try oldNewEdit if nothing better found
-		if diff, ok := extractOldNewEditDiffFromValue(value); ok && len(diff) > len(best) {
-			best = diff
-		}
+	for _, diff := range extractOldNewEditDiffsFromValue(value) {
+		add(diff)
 	}
-	if best == "" {
-		if diff, ok := extractFileSnapshotDiffFromValue(value); ok {
-			best = diff
+	for _, diff := range extractApplyPatchDiffsFromValue(value) {
+		add(diff)
+	}
+	for _, diff := range extractShellHeredocWriteDiffsFromValue(value) {
+		add(diff)
+	}
+
+	if len(out) == 0 {
+		for _, diff := range extractFileSnapshotDiffsFromValue(value) {
+			add(diff)
 		}
 	}
 
-	if best == "" {
-		return "", false
-	}
-	return best, true
+	return out
 }
 
 func isToolUseBlock(m map[string]any) bool {
@@ -107,7 +119,27 @@ func isToolUseBlock(m map[string]any) bool {
 }
 
 func extractOldNewEditDiffFromValue(v any) (string, bool) {
-	best := ""
+	diffs := extractOldNewEditDiffsFromValue(v)
+	if len(diffs) == 0 {
+		return "", false
+	}
+	return diffs[0], true
+}
+
+func extractOldNewEditDiffsFromValue(v any) []string {
+	out := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 4)
+	add := func(diff string) {
+		diff = strings.TrimSpace(diff)
+		if diff == "" {
+			return
+		}
+		if _, exists := seen[diff]; exists {
+			return
+		}
+		seen[diff] = struct{}{}
+		out = append(out, diff)
+	}
 
 	var walk func(node any, inheritedCWD string)
 	walk = func(node any, inheritedCWD string) {
@@ -122,11 +154,11 @@ func extractOldNewEditDiffFromValue(v any) (string, bool) {
 					cwd = trimmed
 				}
 			}
-			if diff, ok := extractOldNewEditDiffFromMap(x, cwd); ok && len(diff) > len(best) {
-				best = diff
+			if diff, ok := extractOldNewEditDiffFromMap(x, cwd); ok {
+				add(diff)
 			}
-			for _, nested := range x {
-				walk(nested, cwd)
+			for _, key := range sortedMapKeys(x) {
+				walk(x[key], cwd)
 			}
 		case []any:
 			for _, nested := range x {
@@ -136,13 +168,14 @@ func extractOldNewEditDiffFromValue(v any) (string, bool) {
 	}
 
 	walk(v, "")
-	if best == "" {
-		return "", false
-	}
-	return best, true
+	return out
 }
 
 func extractOldNewEditDiffFromMap(obj map[string]any, cwd string) (string, bool) {
+	if hasAnyKey(obj, "structuredPatch") {
+		return "", false
+	}
+
 	filePath := ""
 	for _, key := range []string{"filePath", "file_path", "path"} {
 		if s, ok := obj[key].(string); ok {
@@ -182,22 +215,14 @@ func extractOldNewEditDiffFromMap(obj map[string]any, cwd string) (string, bool)
 		return "", false
 	}
 
-	var out strings.Builder
 	for _, path := range paths {
 		diff, ok := buildUnifiedDiffFromStrings(oldText, newText, path)
 		if !ok {
 			continue
 		}
-		if out.Len() > 0 {
-			out.WriteString("\n")
-		}
-		out.WriteString(diff)
+		return diff, true
 	}
-	combined := strings.TrimSpace(out.String())
-	if combined == "" || !looksLikeUnifiedDiff(combined) {
-		return "", false
-	}
-	return combined, true
+	return "", false
 }
 
 func buildUnifiedDiffFromStrings(oldText, newText, repoPath string) (string, bool) {
@@ -240,44 +265,43 @@ func buildUnifiedDiffFromStrings(oldText, newText, repoPath string) (string, boo
 }
 
 func extractStructuredPatchDiffFromValue(v any) (string, bool) {
-	best := ""
-
-	var walk func(node any, inheritedCWD string)
-	walk = func(node any, inheritedCWD string) {
-		switch x := node.(type) {
-		case map[string]any:
-			if isToolUseBlock(x) {
-				return // skip — the tool_result will have better data
-			}
-			cwd := inheritedCWD
-			if s, ok := x["cwd"].(string); ok {
-				if trimmed := strings.TrimSpace(s); trimmed != "" {
-					cwd = trimmed
-				}
-			}
-
-			if diff, ok := extractStructuredPatchDiffFromMap(x, cwd); ok && len(diff) > len(best) {
-				best = diff
-			}
-			for _, nested := range x {
-				walk(nested, cwd)
-			}
-		case []any:
-			for _, nested := range x {
-				walk(nested, inheritedCWD)
-			}
-		}
-	}
-
-	walk(v, "")
-	if best == "" {
+	diffs := extractStructuredPatchDiffsFromValue(v)
+	if len(diffs) == 0 {
 		return "", false
 	}
-	return best, true
+	return diffs[0], true
 }
 
 func extractFileSnapshotDiffFromValue(v any) (string, bool) {
-	best := ""
+	diffs := extractFileSnapshotDiffsFromValue(v)
+	if len(diffs) == 0 {
+		return "", false
+	}
+	return diffs[0], true
+}
+
+func extractApplyPatchDiffsFromValue(v any) []string {
+	return extractContextualStringDiffs(v, extractApplyPatchDiffWithCWD)
+}
+
+func extractShellHeredocWriteDiffsFromValue(v any) []string {
+	return extractContextualStringDiffs(v, extractShellHeredocWriteDiffWithCWD)
+}
+
+func extractStructuredPatchDiffsFromValue(v any) []string {
+	out := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 4)
+	add := func(diff string) {
+		diff = strings.TrimSpace(diff)
+		if diff == "" {
+			return
+		}
+		if _, exists := seen[diff]; exists {
+			return
+		}
+		seen[diff] = struct{}{}
+		out = append(out, diff)
+	}
 
 	var walk func(node any, inheritedCWD string)
 	walk = func(node any, inheritedCWD string) {
@@ -292,11 +316,12 @@ func extractFileSnapshotDiffFromValue(v any) (string, bool) {
 					cwd = trimmed
 				}
 			}
-			if diff, ok := extractFileSnapshotDiffFromMap(x, cwd); ok && len(diff) > len(best) {
-				best = diff
+
+			if diff, ok := extractStructuredPatchDiffFromMap(x, cwd); ok {
+				add(diff)
 			}
-			for _, nested := range x {
-				walk(nested, cwd)
+			for _, key := range sortedMapKeys(x) {
+				walk(x[key], cwd)
 			}
 		case []any:
 			for _, nested := range x {
@@ -306,10 +331,52 @@ func extractFileSnapshotDiffFromValue(v any) (string, bool) {
 	}
 
 	walk(v, "")
-	if best == "" {
-		return "", false
+	return out
+}
+
+func extractFileSnapshotDiffsFromValue(v any) []string {
+	out := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 4)
+	add := func(diff string) {
+		diff = strings.TrimSpace(diff)
+		if diff == "" {
+			return
+		}
+		if _, exists := seen[diff]; exists {
+			return
+		}
+		seen[diff] = struct{}{}
+		out = append(out, diff)
 	}
-	return best, true
+
+	var walk func(node any, inheritedCWD string)
+	walk = func(node any, inheritedCWD string) {
+		switch x := node.(type) {
+		case map[string]any:
+			if isToolUseBlock(x) {
+				return // skip — the tool_result will have better data
+			}
+			cwd := inheritedCWD
+			if s, ok := x["cwd"].(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					cwd = trimmed
+				}
+			}
+			if diff, ok := extractFileSnapshotDiffFromMap(x, cwd); ok {
+				add(diff)
+			}
+			for _, key := range sortedMapKeys(x) {
+				walk(x[key], cwd)
+			}
+		case []any:
+			for _, nested := range x {
+				walk(nested, inheritedCWD)
+			}
+		}
+	}
+
+	walk(v, "")
+	return out
 }
 
 type structuredPatchHunk struct {
@@ -374,35 +441,31 @@ func extractStructuredPatchDiffFromMap(obj map[string]any, cwd string) (string, 
 		return "", false
 	}
 
+	path := candidates[0]
 	var out strings.Builder
-	for _, path := range candidates {
-		if out.Len() > 0 {
-			out.WriteString("\n")
-		}
-		out.WriteString("diff --git a/")
-		out.WriteString(path)
-		out.WriteString(" b/")
-		out.WriteString(path)
-		out.WriteString("\n--- a/")
-		out.WriteString(path)
-		out.WriteString("\n+++ b/")
-		out.WriteString(path)
-		out.WriteString("\n")
-		for _, h := range hunks {
-			out.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", h.oldStart, h.oldLines, h.newStart, h.newLines))
-			for _, line := range h.lines {
-				if line == "" {
-					out.WriteString(" \n")
-					continue
-				}
-				if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
-					out.WriteString(line)
-				} else {
-					out.WriteString(" ")
-					out.WriteString(line)
-				}
-				out.WriteString("\n")
+	out.WriteString("diff --git a/")
+	out.WriteString(path)
+	out.WriteString(" b/")
+	out.WriteString(path)
+	out.WriteString("\n--- a/")
+	out.WriteString(path)
+	out.WriteString("\n+++ b/")
+	out.WriteString(path)
+	out.WriteString("\n")
+	for _, h := range hunks {
+		out.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", h.oldStart, h.oldLines, h.newStart, h.newLines))
+		for _, line := range h.lines {
+			if line == "" {
+				out.WriteString(" \n")
+				continue
 			}
+			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
+				out.WriteString(line)
+			} else {
+				out.WriteString(" ")
+				out.WriteString(line)
+			}
+			out.WriteString("\n")
 		}
 	}
 
@@ -482,24 +545,20 @@ func extractFileSnapshotDiffFromMap(obj map[string]any, cwd string) (string, boo
 		return "", false
 	}
 
+	p := candidates[0]
 	var out strings.Builder
-	for _, p := range candidates {
-		if out.Len() > 0 {
-			out.WriteString("\n")
-		}
-		out.WriteString("diff --git a/")
-		out.WriteString(p)
-		out.WriteString(" b/")
-		out.WriteString(p)
-		out.WriteString("\n--- /dev/null\n+++ b/")
-		out.WriteString(p)
+	out.WriteString("diff --git a/")
+	out.WriteString(p)
+	out.WriteString(" b/")
+	out.WriteString(p)
+	out.WriteString("\n--- /dev/null\n+++ b/")
+	out.WriteString(p)
+	out.WriteString("\n")
+	out.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+	for _, line := range lines {
+		out.WriteString("+")
+		out.WriteString(line)
 		out.WriteString("\n")
-		out.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
-		for _, line := range lines {
-			out.WriteString("+")
-			out.WriteString(line)
-			out.WriteString("\n")
-		}
 	}
 
 	diff := strings.TrimSpace(out.String())
@@ -584,36 +643,56 @@ func buildStructuredPatchPathCandidates(filePath, cwd string) []string {
 		path = strings.TrimPrefix(path, "/")
 		return path
 	}
+	addCandidate := func(candidates *[]string, seen map[string]struct{}, path string) {
+		n := normalize(path)
+		if n == "" {
+			return
+		}
+		if _, exists := seen[n]; exists {
+			return
+		}
+		seen[n] = struct{}{}
+		*candidates = append(*candidates, n)
+	}
 
 	path := strings.TrimSpace(filePath)
 	if path == "" {
 		return nil
 	}
+	candidates := make([]string, 0, 4)
+	seen := make(map[string]struct{}, 4)
 
 	// Relative file paths from tool payloads are already canonical enough.
 	if !filepath.IsAbs(path) {
-		if n := normalize(path); n != "" {
-			return []string{n}
+		addCandidate(&candidates, seen, path)
+		if cwd = strings.TrimSpace(cwd); cwd != "" {
+			addCandidate(&candidates, seen, filepath.Join(cwd, path))
+			if root, ok := FindGitRoot(cwd); ok {
+				addCandidate(&candidates, seen, filepath.Join(root, path))
+			}
 		}
-		return nil
+		return candidates
 	}
 
 	absFile := filepath.Clean(path)
 	if cwd = strings.TrimSpace(cwd); cwd != "" {
 		if root, ok := FindGitRoot(cwd); ok {
 			if rel, ok := relIfContained(root, absFile); ok {
-				return []string{normalize(rel)}
+				addCandidate(&candidates, seen, rel)
 			}
 		}
 		if rel, ok := relIfContained(cwd, absFile); ok {
-			return []string{normalize(rel)}
+			addCandidate(&candidates, seen, rel)
+		}
+	}
+	if root, ok := FindGitRoot(filepath.Dir(absFile)); ok {
+		if rel, ok := relIfContained(root, absFile); ok {
+			addCandidate(&candidates, seen, rel)
 		}
 	}
 
-	if n := normalize(absFile); n != "" {
-		return []string{n}
-	}
-	return nil
+	addCandidate(&candidates, seen, absFile)
+	return candidates
 }
 
 func relIfContained(base, target string) (string, bool) {
@@ -630,7 +709,6 @@ func relIfContained(base, target string) (string, bool) {
 	}
 	return rel, true
 }
-
 
 func extractFencedDiffBlocks(content string) []string {
 	lines := strings.Split(content, "\n")
@@ -736,6 +814,10 @@ func walkStrings(v any, fn func(string)) {
 }
 
 func extractApplyPatchDiff(content string) (string, bool) {
+	return extractApplyPatchDiffWithCWD(content, "")
+}
+
+func extractApplyPatchDiffWithCWD(content, cwd string) (string, bool) {
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	start := -1
 	end := -1
@@ -809,12 +891,12 @@ func extractApplyPatchDiff(content string) (string, bool) {
 	for _, sec := range sections {
 		oldPathRaw := sec.oldPath
 		newPathRaw := sec.newPath
-		oldPath := oldPathRaw
-		newPath := newPathRaw
-		if oldPath == "" {
+		oldPath := resolveStructuredPath(oldPathRaw, cwd)
+		newPath := resolveStructuredPath(newPathRaw, cwd)
+		if oldPath == "" && newPath != "" {
 			oldPath = newPath
 		}
-		if newPath == "" {
+		if newPath == "" && oldPath != "" {
 			newPath = oldPath
 		}
 		if oldPath == "" || newPath == "" {
@@ -857,6 +939,10 @@ func extractApplyPatchDiff(content string) (string, bool) {
 }
 
 func extractShellHeredocWriteDiff(content string) (string, bool) {
+	return extractShellHeredocWriteDiffWithCWD(content, "")
+}
+
+func extractShellHeredocWriteDiffWithCWD(content, cwd string) (string, bool) {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 
 	idx := strings.Index(content, "cat >")
@@ -872,6 +958,10 @@ func extractShellHeredocWriteDiff(content string) (string, bool) {
 
 	path, rem, ok := parseQuotedToken(rest)
 	if !ok || path == "" {
+		return "", false
+	}
+	path = resolveStructuredPath(path, cwd)
+	if path == "" {
 		return "", false
 	}
 	rem = strings.TrimLeft(rem, " \t")
@@ -927,6 +1017,102 @@ func extractShellHeredocWriteDiff(content string) (string, bool) {
 	return strings.TrimSpace(out.String()), true
 }
 
+func extractDirectUnifiedDiff(content string) (string, bool) {
+	content = strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n"))
+	if content == "" {
+		return "", false
+	}
+
+	blocks := extractFencedDiffBlocks(content)
+	if len(blocks) > 0 {
+		accepted := make([]string, 0, len(blocks))
+		for _, block := range blocks {
+			block = strings.TrimSpace(block)
+			if block == "" || !looksLikeUnifiedDiff(block) {
+				continue
+			}
+			accepted = append(accepted, block)
+		}
+		if len(accepted) == 0 {
+			return "", false
+		}
+		return strings.Join(accepted, "\n\n"), true
+	}
+
+	if !looksLikeUnifiedDiff(content) {
+		return "", false
+	}
+	return content, true
+}
+
+func extractContextualStringDiffs(v any, extractor func(string, string) (string, bool)) []string {
+	out := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 4)
+	add := func(diff string) {
+		diff = strings.TrimSpace(diff)
+		if diff == "" {
+			return
+		}
+		if _, exists := seen[diff]; exists {
+			return
+		}
+		seen[diff] = struct{}{}
+		out = append(out, diff)
+	}
+
+	var walk func(node any, inheritedCWD string)
+	walk = func(node any, inheritedCWD string) {
+		switch x := node.(type) {
+		case string:
+			if diff, ok := extractor(x, inheritedCWD); ok {
+				add(diff)
+			}
+			s := strings.TrimSpace(x)
+			if (strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")) || (strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]")) {
+				var nested any
+				if err := json.Unmarshal([]byte(s), &nested); err == nil {
+					walk(nested, inheritedCWD)
+				}
+			}
+		case map[string]any:
+			if isToolUseBlock(x) {
+				return
+			}
+			cwd := inheritedCWD
+			if s, ok := x["cwd"].(string); ok {
+				if trimmed := strings.TrimSpace(s); trimmed != "" {
+					cwd = trimmed
+				}
+			}
+			for _, key := range sortedMapKeys(x) {
+				walk(x[key], cwd)
+			}
+		case []any:
+			for _, nested := range x {
+				walk(nested, inheritedCWD)
+			}
+		}
+	}
+
+	walk(v, "")
+	return out
+}
+
+func resolveStructuredPath(path, cwd string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	candidates := buildStructuredPatchPathCandidates(path, cwd)
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
+	path = strings.TrimPrefix(path, "./")
+	path = strings.TrimPrefix(path, "/")
+	return path
+}
+
 func parseQuotedToken(s string) (token string, remainder string, ok bool) {
 	if s == "" {
 		return "", "", false
@@ -947,4 +1133,13 @@ func parseQuotedToken(s string) (token string, remainder string, ok bool) {
 		}
 		return s[:i], s[i:], true
 	}
+}
+
+func sortedMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

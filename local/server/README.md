@@ -45,9 +45,36 @@ Response (201):
 
 List recent ratings (newest first). `limit` defaults to 50, max 500.
 
+### `POST /api/v1/history/scan`
+
+Trigger conversation history re-import.
+
+```bash
+curl -X POST http://localhost:7022/api/v1/history/scan \
+  -H 'Content-Type: application/json' \
+  -d '{"agent":"codex","timeframe":"200000h","sync":true}'
+```
+
+Notes:
+- `agent` is optional (`"codex"`, `"claude"`, `"gemini"`). Omit to scan all.
+- `timeframe` uses Go duration format.
+- `sync: true` blocks until scan completes and returns processed count.
+
 ### `GET /`
 
 HTML dashboard showing recent ratings. Auto-refreshes every 30s.
+
+## One-time Codex backfill helper
+
+From repo root:
+
+```bash
+scripts/backfill-codex-diffs.sh <project_id> [branch] [timeframe]
+```
+
+This runs:
+1. Synchronous Codex history scan.
+2. Commit coverage recompute for the given project/branch.
 
 ## Build
 

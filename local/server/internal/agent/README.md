@@ -32,9 +32,17 @@ Every agent embeds `agent.Base`, which provides:
 | `pathfilter.go`    | `PathFilter`, `NewPathFilter`, `TrackedProjectFilter`       |
 | `gitid.go`         | `ResolveGitID`                                              |
 | `util.go`          | `FirstNonEmpty`, `TitleFromPrompt`                          |
-| `diff_messages.go` | `AppendDiffEntries`, `AppendDiffDBMessages`                 |
-| `diff.go`          | `ExtractReliableDiff`, `FormatDiffMessage`, etc.            |
+| `diff_messages.go` | `AppendDiffEntries`, `AppendDiffDBMessages`, `AppendDiffDBMessagesWithOptions`, `DiffAppendOptions` |
+| `diff.go`          | `ExtractReliableDiff`, `ExtractReliableDiffFromJSON`, `ExtractReliableDiffsFromJSON`, `FormatDiffMessage`, etc. |
 | `gitroot.go`       | `FindGitRoot`, `ListGitWorktrees`, `GitRootCache`           |
+
+### Diff Derivation Notes
+
+- `AppendDiffDBMessages(messages)` keeps legacy behavior: single high-confidence diff per source message (content first, then JSON fallback).
+- `AppendDiffDBMessagesWithOptions(messages, opts)` enables importer-specific behavior:
+  - `UseAllJSONDiffs=true` emits all reliable diffs found in JSON payloads (deduped per message).
+  - `Deduplicate=true` suppresses repeated synthetic diffs with identical `(conversation_id, role, diff)` keys.
+- For best path matching, importers should enrich raw event JSON with context such as `cwd` before appending diff messages.
 
 ## Message Classification Conventions
 
@@ -92,6 +100,7 @@ Provider-specific structured question sources currently supported:
 5. Use shared utilities:
    - `agent.TrackedProjectFilter(ctx, a.DB, nil)` for path filtering
    - `agent.AppendDiffEntries(entries)` / `agent.AppendDiffDBMessages(messages)` for diff derivation
+   - `agent.AppendDiffDBMessagesWithOptions(messages, opts)` when an agent needs multi-diff extraction or dedupe behavior
    - `agent.TitleFromPrompt(text)` for title generation
    - `agent.FirstNonEmpty(...)` for model resolution
    - `a.BackfillGitIDs(ctx)` / `a.BackfillLabels(ctx)` in your `Run()` loop

@@ -470,6 +470,65 @@ func TestWatcherDerivesDiffFromCurrentSchemaApplyPatch(t *testing.T) {
 	}
 }
 
+func TestWatcherDerivesMultipleDiffsFromSingleJSONPayload(t *testing.T) {
+	database := setupTestDB(t)
+	tmpDir := t.TempDir()
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+
+	now := time.Now().UTC()
+	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "14", "rollout-2026-02-14T08-00-00-thread-multi-diff.jsonl")
+	writeJSONLObjects(t, rolloutPath, []any{
+		map[string]any{
+			"timestamp": now.Add(-3 * time.Second).Format(time.RFC3339Nano),
+			"type":      "session_meta",
+			"payload": map[string]any{
+				"id":    "thread-multi-diff",
+				"cwd":   "/proj/multi-diff",
+				"model": "gpt-5-codex",
+			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"type":      "event_msg",
+			"payload":   map[string]any{"type": "user_message", "message": "apply edits"},
+		},
+		map[string]any{
+			"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),
+			"type":      "response_item",
+			"payload": map[string]any{
+				"type":   "function_call_output",
+				"output": "{\"diffA\":\"diff --git a/a.txt b/a.txt\\n--- a/a.txt\\n+++ b/a.txt\\n@@ -1 +1 @@\\n-old-a\\n+new-a\\n\",\"diffB\":\"diff --git a/b.txt b/b.txt\\n--- a/b.txt\\n+++ b/b.txt\\n@@ -1 +1 @@\\n-old-b\\n+new-b\\n\",\"dupA\":\"diff --git a/a.txt b/a.txt\\n--- a/a.txt\\n+++ b/a.txt\\n@@ -1 +1 @@\\n-old-a\\n+new-a\\n\"}",
+			},
+		},
+	})
+
+	a := newAgent(database, sessionsDir, tmpDir)
+	a.processSessionFile(context.Background(), rolloutPath, nil)
+
+	var diffCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'thread-multi-diff' AND content LIKE '```diff%'").Scan(&diffCount); err != nil {
+		t.Fatalf("count diff messages: %v", err)
+	}
+	if diffCount != 2 {
+		t.Fatalf("diff messages = %d, want 2 (A + B, deduplicated)", diffCount)
+	}
+}
+
+func TestEnrichCodexRawJSONAddsCwdWhenMissing(t *testing.T) {
+	raw := `{"type":"response_item","payload":{"type":"function_call_output","output":"ok"}}`
+	updated := enrichCodexRawJSON(raw, "/proj/enriched")
+	if updated == raw {
+		t.Fatal("expected enriched raw json to differ when cwd is missing")
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(updated), &parsed); err != nil {
+		t.Fatalf("unmarshal enriched json: %v", err)
+	}
+	if got, _ := parsed["cwd"].(string); got != "/proj/enriched" {
+		t.Fatalf("cwd = %q, want %q", got, "/proj/enriched")
+	}
+}
+
 func TestWatcherImportsReasoningSummaryText(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

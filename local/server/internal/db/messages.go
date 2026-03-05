@@ -168,6 +168,8 @@ const hiddenIngestMessageMaxLen = 256
 
 var hiddenIngestMessageRe = regexp.MustCompile(`(?s)^[\[<].*[\]>]$`)
 
+const derivedDiffRawJSON = `{"source":"derived_diff"}`
+
 // InsertMessages inserts multiple messages in a single transaction, skipping duplicates.
 // Duplicates are detected both within the batch (same conversation + role + content
 // within dupWindowMs) and against existing rows in the database.
@@ -289,6 +291,29 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	}
 
 	return tx.Commit()
+}
+
+// DeleteDerivedDiffMessages removes synthetic diff messages for conversations
+// in the specified project and agent scope. It returns the number of rows
+// deleted.
+func DeleteDerivedDiffMessages(ctx context.Context, db *sql.DB, projectID, agent string) (int64, error) {
+	res, err := db.ExecContext(ctx,
+		`DELETE FROM messages
+		 WHERE raw_json = ?
+		   AND conversation_id IN (
+		     SELECT id FROM conversations
+		     WHERE project_id = ? AND agent = ?
+		   )`,
+		derivedDiffRawJSON, projectID, agent,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("delete derived diff messages: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("derived diff rows affected: %w", err)
+	}
+	return n, nil
 }
 
 func filterMessagesForIngest(messages []Message) []Message {

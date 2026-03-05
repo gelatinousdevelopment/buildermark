@@ -96,7 +96,7 @@ func (s *Server) handlePutLocalSettings(w http.ResponseWriter, r *http.Request) 
 	if s.ReloadWatchers != nil {
 		if newHomes := s.ReloadWatchers(); len(newHomes) > 0 {
 			if s.importMu.TryLock() {
-				go s.runHistoryScanJob(time.Now().Add(-agent.DefaultScanWindow), "")
+				go s.runHistoryScanJob(time.Now().Add(-agent.DefaultScanWindow), historyScanRequest{}, nil)
 			}
 		}
 	}
