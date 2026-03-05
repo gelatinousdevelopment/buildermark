@@ -289,7 +289,7 @@ func loadCommitMatchCounts(ctx context.Context, database *sql.DB, term, projectI
 	useFallback := !supportsFTS5(ctx, database) || isShortSearchOnly(term)
 	if useFallback || ftsQuery == "" {
 		query := `SELECT project_id, COUNT(DISTINCT commit_hash)
-			FROM commits_fts
+			FROM commits
 			WHERE (
 			     instr(lower(subject), lower(?)) > 0
 			  OR instr(lower(diff_content), lower(?)) > 0

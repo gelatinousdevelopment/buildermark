@@ -43,7 +43,6 @@ func ensureFTS5SearchSchema(ctx context.Context, database *sql.DB) error {
 			project_id UNINDEXED,
 			commit_hash,
 			subject,
-			diff_content,
 			tokenize='trigram'
 		)`,
 		`CREATE TRIGGER messages_fts_ai
@@ -70,8 +69,8 @@ func ensureFTS5SearchSchema(ctx context.Context, database *sql.DB) error {
 		`CREATE TRIGGER commits_fts_ai
 		AFTER INSERT ON commits
 		BEGIN
-			INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
-			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject, NEW.diff_content);
+			INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject)
+			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject);
 		END`,
 		`CREATE TRIGGER commits_fts_ad
 		AFTER DELETE ON commits
@@ -82,15 +81,15 @@ func ensureFTS5SearchSchema(ctx context.Context, database *sql.DB) error {
 		AFTER UPDATE ON commits
 		BEGIN
 			DELETE FROM commits_fts WHERE commit_id = OLD.id;
-			INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
-			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject, NEW.diff_content);
+			INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject)
+			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject);
 		END`,
 		`INSERT INTO messages_fts (message_id, conversation_id, project_id, content)
 		SELECT id, conversation_id, project_id, content
 		FROM messages
 		WHERE message_type = 'prompt'`,
-		`INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
-		SELECT id, project_id, commit_hash, subject, diff_content
+		`INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject)
+		SELECT id, project_id, commit_hash, subject
 		FROM commits`,
 	}
 	for _, stmt := range statements {
@@ -123,8 +122,7 @@ func ensureFallbackSearchSchema(ctx context.Context, database *sql.DB) error {
 			commit_id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL,
 			commit_hash TEXT NOT NULL,
-			subject TEXT NOT NULL,
-			diff_content TEXT NOT NULL
+			subject TEXT NOT NULL
 		)`,
 		`CREATE INDEX idx_commits_fts_project_hash
 		ON commits_fts(project_id, commit_hash)`,
@@ -152,8 +150,8 @@ func ensureFallbackSearchSchema(ctx context.Context, database *sql.DB) error {
 		`CREATE TRIGGER commits_fts_ai
 		AFTER INSERT ON commits
 		BEGIN
-			INSERT OR REPLACE INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
-			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject, NEW.diff_content);
+			INSERT OR REPLACE INTO commits_fts (commit_id, project_id, commit_hash, subject)
+			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject);
 		END`,
 		`CREATE TRIGGER commits_fts_ad
 		AFTER DELETE ON commits
@@ -164,15 +162,15 @@ func ensureFallbackSearchSchema(ctx context.Context, database *sql.DB) error {
 		AFTER UPDATE ON commits
 		BEGIN
 			DELETE FROM commits_fts WHERE commit_id = OLD.id;
-			INSERT OR REPLACE INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
-			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject, NEW.diff_content);
+			INSERT OR REPLACE INTO commits_fts (commit_id, project_id, commit_hash, subject)
+			VALUES (NEW.id, NEW.project_id, NEW.commit_hash, NEW.subject);
 		END`,
 		`INSERT INTO messages_fts (message_id, conversation_id, project_id, content)
 		SELECT id, conversation_id, project_id, content
 		FROM messages
 		WHERE message_type = 'prompt'`,
-		`INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
-		SELECT id, project_id, commit_hash, subject, diff_content
+		`INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject)
+		SELECT id, project_id, commit_hash, subject
 		FROM commits`,
 	}
 	for _, stmt := range statements {
