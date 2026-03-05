@@ -19,6 +19,7 @@ type Message struct {
 	ProjectID      string
 	ConversationID string
 	Role           string
+	MessageType    string
 	Model          string
 	Content        string
 	RawJSON        string
@@ -171,6 +172,12 @@ var hiddenIngestMessageRe = regexp.MustCompile(`(?s)^[\[<].*[\]>]$`)
 // Duplicates are detected both within the batch (same conversation + role + content
 // within dupWindowMs) and against existing rows in the database.
 func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
+	for i := range messages {
+		messages[i].MessageType = normalizeMessageType(messages[i].MessageType)
+		if messages[i].MessageType == MessageTypeLog {
+			messages[i].MessageType = inferMessageType(messages[i].Role, messages[i].Content)
+		}
+	}
 	messages = filterMessagesForIngest(messages)
 	messages = deduplicateMessages(messages)
 
@@ -181,11 +188,11 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR IGNORE INTO messages (id, timestamp, project_id, conversation_id, role, model, content, raw_json)
-		 SELECT ?, ?, ?, ?, ?, ?, ?, ?
+		`INSERT OR IGNORE INTO messages (id, timestamp, project_id, conversation_id, role, message_type, model, content, raw_json)
+		 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
 		 WHERE NOT EXISTS (
 		     SELECT 1 FROM messages
-		     WHERE conversation_id = ? AND role = ? AND model = ? AND content = ?
+		     WHERE conversation_id = ? AND role = ? AND message_type = ? AND model = ? AND content = ?
 		     AND ABS(timestamp - ?) < ?
 		 )`,
 	)
@@ -208,8 +215,8 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	for _, m := range messages {
 		conversationIDs[m.ConversationID] = struct{}{}
 		if _, err := stmt.ExecContext(ctx,
-			newID(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.Model, m.Content, m.RawJSON,
-			m.ConversationID, m.Role, m.Model, m.Content, m.Timestamp, dupWindowMs,
+			newID(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.MessageType, m.Model, m.Content, m.RawJSON,
+			m.ConversationID, m.Role, m.MessageType, m.Model, m.Content, m.Timestamp, dupWindowMs,
 		); err != nil {
 			return fmt.Errorf("insert message: %w", err)
 		}
@@ -267,9 +274,7 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	updatePromptCountStmt, err := tx.PrepareContext(ctx,
 		`UPDATE conversations SET user_prompt_count = (
 			SELECT COUNT(*) FROM messages
-			WHERE conversation_id = ? AND role = 'user'
-			AND TRIM(content) NOT LIKE '/%'
-			AND TRIM(content) NOT LIKE '$bb%'
+			WHERE conversation_id = ? AND message_type = 'prompt'
 		) WHERE id = ?`,
 	)
 	if err != nil {
@@ -314,13 +319,14 @@ func deduplicateMessages(messages []Message) []Message {
 	type key struct {
 		conversationID string
 		role           string
+		messageType    string
 		model          string
 		content        string
 	}
 	seen := make(map[key]int64) // key -> first-seen timestamp
 	result := make([]Message, 0, len(messages))
 	for _, m := range messages {
-		k := key{m.ConversationID, m.Role, m.Model, m.Content}
+		k := key{m.ConversationID, m.Role, m.MessageType, m.Model, m.Content}
 		if prevTs, ok := seen[k]; ok && absInt64(m.Timestamp-prevTs) < dupWindowMs {
 			continue
 		}

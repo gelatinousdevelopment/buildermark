@@ -113,7 +113,21 @@ func runMigrations(db *sql.DB) error {
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("commit migration %s: %w", name, err)
 		}
+		if err := runPostMigration(context.Background(), db, version); err != nil {
+			return fmt.Errorf("post migration %s: %w", name, err)
+		}
 	}
 
 	return nil
+}
+
+func runPostMigration(ctx context.Context, db *sql.DB, version int) error {
+	switch version {
+	case 36:
+		return backfillMessageTypes(ctx, db)
+	case 37:
+		return backfillMessageTypes(ctx, db)
+	default:
+		return nil
+	}
 }

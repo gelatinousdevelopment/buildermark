@@ -294,7 +294,6 @@ func readWorkingDir(path string) string {
 	return ""
 }
 
-
 // processSessionFile parses a single rollout JSONL file and imports its data.
 func (a *Agent) processSessionFile(ctx context.Context, path string, projectCache map[string]string) {
 	_ = a.processSessionFileSince(ctx, path, projectCache, time.Time{})
@@ -325,6 +324,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 	var firstResponseItemUser string
 	var firstLegacyUser string
 	var latestReasoningSummary string
+	requestUserInputQuestions := make(map[string][]codexQuestionSpec)
 	var ratingEntries []struct {
 		rating    int
 		note      string
@@ -409,12 +409,37 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			if item.Type == "reasoning" && strings.TrimSpace(summaryText) != "" {
 				latestReasoningSummary = strings.TrimSpace(summaryText)
 			}
+			messageType := "log"
 			if item.Type == "message" {
 				role = "user"
 				if item.Role == "assistant" {
 					role = "agent"
 				} else if item.Role != "user" {
 					role = "agent"
+				}
+				if role == "user" {
+					messageType = "prompt"
+				}
+			}
+			if item.Type == "function_call" && strings.TrimSpace(item.Name) == "request_user_input" {
+				role = "agent"
+				messageType = "question"
+				questions := parseRequestUserInputQuestions(item.Arguments)
+				if len(questions) > 0 {
+					content = formatCodexQuestionsMarkdown(questions)
+					if callID := strings.TrimSpace(item.CallID); callID != "" {
+						requestUserInputQuestions[callID] = questions
+					}
+				}
+			}
+			if item.Type == "function_call_output" {
+				callID := strings.TrimSpace(item.CallID)
+				answers := parseRequestUserInputAnswers(item.Output)
+				questions := requestUserInputQuestions[callID]
+				if len(questions) > 0 {
+					role = "user"
+					messageType = "answer"
+					content = formatCodexAnswersMarkdown(questions, answers)
 				}
 			}
 			if strings.TrimSpace(content) == "" {
@@ -424,11 +449,12 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			isResponseItemUser := item.Type == "message" && item.Role == "user"
 
 			messages = append(messages, db.Message{
-				Timestamp: ts,
-				Role:      role,
-				Model:     currentModel,
-				Content:   content,
-				RawJSON:   line,
+				Timestamp:   ts,
+				Role:        role,
+				MessageType: messageType,
+				Model:       currentModel,
+				Content:     content,
+				RawJSON:     line,
 			})
 			if isResponseItemUser {
 				responseItemUserIdx = append(responseItemUserIdx, len(messages)-1)
@@ -745,7 +771,6 @@ func threadIDFromFilename(name string) string {
 	}
 	return name
 }
-
 
 // parseRatingDisplay parses "$bb 4 optional note" into (4, "optional note").
 // Returns (-1, "") if the format is invalid.

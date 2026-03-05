@@ -25,6 +25,7 @@ type MessageRead struct {
 	Timestamp      int64  `json:"timestamp"`
 	ConversationID string `json:"conversationId"`
 	Role           string `json:"role"`
+	MessageType    string `json:"messageType"`
 	Model          string `json:"model"`
 	Content        string `json:"content"`
 	RawJSON        string `json:"rawJson"`
@@ -111,7 +112,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 
 	// Fetch messages ordered by most recent first.
 	messageRows, err := db.QueryContext(ctx,
-		"SELECT id, timestamp, conversation_id, role, model, content, raw_json FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
+		"SELECT id, timestamp, conversation_id, role, message_type, model, content, raw_json FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC",
 		resolvedID,
 	)
 	if err != nil {
@@ -122,7 +123,7 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	c.Messages = []MessageRead{}
 	for messageRows.Next() {
 		var m MessageRead
-		if err := messageRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Model, &m.Content, &m.RawJSON); err != nil {
+		if err := messageRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.MessageType, &m.Model, &m.Content, &m.RawJSON); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		c.Messages = append(c.Messages, m)
@@ -304,9 +305,9 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 
 	// Fetch all user-role messages for these conversations.
 	msgRows, err := db.QueryContext(ctx,
-		fmt.Sprintf(`SELECT id, timestamp, conversation_id, role, model, content, raw_json
+		fmt.Sprintf(`SELECT id, timestamp, conversation_id, role, message_type, model, content, raw_json
 			FROM messages
-			WHERE conversation_id IN (%s) AND role = 'user'
+			WHERE conversation_id IN (%s) AND message_type = 'prompt'
 			ORDER BY timestamp ASC`, placeholders),
 		idArgs...,
 	)
@@ -322,7 +323,7 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 	allUserMsgs := make(map[string][]userMsg)
 	for msgRows.Next() {
 		var m MessageRead
-		if err := msgRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.Model, &m.Content, &m.RawJSON); err != nil {
+		if err := msgRows.Scan(&m.ID, &m.Timestamp, &m.ConversationID, &m.Role, &m.MessageType, &m.Model, &m.Content, &m.RawJSON); err != nil {
 			return nil, fmt.Errorf("scan batch user message: %w", err)
 		}
 		allUserMsgs[m.ConversationID] = append(allUserMsgs[m.ConversationID], userMsg{msg: m})

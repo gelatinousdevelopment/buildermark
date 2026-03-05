@@ -69,7 +69,7 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("conversations table missing or wrong schema: %v", err)
 	}
-	_, err = db.Exec("SELECT id, timestamp, project_id, conversation_id, role, model, content, raw_json FROM messages LIMIT 0")
+	_, err = db.Exec("SELECT id, timestamp, project_id, conversation_id, role, message_type, model, content, raw_json FROM messages LIMIT 0")
 	if err != nil {
 		t.Fatalf("messages table missing or wrong schema: %v", err)
 	}

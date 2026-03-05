@@ -36,6 +36,31 @@ Every agent embeds `agent.Base`, which provides:
 | `diff.go`          | `ExtractReliableDiff`, `FormatDiffMessage`, etc.            |
 | `gitroot.go`       | `FindGitRoot`, `ListGitWorktrees`, `GitRootCache`           |
 
+## Message Classification Conventions
+
+Watchers now classify imported messages with `messages.message_type`:
+
+| `message_type` | Meaning |
+|----------------|---------|
+| `prompt`       | Real user prompt text (not slash commands like `/clear` or rating commands like `$bb`) |
+| `question`     | Model-originated structured question shown to the user for input |
+| `answer`       | User response payload for a structured question |
+| `log`          | Everything else (events, metadata, tool logs, summaries, etc.) |
+
+Conventions to follow when implementing/updating an agent importer:
+
+1. Set `db.Message.MessageType` on insert whenever possible.
+2. Keep `role` semantic (`agent` for model/question, `user` for prompt/answer).
+3. Prefer structured extraction over heuristic text parsing for question/answer flows.
+4. Format structured question/answer content as markdown suitable for UI cards.
+
+Provider-specific structured question sources currently supported:
+
+| Agent | Structured question source | Structured answer source |
+|-------|-----------------------------|--------------------------|
+| Claude | `AskUserQuestion` tool use blocks in conversation JSONL | `toolUseResult.questions` + `toolUseResult.answers` |
+| Codex | `response_item` with `type=function_call` and `name=request_user_input` | matching `response_item` with `type=function_call_output` for the same `call_id` |
+
 ## Implementing a New Agent
 
 1. Create a new package under `agent/` (e.g. `agent/myagent/`).
@@ -69,6 +94,7 @@ Every agent embeds `agent.Base`, which provides:
    - `agent.TitleFromPrompt(text)` for title generation
    - `agent.FirstNonEmpty(...)` for model resolution
    - `a.BackfillGitIDs(ctx)` / `a.BackfillLabels(ctx)` in your `Run()` loop
+   - Follow message classification conventions above (`prompt/question/answer/log`)
 
 6. Register the agent in `cli/run.go`.
 

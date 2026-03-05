@@ -27,7 +27,9 @@ type conversationEntry struct {
 	AgentID                 string `json:"agentId"`
 	PlanContent             string `json:"planContent"`
 	ToolUseResult           struct {
-		Content any `json:"content"`
+		Content   any                  `json:"content"`
+		Questions []claudeQuestionSpec `json:"questions"`
+		Answers   map[string]any       `json:"answers"`
 	} `json:"toolUseResult"`
 	Message struct {
 		Role    string          `json:"role"`
@@ -410,6 +412,8 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 			}
 		}
 
+		role, _, content = classifyClaudeMessage(role, content, line)
+
 		result = append(result, conversationLogEntry{
 			Type:      entry.Type,
 			Timestamp: ts,
@@ -535,7 +539,6 @@ func readSessionSummaryFromIndex(home, projectPath, sessionID string) string {
 	}
 	return ""
 }
-
 
 var parentSessionIDRe = regexp.MustCompile(`/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl`)
 

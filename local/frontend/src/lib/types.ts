@@ -114,6 +114,7 @@ export interface MessageRead {
 	timestamp: number;
 	conversationId: string;
 	role: string;
+	messageType?: 'prompt' | 'question' | 'answer' | 'log';
 	model?: string;
 	content: string;
 	rawJson: string;

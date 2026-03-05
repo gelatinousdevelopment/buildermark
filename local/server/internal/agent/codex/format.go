@@ -54,6 +54,10 @@ type codexResponseItemPayload struct {
 	Summary   []codexResponseSummaryBlock `json:"summary"`
 	Model     string                      `json:"model"`
 	ModelSlug string                      `json:"model_slug"`
+	Name      string                      `json:"name"`
+	Arguments string                      `json:"arguments"`
+	CallID    string                      `json:"call_id"`
+	Output    string                      `json:"output"`
 }
 
 type codexEventMsgPayload struct {

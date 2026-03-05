@@ -6,7 +6,14 @@
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
-	import { isUserPromptMessage, isDiffMessage, messageModel } from '$lib/messageUtils';
+	import {
+		isUserPromptMessage,
+		isQuestionMessage,
+		isAnswerMessage,
+		isStandaloneTimelineMessage,
+		isDiffMessage,
+		messageModel
+	} from '$lib/messageUtils';
 	import { combineDiffs } from '$lib/diffCombiner';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import LogMessageCard from '$lib/components/LogMessageCard.svelte';
@@ -194,6 +201,9 @@
 		// Subtract 1s from user prompt timestamps so they sort before
 		// the model messages that share the same second-level timestamp.
 		for (const message of conversation.messages) {
+			// Questions are represented again in the answer message with full detail,
+			// so rendering both is redundant in the timeline UI.
+			if (isQuestionMessage(message)) continue;
 			const adjust = isUserPromptMessage(message) ? 1000 : 0;
 			items.push({ kind: 'message', message, time: message.timestamp - adjust });
 		}
@@ -255,7 +265,7 @@
 				items.push(item);
 				continue;
 			}
-			if (isUserPromptMessage(item.message)) {
+			if (isStandaloneTimelineMessage(item.message)) {
 				flushRun();
 				items.push(item);
 				continue;
@@ -353,7 +363,7 @@
 			<p>No messages or ratings.</p>
 		{:else}
 			{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
-				{#if item.kind === 'message' && isUserPromptMessage(item.message)}
+				{#if item.kind === 'message' && (isUserPromptMessage(item.message) || isAnswerMessage(item.message))}
 					<div class="message user-message" data-message-id={item.message.id}>
 						<UserPromptMessageCard message={item.message} />
 					</div>

@@ -7,9 +7,9 @@ import (
 	"io"
 	"log"
 	"os"
-	"sort"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -175,7 +175,6 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, 
 	}
 	return len(filtered)
 }
-
 
 // poll reads new data appended since the last read. If the file shrank
 // (rotation), it resets and rescans from the beginning.
@@ -559,7 +558,6 @@ func (a *Agent) backfillParentConversations(ctx context.Context) {
 	}
 }
 
-
 // backfillGitWorktreePaths refreshes git_worktree_paths for all tracked projects.
 // It discovers worktrees from two sources:
 // 1. `git worktree list` (active worktrees)
@@ -649,7 +647,6 @@ func discoverClaudeWorktreePaths(home string) map[string][]string {
 	}
 	return result
 }
-
 
 // processEntries groups entries by sessionId and upserts projects,
 // conversations, and messages for each session.
@@ -762,6 +759,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 					ProjectID:      projectID,
 					ConversationID: sid,
 					Role:           "user",
+					MessageType:    "prompt",
 					Content:        firstText,
 					RawJSON:        string(rawJSON),
 				})
@@ -820,12 +818,14 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if ts <= 0 {
 				ts = nextMessageTimestamp(messages)
 			}
+			role, messageType, display := classifyClaudeMessage(role, display, rawJSON)
 
 			messages = append(messages, db.Message{
 				Timestamp:      ts,
 				ProjectID:      projectID,
 				ConversationID: sid,
 				Role:           role,
+				MessageType:    messageType,
 				Model:          mapRoleModel(role, historyEntryModel(e)),
 				Content:        display,
 				RawJSON:        rawJSON,
@@ -854,14 +854,16 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if e.RawJSON != "" {
 				rawJSON = []byte(e.RawJSON)
 			}
+			role, messageType, content := classifyClaudeMessage(e.Role, e.Content, string(rawJSON))
 
 			messages = append(messages, db.Message{
 				Timestamp:      normalizeMessageTimestamp(e.Timestamp, messages),
 				ProjectID:      projectID,
 				ConversationID: sid,
-				Role:           e.Role,
-				Model:          mapRoleModel(e.Role, extractModelFromJSONLine(string(rawJSON))),
-				Content:        e.Content,
+				Role:           role,
+				MessageType:    messageType,
+				Model:          mapRoleModel(role, extractModelFromJSONLine(string(rawJSON))),
+				Content:        content,
 				RawJSON:        string(rawJSON),
 			})
 		}

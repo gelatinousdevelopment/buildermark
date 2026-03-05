@@ -27,10 +27,38 @@ export function normalizeEscapedNewlines(content: string): string {
 }
 
 export function isUserPromptMessage(message: MessageRead): boolean {
+	if (messageType(message) === 'prompt') return true;
 	if (message.role !== 'user') return false;
 	const trimmed = message.content.trimStart();
 	if (trimmed.startsWith('/') || trimmed.startsWith('$bb')) return false;
 	return true;
+}
+
+export function messageType(message: MessageRead): 'prompt' | 'question' | 'answer' | 'log' {
+	const t = typeof message.messageType === 'string' ? message.messageType.trim().toLowerCase() : '';
+	if (t === 'prompt' || t === 'question' || t === 'answer' || t === 'log') return t;
+	if (isUserPromptMessageLegacy(message)) return 'prompt';
+	return 'log';
+}
+
+function isUserPromptMessageLegacy(message: MessageRead): boolean {
+	if (message.role !== 'user') return false;
+	const trimmed = message.content.trimStart();
+	if (trimmed.startsWith('/') || trimmed.startsWith('$bb')) return false;
+	return true;
+}
+
+export function isQuestionMessage(message: MessageRead): boolean {
+	return messageType(message) === 'question';
+}
+
+export function isAnswerMessage(message: MessageRead): boolean {
+	return messageType(message) === 'answer';
+}
+
+export function isStandaloneTimelineMessage(message: MessageRead): boolean {
+	const t = messageType(message);
+	return t === 'prompt' || t === 'question' || t === 'answer';
 }
 
 export function isDiffMessage(message: MessageRead): boolean {
@@ -51,6 +79,8 @@ export function messageModel(message: MessageRead): string {
 }
 
 export function messageTypeLabel(message: MessageRead): string {
+	const type = messageType(message);
+	if (type !== 'log') return type;
 	if (isDiffMessage(message)) return 'diff';
 	try {
 		const obj = JSON.parse(message.rawJson) as Record<string, unknown>;

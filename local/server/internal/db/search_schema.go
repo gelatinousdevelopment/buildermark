@@ -48,14 +48,14 @@ func ensureFTS5SearchSchema(ctx context.Context, database *sql.DB) error {
 		)`,
 		`CREATE TRIGGER messages_fts_ai
 		AFTER INSERT ON messages
-		WHEN NEW.role = 'user'
+		WHEN NEW.message_type = 'prompt'
 		BEGIN
 			INSERT INTO messages_fts (message_id, conversation_id, project_id, content)
 			VALUES (NEW.id, NEW.conversation_id, NEW.project_id, NEW.content);
 		END`,
 		`CREATE TRIGGER messages_fts_ad
 		AFTER DELETE ON messages
-		WHEN OLD.role = 'user'
+		WHEN OLD.message_type = 'prompt'
 		BEGIN
 			DELETE FROM messages_fts WHERE message_id = OLD.id;
 		END`,
@@ -65,7 +65,7 @@ func ensureFTS5SearchSchema(ctx context.Context, database *sql.DB) error {
 			DELETE FROM messages_fts WHERE message_id = OLD.id;
 			INSERT INTO messages_fts (message_id, conversation_id, project_id, content)
 			SELECT NEW.id, NEW.conversation_id, NEW.project_id, NEW.content
-			WHERE NEW.role = 'user';
+			WHERE NEW.message_type = 'prompt';
 		END`,
 		`CREATE TRIGGER commits_fts_ai
 		AFTER INSERT ON commits
@@ -88,7 +88,7 @@ func ensureFTS5SearchSchema(ctx context.Context, database *sql.DB) error {
 		`INSERT INTO messages_fts (message_id, conversation_id, project_id, content)
 		SELECT id, conversation_id, project_id, content
 		FROM messages
-		WHERE role = 'user'`,
+		WHERE message_type = 'prompt'`,
 		`INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
 		SELECT id, project_id, commit_hash, subject, diff_content
 		FROM commits`,
@@ -130,14 +130,14 @@ func ensureFallbackSearchSchema(ctx context.Context, database *sql.DB) error {
 		ON commits_fts(project_id, commit_hash)`,
 		`CREATE TRIGGER messages_fts_ai
 		AFTER INSERT ON messages
-		WHEN NEW.role = 'user'
+		WHEN NEW.message_type = 'prompt'
 		BEGIN
 			INSERT OR REPLACE INTO messages_fts (message_id, conversation_id, project_id, content)
 			VALUES (NEW.id, NEW.conversation_id, NEW.project_id, NEW.content);
 		END`,
 		`CREATE TRIGGER messages_fts_ad
 		AFTER DELETE ON messages
-		WHEN OLD.role = 'user'
+		WHEN OLD.message_type = 'prompt'
 		BEGIN
 			DELETE FROM messages_fts WHERE message_id = OLD.id;
 		END`,
@@ -147,7 +147,7 @@ func ensureFallbackSearchSchema(ctx context.Context, database *sql.DB) error {
 			DELETE FROM messages_fts WHERE message_id = OLD.id;
 			INSERT OR REPLACE INTO messages_fts (message_id, conversation_id, project_id, content)
 			SELECT NEW.id, NEW.conversation_id, NEW.project_id, NEW.content
-			WHERE NEW.role = 'user';
+			WHERE NEW.message_type = 'prompt';
 		END`,
 		`CREATE TRIGGER commits_fts_ai
 		AFTER INSERT ON commits
@@ -170,7 +170,7 @@ func ensureFallbackSearchSchema(ctx context.Context, database *sql.DB) error {
 		`INSERT INTO messages_fts (message_id, conversation_id, project_id, content)
 		SELECT id, conversation_id, project_id, content
 		FROM messages
-		WHERE role = 'user'`,
+		WHERE message_type = 'prompt'`,
 		`INSERT INTO commits_fts (commit_id, project_id, commit_hash, subject, diff_content)
 		SELECT id, project_id, commit_hash, subject, diff_content
 		FROM commits`,
