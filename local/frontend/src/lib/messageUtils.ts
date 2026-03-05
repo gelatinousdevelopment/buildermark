@@ -36,7 +36,10 @@ export function isUserPromptMessage(message: MessageRead): boolean {
 
 export function messageType(message: MessageRead): 'prompt' | 'question' | 'answer' | 'log' {
 	const t = typeof message.messageType === 'string' ? message.messageType.trim().toLowerCase() : '';
-	if (t === 'prompt' || t === 'question' || t === 'answer' || t === 'log') return t;
+	if (t === 'prompt') return message.role === 'user' ? 'prompt' : 'log';
+	if (t === 'question') return message.role === 'agent' ? 'question' : 'log';
+	if (t === 'answer') return message.role === 'user' ? 'answer' : 'log';
+	if (t === 'log') return 'log';
 	if (isUserPromptMessageLegacy(message)) return 'prompt';
 	return 'log';
 }

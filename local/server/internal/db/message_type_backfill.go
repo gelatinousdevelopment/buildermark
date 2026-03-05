@@ -27,7 +27,7 @@ type codexAnswerValue struct {
 
 func backfillMessageTypes(ctx context.Context, database *sql.DB) error {
 	rows, err := database.QueryContext(ctx,
-		`SELECT m.id, m.conversation_id, m.role, m.content, m.raw_json, c.agent
+		`SELECT m.id, m.conversation_id, m.role, m.message_type, m.content, m.raw_json, c.agent
 		 FROM messages m
 		 JOIN conversations c ON c.id = m.conversation_id
 		 ORDER BY m.conversation_id, m.timestamp, m.id`,
@@ -51,8 +51,8 @@ func backfillMessageTypes(ctx context.Context, database *sql.DB) error {
 	codexQuestions := make(map[string][]questionSpec)
 
 	for rows.Next() {
-		var id, conversationID, role, content, rawJSON, agentName string
-		if err := rows.Scan(&id, &conversationID, &role, &content, &rawJSON, &agentName); err != nil {
+		var id, conversationID, role, currentType, content, rawJSON, agentName string
+		if err := rows.Scan(&id, &conversationID, &role, &currentType, &content, &rawJSON, &agentName); err != nil {
 			return fmt.Errorf("scan message row: %w", err)
 		}
 
@@ -74,10 +74,8 @@ func backfillMessageTypes(ctx context.Context, database *sql.DB) error {
 			nextRole, nextType, nextContent = classifiedRole, classifiedType, classifiedContent
 		}
 
-		nextType = normalizeMessageType(nextType)
-		if nextType == MessageTypeLog {
-			nextType = inferMessageType(nextRole, nextContent)
-		}
+		nextType = canonicalMessageType(nextRole, nextType, nextContent)
+		currentType = normalizeMessageType(currentType)
 		if nextRole == "" {
 			nextRole = role
 		}
@@ -85,7 +83,7 @@ func backfillMessageTypes(ctx context.Context, database *sql.DB) error {
 			nextContent = content
 		}
 
-		if nextRole != role || nextType != MessageTypeLog || nextContent != content {
+		if nextRole != role || nextType != currentType || nextContent != content {
 			updates = append(updates, rowUpdate{
 				id:             id,
 				conversationID: conversationID,

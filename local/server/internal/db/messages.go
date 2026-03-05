@@ -175,10 +175,7 @@ const derivedDiffRawJSON = `{"source":"derived_diff"}`
 // within dupWindowMs) and against existing rows in the database.
 func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	for i := range messages {
-		messages[i].MessageType = normalizeMessageType(messages[i].MessageType)
-		if messages[i].MessageType == MessageTypeLog {
-			messages[i].MessageType = inferMessageType(messages[i].Role, messages[i].Content)
-		}
+		messages[i].MessageType = canonicalMessageType(messages[i].Role, messages[i].MessageType, messages[i].Content)
 	}
 	messages = filterMessagesForIngest(messages)
 	messages = deduplicateMessages(messages)

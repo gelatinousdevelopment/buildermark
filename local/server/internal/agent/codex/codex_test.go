@@ -408,6 +408,29 @@ func TestWatcherProcessCurrentSchemaSessionFile(t *testing.T) {
 	if userCount != 1 {
 		t.Errorf("user messages: got %d, want 1 (event_msg should be canonical user input)", userCount)
 	}
+	var promptCount int
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = 'thread-current' AND message_type = 'prompt'").Scan(&promptCount); err != nil {
+		t.Fatalf("count prompt messages: %v", err)
+	}
+	if promptCount != 1 {
+		t.Errorf("prompt messages: got %d, want 1 (only the canonical user prompt)", promptCount)
+	}
+	var internalRole, internalType string
+	if err := database.QueryRow(
+		"SELECT role, message_type FROM messages WHERE conversation_id = 'thread-current' AND content = ?",
+		"internal system-expanded prompt",
+	).Scan(&internalRole, &internalType); err != nil {
+		t.Fatalf("query internal wrapper message: %v", err)
+	}
+	if internalRole != "agent" || internalType != "log" {
+		t.Errorf("internal wrapper message = (%q, %q), want (agent, log)", internalRole, internalType)
+	}
+	if err := database.QueryRow("SELECT user_prompt_count FROM conversations WHERE id = 'thread-current'").Scan(&promptCount); err != nil {
+		t.Fatalf("query user_prompt_count: %v", err)
+	}
+	if promptCount != 1 {
+		t.Errorf("user_prompt_count = %d, want 1", promptCount)
+	}
 
 	var agentName string
 	if err := database.QueryRow("SELECT agent FROM conversations WHERE id = 'thread-current'").Scan(&agentName); err != nil {

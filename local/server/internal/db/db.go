@@ -127,6 +127,8 @@ func runPostMigration(ctx context.Context, db *sql.DB, version int) error {
 		return backfillMessageTypes(ctx, db)
 	case 37:
 		return backfillMessageTypes(ctx, db)
+	case 38:
+		return backfillMessageTypes(ctx, db)
 	default:
 		return nil
 	}
