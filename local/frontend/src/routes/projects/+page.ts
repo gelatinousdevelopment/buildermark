@@ -23,8 +23,7 @@ export async function load({ fetch }) {
 			projects.map(async (project): Promise<ProjectRow> => {
 				try {
 					const conversationData = await getProject(project.id, 1, 10, fetch);
-					const latestConversationTs =
-						conversationData.conversations[0]?.lastMessageTimestamp ?? 0;
+					const latestConversationTs = conversationData.conversations[0]?.lastMessageTimestamp ?? 0;
 					return {
 						project,
 						conversationData,
@@ -46,9 +45,7 @@ export async function load({ fetch }) {
 			if (a.lastMessageTimestamp !== b.lastMessageTimestamp) {
 				return b.lastMessageTimestamp - a.lastMessageTimestamp;
 			}
-			return (a.project.label || a.project.path).localeCompare(
-				b.project.label || b.project.path
-			);
+			return (a.project.label || a.project.path).localeCompare(b.project.label || b.project.path);
 		});
 	} catch (e) {
 		error = e instanceof Error ? e.message : 'Failed to load projects';

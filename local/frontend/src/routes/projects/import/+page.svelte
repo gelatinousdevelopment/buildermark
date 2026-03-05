@@ -119,7 +119,7 @@
 		margin: 0 auto;
 
 		background: var(--color-background-content);
-		border-radius: 10px;
+		border-radius: var(--content-section-border-radius);
 		border: 0.5px solid var(--color-divider);
 		box-sizing: border-box;
 		margin: 1.5rem auto;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
@@ -14,6 +15,14 @@
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import Dialog from '$lib/Dialog.svelte';
+	import { layoutStore } from '$lib/stores/layout.svelte';
+
+	onMount(() => {
+		layoutStore.hideContainer = true;
+	});
+	onDestroy(() => {
+		layoutStore.hideContainer = false;
+	});
 
 	let { data } = $props();
 
@@ -126,156 +135,160 @@
 	}
 </script>
 
-<div class="page">
-	<h1>Project Settings</h1>
+<div class="outer">
+	<div class="page">
+		<h1>Project Settings</h1>
 
-	<div class="columns">
-		<div class="column">
-			<div class="section">
-				<label class="field-label" for="project-label">Project Name</label>
-				<input
-					id="project-label"
-					class="project-label"
-					type="text"
-					bind:value={label}
-					placeholder="Project label"
-				/>
-
-				<label class="field-label" for="project-path">Path to Git Repository</label>
-				<input
-					id="project-path"
-					type="text"
-					bind:value={path}
-					placeholder="/path/to/project"
-					class="mono-input"
-				/>
-			</div>
-
-			<div class="section">
-				<h2>Ignore Paths for Diff Matching</h2>
-				<div class="defaults-row">
-					<label class="checkbox-label">
-						<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
-						Ignore default paths
-					</label>
-					<button
-						class="info-btn"
-						title="Show default paths"
-						onclick={() => (showDefaultPaths = !showDefaultPaths)}
-					>
-						<Icon name="info" width="15px" />
-					</button>
-				</div>
-				{#if showDefaultPaths}
-					<ul class="default-paths-list">
-						{#each defaultPaths as p (p)}
-							<li><code>{p}</code></li>
-						{/each}
-					</ul>
-				{/if}
-				<p class="hint">One glob path per line.</p>
-				<textarea
-					id="ignore-diff-paths"
-					bind:value={ignoreDiffPaths}
-					rows="4"
-					spellcheck="false"
-					placeholder="Glob patterns, one per line"
-				></textarea>
-			</div>
-
-			<div class="section">
-				<h2>Old Filesystem Paths</h2>
-				<p class="hint">
-					Match conversations created from previous project locations. One absolute path per line.
-				</p>
-				<textarea
-					id="old-paths"
-					bind:value={oldPaths}
-					rows="4"
-					spellcheck="false"
-					placeholder="/old/path/to/repo"
-				></textarea>
-			</div>
-
-			{#if project.gitWorktreePaths}
+		<div class="columns">
+			<div class="column">
 				<div class="section">
-					<h2>Git Worktree Paths</h2>
-					<p class="hint">
-						Auto-detected git worktrees. Conversations from these paths are included in this
-						project.
-					</p>
+					<div class="row">
+						<label class="field-label" for="project-label">Project Name</label>
+						<input
+							id="project-label"
+							class="project-label"
+							type="text"
+							bind:value={label}
+							placeholder="Project label"
+						/>
+					</div>
+					<div class="row">
+						<label class="field-label" for="project-path">Path to Git Repository</label>
+						<input
+							id="project-path"
+							type="text"
+							bind:value={path}
+							placeholder="/path/to/project"
+							class="mono-input"
+						/>
+					</div>
+					<div class="row">
+						<label class="field-label" for="team-server-select">Team Server</label>
+						<div class="field">
+							<select id="team-server-select" bind:value={teamServerId} class="team-server-select">
+								<option value="">None</option>
+								{#each teamServers as server (server.id)}
+									<option value={server.id}>{server.label}</option>
+								{/each}
+							</select>
+						</div>
+					</div>
+				</div>
+
+				<div class="section">
+					<h2>Ignore Paths for Diff Matching</h2>
+					<div class="defaults-row">
+						<label class="checkbox-label">
+							<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
+							Ignore default paths
+						</label>
+						<button
+							class="info-btn"
+							title="Show default paths"
+							onclick={() => (showDefaultPaths = !showDefaultPaths)}
+						>
+							<Icon name="info" width="15px" />
+						</button>
+					</div>
+					{#if showDefaultPaths}
+						<ul class="paths-list">
+							{#each defaultPaths as p (p)}
+								<li><code>{p}</code></li>
+							{/each}
+						</ul>
+					{/if}
+					<p class="hint">One glob path per line.</p>
 					<textarea
-						id="git-worktree-paths"
-						value={project.gitWorktreePaths}
-						rows={Math.min(project.gitWorktreePaths.split('\n').length, 6)}
+						id="ignore-diff-paths"
+						bind:value={ignoreDiffPaths}
+						rows="4"
 						spellcheck="false"
-						readonly
-						class="readonly-textarea"
+						placeholder="Glob patterns, one per line"
 					></textarea>
 				</div>
-			{/if}
 
-			<div class="section">
-				<h2>Alternate Coding Agent Paths</h2>
-				<p class="hint">
-					Need to track conversations from other user folders or mounted filesystems? Configure that
-					in <a href={resolve('/settings')}>Buildermark Local Settings</a>.
-				</p>
-			</div>
+				<div class="section">
+					<h2>Old Filesystem Paths</h2>
+					<p class="hint">
+						Match conversations created from previous project locations. One absolute path per line.
+					</p>
+					<textarea
+						id="old-paths"
+						bind:value={oldPaths}
+						rows="4"
+						spellcheck="false"
+						placeholder="/old/path/to/repo"
+					></textarea>
+				</div>
 
-			<div class="actions">
-				<button class="bordered prominent" disabled={saving} onclick={save}
-					>{saving ? 'Saving...' : 'Save Settings'}</button
-				>
-				{#if notice}
-					<span class="notice">{notice}</span>
+				{#if project.gitWorktreePaths}
+					{@const paths = project.gitWorktreePaths.split('\n')}
+					<div class="section">
+						<h2>Git Worktree Paths</h2>
+						<p class="hint">
+							Auto-detected git worktrees. Conversations from these paths are included in this
+							project.
+						</p>
+						<ul class="paths-list">
+							{#each paths as p (p)}
+								<li><code>{p}</code></li>
+							{/each}
+						</ul>
+					</div>
 				{/if}
-				{#if recomputeStatusMessage}
-					<span class="notice">{recomputeStatusMessage}</span>
-				{/if}
-			</div>
-			{#if error}
-				<p class="error">{error}</p>
-			{/if}
 
-			<div class="advanced-zone">
-				<h2>Advanced Actions</h2>
-				<p class="advanced-description">
-					Re-scan and recompute commit attribution for this project. This is typically not necessary
-					as commits are refreshed automatically.
-				</p>
+				<div class="section">
+					<h2>Alternate Coding Agent Paths</h2>
+					<p class="hint">
+						Need to track conversations from other user folders or mounted filesystems? Configure
+						that in <a href={resolve('/settings')}>Buildermark Local Settings</a>.
+					</p>
+				</div>
+
 				<div class="actions">
-					<button class="bordered" disabled={refreshing} onclick={refreshCommits}
-						>{refreshing ? 'Refreshing...' : 'Refresh Commits'}</button
+					<button class="bordered prominent" disabled={saving} onclick={save}
+						>{saving ? 'Saving...' : 'Save Settings'}</button
 					>
-					{#if refreshNotice}
-						<span class="notice">{refreshNotice}</span>
+					{#if notice}
+						<span class="notice">{notice}</span>
+					{/if}
+					{#if recomputeStatusMessage}
+						<span class="notice">{recomputeStatusMessage}</span>
 					{/if}
 				</div>
+				{#if error}
+					<p class="error">{error}</p>
+				{/if}
 			</div>
 
-			<div class="danger-zone">
-				<h2>Danger Zone</h2>
-				<p class="danger-description">
-					Permanently delete this project and all its data, including conversations, messages,
-					ratings, and commits.
-				</p>
-				<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button>
-			</div>
-		</div>
+			<hr class="divider" />
 
-		<hr class="divider" />
+			<div class="column">
+				<div class="advanced-zone">
+					<h2>Advanced Actions</h2>
+					<p class="advanced-description">
+						Re-scan and recompute commit attribution for this project. This is typically not
+						necessary as commits are refreshed automatically.
+					</p>
+					<div class="actions">
+						<button class="bordered" disabled={refreshing} onclick={refreshCommits}
+							>{refreshing ? 'Refreshing...' : 'Refresh Commits'}</button
+						>
+						{#if refreshNotice}
+							<span class="notice">{refreshNotice}</span>
+						{/if}
+					</div>
+				</div>
 
-		<div class="column">
-			<div class="section">
-				<h2>Team Server</h2>
-				<select id="team-server-select" bind:value={teamServerId} class="team-server-select">
-					<option value="">None</option>
-					{#each teamServers as server (server.id)}
-						<option value={server.id}>{server.label}</option>
-					{/each}
-				</select>
-				<div class="hint">Coming soon.</div>
+				<div class="danger-zone">
+					<h2>Danger Zone</h2>
+					<p class="danger-description">
+						Permanently delete this project and all its data, including conversations, messages,
+						ratings, and commits.
+					</p>
+					<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button
+					>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -312,8 +325,25 @@
 </Dialog>
 
 <style>
+	.outer {
+		flex: 1;
+	}
+
 	.page {
-		padding: 0rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+		margin: 0;
+
+		max-width: 1100px;
+		margin: 0 auto;
+
+		background: var(--color-background-content);
+		border-radius: var(--content-section-border-radius);
+		border: 0.5px solid var(--color-divider);
+		box-sizing: border-box;
+		margin: 1.5rem auto;
+		width: 100%;
 	}
 
 	h1 {
@@ -323,8 +353,7 @@
 	}
 
 	h2 {
-		color: var(--accent-color-darkest);
-		margin: 0.5rem 0;
+		margin: 0;
 		font-size: 1rem;
 	}
 
@@ -341,8 +370,12 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 2rem;
+		gap: 1.5rem;
 		padding: 1rem 1.5rem 1.5rem 1.5rem;
+	}
+
+	.column:first-of-type {
+		flex: 1.67;
 	}
 
 	hr.divider {
@@ -359,6 +392,20 @@
 		gap: 0.4rem;
 	}
 
+	.section .row {
+		display: flex;
+		gap: 1rem;
+	}
+
+	.section .row .field-label {
+		max-width: 230px;
+		width: 230px;
+	}
+
+	.section .row .field {
+		width: 100%;
+	}
+
 	@media (max-width: 1200px) {
 		.columns {
 			flex-direction: column;
@@ -369,7 +416,6 @@
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		margin-bottom: 0.5rem;
 	}
 
 	.checkbox-label {
@@ -389,15 +435,15 @@
 		color: var(--accent-color);
 	}
 
-	.default-paths-list {
-		margin: 0 0 1rem;
+	.paths-list {
+		margin: 0;
 		padding-left: 1.5rem;
-		font-size: 0.8rem;
+		font-size: 0.9rem;
 		color: var(--color-text-secondary);
 		line-height: 1.6;
 	}
 
-	.default-paths-list code {
+	.paths-list code {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		font-size: 0.78rem;
 		background: var(--color-button-bg);
@@ -408,7 +454,6 @@
 	.field-label {
 		display: block;
 		margin: 0.5rem 0;
-		font-weight: 600;
 	}
 
 	input[type='text'] {
@@ -422,23 +467,20 @@
 		box-sizing: border-box;
 	}
 
-	input[type='text'].project-label {
-		font-size: 1.3rem;
-	}
-
-	.mono-input {
+	input[type='text'].mono-input {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 		font-size: 0.9rem;
 	}
 
 	.team-server-select {
-		padding: 0.4rem 0.6rem;
+		padding: 0.4rem 0.3rem;
 		font-size: 1rem;
 		border: 1px solid var(--color-border-input);
 		background: var(--color-background-surface);
 		color: var(--color-text);
 		border-radius: 4px;
 		min-width: 200px;
+		width: 100%;
 	}
 
 	textarea {
@@ -453,11 +495,6 @@
 		color: var(--color-text);
 		border-radius: 4px;
 		box-sizing: border-box;
-	}
-
-	.readonly-textarea {
-		opacity: 0.7;
-		cursor: default;
 	}
 
 	.hint {
@@ -479,7 +516,7 @@
 
 	.advanced-zone {
 		padding-top: 1rem;
-		border-top: 0.5px solid var(--color-divider);
+		/*border-top: 0.5px solid var(--color-divider);*/
 	}
 
 	.advanced-zone h2 {

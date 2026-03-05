@@ -7,7 +7,7 @@
 	--accent-color-ultralight: light-dark(#eff7ff, #1a2a3d);
 	--accent-color-divider: light-dark(#9fbbd6, #3a5a7a);
 	--color-text: light-dark(#444, #d4d4d4);
-	--color-text-faded: light-dark(#999, #777);
+	--color-text-faded: light-dark(#888, #777);
 	--color-text-secondary: light-dark(#666, #999);
 	--color-text-tertiary: light-dark(#888, #777);
 	--color-text-strong: light-dark(#333, #e0e0e0);
@@ -102,9 +102,10 @@
 	/* Spinner */
 	--color-spinner-border: transparent;
 	--color-spinner-top: light-dark(#fff, #ddd);
+	--color-spinner-top-on-content: light-dark(#999, #ddd);
 
 	/* Buttons */
-	--color-button-bg: light-dark(#f5f5f5, #333);
+	--color-button-bg: light-dark(#fafafa, #333);
 	--color-button-gradient-start: light-dark(#fafafa, #2e2e32);
 	--color-button-gradient-end: light-dark(#ffffff, #383840);
 
@@ -119,6 +120,8 @@
 
 	/* Visibility button */
 	--color-visibility-btn-bg: light-dark(#e8e8e8, #333);
+
+	--content-section-border-radius: 8px;
 }
 
 :root[data-content-width='wider'] {
@@ -173,7 +176,7 @@ a:active {
 
 .inset-when-limited-content-width {
 	background: var(--color-background-content);
-	border-radius: 10px;
+	border-radius: var(--content-section-border-radius);
 	border: 0.5px solid var(--color-divider);
 	box-sizing: border-box;
 	margin: 1.5rem auto;
@@ -207,11 +210,7 @@ a:active {
 
 a.bordered,
 button.bordered {
-	background: linear-gradient(
-		0deg,
-		var(--color-button-gradient-start),
-		var(--color-button-gradient-end)
-	);
+	background: var(--color-button-bg);
 	border-radius: 4px;
 	border: 0.5px solid var(--color-divider);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -239,11 +238,7 @@ button.bordered:disabled {
 
 a.bordered:hover,
 button.bordered:hover {
-	background: linear-gradient(
-		0deg,
-		var(--accent-color-ultralight),
-		var(--color-button-gradient-end)
-	);
+	background: var(--accent-color-ultralight);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 	color: var(--accent-color);
 	border-color: var(--accent-color);

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -11,7 +11,9 @@
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 
-	layoutStore.hideContainer = true;
+	onMount(() => {
+		layoutStore.hideContainer = true;
+	});
 	onDestroy(() => {
 		layoutStore.hideContainer = false;
 	});
@@ -268,7 +270,7 @@
 		margin: 0 auto;
 
 		background: var(--color-background-content);
-		border-radius: 10px;
+		border-radius: var(--content-section-border-radius);
 		border: 0.5px solid var(--color-divider);
 		box-sizing: border-box;
 		margin: 1.5rem auto;

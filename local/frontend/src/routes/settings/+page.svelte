@@ -24,11 +24,13 @@
 
 	let projects = $derived(data.projects);
 	let projectError = $derived(data.projectError);
-	let localSettings = $state(data.localSettings);
+	let localSettings = $derived(data.localSettings);
 	let localSettingsError = $derived(data.localSettingsError);
 
-	let extraAgentHomesText = $state(data.localSettings?.extraAgentHomes?.join('\n') ?? '');
-	let extraLocalUserEmailsText = $state(data.localSettings?.extraLocalUserEmails?.join('\n') ?? '');
+	let extraAgentHomesText = $derived(data.localSettings?.extraAgentHomes?.join('\n') ?? '');
+	let extraLocalUserEmailsText = $derived(
+		data.localSettings?.extraLocalUserEmails?.join('\n') ?? ''
+	);
 	let savingSettings = $state(false);
 	let settingsNotice: string | null = $state(null);
 	let settingsError: string | null = $state(null);
@@ -470,12 +472,13 @@
 	}
 
 	.spinner {
-		width: 0.8rem;
-		height: 0.8rem;
+		width: 0.6rem;
+		height: 0.6rem;
 		border: 2px solid var(--color-spinner-border);
-		border-top-color: var(--color-spinner-top);
+		border-top-color: var(--color-spinner-top-on-content);
 		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
+		animation: spin 0.3s linear infinite;
+		display: inline-block;
 	}
 
 	@keyframes spin {

@@ -28,7 +28,7 @@
 			settingsStore.initCommitSortOrder(data.localSettings.commitSortOrder);
 		}
 		listProjects()
-			.then((p) => (projects = p))
+			.then((p) => (projects = p.sort((a, b) => a.label.localeCompare(b.label))))
 			.catch(() => {});
 		const svg = animatedEl?.querySelector('svg');
 		if (svg) {
