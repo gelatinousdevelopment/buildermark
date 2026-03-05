@@ -36,6 +36,7 @@ func (a *Agent) Run(ctx context.Context) {
 	})
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
+	a.CleanupEmptyConversations(ctx)
 
 	ticker := time.NewTicker(a.Interval)
 	defer ticker.Stop()

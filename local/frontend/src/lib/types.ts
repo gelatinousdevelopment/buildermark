@@ -33,7 +33,6 @@ export interface LocalSettings {
 	conversationSearchPaths: AgentConversationSearchPath[];
 	extraAgentHomes: string[];
 	extraLocalUserEmails: string[];
-	commitSortOrder: string;
 }
 
 export interface ProjectDetail {

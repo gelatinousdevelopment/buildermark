@@ -10,7 +10,6 @@
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
-	import { settingsStore } from '$lib/stores/settings.svelte';
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { listProjects } from '$lib/api';
@@ -24,9 +23,6 @@
 
 	onMount(() => {
 		websocketStore.connect();
-		if (data.localSettings?.commitSortOrder) {
-			settingsStore.initCommitSortOrder(data.localSettings.commitSortOrder);
-		}
 		listProjects()
 			.then((p) => (projects = p.sort((a, b) => a.label.localeCompare(b.label))))
 			.catch(() => {});

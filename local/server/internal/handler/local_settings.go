@@ -19,14 +19,12 @@ type localSettingsResponse struct {
 	ConversationSearchPaths []agentSearchPath `json:"conversationSearchPaths"`
 	ExtraAgentHomes         []string          `json:"extraAgentHomes"`
 	ExtraLocalUserEmails    []string          `json:"extraLocalUserEmails"`
-	CommitSortOrder         string            `json:"commitSortOrder"`
 }
 
 type localConfigFile struct {
 	UpdateMode           string   `json:"updateMode"`
 	ExtraAgentHomes      []string `json:"extraAgentHomes,omitempty"`
 	ExtraLocalUserEmails []string `json:"extraLocalUserEmails,omitempty"`
-	CommitSortOrder      string   `json:"commitSortOrder,omitempty"`
 }
 
 type agentSearchPath struct {
@@ -56,11 +54,6 @@ func (s *Server) handleGetLocalSettings(w http.ResponseWriter, r *http.Request) 
 		dbPath = abs
 	}
 
-	commitSortOrder := cfg.CommitSortOrder
-	if commitSortOrder != "asc" && commitSortOrder != "desc" {
-		commitSortOrder = "desc"
-	}
-
 	writeSuccess(w, http.StatusOK, localSettingsResponse{
 		HomePath:                home,
 		DBPath:                  dbPath,
@@ -68,7 +61,6 @@ func (s *Server) handleGetLocalSettings(w http.ResponseWriter, r *http.Request) 
 		ConversationSearchPaths: paths,
 		ExtraAgentHomes:         extraHomes,
 		ExtraLocalUserEmails:    effectiveExtraLocalUserEmails(cfg),
-		CommitSortOrder:         commitSortOrder,
 	})
 }
 
@@ -79,7 +71,6 @@ func (s *Server) handlePutLocalSettings(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		ExtraAgentHomes      []string `json:"extraAgentHomes"`
 		ExtraLocalUserEmails []string `json:"extraLocalUserEmails"`
-		CommitSortOrder      *string  `json:"commitSortOrder"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -96,11 +87,6 @@ func (s *Server) handlePutLocalSettings(w http.ResponseWriter, r *http.Request) 
 	}
 	cfg.ExtraAgentHomes = normalizeHomeEntries(req.ExtraAgentHomes)
 	cfg.ExtraLocalUserEmails = normalizeEmailEntries(req.ExtraLocalUserEmails)
-	if req.CommitSortOrder != nil {
-		if *req.CommitSortOrder == "asc" || *req.CommitSortOrder == "desc" {
-			cfg.CommitSortOrder = *req.CommitSortOrder
-		}
-	}
 	if err := saveLocalConfigFile(s.ConfigDir, cfg); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save config")
 		return

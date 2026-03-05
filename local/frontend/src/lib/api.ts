@@ -72,14 +72,6 @@ export function updateLocalSettings(
 		body: JSON.stringify({ extraAgentHomes, extraLocalUserEmails })
 	});
 }
-
-export function updateCommitSortOrder(order: string): Promise<LocalSettings> {
-	return api('/api/v1/settings', {
-		method: 'PUT',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ commitSortOrder: order })
-	});
-}
 export function deleteProject(id: string): Promise<void> {
 	return api(`/api/v1/projects/${id}`, { method: 'DELETE' });
 }

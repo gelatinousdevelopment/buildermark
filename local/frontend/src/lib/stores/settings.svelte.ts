@@ -1,5 +1,4 @@
 import { browser } from '$app/environment';
-import { updateCommitSortOrder } from '$lib/api';
 
 const STORAGE_KEY = 'buildermark_local_settings';
 
@@ -108,12 +107,5 @@ export const settingsStore = {
 	set commitSortOrder(v: CommitSortOrder) {
 		_commitSortOrder = v;
 		save();
-		updateCommitSortOrder(v).catch(() => {});
-	},
-	initCommitSortOrder(order: string) {
-		if (order === 'asc' || order === 'desc') {
-			_commitSortOrder = order;
-			save();
-		}
 	}
 };

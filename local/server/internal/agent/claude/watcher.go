@@ -45,6 +45,7 @@ func (a *Agent) Run(ctx context.Context) {
 	a.backfillParentConversations(ctx)
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
+	a.CleanupEmptyConversations(ctx)
 	a.backfillGitWorktreePaths(ctx)
 
 	ticker := time.NewTicker(a.Interval)

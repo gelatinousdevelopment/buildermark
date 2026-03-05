@@ -55,6 +55,19 @@ func (b *Base) BackfillGitIDs(ctx context.Context) {
 	}
 }
 
+// CleanupEmptyConversations deletes conversations that have no messages and no
+// ratings (started_at still 0 from EnsureConversation).
+func (b *Base) CleanupEmptyConversations(ctx context.Context) {
+	n, err := db.DeleteEmptyConversations(ctx, b.DB)
+	if err != nil {
+		log.Printf("%s watcher: cleanup empty conversations: %v", b.agentName, err)
+		return
+	}
+	if n > 0 {
+		log.Printf("%s watcher: cleaned up %d empty conversations", b.agentName, n)
+	}
+}
+
 // BackfillLabels updates project labels from the last path component to the
 // git repository root directory name for projects whose label was auto-generated.
 func (b *Base) BackfillLabels(ctx context.Context) {

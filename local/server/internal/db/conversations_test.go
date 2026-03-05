@@ -344,6 +344,64 @@ func TestGetConversationDetailEmptyMessagesAndRatings(t *testing.T) {
 	}
 }
 
+func TestDeleteEmptyConversations(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	// Create three conversations: empty, with messages, empty but with rating.
+	for _, id := range []string{"conv-empty", "conv-messages", "conv-rated"} {
+		if err := EnsureConversation(ctx, db, id, pid, "claude"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+
+	// Add messages to conv-messages (this updates started_at via trigger).
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "conv-messages", Role: "user", Content: "hello"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	// Add a rating to conv-rated (started_at remains 0 but should be kept).
+	if _, err := InsertRating(ctx, db, "conv-rated", 4, "good", ""); err != nil {
+		t.Fatalf("InsertRating: %v", err)
+	}
+
+	n, err := DeleteEmptyConversations(ctx, db)
+	if err != nil {
+		t.Fatalf("DeleteEmptyConversations: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("deleted %d conversations, want 1", n)
+	}
+
+	// conv-empty should be gone.
+	if c, err := GetConversation(ctx, db, "conv-empty"); err != nil {
+		t.Fatalf("GetConversation conv-empty: %v", err)
+	} else if c != nil {
+		t.Error("conv-empty should have been deleted")
+	}
+
+	// conv-messages should still exist.
+	if c, err := GetConversation(ctx, db, "conv-messages"); err != nil {
+		t.Fatalf("GetConversation conv-messages: %v", err)
+	} else if c == nil {
+		t.Error("conv-messages should not have been deleted")
+	}
+
+	// conv-rated should still exist.
+	if c, err := GetConversation(ctx, db, "conv-rated"); err != nil {
+		t.Fatalf("GetConversation conv-rated: %v", err)
+	} else if c == nil {
+		t.Error("conv-rated should not have been deleted")
+	}
+}
+
 func TestListUntitledConversations(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

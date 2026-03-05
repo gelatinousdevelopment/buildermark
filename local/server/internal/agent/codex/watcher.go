@@ -70,6 +70,7 @@ func (a *Agent) Run(ctx context.Context) {
 	log.Printf("codex watcher: startup scan duration %s", time.Since(start))
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
+	a.CleanupEmptyConversations(ctx)
 
 	ticker := time.NewTicker(a.Interval)
 	defer ticker.Stop()
