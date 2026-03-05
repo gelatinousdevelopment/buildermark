@@ -507,18 +507,6 @@ func ListParentlessConversations(ctx context.Context, db *sql.DB, agent string) 
 	return result, rows.Err()
 }
 
-// DeleteEmptyConversations removes conversations where started_at = 0 (no
-// messages were ever inserted) and no ratings exist.
-func DeleteEmptyConversations(ctx context.Context, db *sql.DB) (int64, error) {
-	res, err := db.ExecContext(ctx,
-		"DELETE FROM conversations WHERE started_at = 0 AND id NOT IN (SELECT DISTINCT conversation_id FROM ratings)",
-	)
-	if err != nil {
-		return 0, fmt.Errorf("delete empty conversations: %w", err)
-	}
-	return res.RowsAffected()
-}
-
 // UpdateConversationProject sets the project_id on an existing conversation.
 func UpdateConversationProject(ctx context.Context, db *sql.DB, conversationID, projectID string) error {
 	res, err := db.ExecContext(ctx, "UPDATE conversations SET project_id = ? WHERE id = ?", projectID, conversationID)

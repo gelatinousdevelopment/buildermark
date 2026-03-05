@@ -34,9 +34,10 @@ func (a *Agent) Run(ctx context.Context) {
 	log.Printf("claude watcher: startup scan window %s", scanWindow)
 
 	trackedFilter := a.trackedProjectFilter(ctx)
+	scanCutoff := time.Now().Add(-scanWindow)
 	start := time.Now()
-	a.scanSinceFiltered(ctx, time.Now().Add(-scanWindow), trackedFilter)
-	projectScanCount := a.scanProjectFilesSince(ctx, time.Now().Add(-scanWindow), true, trackedFilter, nil)
+	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter)
+	projectScanCount := a.scanProjectFilesSince(ctx, scanCutoff, true, trackedFilter, nil)
 	log.Printf("claude watcher: startup scan duration %s", time.Since(start))
 	if projectScanCount > 0 {
 		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
@@ -45,7 +46,6 @@ func (a *Agent) Run(ctx context.Context) {
 	a.backfillParentConversations(ctx)
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
-	a.CleanupEmptyConversations(ctx)
 	a.backfillGitWorktreePaths(ctx)
 
 	ticker := time.NewTicker(a.Interval)
@@ -695,18 +695,9 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			projectIDCache[normalizedProject] = projectID
 		}
 
-		if err := db.EnsureConversation(ctx, a.DB, sid, projectID, a.Name()); err != nil {
-			log.Printf("claude watcher: ensure conversation %s: %v", sid, err)
-			continue
-		}
-
 		cacheKey := g.project + "\n" + sid
 		if _, ok := conversationLogCache[cacheKey]; !ok {
 			conversationLogCache[cacheKey] = readConversationLogEntries(a.Home, g.project, sid)
-		}
-		parentSessionID := extractParentSessionID(conversationLogCache[cacheKey])
-		if parentSessionID != "" && parentSessionID != sid {
-			db.UpdateConversationParent(ctx, a.DB, sid, parentSessionID)
 		}
 
 		if _, ok := sessionTitleCache[cacheKey]; !ok {
@@ -727,12 +718,6 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 				title = titleFromConversationLogs(conversationLogCache[cacheKey])
 			}
 			sessionTitleCache[cacheKey] = title
-		}
-
-		if title := sessionTitleCache[cacheKey]; title != "" {
-			if err := db.UpdateConversationTitle(ctx, a.DB, sid, title); err != nil {
-				log.Printf("claude watcher: update title for %s: %v", sid, err)
-			}
 		}
 
 		messages := make([]db.Message, 0, len(g.entries)+1)
@@ -871,12 +856,12 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 
 		messages = appendDiffDBMessages(messages)
 
-		if err := db.InsertMessages(ctx, a.DB, messages); err != nil {
-			log.Printf("claude watcher: insert messages for session %s: %v", sid, err)
+		// Collect rating entries from /bb commands.
+		var ratingEntries []struct {
+			rating    int
+			note      string
+			timestamp int64
 		}
-
-		// Reconcile orphaned ratings: if any entry in this session is a /bb
-		// command, find the corresponding orphaned rating and re-link it.
 		for _, e := range g.entries {
 			if !isRatingDisplay(e.Display) {
 				continue
@@ -885,7 +870,48 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if rating < 0 {
 				continue
 			}
-			if err := db.ReconcileOrphanedRating(ctx, a.DB, rating, note, e.Timestamp, sid); err != nil {
+			ratingEntries = append(ratingEntries, struct {
+				rating    int
+				note      string
+				timestamp int64
+			}{rating, note, e.Timestamp})
+		}
+
+		// Skip conversations that have no user messages and no ratings — these
+		// would appear empty in the UI.
+		hasUserMessage := false
+		for _, m := range messages {
+			if m.Role == "user" {
+				hasUserMessage = true
+				break
+			}
+		}
+		if !hasUserMessage && len(ratingEntries) == 0 {
+			continue
+		}
+
+		if err := db.EnsureConversation(ctx, a.DB, sid, projectID, a.Name()); err != nil {
+			log.Printf("claude watcher: ensure conversation %s: %v", sid, err)
+			continue
+		}
+
+		parentSessionID := extractParentSessionID(conversationLogCache[cacheKey])
+		if parentSessionID != "" && parentSessionID != sid {
+			db.UpdateConversationParent(ctx, a.DB, sid, parentSessionID)
+		}
+
+		if title := sessionTitleCache[cacheKey]; title != "" {
+			if err := db.UpdateConversationTitle(ctx, a.DB, sid, title); err != nil {
+				log.Printf("claude watcher: update title for %s: %v", sid, err)
+			}
+		}
+
+		if err := db.InsertMessages(ctx, a.DB, messages); err != nil {
+			log.Printf("claude watcher: insert messages for session %s: %v", sid, err)
+		}
+
+		for _, z := range ratingEntries {
+			if err := db.ReconcileOrphanedRating(ctx, a.DB, z.rating, z.note, z.timestamp, sid); err != nil {
 				log.Printf("claude watcher: reconcile rating for session %s: %v", sid, err)
 			}
 		}

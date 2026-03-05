@@ -1956,7 +1956,8 @@ func TestWatcherExtractsModelFromNestedRawHistoryJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	histPath := filepath.Join(tmpDir, "history.jsonl")
 
-	raw := `{"display":"hello","timestamp":1000,"sessionId":"sess-nested","project":"/proj/a","type":"assistant","message":{"metadata":{"model":"claude-3-5-sonnet"}}}` + "\n"
+	raw := `{"display":"do something","timestamp":900,"sessionId":"sess-nested","project":"/proj/a","type":"human"}` + "\n" +
+		`{"display":"hello","timestamp":1000,"sessionId":"sess-nested","project":"/proj/a","type":"assistant","message":{"metadata":{"model":"claude-3-5-sonnet"}}}` + "\n"
 	if err := os.WriteFile(histPath, []byte(raw), 0644); err != nil {
 		t.Fatalf("write history: %v", err)
 	}

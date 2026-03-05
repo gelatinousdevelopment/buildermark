@@ -212,6 +212,12 @@ func TestWatcherDetectsNestedConversationModel(t *testing.T) {
 		"directories": []string{"/proj/gemini"},
 		"messages": []map[string]any{
 			{
+				"id":        "m0",
+				"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+				"type":      "user",
+				"content":   "do something",
+			},
+			{
 				"id":        "m1",
 				"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),
 				"type":      "gemini",

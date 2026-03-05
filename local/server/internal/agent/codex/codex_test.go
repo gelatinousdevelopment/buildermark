@@ -434,13 +434,18 @@ func TestWatcherDerivesDiffFromCurrentSchemaApplyPatch(t *testing.T) {
 	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "14", "rollout-2026-02-14T08-00-00-thread-apply-patch.jsonl")
 	writeJSONLObjects(t, rolloutPath, []any{
 		map[string]any{
-			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"timestamp": now.Add(-3 * time.Second).Format(time.RFC3339Nano),
 			"type":      "session_meta",
 			"payload": map[string]any{
 				"id":    "thread-apply-patch",
 				"cwd":   "/proj/apply-patch",
 				"model": "gpt-5-codex",
 			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"type":      "event_msg",
+			"payload":   map[string]any{"type": "user_message", "message": "patch the file"},
 		},
 		map[string]any{
 			"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),
@@ -474,13 +479,18 @@ func TestWatcherImportsReasoningSummaryText(t *testing.T) {
 	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "22", "rollout-2026-02-22T17-59-57-thread-reasoning.jsonl")
 	writeJSONLObjects(t, rolloutPath, []any{
 		map[string]any{
-			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"timestamp": now.Add(-3 * time.Second).Format(time.RFC3339Nano),
 			"type":      "session_meta",
 			"payload": map[string]any{
 				"id":    "thread-reasoning",
 				"cwd":   "/proj/reasoning",
 				"model": "gpt-5-codex",
 			},
+		},
+		map[string]any{
+			"timestamp": now.Add(-2 * time.Second).Format(time.RFC3339Nano),
+			"type":      "event_msg",
+			"payload":   map[string]any{"type": "user_message", "message": "reformat files"},
 		},
 		map[string]any{
 			"timestamp": now.Add(-1 * time.Second).Format(time.RFC3339Nano),

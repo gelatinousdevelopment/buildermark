@@ -53,6 +53,7 @@ Conventions to follow when implementing/updating an agent importer:
 2. Keep `role` semantic (`agent` for model/question, `user` for prompt/answer).
 3. Prefer structured extraction over heuristic text parsing for question/answer flows.
 4. Format structured question/answer content as markdown suitable for UI cards.
+5. **Skip conversations with no user content.** Before calling `EnsureConversation`, verify that at least one message has `Role == "user"` or that ratings exist. Conversations with only agent/log messages appear empty in the UI and must not be imported.
 
 Provider-specific structured question sources currently supported:
 

@@ -26,8 +26,9 @@ func (a *Agent) Run(ctx context.Context) {
 	}
 	log.Printf("gemini watcher: startup scan window %s", scanWindow)
 
+	scanCutoff := time.Now().Add(-scanWindow)
 	trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
-	a.scanSince(ctx, time.Now().Add(-scanWindow), trackedFilter)
+	a.scanSince(ctx, scanCutoff, trackedFilter)
 	// Write a scan marker so future restarts can compute a narrow window.
 	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 		Agent:      a.Name(),
@@ -36,7 +37,6 @@ func (a *Agent) Run(ctx context.Context) {
 	})
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
-	a.CleanupEmptyConversations(ctx)
 
 	ticker := time.NewTicker(a.Interval)
 	defer ticker.Stop()
@@ -317,7 +317,16 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, since 
 			}
 		}
 	}
-	if len(messages) == 0 && len(ratingEntries) == 0 {
+	// Skip conversations that have no user messages and no ratings — these are
+	// agent-only log entries that would appear empty in the UI.
+	hasUserMessage := false
+	for _, m := range messages {
+		if m.Role == "user" {
+			hasUserMessage = true
+			break
+		}
+	}
+	if !hasUserMessage && len(ratingEntries) == 0 {
 		return false
 	}
 

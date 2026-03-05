@@ -64,13 +64,13 @@ func (a *Agent) Run(ctx context.Context) {
 	}
 	log.Printf("codex watcher: startup scan window %s", scanWindow)
 
+	scanCutoff := time.Now().Add(-scanWindow)
 	trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	start := time.Now()
-	a.scanSinceFiltered(ctx, time.Now().Add(-scanWindow), trackedFilter)
+	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter)
 	log.Printf("codex watcher: startup scan duration %s", time.Since(start))
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
-	a.CleanupEmptyConversations(ctx)
 
 	ticker := time.NewTicker(a.Interval)
 	defer ticker.Stop()
@@ -645,7 +645,16 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 	if threadID == "" || workingDir == "" {
 		return false
 	}
-	if len(messages) == 0 && len(ratingEntries) == 0 {
+	// Skip conversations that have no user messages and no ratings — these
+	// would appear empty in the UI.
+	hasUserMessage := false
+	for _, m := range messages {
+		if m.Role == "user" {
+			hasUserMessage = true
+			break
+		}
+	}
+	if !hasUserMessage && len(ratingEntries) == 0 {
 		return false
 	}
 
