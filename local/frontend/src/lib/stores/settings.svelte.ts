@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import type { ExportMode, ExportFormat } from '$lib/exportGenerator';
 
 const STORAGE_KEY = 'buildermark_local_settings';
 
@@ -10,13 +11,19 @@ interface Settings {
 	commits_chart_stretch_bars: boolean;
 	content_width: ContentWidth;
 	commit_sort_order: CommitSortOrder;
+	export_mode: ExportMode;
+	export_format: ExportFormat;
+	export_preset_days: number | null;
 }
 
 const defaults: Settings = {
 	commits_chart_scale_by_lines: false,
 	commits_chart_stretch_bars: false,
 	content_width: 'default',
-	commit_sort_order: 'desc'
+	commit_sort_order: 'desc',
+	export_mode: 'commits-with-prompts',
+	export_format: 'markdown',
+	export_preset_days: 30
 };
 
 function load(): Settings {
@@ -35,7 +42,10 @@ function currentSettings(): Settings {
 		commits_chart_scale_by_lines: _commitsChartScaleByLines,
 		commits_chart_stretch_bars: _commitsChartStretchBars,
 		content_width: _contentWidth,
-		commit_sort_order: _commitSortOrder
+		commit_sort_order: _commitSortOrder,
+		export_mode: _exportMode,
+		export_format: _exportFormat,
+		export_preset_days: _exportPresetDays
 	};
 }
 
@@ -63,6 +73,9 @@ let _commitsChartScaleByLines = $state(initial.commits_chart_scale_by_lines);
 let _commitsChartStretchBars = $state(initial.commits_chart_stretch_bars);
 let _contentWidth = $state(initial.content_width);
 let _commitSortOrder: CommitSortOrder = $state(initial.commit_sort_order);
+let _exportMode: ExportMode = $state(initial.export_mode);
+let _exportFormat: ExportFormat = $state(initial.export_format);
+let _exportPresetDays: number | null = $state(initial.export_preset_days);
 
 applyContentWidth(initial.content_width);
 
@@ -74,6 +87,9 @@ if (browser) {
 		_commitsChartStretchBars = updated.commits_chart_stretch_bars;
 		_contentWidth = updated.content_width;
 		_commitSortOrder = updated.commit_sort_order;
+		_exportMode = updated.export_mode;
+		_exportFormat = updated.export_format;
+		_exportPresetDays = updated.export_preset_days;
 		applyContentWidth(updated.content_width);
 	});
 }
@@ -106,6 +122,27 @@ export const settingsStore = {
 	},
 	set commitSortOrder(v: CommitSortOrder) {
 		_commitSortOrder = v;
+		save();
+	},
+	get exportMode(): ExportMode {
+		return _exportMode;
+	},
+	set exportMode(v: ExportMode) {
+		_exportMode = v;
+		save();
+	},
+	get exportFormat(): ExportFormat {
+		return _exportFormat;
+	},
+	set exportFormat(v: ExportFormat) {
+		_exportFormat = v;
+		save();
+	},
+	get exportPresetDays(): number | null {
+		return _exportPresetDays;
+	},
+	set exportPresetDays(v: number | null) {
+		_exportPresetDays = v;
 		save();
 	}
 };

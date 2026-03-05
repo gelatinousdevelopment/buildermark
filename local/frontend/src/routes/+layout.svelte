@@ -66,6 +66,11 @@
 			route: '/projects/[project_id]/insights' as const
 		},
 		{
+			label: 'Export',
+			segment: 'export',
+			route: '/projects/[project_id]/export' as const
+		},
+		{
 			label: 'Settings',
 			segment: 'settings',
 			route: '/projects/[project_id]/settings' as const
