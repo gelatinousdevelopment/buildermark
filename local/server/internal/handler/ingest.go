@@ -341,6 +341,8 @@ func ingestCommits(
 	dbCommits := make([]db.Commit, 0, len(toIngest))
 	// Per-commit, per-agent coverage: map from commit hash to agent->lines/chars.
 	perCommitAgent := make(map[string]map[string]*agentStats)
+	// Per-commit conversation links: map from commit hash to unique conversation IDs.
+	perCommitConvLinks := make(map[string][]string)
 
 	for _, gc := range toIngest {
 		rawDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", gc.Hash)
@@ -365,7 +367,7 @@ func ingestCommits(
 		if matchesIdentity && len(commitTokens) > 0 && len(messages) > 0 {
 			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
-			_, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			contribs, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 			files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 			matchedLines = ml + fallbackLines
 			matchedChars = mc + fallbackChars
@@ -378,6 +380,19 @@ func ingestCommits(
 					byAgent[seg.Agent] = &agentStats{lines: seg.LinesFromAgent}
 				}
 				perCommitAgent[gc.Hash] = byAgent
+			}
+
+			// Collect unique conversation IDs for commit-conversation links.
+			convSeen := make(map[string]bool)
+			var convIDs []string
+			for _, contrib := range contribs {
+				if !convSeen[contrib.ConversationID] {
+					convSeen[contrib.ConversationID] = true
+					convIDs = append(convIDs, contrib.ConversationID)
+				}
+			}
+			if len(convIDs) > 0 {
+				perCommitConvLinks[gc.Hash] = convIDs
 			}
 		}
 
@@ -433,6 +448,23 @@ func ingestCommits(
 		}
 	}
 
+	// Persist commit-conversation links.
+	if len(perCommitConvLinks) > 0 {
+		for _, c := range dbCommits {
+			convIDs, ok := perCommitConvLinks[c.CommitHash]
+			if !ok {
+				continue
+			}
+			dbCommit, err := db.GetCommitByProjectAndHash(ctx, database, c.ProjectID, c.CommitHash)
+			if err != nil || dbCommit == nil {
+				continue
+			}
+			if err := db.UpsertCommitConversationLinks(ctx, database, dbCommit.ID, convIDs); err != nil {
+				log.Printf("warning: failed to upsert commit conversation links for %s: %v", c.CommitHash, err)
+			}
+		}
+	}
+
 	return len(dbCommits), nil
 }
 
@@ -485,7 +517,7 @@ func recomputeSingleCommit(
 	messages []messageDiff,
 	identity *gitIdentity,
 	extraEmails []string,
-) (db.Commit, map[string]agentStats, error) {
+) (db.Commit, map[string]agentStats, []string, error) {
 	cleanDiff := c.DiffContent
 	rawDiff, rawErr := runGit(ctx, repoPath, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
 	if rawErr == nil {
@@ -506,13 +538,14 @@ func recomputeSingleCommit(
 	var files []commitFileCoverage
 	fallbackLines := 0
 	fallbackChars := 0
+	var contribs []commitContributionMessage
 
 	windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
 	windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
 	if matchesIdent {
 		var fileAgent map[string]commitFileCoverage
 		var remainingNorms map[string]int
-		_, matchedLines, matchedChars, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		contribs, matchedLines, matchedChars, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		files, fallbackLines, fallbackChars = summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
 		matchedChars += fallbackChars
@@ -546,16 +579,28 @@ func recomputeSingleCommit(
 			byAgent[seg.Agent] = agentStats{lines: seg.LinesFromAgent}
 		}
 	}
-	return updated, byAgent, nil
+
+	// Collect unique conversation IDs from contribs.
+	convSeen := make(map[string]bool)
+	var convIDs []string
+	for _, contrib := range contribs {
+		if !convSeen[contrib.ConversationID] {
+			convSeen[contrib.ConversationID] = true
+			convIDs = append(convIDs, contrib.ConversationID)
+		}
+	}
+
+	return updated, byAgent, convIDs, nil
 }
 
-// persistRecomputedCommits upserts recomputed commits and agent coverage.
+// persistRecomputedCommits upserts recomputed commits, agent coverage, and conversation links.
 func persistRecomputedCommits(
 	ctx context.Context,
 	database *sql.DB,
 	commits []db.Commit,
 	originals []db.Commit,
 	perCommitAgent map[string]map[string]agentStats,
+	perCommitConvLinks map[string][]string,
 ) error {
 	if err := db.UpsertCommits(ctx, database, commits); err != nil {
 		return fmt.Errorf("upsert recomputed commits: %w", err)
@@ -565,20 +610,27 @@ func persistRecomputedCommits(
 			return err
 		}
 		byAgent := perCommitAgent[c.ID]
-		if len(byAgent) == 0 {
+		if len(byAgent) == 0 && len(perCommitConvLinks[c.ID]) == 0 {
 			continue
 		}
-		rows := make([]db.CommitAgentCoverage, 0, len(byAgent))
-		for agentName, stats := range byAgent {
-			rows = append(rows, db.CommitAgentCoverage{
-				CommitID:       c.ID,
-				Agent:          agentName,
-				LinesFromAgent: stats.lines,
-				CharsFromAgent: stats.chars,
-			})
+		if len(byAgent) > 0 {
+			rows := make([]db.CommitAgentCoverage, 0, len(byAgent))
+			for agentName, stats := range byAgent {
+				rows = append(rows, db.CommitAgentCoverage{
+					CommitID:       c.ID,
+					Agent:          agentName,
+					LinesFromAgent: stats.lines,
+					CharsFromAgent: stats.chars,
+				})
+			}
+			if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {
+				return fmt.Errorf("upsert recomputed commit agent coverage: %w", err)
+			}
 		}
-		if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {
-			return fmt.Errorf("upsert recomputed commit agent coverage: %w", err)
+		if convIDs, ok := perCommitConvLinks[c.ID]; ok {
+			if err := db.UpsertCommitConversationLinks(ctx, database, c.ID, convIDs); err != nil {
+				log.Printf("warning: failed to upsert commit conversation links for %s: %v", c.CommitHash, err)
+			}
 		}
 	}
 	return nil
@@ -624,12 +676,13 @@ func recomputeCommitCoverageForProjectHashes(
 
 	updatedCommits := make([]db.Commit, 0, len(commits))
 	perCommitAgent := make(map[string]map[string]agentStats)
+	perCommitConvLinks := make(map[string][]string)
 
 	for _, c := range commits {
 		if progress != nil {
 			progress(fmt.Sprintf("Recomputing commit %s...", c.CommitHash), len(updatedCommits))
 		}
-		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
+		updated, byAgent, convIDs, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
 		if err != nil {
 			continue
 		}
@@ -637,9 +690,12 @@ func recomputeCommitCoverageForProjectHashes(
 		if len(byAgent) > 0 {
 			perCommitAgent[c.ID] = byAgent
 		}
+		if len(convIDs) > 0 {
+			perCommitConvLinks[c.ID] = convIDs
+		}
 	}
 
-	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent); err != nil {
+	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent, perCommitConvLinks); err != nil {
 		return 0, err
 	}
 	return len(updatedCommits), nil
@@ -713,9 +769,10 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 
 	updatedCommits := make([]db.Commit, 0, len(commits))
 	perCommitAgent := make(map[string]map[string]agentStats)
+	perCommitConvLinks := make(map[string][]string)
 
 	for _, c := range commits {
-		updated, byAgent, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
+		updated, byAgent, convIDs, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
 		if err != nil {
 			continue
 		}
@@ -723,9 +780,12 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 		if len(byAgent) > 0 {
 			perCommitAgent[c.ID] = byAgent
 		}
+		if len(convIDs) > 0 {
+			perCommitConvLinks[c.ID] = convIDs
+		}
 	}
 
-	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent); err != nil {
+	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent, perCommitConvLinks); err != nil {
 		return 0, err
 	}
 	return len(updatedCommits), nil

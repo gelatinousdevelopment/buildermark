@@ -1059,6 +1059,94 @@ func SetCommitOverrideLinePercent(ctx context.Context, db *sql.DB, projectID, co
 	return nil
 }
 
+// UpsertCommitConversationLinks replaces the conversation links for a commit.
+func UpsertCommitConversationLinks(ctx context.Context, database *sql.DB, commitID string, conversationIDs []string) error {
+	if strings.TrimSpace(commitID) == "" {
+		return nil
+	}
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM commit_conversation_links WHERE commit_id = ?", commitID); err != nil {
+		return fmt.Errorf("delete old commit conversation links: %w", err)
+	}
+
+	if len(conversationIDs) == 0 {
+		return tx.Commit()
+	}
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT OR IGNORE INTO commit_conversation_links (commit_id, conversation_id) VALUES (?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare insert commit conversation link: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, cid := range conversationIDs {
+		if _, err := stmt.ExecContext(ctx, commitID, cid); err != nil {
+			return fmt.Errorf("insert commit conversation link: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// GetCachedCommitConversationLinks returns cached commit-to-conversation mappings
+// for commits matching the given project IDs and commit hashes.
+func GetCachedCommitConversationLinks(ctx context.Context, database *sql.DB, projectIDs []string, commitHashes []string) (map[string][]string, error) {
+	if len(projectIDs) == 0 || len(commitHashes) == 0 {
+		return map[string][]string{}, nil
+	}
+
+	pidPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
+	result := make(map[string][]string)
+
+	for i := 0; i < len(commitHashes); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(commitHashes) {
+			end = len(commitHashes)
+		}
+		batch := commitHashes[i:end]
+		hashPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf(
+			`SELECT c.commit_hash, ccl.conversation_id
+			 FROM commit_conversation_links ccl
+			 JOIN commits c ON c.id = ccl.commit_id
+			 WHERE c.project_id IN (%s) AND c.commit_hash IN (%s)`,
+			pidPlaceholders, hashPlaceholders,
+		)
+		args := make([]any, 0, len(projectIDs)+len(batch))
+		for _, pid := range projectIDs {
+			args = append(args, pid)
+		}
+		for _, h := range batch {
+			args = append(args, h)
+		}
+
+		rows, err := database.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("query cached commit conversation links: %w", err)
+		}
+		for rows.Next() {
+			var commitHash, conversationID string
+			if err := rows.Scan(&commitHash, &conversationID); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan commit conversation link: %w", err)
+			}
+			result[commitHash] = append(result[commitHash], conversationID)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
 // ListAllCommitsByProject returns ALL commits for a project (no branch filter),
 // ordered by authored_at DESC. DiffContent is omitted.
 func ListAllCommitsByProject(ctx context.Context, db *sql.DB, projectID string, limit, offset int) ([]Commit, error) {

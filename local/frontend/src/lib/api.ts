@@ -360,6 +360,17 @@ export function getCommitConversationLinks(
 	commitHashes: string[],
 	conversationIds: string[]
 ): Promise<CommitConversationLinks> {
+	// Use POST for large payloads to avoid URL length limits.
+	if (commitHashes.length > 50 || conversationIds.length > 50) {
+		return api(`/api/v1/projects/${projectId}/commit-conversation-links`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				commitHashes,
+				conversationIds: conversationIds.length > 0 ? conversationIds : undefined
+			})
+		});
+	}
 	const params = new URLSearchParams();
 	params.set('commitHashes', commitHashes.join(','));
 	if (conversationIds.length > 0) {

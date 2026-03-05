@@ -90,6 +90,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/projects/{id}/recompute-commit-coverage", s.handleRecomputeCommitCoverage)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commit-ingestion-status", s.handleCommitIngestionStatus)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commit-conversation-links", s.handleGetCommitConversationLinks)
+	mux.HandleFunc("POST /api/v1/projects/{projectId}/commit-conversation-links", s.handleGetCommitConversationLinks)
 	mux.HandleFunc("GET /api/v1/team-servers", s.handleListTeamServers)
 	mux.HandleFunc("POST /api/v1/team-servers", s.handleCreateTeamServer)
 	mux.HandleFunc("PUT /api/v1/team-servers/{id}", s.handleUpdateTeamServer)

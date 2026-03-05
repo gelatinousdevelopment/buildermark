@@ -10,15 +10,16 @@
 	import {
 		generateMarkdown,
 		generateHTML,
+		generateHTMLPreview,
 		type ExportMode,
 		type ExportFormat,
+		type ExportSortOrder,
 		type ExportData
 	} from '$lib/exportGenerator';
 	import type {
 		ConversationWithRatings,
 		ConversationBatchDetail,
-		ProjectCommitCoverage,
-		CommitConversationLinks
+		ProjectCommitCoverage
 	} from '$lib/types';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
@@ -32,6 +33,7 @@
 
 	let mode: ExportMode = $state(settingsStore.exportMode);
 	let format: ExportFormat = $state(settingsStore.exportFormat);
+	let sortOrder: ExportSortOrder = $state(settingsStore.exportSortOrder);
 	let presetDays: number | null = $state(settingsStore.exportPresetDays);
 	let customStart = $state('');
 	let customEnd = $state('');
@@ -40,7 +42,15 @@
 	let output = $state('');
 	let outputFormat: ExportFormat = $state('markdown');
 	let copied = $state(false);
-	let previewIframe: HTMLIFrameElement | undefined = $state();
+	let previewHost: HTMLDivElement | undefined = $state();
+	let shadowRoot: ShadowRoot | null = null;
+	let previewHtml = '';
+
+	// Shadow DOM pagination state (not reactive - managed imperatively)
+	let _viewMode: 'all' | 'paged' = 'all';
+	let _currentPage = 0;
+	let _totalPages = 0;
+	let _topLevelLabel = '';
 
 	onMount(() => {
 		layoutStore.fixedHeight = true;
@@ -52,6 +62,7 @@
 		layoutStore.hideContainer = false;
 	});
 
+	// Persist settings without triggering preview updates
 	$effect(() => {
 		settingsStore.exportMode = mode;
 	});
@@ -61,12 +72,102 @@
 	$effect(() => {
 		settingsStore.exportPresetDays = presetDays;
 	});
-
 	$effect(() => {
-		if (outputFormat === 'html' && output && previewIframe) {
-			previewIframe.srcdoc = output;
-		}
+		settingsStore.exportSortOrder = sortOrder;
 	});
+
+	function shadowEl<T extends HTMLElement>(id: string): T | null {
+		return shadowRoot?.getElementById(id) as T | null;
+	}
+
+	function updateShadowNav() {
+		if (!shadowRoot) return;
+		const paged = _viewMode === 'paged';
+		const btnPrev = shadowEl<HTMLButtonElement>('btn-prev');
+		const btnNext = shadowEl<HTMLButtonElement>('btn-next');
+		const btnPrev10 = shadowEl<HTMLButtonElement>('btn-prev10');
+		const btnNext10 = shadowEl<HTMLButtonElement>('btn-next10');
+		const pageInfo = shadowEl('page-info');
+		const gotoWrap = shadowEl('goto-wrap');
+		if (btnPrev) btnPrev.disabled = !paged || _currentPage <= 0;
+		if (btnNext) btnNext.disabled = !paged || _currentPage >= _totalPages - 1;
+		if (btnPrev10) btnPrev10.disabled = !paged || _currentPage <= 0;
+		if (btnNext10) btnNext10.disabled = !paged || _currentPage >= _totalPages - 1;
+		if (pageInfo)
+			pageInfo.textContent = paged
+				? `${_currentPage + 1} / ${_totalPages} ${_topLevelLabel}`
+				: `${_totalPages} ${_topLevelLabel}`;
+		if (gotoWrap) gotoWrap.className = paged ? 'goto-wrap visible' : 'goto-wrap';
+	}
+
+	function showShadowSections() {
+		if (!shadowRoot) return;
+		const sections = shadowRoot.querySelectorAll<HTMLElement>('.top-section');
+		for (let i = 0; i < sections.length; i++) {
+			sections[i].style.display = _viewMode === 'paged' && i !== _currentPage ? 'none' : '';
+		}
+		updateShadowNav();
+	}
+
+	function setShadowViewMode(m: 'all' | 'paged') {
+		_viewMode = m;
+		const btnAll = shadowEl('btn-all');
+		const btnPaged = shadowEl('btn-paged');
+		if (btnAll) btnAll.className = m === 'all' ? 'active' : '';
+		if (btnPaged) btnPaged.className = m === 'paged' ? 'active' : '';
+		if (m === 'paged') _currentPage = 0;
+		showShadowSections();
+	}
+
+	function goShadowPage(delta: number) {
+		if (_viewMode !== 'paged') return;
+		let p = _currentPage + delta;
+		if (p < 0) p = 0;
+		if (p >= _totalPages) p = _totalPages - 1;
+		_currentPage = p;
+		showShadowSections();
+		previewHost?.scrollTo(0, 0);
+	}
+
+	function gotoShadowPage() {
+		const input = shadowEl<HTMLInputElement>('goto-input');
+		if (!input) return;
+		let val = parseInt(input.value, 10);
+		if (isNaN(val) || val < 1) val = 1;
+		if (val > _totalPages) val = _totalPages;
+		_currentPage = val - 1;
+		input.value = '';
+		showShadowSections();
+		previewHost?.scrollTo(0, 0);
+	}
+
+	function renderPreview() {
+		if (previewHtml && previewHost) {
+			if (!shadowRoot) {
+				shadowRoot = previewHost.attachShadow({ mode: 'open' });
+			}
+			shadowRoot.innerHTML = previewHtml;
+			const sections = shadowRoot.querySelectorAll('.top-section');
+			_totalPages = sections.length;
+			_topLevelLabel = mode === 'commits-with-prompts' ? 'Commits' : 'Conversations';
+			_viewMode = 'all';
+			_currentPage = 0;
+
+			// Wire up toolbar event listeners
+			shadowEl('btn-all')?.addEventListener('click', () => setShadowViewMode('all'));
+			shadowEl('btn-paged')?.addEventListener('click', () => setShadowViewMode('paged'));
+			shadowEl('btn-prev')?.addEventListener('click', () => goShadowPage(-1));
+			shadowEl('btn-next')?.addEventListener('click', () => goShadowPage(1));
+			shadowEl('btn-prev10')?.addEventListener('click', () => goShadowPage(-10));
+			shadowEl('btn-next10')?.addEventListener('click', () => goShadowPage(10));
+			shadowEl('btn-goto')?.addEventListener('click', () => gotoShadowPage());
+			shadowEl('goto-input')?.addEventListener('keydown', (e) => {
+				if ((e as KeyboardEvent).key === 'Enter') gotoShadowPage();
+			});
+
+			updateShadowNav();
+		}
+	}
 
 	function getDateRange(): { start: number; end: number } | null {
 		if (presetDays !== null) {
@@ -108,65 +209,84 @@
 		presetDays = null;
 	}
 
+	async function fetchAllConversations(range: { start: number; end: number } | null) {
+		const all: ConversationWithRatings[] = [];
+		let pg = 1;
+		const pageSize = 200;
+		while (true) {
+			const resp = await getProject(projectId, pg, pageSize, undefined, {
+				start: range?.start,
+				end: range?.end,
+				order: 'desc'
+			});
+			all.push(...resp.conversations);
+			if (pg >= resp.conversationPagination.totalPages) break;
+			pg++;
+		}
+		return all;
+	}
+
+	async function fetchAllCommits(range: { start: number; end: number } | null) {
+		const all: ProjectCommitCoverage[] = [];
+		let pg = 1;
+		while (true) {
+			const resp = await listProjectCommitsPage(
+				projectId,
+				pg,
+				'',
+				200,
+				'',
+				'',
+				'',
+				range?.start,
+				range?.end
+			);
+			all.push(...resp.commits);
+			if (pg >= resp.pagination.totalPages) break;
+			pg++;
+		}
+		return all;
+	}
+
 	async function generate() {
 		if (!projectId) return;
 		loading = true;
 		error = null;
 		output = '';
+		previewHtml = '';
 		copied = false;
 
 		try {
 			const range = getDateRange();
+			const needCommits = mode !== 'just-prompts';
 
-			const allConversations: ConversationWithRatings[] = [];
-			let pg = 1;
-			const pageSize = 200;
-			while (true) {
-				const resp = await getProject(projectId, pg, pageSize, undefined, {
-					start: range?.start,
-					end: range?.end,
-					order: 'desc'
-				});
-				allConversations.push(...resp.conversations);
-				if (pg >= resp.conversationPagination.totalPages) break;
-				pg++;
-			}
+			const [allConversations, allCommits] = await Promise.all([
+				fetchAllConversations(range),
+				needCommits ? fetchAllCommits(range) : Promise.resolve([] as ProjectCommitCoverage[])
+			]);
 
-			const allBatchDetails: ConversationBatchDetail[] = [];
 			const convIds = allConversations.map((c) => c.id);
-			for (let i = 0; i < convIds.length; i += 200) {
-				const batch = convIds.slice(i, i + 200);
-				const details = await getConversationsBatchDetail(batch);
-				allBatchDetails.push(...details);
-			}
 
-			let allCommits: ProjectCommitCoverage[] = [];
-			let links: CommitConversationLinks | null = null;
-
-			if (mode !== 'just-prompts') {
-				pg = 1;
-				while (true) {
-					const resp = await listProjectCommitsPage(
-						projectId,
-						pg,
-						'',
-						200,
-						'',
-						'',
-						'',
-						range?.start,
-						range?.end
-					);
-					allCommits.push(...resp.commits);
-					if (pg >= resp.pagination.totalPages) break;
-					pg++;
+			const batchDetailPromise = (async () => {
+				const all: ConversationBatchDetail[] = [];
+				for (let i = 0; i < convIds.length; i += 200) {
+					const batch = convIds.slice(i, i + 200);
+					const details = await getConversationsBatchDetail(batch);
+					all.push(...details);
 				}
+				return all;
+			})();
 
-				if (allCommits.length > 0 || convIds.length > 0) {
-					const commitHashes = allCommits.map((c) => c.commitHash);
-					links = await getCommitConversationLinks(projectId, commitHashes, convIds);
-				}
-			}
+			const linksPromise =
+				needCommits && (allCommits.length > 0 || convIds.length > 0)
+					? getCommitConversationLinks(
+							projectId,
+							allCommits.map((c) => c.commitHash),
+							convIds
+						)
+					: Promise.resolve(null);
+
+			const [allBatchDetails, links] = await Promise.all([batchDetailPromise, linksPromise]);
 
 			const exportData: ExportData = {
 				projectLabel: navStore.projectName || projectId,
@@ -178,10 +298,15 @@
 
 			outputFormat = format;
 			if (format === 'markdown') {
-				output = generateMarkdown(exportData, mode);
+				output = generateMarkdown(exportData, mode, sortOrder);
+				previewHtml = '';
 			} else {
-				output = generateHTML(exportData, mode);
+				output = generateHTML(exportData, mode, sortOrder);
+				previewHtml = generateHTMLPreview(exportData, mode, sortOrder);
 			}
+
+			// Render shadow DOM preview after state settles
+			requestAnimationFrame(() => renderPreview());
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to generate export';
 		} finally {
@@ -246,15 +371,29 @@
 				<div class="radio-group">
 					<label class:selected={mode === 'commits-with-prompts'}>
 						<input type="radio" name="mode" value="commits-with-prompts" bind:group={mode} />
-						Commits ❯ Conversations
+						Commits > Conversations
 					</label>
 					<label class:selected={mode === 'prompts-with-commits'}>
 						<input type="radio" name="mode" value="prompts-with-commits" bind:group={mode} />
-						Conversations ❯ Commits
+						Conversations > Commits
 					</label>
 					<label class:selected={mode === 'just-prompts'}>
 						<input type="radio" name="mode" value="just-prompts" bind:group={mode} />
 						Conversations
+					</label>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<span class="control-label">Sort Order</span>
+				<div class="radio-group">
+					<label class:selected={sortOrder === 'newest'}>
+						<input type="radio" name="sortOrder" value="newest" bind:group={sortOrder} />
+						Newest first
+					</label>
+					<label class:selected={sortOrder === 'oldest'}>
+						<input type="radio" name="sortOrder" value="oldest" bind:group={sortOrder} />
+						Oldest first
 					</label>
 				</div>
 			</div>
@@ -297,12 +436,7 @@
 	<div class="column right">
 		{#if output}
 			{#if outputFormat === 'html'}
-				<iframe
-					bind:this={previewIframe}
-					class="html-preview"
-					title="Export preview"
-					sandbox="allow-same-origin"
-				></iframe>
+				<div bind:this={previewHost} class="html-preview"></div>
 			{:else}
 				<pre class="preview">{output}</pre>
 			{/if}
@@ -521,9 +655,8 @@
 	}
 
 	.html-preview {
-		border: none;
 		flex: 1;
-		width: 100%;
+		overflow-y: auto;
 	}
 
 	@media (max-width: 768px) {

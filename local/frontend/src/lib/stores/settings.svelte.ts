@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import type { ExportMode, ExportFormat } from '$lib/exportGenerator';
+import type { ExportMode, ExportFormat, ExportSortOrder } from '$lib/exportGenerator';
 
 const STORAGE_KEY = 'buildermark_local_settings';
 
@@ -14,6 +14,7 @@ interface Settings {
 	export_mode: ExportMode;
 	export_format: ExportFormat;
 	export_preset_days: number | null;
+	export_sort_order: ExportSortOrder;
 }
 
 const defaults: Settings = {
@@ -23,7 +24,8 @@ const defaults: Settings = {
 	commit_sort_order: 'desc',
 	export_mode: 'commits-with-prompts',
 	export_format: 'markdown',
-	export_preset_days: 30
+	export_preset_days: 30,
+	export_sort_order: 'newest' as ExportSortOrder
 };
 
 function load(): Settings {
@@ -45,7 +47,8 @@ function currentSettings(): Settings {
 		commit_sort_order: _commitSortOrder,
 		export_mode: _exportMode,
 		export_format: _exportFormat,
-		export_preset_days: _exportPresetDays
+		export_preset_days: _exportPresetDays,
+		export_sort_order: _exportSortOrder
 	};
 }
 
@@ -76,6 +79,7 @@ let _commitSortOrder: CommitSortOrder = $state(initial.commit_sort_order);
 let _exportMode: ExportMode = $state(initial.export_mode);
 let _exportFormat: ExportFormat = $state(initial.export_format);
 let _exportPresetDays: number | null = $state(initial.export_preset_days);
+let _exportSortOrder: ExportSortOrder = $state(initial.export_sort_order);
 
 applyContentWidth(initial.content_width);
 
@@ -90,6 +94,7 @@ if (browser) {
 		_exportMode = updated.export_mode;
 		_exportFormat = updated.export_format;
 		_exportPresetDays = updated.export_preset_days;
+		_exportSortOrder = updated.export_sort_order;
 		applyContentWidth(updated.content_width);
 	});
 }
@@ -143,6 +148,13 @@ export const settingsStore = {
 	},
 	set exportPresetDays(v: number | null) {
 		_exportPresetDays = v;
+		save();
+	},
+	get exportSortOrder(): ExportSortOrder {
+		return _exportSortOrder;
+	},
+	set exportSortOrder(v: ExportSortOrder) {
+		_exportSortOrder = v;
 		save();
 	}
 };

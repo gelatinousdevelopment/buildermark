@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
 	"log"
-	"math"
 	"net/http"
 	"strings"
 
@@ -16,6 +16,11 @@ type CommitConversationLinks struct {
 	ConversationToCommits map[string][]string `json:"conversationToCommits"`
 }
 
+type commitConversationLinksRequest struct {
+	CommitHashes    []string `json:"commitHashes"`
+	ConversationIDs []string `json:"conversationIds"`
+}
+
 func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http.Request) {
 	projectID := strings.TrimSpace(r.PathValue("projectId"))
 	if projectID == "" {
@@ -23,29 +28,46 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 		return
 	}
 
-	commitHashesRaw := strings.TrimSpace(r.URL.Query().Get("commitHashes"))
-	conversationIDsRaw := strings.TrimSpace(r.URL.Query().Get("conversationIds"))
-
-	if commitHashesRaw == "" {
-		writeError(w, http.StatusBadRequest, "commitHashes query parameter is required")
-		return
-	}
-
-	commitHashes := splitCSV(commitHashesRaw)
-	if len(commitHashes) > 200 {
-		commitHashes = commitHashes[:200]
-	}
-
+	var commitHashes []string
 	var conversationIDFilter map[string]bool
-	if conversationIDsRaw != "" {
-		ids := splitCSV(conversationIDsRaw)
-		if len(ids) > 200 {
-			ids = ids[:200]
+
+	if r.Method == http.MethodPost {
+		var req commitConversationLinksRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
 		}
-		conversationIDFilter = make(map[string]bool, len(ids))
-		for _, id := range ids {
-			conversationIDFilter[id] = true
+		commitHashes = req.CommitHashes
+		if len(req.ConversationIDs) > 0 {
+			conversationIDFilter = make(map[string]bool, len(req.ConversationIDs))
+			for _, id := range req.ConversationIDs {
+				conversationIDFilter[id] = true
+			}
 		}
+	} else {
+		commitHashesRaw := strings.TrimSpace(r.URL.Query().Get("commitHashes"))
+		if commitHashesRaw == "" {
+			writeError(w, http.StatusBadRequest, "commitHashes query parameter is required")
+			return
+		}
+		commitHashes = splitCSV(commitHashesRaw)
+
+		conversationIDsRaw := strings.TrimSpace(r.URL.Query().Get("conversationIds"))
+		if conversationIDsRaw != "" {
+			ids := splitCSV(conversationIDsRaw)
+			conversationIDFilter = make(map[string]bool, len(ids))
+			for _, id := range ids {
+				conversationIDFilter[id] = true
+			}
+		}
+	}
+
+	if len(commitHashes) == 0 {
+		writeSuccess(w, http.StatusOK, &CommitConversationLinks{
+			CommitToConversations: map[string][]string{},
+			ConversationToCommits: map[string][]string{},
+		})
+		return
 	}
 
 	// Resolve the project group to get all related project IDs.
@@ -64,91 +86,25 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 
 	pIDs := projectIDs(group)
 
-	// Load commits with diff content (only those with agent attribution).
-	commits, err := db.ListCommitsWithDiffByHashes(r.Context(), s.DB, pIDs, commitHashes)
+	// Use cached commit-conversation links from the database.
+	cached, err := db.GetCachedCommitConversationLinks(r.Context(), s.DB, pIDs, commitHashes)
 	if err != nil {
-		log.Printf("error loading commits with diff: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load commits")
+		log.Printf("error loading cached commit conversation links: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to load commit conversation links")
 		return
 	}
 
-	if len(commits) == 0 {
-		writeSuccess(w, http.StatusOK, &CommitConversationLinks{
-			CommitToConversations: map[string][]string{},
-			ConversationToCommits: map[string][]string{},
-		})
-		return
-	}
-
-	// Compute overall time window across all loaded commits.
-	var minAuthoredAt, maxAuthoredAt int64
-	minAuthoredAt = math.MaxInt64
-	for _, c := range commits {
-		if c.AuthoredAt < minAuthoredAt {
-			minAuthoredAt = c.AuthoredAt
-		}
-		if c.AuthoredAt > maxAuthoredAt {
-			maxAuthoredAt = c.AuthoredAt
-		}
-	}
-	overallMinTs := minAuthoredAt*1000 - defaultMessageWindowMs
-	overallMaxTs := maxAuthoredAt*1000 + commitWindowLookaheadMs
-
-	// Load messages with extracted diffs for the time window.
-	messages, err := listDerivedDiffMessages(r.Context(), s.DB, pIDs, overallMinTs, overallMaxTs)
-	if err != nil {
-		log.Printf("error loading derived diff messages: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load messages")
-		return
-	}
-
-	ignorePatterns := groupIgnoreDiffPatterns(group)
-
-	// Resolve identity + extra emails for filtering.
-	repoProject, repoErr := resolveRepoProject(r.Context(), group)
-	var identity *gitIdentity
-	var extraEmails []string
-	if repoErr == nil {
-		if id, err := resolveGitIdentity(r.Context(), repoProject.Path); err == nil {
-			identity = &id
-		}
-		extraEmails = s.loadExtraLocalUserEmails()
-	}
-
-	// Build bidirectional maps using diff-matching attribution.
+	// Build bidirectional maps, applying optional conversation ID filter.
 	c2c := make(map[string][]string)
 	c2commit := make(map[string][]string)
 
-	for _, commit := range commits {
-		// Skip attribution for commits not matching the local user identity.
-		if identity != nil && !commitMatchesExpandedIdentity(commit.UserEmail, *identity, extraEmails) {
-			continue
-		}
-		tokens := parseUnifiedDiffTokens(commit.DiffContent, ignorePatterns)
-		if len(tokens) == 0 {
-			continue
-		}
-
-		windowStart := commit.AuthoredAt*1000 - defaultMessageWindowMs
-		windowEnd := commit.AuthoredAt*1000 + commitWindowLookaheadMs
-
-		contribs, _, _, _, _ := attributeCommitToMessages(tokens, messages, windowStart, windowEnd)
-
-		// Extract unique conversation IDs from contributions.
-		seen := make(map[string]bool)
-		for _, contrib := range contribs {
-			if seen[contrib.ConversationID] {
+	for commitHash, convIDs := range cached {
+		for _, convID := range convIDs {
+			if conversationIDFilter != nil && !conversationIDFilter[convID] {
 				continue
 			}
-			seen[contrib.ConversationID] = true
-
-			// Apply optional conversation ID filter.
-			if conversationIDFilter != nil && !conversationIDFilter[contrib.ConversationID] {
-				continue
-			}
-
-			c2c[commit.CommitHash] = append(c2c[commit.CommitHash], contrib.ConversationID)
-			c2commit[contrib.ConversationID] = append(c2commit[contrib.ConversationID], commit.CommitHash)
+			c2c[commitHash] = append(c2c[commitHash], convID)
+			c2commit[convID] = append(c2commit[convID], commitHash)
 		}
 	}
 
