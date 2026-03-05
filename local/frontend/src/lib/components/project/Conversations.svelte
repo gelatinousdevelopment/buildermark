@@ -811,6 +811,10 @@
 		background: var(--color-relationship-highlight, #fff8e1) !important;
 	}
 
+	tr.relationship-highlight .title a {
+		color: var(--color-relationship-foreground);
+	}
+
 	tr.relationship-source {
 		background: var(--color-relationship-source, #e3f2fd) !important;
 	}

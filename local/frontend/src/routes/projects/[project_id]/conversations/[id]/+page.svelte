@@ -288,14 +288,16 @@
 
 	onMount(() => {
 		layoutStore.fixedHeight = true;
-		wideModeQuery = window.matchMedia('(min-width: 1024px)');
-		updateWideMode(wideModeQuery);
-		wideModeQuery.addEventListener('change', updateWideMode);
+		layoutStore.hideContainer = true;
+		// wideModeQuery = window.matchMedia('(min-width: 1024px)');
+		// updateWideMode(wideModeQuery);
+		// wideModeQuery.addEventListener('change', updateWideMode);
 	});
 
 	onDestroy(() => {
-		wideModeQuery?.removeEventListener('change', updateWideMode);
+		// wideModeQuery?.removeEventListener('change', updateWideMode);
 		layoutStore.fixedHeight = false;
+		layoutStore.hideContainer = false;
 	});
 </script>
 
@@ -520,7 +522,7 @@
 		flex-direction: row;
 		align-items: stretch;
 		flex: 1;
-		min-height: 0;
+		min-height: 100%;
 	}
 
 	.column {
@@ -610,6 +612,7 @@
 	}
 
 	h2 {
+		font-size: 1.3rem;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;

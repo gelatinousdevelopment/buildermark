@@ -4,7 +4,7 @@
 	--accent-color: light-dark(#0066cc, #4d9aff);
 	--accent-color-darker: light-dark(#0055aa, #3d88ee);
 	--accent-color-darkest: light-dark(#003377, #9ecdff);
-	--accent-color-ultralight: light-dark(#eff7ff, #1a2a3d);
+	--accent-color-ultralight: light-dark(#eff7ff, #002b5e);
 	--accent-color-divider: light-dark(#9fbbd6, #3a5a7a);
 	--color-text: light-dark(#444, #d4d4d4);
 	--color-text-faded: light-dark(#888, #777);
@@ -59,8 +59,8 @@
 	--color-tag-background-hover: light-dark(#555, #666);
 	--color-tag-text-hover: white;
 
-	--color-relationship-foreground: light-dark(#b49e00, #d4be44);
-	--color-relationship-highlight: light-dark(#fff8e1, #2e2a16);
+	--color-relationship-foreground: light-dark(#a47e00, #ffd800cc);
+	--color-relationship-highlight: light-dark(#fff8e1, rgb(249, 255, 0, 0.1));
 	--color-relationship-source: light-dark(#e3f2fd, #1a2a3d);
 
 	/* Diff colors */

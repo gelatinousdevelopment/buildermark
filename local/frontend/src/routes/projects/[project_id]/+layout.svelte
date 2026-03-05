@@ -167,6 +167,7 @@
 </div>
 
 <div
+	class="container"
 	class:content={!layoutStore.hideContainer}
 	class:limited-content-width={!layoutStore.hideContainer}
 	class:inset-when-limited-content-width={!layoutStore.hideContainer}
@@ -305,19 +306,11 @@
 		width: 100%;*/
 	}
 
-	.content.fixed-height {
+	.container.fixed-height {
 		display: flex;
 		flex: 1;
 		flex-direction: column;
 		min-height: 0;
 		overflow: hidden;
 	}
-
-	/*@media (max-width: 1600px) {
-		.content {
-			border-width: 0 0 0.5px 0;
-			margin: 0 auto;
-			border-radius: 0;
-		}
-	}*/
 </style>

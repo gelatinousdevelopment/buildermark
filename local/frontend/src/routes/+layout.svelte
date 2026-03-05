@@ -527,6 +527,10 @@
 		padding: 1rem;
 	}
 
+	.site.fixed-height footer {
+		display: none;
+	}
+
 	footer .content {
 		font-size: 0.9rem;
 		opacity: 0.6;
