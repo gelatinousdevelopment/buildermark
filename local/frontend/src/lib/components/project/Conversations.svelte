@@ -397,9 +397,7 @@
 {:else}
 	<table class="data" class:compact class:detailed>
 		<colgroup>
-			{#if !compact}
-				<col class="date-col" />
-			{/if}
+			<col class="date-col" />
 			<col />
 			{#if showRatingsColumn}
 				<col class={detailed ? 'ratings-col-detailed' : 'ratings-col'} />
@@ -414,9 +412,7 @@
 		{#if showColumnNames}
 			<thead>
 				<tr>
-					{#if !compact}
-						<th class="date-col">Date</th>
-					{/if}
+					<th class="date-col">Date</th>
 					<th>Conversation</th>
 					{#if showRatingsColumn}
 						<th>Ratings</th>
@@ -438,6 +434,7 @@
 			{#each visibleConversations as conv (conv.id)}
 				{@const detail = detailData.get(conv.id)}
 				<tr
+					class:conversation-child={Boolean(conv.parentConversationId)}
 					class:relationship-highlight={enableRelationshipHover &&
 						relationshipCache.highlightedConversationIds.has(conv.id)}
 					class:relationship-source={enableRelationshipHover &&
@@ -446,12 +443,14 @@
 						if (enableRelationshipHover) relationshipCache.hoverConversation(projectId, conv.id);
 					}}
 				>
-					{#if !compact}
-						<td class="date" title={formatFullDateTitle(conv.lastMessageTimestamp)}
-							>{formatRelativeOrShortDate(conv.lastMessageTimestamp)}</td
-						>
-					{/if}
-					<td class="title">
+					<td
+						class="date"
+						title={conv.parentConversationId ? '' : formatFullDateTitle(conv.lastMessageTimestamp)}
+						>{conv.parentConversationId
+							? ''
+							: formatRelativeOrShortDate(conv.lastMessageTimestamp, compact)}</td
+					>
+					<td class="title" class:child-title={Boolean(conv.parentConversationId)}>
 						<div class="title-content">
 							<a
 								href={resolve('/projects/[project_id]/conversations/[id]', {
@@ -678,7 +677,11 @@
 	}
 
 	.date-col {
-		width: 140px;
+		width: 120px;
+	}
+
+	.compact .date-col {
+		width: 70px;
 	}
 
 	.ratings-col {
@@ -690,8 +693,13 @@
 	}
 
 	.date {
+		color: var(--color-text-secondary);
+		font-size: 0.9rem;
 		padding-left: 1rem;
+		padding-right: 0;
+		text-align: right;
 		white-space: nowrap;
+		width: fit-content;
 	}
 
 	table.data.detailed td.date {
@@ -701,6 +709,10 @@
 	.title {
 		overflow: hidden;
 		padding-left: 1rem;
+	}
+
+	.title.child-title {
+		padding-left: 1.7rem;
 	}
 
 	.title .title-content {
@@ -726,7 +738,7 @@
 	}
 
 	.document-icon {
-		color: var(--color-relationship-foreground);
+		color: var(--color-relationship-icon);
 		display: inline-block;
 		flex-shrink: 0;
 		height: 12px;

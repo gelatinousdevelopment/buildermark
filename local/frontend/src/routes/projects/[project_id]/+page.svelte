@@ -45,8 +45,8 @@
 		<Conversations
 			{projectId}
 			page={1}
-			pageSize={30}
-			limit={30}
+			pageSize={100}
+			limit={100}
 			compact={true}
 			showAgentColumn={true}
 			showRatingsColumn={true}
@@ -59,7 +59,8 @@
 		<div class="more">
 			<a
 				class="bordered small"
-				href={resolve('/projects/[project_id]/conversations', { project_id: projectId })}>More...</a
+				href={resolve('/projects/[project_id]/conversations', { project_id: projectId })}
+				>More Conversations...</a
 			>
 		</div>
 	</div>
@@ -68,8 +69,8 @@
 		<Commits
 			{projectId}
 			page={1}
-			pageSize={30}
-			limit={30}
+			pageSize={100}
+			limit={100}
 			compact={true}
 			showHeader={true}
 			headerLink={resolve('/projects/[project_id]/commits', { project_id: projectId })}
@@ -83,7 +84,8 @@
 		<div class="more">
 			<a
 				class="bordered small"
-				href={resolve('/projects/[project_id]/commits', { project_id: projectId })}>More...</a
+				href={resolve('/projects/[project_id]/commits', { project_id: projectId })}
+				>More Commits...</a
 			>
 		</div>
 	</div>

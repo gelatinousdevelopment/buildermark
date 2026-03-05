@@ -23,7 +23,10 @@ export async function load({ fetch }) {
 			projects.map(async (project): Promise<ProjectRow> => {
 				try {
 					const conversationData = await getProject(project.id, 1, 10, fetch);
-					const latestConversationTs = conversationData.conversations[0]?.lastMessageTimestamp ?? 0;
+					const latestConversationTs = Math.max(
+						0,
+						...conversationData.conversations.map((c) => c.lastMessageTimestamp ?? 0)
+					);
 					return {
 						project,
 						conversationData,

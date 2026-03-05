@@ -86,7 +86,6 @@
 <div class="project-section">
 	<Conversations
 		{projectId}
-		enableRelationshipHover={true}
 		showFilters={true}
 		showDateFilter={true}
 		showFilesColumn={true}

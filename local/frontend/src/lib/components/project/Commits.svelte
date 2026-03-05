@@ -564,9 +564,7 @@
 			{#if !compact}
 				<col class="timeline-col" />
 			{/if}
-			{#if !compact}
-				<col class="time-col" />
-			{/if}
+			<col class="date-col" />
 			<col class="title-col" />
 			{#if showDiffCount}
 				<col class="diff-col" />
@@ -590,9 +588,7 @@
 					{#if !compact}
 						<th class="timeline-col"></th>
 					{/if}
-					{#if !compact}
-						<th class="time-col">Time</th>
-					{/if}
+					<th class="date-col">Time</th>
 					<th>Commit</th>
 					{#if showDiffCount}
 						<th class="diff-col">Diff</th>
@@ -633,11 +629,9 @@
 							<span class="timeline-dot"></span>
 						</td>
 					{/if}
-					{#if !compact}
-						<td class="time" title={formatFullDateTitle(c.authoredAtUnixMs)}
-							>{formatRelativeOrShortDate(c.authoredAtUnixMs)}</td
-						>
-					{/if}
+					<td class="date" title={formatFullDateTitle(c.authoredAtUnixMs)}
+						>{c.workingCopy ? '' : formatRelativeOrShortDate(c.authoredAtUnixMs, compact)}</td
+					>
 					<td class="title">
 						<div class="title-content">
 							<a
@@ -929,8 +923,12 @@
 		overflow: hidden;
 	}
 
-	.time-col {
+	.date-col {
 		width: 130px;
+	}
+
+	.compact .date-col {
+		width: 70px;
 	}
 
 	.diff-col {
@@ -973,8 +971,18 @@
 		text-overflow: ellipsis;
 	}
 
-	.time {
+	.date {
 		padding-left: 1rem;
+	}
+
+	.compact .date {
+		color: var(--color-text-secondary);
+		font-size: 0.9rem;
+		padding-left: 1rem;
+		padding-right: 0;
+		text-align: right;
+		white-space: nowrap;
+		width: fit-content;
 	}
 
 	.timeline {

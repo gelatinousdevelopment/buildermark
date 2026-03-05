@@ -58,7 +58,7 @@ type ConversationWithRatings struct {
 	Title                string   `json:"title"`
 	ParentConversationID string   `json:"parentConversationId"`
 	Hidden               bool     `json:"hidden"`
-	LastMessageTimestamp  int64    `json:"lastMessageTimestamp"`
+	LastMessageTimestamp int64    `json:"lastMessageTimestamp"`
 	UserPromptCount      int      `json:"userPromptCount"`
 	Ratings              []Rating `json:"ratings"`
 	FilesEdited          []string `json:"filesEdited"`
@@ -72,7 +72,7 @@ type ConversationFilters struct {
 	Search     string // optional free-text search against user messages
 	DateFrom   int64  // unix ms lower bound (inclusive), 0 = no filter
 	DateTo     int64  // unix ms upper bound (exclusive), 0 = no filter
-	Order      string // "asc" for oldest first, default "desc" for newest first
+	Order      string // "asc" for oldest-first family ordering, default "desc"
 }
 
 type ConversationPagination struct {
@@ -123,9 +123,11 @@ func GetProjectDetail(ctx context.Context, db *sql.DB, projectID string) (*Proje
 	return GetProjectDetailPage(ctx, db, projectID, 1, 0, ConversationFilters{})
 }
 
-// GetProjectDetailPage returns a project with conversations sorted by most
-// recent message first. If pageSize <= 0, all conversations are returned.
-// Filters optionally restrict results by agent name and/or rating.
+// GetProjectDetailPage returns a project with conversation families grouped by
+// parent. Families are ordered by the latest ended_at across any family member.
+// Within a family, the parent row is first and children are ordered by
+// started_at ascending (oldest to newest). Pagination is by family count.
+// If pageSize <= 0, all matching families are returned.
 func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, page, pageSize int, filters ConversationFilters) (*ProjectDetail, error) {
 	var p ProjectDetail
 	err := db.QueryRowContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths, team_server_id, git_worktree_paths FROM projects WHERE id = ?", projectID).Scan(&p.ID, &p.Path, &p.OldPaths, &p.Label, &p.GitID, &p.DefaultBranch, &p.Remote, &p.LocalUser, &p.LocalEmail, &p.Ignored, &p.IgnoreDiffPaths, &p.IgnoreDefaultDiffPaths, &p.TeamServerID, &p.GitWorktreePaths)
@@ -204,9 +206,44 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	}
 
 	var total int
-	countArgs := append([]any{projectID, hidden}, filterArgs...)
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM conversations c WHERE c.project_id = ? AND c.hidden = ?"+filterWhere, countArgs...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("count conversations: %w", err)
+	countArgs := append([]any{projectID, projectID, projectID, projectID, projectID, hidden}, filterArgs...)
+	if err := db.QueryRowContext(
+		ctx,
+		`WITH RECURSIVE ancestry(start_id, current_id, parent_id, depth, path) AS (
+			SELECT c.id, c.id, c.parent_conversation_id, 0, ',' || c.id || ','
+			FROM conversations c
+			WHERE c.project_id = ?
+			UNION ALL
+			SELECT a.start_id, p.id, p.parent_conversation_id, a.depth + 1, a.path || p.id || ','
+			FROM ancestry a
+			JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
+			WHERE a.parent_id <> '' AND a.depth < 32 AND instr(a.path, ',' || p.id || ',') = 0
+		),
+		terminal AS (
+			SELECT
+				a.start_id AS conversation_id,
+				a.current_id AS ultimate_root_id,
+				a.depth,
+				ROW_NUMBER() OVER (PARTITION BY a.start_id ORDER BY a.depth DESC, a.current_id ASC) AS rn
+			FROM ancestry a
+			LEFT JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
+			WHERE a.parent_id = '' OR p.id IS NULL
+		),
+		roots AS (
+			SELECT
+				c.id AS conversation_id,
+				COALESCE(t.ultimate_root_id, c.id) AS ultimate_root_id
+			FROM conversations c
+			LEFT JOIN terminal t ON t.conversation_id = c.id AND t.rn = 1
+			WHERE c.project_id = ?
+		)
+		SELECT COUNT(DISTINCT r.ultimate_root_id)
+		FROM conversations c
+		JOIN roots r ON r.conversation_id = c.id
+		WHERE c.project_id = ? AND c.hidden = ?`+filterWhere,
+		countArgs...,
+	).Scan(&total); err != nil {
+		return nil, fmt.Errorf("count conversation families: %w", err)
 	}
 
 	if pageSize <= 0 {
@@ -239,19 +276,93 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 		limit = total
 	}
 
-	// Fetch conversations for this project ordered by latest activity.
+	// Fetch all conversations for the selected page of families.
 	orderDir := "DESC"
 	if filters.Order == "asc" {
 		orderDir = "ASC"
 	}
-	selectArgs := append([]any{projectID, hidden}, filterArgs...)
-	selectArgs = append(selectArgs, limit, offset)
+	selectArgs := append([]any{
+		projectID,
+		projectID,
+		projectID,
+		projectID,
+		projectID,
+		hidden,
+	}, filterArgs...)
+	selectArgs = append(selectArgs, projectID, limit, offset, projectID)
 	convRows, err := db.QueryContext(ctx,
-		`SELECT c.id, c.agent, c.title, c.parent_conversation_id, c.hidden, c.ended_at, c.user_prompt_count
-		 FROM conversations c
-		 WHERE c.project_id = ? AND c.hidden = ?`+filterWhere+`
-		 ORDER BY c.ended_at `+orderDir+`, c.id `+orderDir+`
-		 LIMIT ? OFFSET ?`,
+		`WITH RECURSIVE ancestry(start_id, current_id, parent_id, depth, path) AS (
+			SELECT c.id, c.id, c.parent_conversation_id, 0, ',' || c.id || ','
+			FROM conversations c
+			WHERE c.project_id = ?
+			UNION ALL
+			SELECT a.start_id, p.id, p.parent_conversation_id, a.depth + 1, a.path || p.id || ','
+			FROM ancestry a
+			JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
+			WHERE a.parent_id <> '' AND a.depth < 32 AND instr(a.path, ',' || p.id || ',') = 0
+		),
+		terminal AS (
+			SELECT
+				a.start_id AS conversation_id,
+				a.current_id AS ultimate_root_id,
+				a.depth,
+				ROW_NUMBER() OVER (PARTITION BY a.start_id ORDER BY a.depth DESC, a.current_id ASC) AS rn
+			FROM ancestry a
+			LEFT JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
+			WHERE a.parent_id = '' OR p.id IS NULL
+		),
+		roots AS (
+			SELECT
+				c.id AS conversation_id,
+				COALESCE(t.ultimate_root_id, c.id) AS ultimate_root_id
+			FROM conversations c
+			LEFT JOIN terminal t ON t.conversation_id = c.id AND t.rn = 1
+			WHERE c.project_id = ?
+		),
+		matched_families AS (
+			SELECT DISTINCT r.ultimate_root_id AS family_root_id
+			FROM conversations c
+			JOIN roots r ON r.conversation_id = c.id
+			WHERE c.project_id = ? AND c.hidden = ?`+filterWhere+`
+		),
+		family_activity AS (
+			SELECT
+				mf.family_root_id,
+				COALESCE(MAX(allc.ended_at), 0) AS group_latest_ts
+			FROM matched_families mf
+			JOIN conversations allc
+				ON allc.project_id = ?
+			JOIN roots allr
+				ON allr.conversation_id = allc.id
+				AND allr.ultimate_root_id = mf.family_root_id
+			GROUP BY mf.family_root_id
+		),
+		page_families AS (
+			SELECT family_root_id, group_latest_ts
+			FROM family_activity
+			ORDER BY group_latest_ts `+orderDir+`, family_root_id `+orderDir+`
+			LIMIT ? OFFSET ?
+		)
+		SELECT
+			c.id,
+			c.agent,
+			c.title,
+			c.parent_conversation_id,
+			c.hidden,
+			CASE WHEN c.id = pf.family_root_id THEN pf.group_latest_ts ELSE c.ended_at END AS display_ended_at,
+			c.user_prompt_count
+		FROM page_families pf
+		JOIN conversations c
+			ON c.project_id = ?
+		JOIN roots cr
+			ON cr.conversation_id = c.id
+			AND cr.ultimate_root_id = pf.family_root_id
+		ORDER BY
+			pf.group_latest_ts `+orderDir+`,
+			pf.family_root_id `+orderDir+`,
+			CASE WHEN c.id = pf.family_root_id THEN 0 ELSE 1 END ASC,
+			c.started_at ASC,
+			c.id ASC`,
 		selectArgs...,
 	)
 	if err != nil {

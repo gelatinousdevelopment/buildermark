@@ -335,6 +335,233 @@ func TestGetProjectDetailPageHiddenFilter(t *testing.T) {
 	}
 }
 
+func TestGetProjectDetailPageOrdersByFamilyLatestActivityAndChildrenOldestFirst(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"parent-a", "child-a-old", "child-a-new", "parent-b"} {
+		if err := EnsureConversation(ctx, db, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := UpdateConversationParent(ctx, db, "child-a-old", "parent-a"); err != nil {
+		t.Fatalf("UpdateConversationParent old: %v", err)
+	}
+	if err := UpdateConversationParent(ctx, db, "child-a-new", "parent-a"); err != nil {
+		t.Fatalf("UpdateConversationParent new: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "parent-a", Role: "user", Content: "p-a", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "child-a-old", Role: "user", Content: "c-a-old", RawJSON: "{}"},
+		{Timestamp: 7000, ProjectID: pid, ConversationID: "child-a-new", Role: "user", Content: "c-a-new", RawJSON: "{}"},
+		{Timestamp: 5000, ProjectID: pid, ConversationID: "parent-b", Role: "user", Content: "p-b", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	detail, err := GetProjectDetailPage(ctx, db, pid, 1, 10, ConversationFilters{})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage: %v", err)
+	}
+	if len(detail.Conversations) != 4 {
+		t.Fatalf("conversations = %d, want 4", len(detail.Conversations))
+	}
+	got := []string{
+		detail.Conversations[0].ID,
+		detail.Conversations[1].ID,
+		detail.Conversations[2].ID,
+		detail.Conversations[3].ID,
+	}
+	want := []string{"parent-a", "child-a-old", "child-a-new", "parent-b"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order[%d] = %q, want %q (full order=%v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestGetProjectDetailPagePaginatesByFamily(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"parent-a", "child-a", "parent-b"} {
+		if err := EnsureConversation(ctx, db, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := UpdateConversationParent(ctx, db, "child-a", "parent-a"); err != nil {
+		t.Fatalf("UpdateConversationParent: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "parent-a", Role: "user", Content: "p-a", RawJSON: "{}"},
+		{Timestamp: 4000, ProjectID: pid, ConversationID: "child-a", Role: "user", Content: "c-a", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: pid, ConversationID: "parent-b", Role: "user", Content: "p-b", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	page1, err := GetProjectDetailPage(ctx, db, pid, 1, 1, ConversationFilters{})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage page1: %v", err)
+	}
+	if got := page1.ConversationPagination.Total; got != 2 {
+		t.Fatalf("page1 total = %d, want 2 families", got)
+	}
+	if got := page1.ConversationPagination.TotalPages; got != 2 {
+		t.Fatalf("page1 totalPages = %d, want 2", got)
+	}
+	if len(page1.Conversations) != 2 {
+		t.Fatalf("page1 rows = %d, want 2 (parent+child family)", len(page1.Conversations))
+	}
+	if page1.Conversations[0].ID != "parent-a" || page1.Conversations[1].ID != "child-a" {
+		t.Fatalf("page1 order = [%s, %s], want [parent-a, child-a]", page1.Conversations[0].ID, page1.Conversations[1].ID)
+	}
+
+	page2, err := GetProjectDetailPage(ctx, db, pid, 2, 1, ConversationFilters{})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage page2: %v", err)
+	}
+	if len(page2.Conversations) != 1 {
+		t.Fatalf("page2 rows = %d, want 1", len(page2.Conversations))
+	}
+	if page2.Conversations[0].ID != "parent-b" {
+		t.Fatalf("page2 conversation = %q, want %q", page2.Conversations[0].ID, "parent-b")
+	}
+}
+
+func TestGetProjectDetailPageFilterMatchIncludesFullFamily(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"parent-a", "child-a", "parent-b"} {
+		if err := EnsureConversation(ctx, db, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := UpdateConversationParent(ctx, db, "child-a", "parent-a"); err != nil {
+		t.Fatalf("UpdateConversationParent: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "parent-a", Role: "user", Content: "alpha", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "child-a", Role: "user", Content: "needle keyword", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: pid, ConversationID: "parent-b", Role: "user", Content: "other", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	detail, err := GetProjectDetailPage(ctx, db, pid, 1, 10, ConversationFilters{Search: "needle"})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage: %v", err)
+	}
+	if got := detail.ConversationPagination.Total; got != 1 {
+		t.Fatalf("total = %d, want 1 family", got)
+	}
+	if len(detail.Conversations) != 2 {
+		t.Fatalf("rows = %d, want 2 (parent+child)", len(detail.Conversations))
+	}
+	if detail.Conversations[0].ID != "parent-a" || detail.Conversations[1].ID != "child-a" {
+		t.Fatalf("order = [%s, %s], want [parent-a, child-a]", detail.Conversations[0].ID, detail.Conversations[1].ID)
+	}
+}
+
+func TestGetProjectDetailPageGroupsDescendantsUnderUltimateParent(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"root-a", "child-a", "grandchild-a", "root-b"} {
+		if err := EnsureConversation(ctx, db, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := UpdateConversationParent(ctx, db, "child-a", "root-a"); err != nil {
+		t.Fatalf("UpdateConversationParent child: %v", err)
+	}
+	if err := UpdateConversationParent(ctx, db, "grandchild-a", "child-a"); err != nil {
+		t.Fatalf("UpdateConversationParent grandchild: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "root-a", Role: "user", Content: "root", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "child-a", Role: "user", Content: "child", RawJSON: "{}"},
+		{Timestamp: 8000, ProjectID: pid, ConversationID: "grandchild-a", Role: "user", Content: "grandchild", RawJSON: "{}"},
+		{Timestamp: 5000, ProjectID: pid, ConversationID: "root-b", Role: "user", Content: "other", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	detail, err := GetProjectDetailPage(ctx, db, pid, 1, 10, ConversationFilters{})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage: %v", err)
+	}
+	if len(detail.Conversations) != 4 {
+		t.Fatalf("rows = %d, want 4", len(detail.Conversations))
+	}
+	want := []string{"root-a", "child-a", "grandchild-a", "root-b"}
+	for i, id := range want {
+		if detail.Conversations[i].ID != id {
+			t.Fatalf("row[%d] = %q, want %q", i, detail.Conversations[i].ID, id)
+		}
+	}
+	if got := detail.Conversations[0].LastMessageTimestamp; got != 8000 {
+		t.Fatalf("root-a display timestamp = %d, want 8000 (group latest)", got)
+	}
+}
+
+func TestGetProjectDetailPagePaginatesMultiLevelFamilyAsSingleGroup(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	pid, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"root-a", "child-a", "grandchild-a", "root-b"} {
+		if err := EnsureConversation(ctx, db, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := UpdateConversationParent(ctx, db, "child-a", "root-a"); err != nil {
+		t.Fatalf("UpdateConversationParent child: %v", err)
+	}
+	if err := UpdateConversationParent(ctx, db, "grandchild-a", "child-a"); err != nil {
+		t.Fatalf("UpdateConversationParent grandchild: %v", err)
+	}
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "root-a", Role: "user", Content: "root", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "child-a", Role: "user", Content: "child", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: pid, ConversationID: "grandchild-a", Role: "user", Content: "grandchild", RawJSON: "{}"},
+		{Timestamp: 1500, ProjectID: pid, ConversationID: "root-b", Role: "user", Content: "other", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	page1, err := GetProjectDetailPage(ctx, db, pid, 1, 1, ConversationFilters{})
+	if err != nil {
+		t.Fatalf("GetProjectDetailPage page1: %v", err)
+	}
+	if got := page1.ConversationPagination.Total; got != 2 {
+		t.Fatalf("total = %d, want 2 families", got)
+	}
+	if len(page1.Conversations) != 3 {
+		t.Fatalf("page1 rows = %d, want 3 (root+child+grandchild)", len(page1.Conversations))
+	}
+}
+
 func TestListProjectsReturnsLabel(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

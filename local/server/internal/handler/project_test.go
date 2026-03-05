@@ -235,6 +235,114 @@ func TestGetProjectSupportsConversationPagination(t *testing.T) {
 	}
 }
 
+func TestGetProjectPaginationByFamilyIncludesParentAndChildren(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"parent-a", "child-a", "parent-b"} {
+		if err := db.EnsureConversation(ctx, s.DB, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := db.UpdateConversationParent(ctx, s.DB, "child-a", "parent-a"); err != nil {
+		t.Fatalf("UpdateConversationParent: %v", err)
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "parent-a", Role: "user", Content: "one", RawJSON: "{}"},
+		{Timestamp: 4000, ProjectID: pid, ConversationID: "child-a", Role: "user", Content: "two", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "parent-b", Role: "user", Content: "three", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+pid+"?page=1&pageSize=1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data := env.Data.(map[string]any)
+	pagination := data["conversationPagination"].(map[string]any)
+	if got := int(pagination["total"].(float64)); got != 2 {
+		t.Fatalf("total = %d, want 2 families", got)
+	}
+	conversations := data["conversations"].([]any)
+	if len(conversations) != 2 {
+		t.Fatalf("rows = %d, want 2 (parent+child family)", len(conversations))
+	}
+	first := conversations[0].(map[string]any)
+	second := conversations[1].(map[string]any)
+	if first["id"] != "parent-a" || second["id"] != "child-a" {
+		t.Fatalf("conversation order = [%v, %v], want [parent-a, child-a]", first["id"], second["id"])
+	}
+}
+
+func TestGetProjectPaginationByFamilyIncludesGrandchildren(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	pid, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	for _, id := range []string{"root-a", "child-a", "grandchild-a", "root-b"} {
+		if err := db.EnsureConversation(ctx, s.DB, id, pid, "codex"); err != nil {
+			t.Fatalf("EnsureConversation %s: %v", id, err)
+		}
+	}
+	if err := db.UpdateConversationParent(ctx, s.DB, "child-a", "root-a"); err != nil {
+		t.Fatalf("UpdateConversationParent child: %v", err)
+	}
+	if err := db.UpdateConversationParent(ctx, s.DB, "grandchild-a", "child-a"); err != nil {
+		t.Fatalf("UpdateConversationParent grandchild: %v", err)
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: pid, ConversationID: "root-a", Role: "user", Content: "root", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: pid, ConversationID: "child-a", Role: "user", Content: "child", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: pid, ConversationID: "grandchild-a", Role: "user", Content: "grandchild", RawJSON: "{}"},
+		{Timestamp: 1500, ProjectID: pid, ConversationID: "root-b", Role: "user", Content: "other", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+pid+"?page=1&pageSize=1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data := env.Data.(map[string]any)
+	conversations := data["conversations"].([]any)
+	if len(conversations) != 3 {
+		t.Fatalf("rows = %d, want 3 (root+child+grandchild)", len(conversations))
+	}
+	if conversations[0].(map[string]any)["id"] != "root-a" {
+		t.Fatalf("first row = %v, want root-a", conversations[0].(map[string]any)["id"])
+	}
+	if conversations[1].(map[string]any)["id"] != "child-a" {
+		t.Fatalf("second row = %v, want child-a", conversations[1].(map[string]any)["id"])
+	}
+	if conversations[2].(map[string]any)["id"] != "grandchild-a" {
+		t.Fatalf("third row = %v, want grandchild-a", conversations[2].(map[string]any)["id"])
+	}
+}
+
 func TestGetProjectHiddenFilter(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()

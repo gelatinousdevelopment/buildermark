@@ -59,7 +59,8 @@
 	--color-tag-background-hover: light-dark(#555, #666);
 	--color-tag-text-hover: white;
 
-	--color-relationship-foreground: light-dark(#a47e00, #ffd800cc);
+	--color-relationship-foreground: light-dark(#745e00, #ffd800cc);
+	--color-relationship-icon: light-dark(#b48e00, #ffd800cc);
 	--color-relationship-highlight: light-dark(#fff8e1, rgb(249, 255, 0, 0.1));
 	--color-relationship-source: light-dark(#e3f2fd, #1a2a3d);
 

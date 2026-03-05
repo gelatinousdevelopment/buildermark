@@ -51,15 +51,14 @@ export function fmtTimeWithSeconds(t: string | number): string {
 		day: '2-digit',
 		hour: '2-digit',
 		minute: '2-digit',
-		second: '2-digit',
-		hour12: false
+		second: '2-digit'
 	});
 }
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const YEAR_IN_MS = DAY_IN_MS * 365;
 
-export function formatRelativeOrShortDate(unixMs: number): string {
+export function formatRelativeOrShortDate(unixMs: number, compact = false): string {
 	if (!Number.isFinite(unixMs) || unixMs <= 0) return 'Unknown';
 	const deltaMs = referenceNowMs() - unixMs;
 	const absDeltaMs = Math.abs(deltaMs);
@@ -84,9 +83,9 @@ export function formatRelativeOrShortDate(unixMs: number): string {
 	return new Date(unixMs).toLocaleString(undefined, {
 		month: 'short',
 		day: 'numeric',
-		hour: 'numeric',
-		minute: '2-digit',
-		year: absDeltaMs > YEAR_IN_MS ? 'numeric' : undefined
+		hour: compact ? undefined : 'numeric',
+		minute: compact ? undefined : '2-digit',
+		year: compact ? undefined : absDeltaMs > YEAR_IN_MS ? 'numeric' : undefined
 	});
 }
 
