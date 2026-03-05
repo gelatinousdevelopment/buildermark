@@ -207,8 +207,20 @@
 		return match?.name || selectedUser;
 	});
 	const visibleCommits = $derived.by(() => {
-		const all = data?.commits ?? [];
-		if (limit > 0) return all.slice(0, limit);
+		let all = data?.commits ?? [];
+		if (limit > 0) all = all.slice(0, limit);
+
+		if (selectedOrder === 'asc') {
+			const hasMore =
+				data?.pagination &&
+				data.pagination.totalPages > 1 &&
+				currentPage < data.pagination.totalPages;
+			const wc = all.filter((c) => c.workingCopy);
+			const rest = all.filter((c) => !c.workingCopy);
+			if (hasMore) return rest;
+			return [...rest, ...wc];
+		}
+
 		return all;
 	});
 
