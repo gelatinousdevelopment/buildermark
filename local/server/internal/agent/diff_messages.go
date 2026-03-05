@@ -4,6 +4,9 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
+// DerivedDiffRawJSON is the JSON marker for synthetic diff messages.
+const DerivedDiffRawJSON = `{"source":"derived_diff"}`
+
 // AppendDiffEntries scans entries for embedded diffs and appends synthetic
 // diff-only entries after each match. Used during session resolution.
 func AppendDiffEntries(entries []Entry) []Entry {
@@ -43,7 +46,7 @@ func AppendDiffEntries(entries []Entry) []Entry {
 			Role:      e.Role,
 			Model:     e.Model,
 			Display:   FormatDiffMessage(diff),
-			RawJSON:   `{"source":"derived_diff"}`,
+			RawJSON:   DerivedDiffRawJSON,
 		})
 	}
 	return out
@@ -88,7 +91,7 @@ func AppendDiffDBMessages(messages []db.Message) []db.Message {
 			Role:           m.Role,
 			Model:          m.Model,
 			Content:        FormatDiffMessage(diff),
-			RawJSON:        `{"source":"derived_diff"}`,
+			RawJSON:        DerivedDiffRawJSON,
 		})
 	}
 	return out

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
@@ -89,7 +90,7 @@ func TestListProjectCommits(t *testing.T) {
 		ConversationID: "conv-1",
 		Role:           "agent",
 		Content:        agentDiff,
-		RawJSON:        `{"source":"derived_diff"}`,
+		RawJSON:        agent.DerivedDiffRawJSON,
 	}}); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestListProjectCommits(t *testing.T) {
 		ConversationID: "conv-1",
 		Role:           "agent",
 		Content:        workingCopyDiff,
-		RawJSON:        `{"source":"derived_diff"}`,
+		RawJSON:        agent.DerivedDiffRawJSON,
 	}}); err != nil {
 		t.Fatalf("InsertMessages working copy: %v", err)
 	}
@@ -611,7 +612,7 @@ func TestProjectCommitsPageAutoHealsStaleCoverage(t *testing.T) {
 		ConversationID: "conv-heal",
 		Role:           "agent",
 		Content:        agentDiff,
-		RawJSON:        `{"source":"derived_diff"}`,
+		RawJSON:        agent.DerivedDiffRawJSON,
 	}}); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
 	}
@@ -748,7 +749,7 @@ func TestGetProjectCommit_RecoversWhenStoredDiffMissing(t *testing.T) {
 		ConversationID: "conv-recover",
 		Role:           "agent",
 		Content:        agentDiff,
-		RawJSON:        `{"source":"derived_diff"}`,
+		RawJSON:        agent.DerivedDiffRawJSON,
 	}}); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
 	}
@@ -864,7 +865,7 @@ func TestListProjectCommitsIgnoresConfiguredDiffPaths(t *testing.T) {
 		ConversationID: "conv-1",
 		Role:           "agent",
 		Content:        agentDiff,
-		RawJSON:        `{"source":"derived_diff"}`,
+		RawJSON:        agent.DerivedDiffRawJSON,
 	}}); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
 	}

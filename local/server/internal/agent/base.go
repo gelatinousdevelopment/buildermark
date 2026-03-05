@@ -15,7 +15,7 @@ type Base struct {
 	DB        *sql.DB
 	Home      string
 	Interval  time.Duration
-	AgentName string
+	agentName string
 }
 
 // NewBase creates a Base with sensible defaults.
@@ -24,19 +24,19 @@ func NewBase(database *sql.DB, home, name string) Base {
 		DB:        database,
 		Home:      home,
 		Interval:  2 * time.Second,
-		AgentName: name,
+		agentName: name,
 	}
 }
 
 // Name returns the agent name (implements Agent interface).
-func (b *Base) Name() string { return b.AgentName }
+func (b *Base) Name() string { return b.agentName }
 
 // BackfillGitIDs finds all projects without a git_id and attempts to
 // resolve it from the git root commit.
 func (b *Base) BackfillGitIDs(ctx context.Context) {
 	projects, err := db.ListProjectsWithoutGitID(ctx, b.DB)
 	if err != nil {
-		log.Printf("%s watcher: list projects without git_id: %v", b.AgentName, err)
+		log.Printf("%s watcher: list projects without git_id: %v", b.agentName, err)
 		return
 	}
 
@@ -44,14 +44,14 @@ func (b *Base) BackfillGitIDs(ctx context.Context) {
 	for _, p := range projects {
 		if gitID := ResolveGitID(p.Path); gitID != "" {
 			if err := db.UpdateProjectGitID(ctx, b.DB, p.ID, gitID); err != nil {
-				log.Printf("%s watcher: update git_id for %s: %v", b.AgentName, p.ID, err)
+				log.Printf("%s watcher: update git_id for %s: %v", b.agentName, p.ID, err)
 				continue
 			}
 			updated++
 		}
 	}
 	if updated > 0 {
-		log.Printf("%s watcher: backfilled %d project git_ids", b.AgentName, updated)
+		log.Printf("%s watcher: backfilled %d project git_ids", b.agentName, updated)
 	}
 }
 
@@ -60,7 +60,7 @@ func (b *Base) BackfillGitIDs(ctx context.Context) {
 func (b *Base) BackfillLabels(ctx context.Context) {
 	projects, err := db.ListAllProjects(ctx, b.DB)
 	if err != nil {
-		log.Printf("%s watcher: list projects for label backfill: %v", b.AgentName, err)
+		log.Printf("%s watcher: list projects for label backfill: %v", b.agentName, err)
 		return
 	}
 
@@ -69,13 +69,13 @@ func (b *Base) BackfillLabels(ctx context.Context) {
 		repoName := db.RepoLabel(p.Path)
 		if repoName != p.Label && p.Label == filepath.Base(p.Path) {
 			if err := db.SetProjectLabel(ctx, b.DB, p.ID, repoName); err != nil {
-				log.Printf("%s watcher: update label for %s: %v", b.AgentName, p.ID, err)
+				log.Printf("%s watcher: update label for %s: %v", b.agentName, p.ID, err)
 				continue
 			}
 			updated++
 		}
 	}
 	if updated > 0 {
-		log.Printf("%s watcher: backfilled %d project labels", b.AgentName, updated)
+		log.Printf("%s watcher: backfilled %d project labels", b.agentName, updated)
 	}
 }

@@ -11,11 +11,11 @@ const MaxTitleLen = 1000
 // TitleFromPrompt extracts a title from a user prompt by taking the first
 // MaxTitleLen characters, appending an ellipsis when truncated.
 func TitleFromPrompt(text string) string {
-	return TruncateTitle(strings.TrimSpace(text))
+	return truncateTitle(strings.TrimSpace(text))
 }
 
-// TruncateTitle truncates a string to MaxTitleLen runes, appending "..." if truncated.
-func TruncateTitle(s string) string {
+// truncateTitle truncates a string to MaxTitleLen runes, appending "..." if truncated.
+func truncateTitle(s string) string {
 	if utf8.RuneCountInString(s) > MaxTitleLen {
 		return string([]rune(s)[:MaxTitleLen]) + "..."
 	}

@@ -21,8 +21,7 @@ Every agent embeds `agent.Base`, which provides:
 | `DB`               | Database connection                              |
 | `Home`             | User home directory                              |
 | `Interval`         | Poll interval (default 2s)                       |
-| `AgentName`        | Agent name string                                |
-| `Name()`           | Returns `AgentName` (implements `Agent`)          |
+| `Name()`           | Returns the agent name (implements `Agent`)       |
 | `BackfillGitIDs()` | Resolves git root commits for projects           |
 | `BackfillLabels()` | Updates project labels from repo directory names |
 
@@ -32,7 +31,7 @@ Every agent embeds `agent.Base`, which provides:
 |--------------------|-------------------------------------------------------------|
 | `pathfilter.go`    | `PathFilter`, `NewPathFilter`, `TrackedProjectFilter`       |
 | `gitid.go`         | `ResolveGitID`                                              |
-| `util.go`          | `FirstNonEmpty`, `TitleFromPrompt`, `TruncateTitle`         |
+| `util.go`          | `FirstNonEmpty`, `TitleFromPrompt`                          |
 | `diff_messages.go` | `AppendDiffEntries`, `AppendDiffDBMessages`                 |
 | `diff.go`          | `ExtractReliableDiff`, `FormatDiffMessage`, etc.            |
 | `gitroot.go`       | `FindGitRoot`, `ListGitWorktrees`, `GitRootCache`           |

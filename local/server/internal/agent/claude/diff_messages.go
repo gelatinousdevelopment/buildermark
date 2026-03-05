@@ -56,7 +56,7 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 			Role:           m.Role,
 			Model:          m.Model,
 			Content:        agent.FormatDiffMessage(diff),
-			RawJSON:        `{"source":"derived_diff"}`,
+			RawJSON:        agent.DerivedDiffRawJSON,
 		})
 	}
 	return out

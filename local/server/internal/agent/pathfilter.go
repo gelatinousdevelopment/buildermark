@@ -47,10 +47,10 @@ func (f PathFilter) Match(projectPath string) bool {
 	if projectPath == "" {
 		return false
 	}
+	if _, ok := f[projectPath]; ok {
+		return true
+	}
 	for p := range f {
-		if projectPath == p {
-			return true
-		}
 		if strings.HasPrefix(projectPath, p+string(filepath.Separator)) {
 			return true
 		}
@@ -70,38 +70,19 @@ func TrackedProjectFilter(ctx context.Context, database *sql.DB, extraPaths Extr
 	if err != nil {
 		return make(PathFilter)
 	}
-	out := make(PathFilter)
+	var paths []string
 	for _, p := range projects {
-		path := strings.TrimSpace(p.Path)
-		if path != "" {
-			path = filepath.Clean(path)
-		}
-		if path != "" && path != "." {
-			out[path] = struct{}{}
-		}
+		paths = append(paths, p.Path)
 		if extraPaths != nil {
-			for _, extra := range extraPaths(p) {
-				extra = strings.TrimSpace(extra)
-				if extra == "" {
-					continue
-				}
-				extra = filepath.Clean(extra)
-				if extra != "" && extra != "." {
-					out[extra] = struct{}{}
-				}
-			}
+			paths = append(paths, extraPaths(p)...)
 		}
 		for _, oldPath := range strings.Split(p.OldPaths, "\n") {
-			oldPath = strings.TrimSpace(oldPath)
-			if oldPath == "" {
-				continue
-			}
-			oldPath = filepath.Clean(oldPath)
-			if oldPath == "." {
-				continue
-			}
-			out[oldPath] = struct{}{}
+			paths = append(paths, oldPath)
 		}
 	}
-	return out
+	result := NewPathFilter(paths)
+	if result == nil {
+		return make(PathFilter)
+	}
+	return result
 }
