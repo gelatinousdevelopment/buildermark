@@ -937,6 +937,19 @@ func firstPromptFromConversationLogs(entries []conversationLogEntry) (string, in
 }
 
 func titleFromConversationLogs(entries []conversationLogEntry) string {
+	// Check all user messages for a plan title.
+	for _, e := range entries {
+		if e.Role != "user" {
+			continue
+		}
+		text := strings.TrimSpace(e.Content)
+		if text == "" || isSystemMessage(text) {
+			continue
+		}
+		if title := agent.TitleFromPlanPrompt(text); title != "" {
+			return title
+		}
+	}
 	text, _ := firstPromptFromConversationLogs(entries)
 	if text == "" {
 		return ""
