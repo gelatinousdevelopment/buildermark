@@ -4,6 +4,7 @@
 	type Position = 'leading' | 'trailing' | 'above' | 'below';
 
 	interface Props {
+		wrapWidth?: string;
 		position?: Position;
 		width?: string;
 		padding?: string;
@@ -13,6 +14,7 @@
 	}
 
 	let {
+		wrapWidth = undefined,
 		position = 'leading',
 		width,
 		padding = '1rem',
@@ -235,6 +237,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="popover-wrap"
+	style:width={wrapWidth}
 	bind:this={wrapperEl}
 	onmouseenter={() => (visible = true)}
 	onmouseleave={() => (visible = false)}

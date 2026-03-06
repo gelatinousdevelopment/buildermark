@@ -5,7 +5,8 @@
 		getProject,
 		getConversationsBatchDetail,
 		listProjectCommitsPage,
-		getCommitConversationLinks
+		getCommitConversationLinks,
+		getLocalSettings
 	} from '$lib/api';
 	import {
 		generateMarkdown,
@@ -45,16 +46,24 @@
 	let previewHost: HTMLDivElement | undefined = $state();
 	let shadowRoot: ShadowRoot | null = null;
 	let previewHtml = '';
+	let dbPath = $state('');
+	let dbCopied = $state(false);
 
 	// Shadow DOM pagination state (not reactive - managed imperatively)
 	let _viewMode: 'all' | 'paged' = 'all';
 	let _currentPage = 0;
 	let _totalPages = 0;
-	let _topLevelLabel = '';
+	let _editing = false;
 
-	onMount(() => {
+	onMount(async () => {
 		layoutStore.fixedHeight = true;
 		layoutStore.hideContainer = true;
+		try {
+			const settings = await getLocalSettings();
+			dbPath = settings.dbPath;
+		} catch {
+			// settings fetch is best-effort
+		}
 	});
 
 	onDestroy(() => {
@@ -88,16 +97,13 @@
 		const btnPrev10 = shadowEl<HTMLButtonElement>('btn-prev10');
 		const btnNext10 = shadowEl<HTMLButtonElement>('btn-next10');
 		const pageInfo = shadowEl('page-info');
-		const gotoWrap = shadowEl('goto-wrap');
 		if (btnPrev) btnPrev.disabled = !paged || _currentPage <= 0;
 		if (btnNext) btnNext.disabled = !paged || _currentPage >= _totalPages - 1;
 		if (btnPrev10) btnPrev10.disabled = !paged || _currentPage <= 0;
 		if (btnNext10) btnNext10.disabled = !paged || _currentPage >= _totalPages - 1;
-		if (pageInfo)
-			pageInfo.textContent = paged
-				? `${_currentPage + 1} / ${_totalPages} ${_topLevelLabel}`
-				: `${_totalPages} ${_topLevelLabel}`;
-		if (gotoWrap) gotoWrap.className = paged ? 'goto-wrap visible' : 'goto-wrap';
+		if (pageInfo && !_editing) {
+			pageInfo.textContent = paged ? `${_currentPage + 1} / ${_totalPages}` : `${_totalPages}`;
+		}
 	}
 
 	function showShadowSections() {
@@ -129,27 +135,51 @@
 		previewHost?.scrollTo(0, 0);
 	}
 
-	function gotoShadowPage() {
-		const input = shadowEl<HTMLInputElement>('goto-input');
-		if (!input) return;
-		let val = parseInt(input.value, 10);
-		if (isNaN(val) || val < 1) val = 1;
-		if (val > _totalPages) val = _totalPages;
-		_currentPage = val - 1;
-		input.value = '';
-		showShadowSections();
-		previewHost?.scrollTo(0, 0);
+	function startShadowEdit() {
+		if (_viewMode !== 'paged' || _editing) return;
+		_editing = true;
+		const pageInfo = shadowEl('page-info');
+		if (!pageInfo) return;
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.className = 'goto-input';
+		input.value = String(_currentPage + 1);
+		pageInfo.textContent = '';
+		pageInfo.appendChild(input);
+		input.focus();
+		input.select();
+		function commit() {
+			if (!_editing) return;
+			_editing = false;
+			let val = parseInt(input.value, 10);
+			if (!isNaN(val) && val >= 1 && val <= _totalPages) {
+				_currentPage = val - 1;
+				showShadowSections();
+				previewHost?.scrollTo(0, 0);
+			} else {
+				updateShadowNav();
+			}
+			if (pageInfo && input.parentNode === pageInfo) pageInfo.removeChild(input);
+		}
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') commit();
+			if (e.key === 'Escape') {
+				_editing = false;
+				if (pageInfo && input.parentNode === pageInfo) pageInfo.removeChild(input);
+				updateShadowNav();
+			}
+		});
+		input.addEventListener('blur', commit);
 	}
 
 	function renderPreview() {
 		if (previewHtml && previewHost) {
-			if (!shadowRoot) {
+			if (!shadowRoot || shadowRoot.host !== previewHost) {
 				shadowRoot = previewHost.attachShadow({ mode: 'open' });
 			}
 			shadowRoot.innerHTML = previewHtml;
 			const sections = shadowRoot.querySelectorAll('.top-section');
 			_totalPages = sections.length;
-			_topLevelLabel = mode === 'commits-with-prompts' ? 'Commits' : 'Conversations';
 			_viewMode = 'all';
 			_currentPage = 0;
 
@@ -160,11 +190,9 @@
 			shadowEl('btn-next')?.addEventListener('click', () => goShadowPage(1));
 			shadowEl('btn-prev10')?.addEventListener('click', () => goShadowPage(-10));
 			shadowEl('btn-next10')?.addEventListener('click', () => goShadowPage(10));
-			shadowEl('btn-goto')?.addEventListener('click', () => gotoShadowPage());
-			shadowEl('goto-input')?.addEventListener('keydown', (e) => {
-				if ((e as KeyboardEvent).key === 'Enter') gotoShadowPage();
-			});
+			shadowEl('page-info')?.addEventListener('click', () => startShadowEdit());
 
+			setShadowViewMode('paged');
 			updateShadowNav();
 		}
 	}
@@ -368,7 +396,7 @@
 
 			<div class="control-group">
 				<span class="control-label">Organization</span>
-				<div class="radio-group">
+				<div class="radio-list">
 					<label class:selected={mode === 'commits-with-prompts'}>
 						<input type="radio" name="mode" value="commits-with-prompts" bind:group={mode} />
 						Commits > Conversations
@@ -423,25 +451,54 @@
 			<div class="error">{error}</div>
 		{/if}
 
-		{#if output}
-			<div class="output-actions">
-				<button class="bordered small" onclick={copyToClipboard}>
-					{copied ? 'Copied!' : 'Copy to clipboard'}
-				</button>
-				<button class="bordered small" onclick={download}>Download</button>
+		{#if dbPath}
+			<div class="db-note">
+				<span class="control-label">Direct Database Access</span>
+				<p>The raw data is stored in a SQLite database at:</p>
+				<code class="db-path">{dbPath}</code>
+				<p>
+					Query the <code>conversations</code> and <code>messages</code> tables. For this project:
+				</p>
+				<div class="query-block">
+					<code
+						>{`sqlite3 "${dbPath}" "SELECT * FROM conversations WHERE project_id = '${projectId}' ORDER BY started_at DESC;"`}</code
+					>
+					<button
+						class="bordered tiny copy-query"
+						onclick={async () => {
+							await navigator.clipboard.writeText(
+								`sqlite3 "${dbPath}" "SELECT * FROM conversations WHERE project_id = '${projectId}' ORDER BY started_at DESC;"`
+							);
+							dbCopied = true;
+							setTimeout(() => (dbCopied = false), 2000);
+						}}
+					>
+						{dbCopied ? 'Copied!' : 'Copy Command'}
+					</button>
+				</div>
 			</div>
 		{/if}
 	</div>
 	<hr class="divider" />
 	<div class="column right">
 		{#if output}
-			{#if outputFormat === 'html'}
-				<div bind:this={previewHost} class="html-preview"></div>
-			{:else}
-				<pre class="preview">{output}</pre>
-			{/if}
+			<div class="output-actions">
+				<div class="inner">
+					<button class="bordered small" onclick={copyToClipboard}>
+						{copied ? 'Copied!' : 'Copy to Clipboard'}
+					</button>
+					<button class="bordered small" onclick={download}>Download File</button>
+				</div>
+			</div>
+			<div class="preview-container">
+				{#if outputFormat === 'html'}
+					<div bind:this={previewHost} class="html-preview"></div>
+				{:else}
+					<pre class="markdown-preview">{output}</pre>
+				{/if}
+			</div>
 		{:else}
-			<div class="empty">No export generated yet</div>
+			<div class="empty">Export Preview</div>
 		{/if}
 	</div>
 </div>
@@ -463,7 +520,7 @@
 	}
 
 	.column.left {
-		width: 500px;
+		width: 400px;
 		padding: 1.5rem;
 		display: flex;
 		flex-direction: column;
@@ -471,6 +528,7 @@
 	}
 
 	.column.right {
+		background: var(--color-background-empty);
 		flex: 1;
 		padding: 0;
 		display: flex;
@@ -608,6 +666,47 @@
 		display: none;
 	}
 
+	.radio-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+
+	.radio-list label {
+		cursor: pointer;
+		font-size: 0.95rem;
+		padding: 0.35rem 0.7rem;
+		border: 0.5px solid var(--color-border-input);
+		background: var(--color-background-elevated);
+	}
+
+	.radio-list label:first-child {
+		border-radius: 4px 4px 0 0;
+	}
+
+	.radio-list label:last-child {
+		border-radius: 0 0 4px 4px;
+		border-top: 0;
+	}
+
+	.radio-list label:not(:first-child):not(:last-child) {
+		border-top: 0;
+	}
+
+	.radio-list label.selected {
+		background: var(--accent-color-ultralight);
+		color: var(--accent-color);
+		border-color: var(--accent-color);
+	}
+
+	.radio-list label.selected + label {
+		border-top: 0;
+	}
+
+	.radio-list input {
+		display: none;
+	}
+
 	.generate-btn {
 		align-self: flex-start;
 		background: var(--accent-color);
@@ -635,28 +734,97 @@
 	}
 
 	.output-actions {
-		border-top: 0.5px solid var(--color-divider);
 		display: flex;
 		gap: 0.5rem;
-		padding-top: 1rem;
+		justify-content: center;
+		width: 100%;
+		position: sticky;
+		top: 0.7rem;
+		margin: 0.7rem 0;
 	}
 
-	.preview {
-		background: var(--color-background-surface);
+	.output-actions .inner {
+		background: var(--color-background-empty);
+		padding: 0.5rem;
+		margin: -0.5rem;
+		border-radius: 6px;
+		min-width: fit-content;
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.preview-container {
+		box-sizing: border-box;
+		padding: 0 1rem 1rem 1rem;
+		min-height: 100%;
+	}
+
+	.html-preview {
+		background: var(--color-background-content);
+		border: 0.5px solid var(--color-divider);
+		border-radius: 5px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+		flex: 1;
+		overflow-y: auto;
+	}
+
+	.markdown-preview {
+		background: var(--color-background-content);
+		border: 0.5px solid var(--color-divider);
+		border-radius: 5px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 		font-family: var(--font-mono, monospace);
 		font-size: 0.85rem;
 		line-height: 1.5;
 		margin: 0;
 		overflow: auto;
-		padding: 1rem;
+		padding: 2rem;
 		white-space: pre-wrap;
 		word-break: break-word;
 		flex: 1;
 	}
 
-	.html-preview {
-		flex: 1;
-		overflow-y: auto;
+	.db-note {
+		border-top: 0.5px solid var(--color-divider);
+		padding-top: 1rem;
+		margin-top: auto;
+	}
+
+	.db-note p {
+		font-size: 0.85rem;
+		color: var(--color-text-secondary);
+		margin: 0.4rem 0;
+	}
+
+	.db-note p code {
+		font-family: var(--font-mono, monospace);
+		font-size: 0.8rem;
+		background: var(--color-background-surface);
+		padding: 0.1rem 0.3rem;
+		border-radius: 3px;
+	}
+
+	.query-block {
+		position: relative;
+	}
+
+	.db-note code.db-path,
+	.query-block code {
+		display: block;
+		background: var(--color-background-empty);
+		padding: 0.5rem;
+		font-size: 0.8rem;
+		border-radius: 4px;
+		font-family: var(--font-mono, monospace);
+		word-break: break-all;
+		line-height: 1.4;
+	}
+
+	.query-block .copy-query {
+		margin-top: 0.5rem;
+		/*position: absolute;*/
+		/*top: 0.3rem;*/
+		/*right: 0.3rem;*/
 	}
 
 	@media (max-width: 768px) {

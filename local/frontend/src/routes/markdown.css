@@ -26,17 +26,25 @@
 }
 
 .markdown-body pre {
-	overflow-x: auto;
-	padding: 0.5rem;
 	background: var(--color-code-bg);
 	border-radius: 4px;
+	border: 1px solid var(--color-code-border);
+	overflow-x: auto;
+	padding: 0.5rem;
 }
 
 .markdown-body code {
+	background: var(--color-code-inline-bg);
+	border-radius: 5px;
+	border: 1px solid var(--color-code-border);
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	font-size: 0.8em;
-	border: 1px solid var(--color-code-border);
-	background: var(--color-code-inline-bg);
+	padding: 0.2rem 0.4rem;
+}
+
+.markdown-body pre code {
+	border: 0px;
+	background: none;
 	padding: 0.2rem 0.4rem;
 	border-radius: 5px;
 }

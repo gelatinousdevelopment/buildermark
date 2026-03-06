@@ -87,8 +87,8 @@
 	--color-fallback-note: light-dark(#8a6d1f, #d4be44);
 
 	/* Code */
-	--color-code-bg: light-dark(rgb(0 0 0 / 0.03), rgb(255 255 255 / 0.06));
-	--color-code-inline-bg: light-dark(rgb(255 253 193 / 76%), rgb(80 70 20 / 50%));
+	--color-code-bg: light-dark(#f5ffed, rgb(255 255 255 / 0.06));
+	--color-code-inline-bg: light-dark(#f5ffed, rgb(80 70 20 / 50%));
 	--color-code-border: light-dark(#ddd, #444);
 	--color-code-block-json-background: light-dark(#fdf2ff, #291c2b);
 	--color-code-block-json-border: light-dark(#9600b7, #ad00d3);
@@ -233,6 +233,12 @@ button.bordered {
 a.bordered.small,
 button.bordered.small {
 	padding: 0.2rem 0.7em;
+}
+
+a.bordered.tiny,
+button.bordered.tiny {
+	font-size: 0.8rem;
+	padding: 0.15rem 0.6em;
 }
 
 a.bordered:disabled,

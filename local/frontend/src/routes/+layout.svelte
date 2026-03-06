@@ -204,7 +204,9 @@
 		</section>
 		<hr class="divider" />
 		<section>
-			<ServerStatusIndicator />
+			<nav class="right">
+				<ServerStatusIndicator />
+			</nav>
 		</section>
 		<!-- <hr class="divider" />
 		<section>
@@ -319,9 +321,6 @@
 	header .brand {
 		margin: 0;
 		font-weight: 600;
-
-		/*margin-bottom: -1px;*/
-		/*margin-top: 1px;*/
 	}
 
 	header .brand a {
@@ -332,11 +331,6 @@
 		font-size: 1rem;
 		gap: 0.6rem;
 		text-decoration: none;
-
-		/*color: var(--accent-color);*/
-		/*opacity: 0.7;*/
-		/*padding: 0 2rem;*/
-
 		padding: 0 1.5rem;
 	}
 
@@ -412,34 +406,6 @@
 		align-items: flex-end;
 	}
 
-	/*header .brand .text {
-		display: flex;
-		flex-direction: column;
-		gap: 0rem;
-		justify-content: center;
-	}
-
-	header .brand .text .title {
-		font-size: 1.9rem;
-		font-weight: bold;
-	}
-
-	header .brand .text .subtitle {
-		font-size: 0.6rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		display: none;
-	}*/
-
-	/*hr.divider:has(~ section > .breadcrumbs > a:first-of-type) {
-		opacity: 1;
-		transition: opacity 0.15s ease-in-out;
-	}
-
-	hr.divider:has(~ section > .breadcrumbs > a.selected:first-of-type) {
-		opacity: 0;
-	}*/
-
 	header nav {
 		align-items: center;
 		display: flex;
@@ -458,7 +424,6 @@
 	header nav.breadcrumbs a {
 		padding: 0 0.8rem;
 		margin: 0 0rem;
-		/*border-radius: 4px;*/
 	}
 
 	header nav.breadcrumbs a:hover {
@@ -469,13 +434,13 @@
 		background: var(--accent-color-ultralight);
 		color: var(--accent-color);
 		padding: 0.4rem 0.8rem calc(0.4rem - 2px) 0.8rem;
-		/*margin: -0.4rem 0.2rem;*/
 		border-bottom: 3px solid var(--accent-color);
 		margin-bottom: -1px;
 	}
 
 	header nav.right {
 		gap: 1.5rem;
+		min-width: 50px;
 	}
 
 	header nav.right .read-only-pill {
@@ -507,20 +472,23 @@
 		text-decoration: underline;
 	}
 
-	.dashboard-content {
-		background: var(--color-background-page);
-		margin: 0 auto;
-		/*max-width: 100rem;*/
-		/*padding: 1rem;*/
-		flex: 1;
+	header nav.right a {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
 
+	.dashboard-content {
+		align-items: stretch;
+		background: var(--color-background-page);
+		box-sizing: border-box;
 		display: flex;
 		flex-direction: column;
-		align-items: stretch;
-
-		width: 100vw;
+		flex: 1;
+		margin: 0 auto;
 		max-width: 100vw;
-		box-sizing: border-box;
+		width: 100vw;
 	}
 
 	footer {

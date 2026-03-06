@@ -11,7 +11,7 @@
 	});
 </script>
 
-<Popover position="below" fixed={true} width="280px" padding="0.75rem">
+<Popover position="below" fixed={true} width="280px" padding="0.75rem" wrapWidth="100%">
 	<button class="status-button" title="Server: {websocketStore.connectionState}">
 		<div class="status-container">
 			<div class="status-dot {websocketStore.connectionState}" class:active={isActive}></div>
@@ -49,6 +49,7 @@
 		height: 40px;
 		padding: 0 1.3rem;
 		cursor: default;
+		width: 100%;
 	}
 
 	.status-button:hover {

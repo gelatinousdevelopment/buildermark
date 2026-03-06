@@ -589,6 +589,8 @@
 		border: 1px solid var(--color-border-medium);
 		border-radius: 8px;
 		line-height: 1.4em;
+		margin-left: 0;
+		margin-right: 10%;
 	}
 
 	.message-collapsed {
@@ -615,6 +617,8 @@
 		background: var(--color-prompt-background);
 		border: 1px solid var(--color-prompt-border);
 		color: var(--color-text);
+		margin-left: 10%;
+		margin-right: 0rem;
 	}
 
 	h2 {
@@ -678,11 +682,10 @@
 	.log-group {
 		background: none;
 		border: 1px solid transparent;
-		margin-left: 1rem;
 		padding: 0;
 		width: fit-content;
 		border-radius: 5px;
-		max-width: calc(100% - 1rem);
+		max-width: calc(100% - 10%);
 	}
 
 	.log-group.message-collapsed:hover {
@@ -777,35 +780,25 @@
 		gap: 0.4rem;
 		padding: 0.5rem 0.75rem;
 		border-radius: 6px;
-		font-size: 0.85rem;
+		font-size: 0.9rem;
 		text-decoration: none;
 		margin-bottom: 0.5rem;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-
-	.parent-link {
-		background: var(--color-prompt-background);
-		border: 1px solid var(--color-prompt-border);
-		color: var(--color-text-secondary);
-	}
-
-	.child-link {
-		background: var(--color-rating-background);
-		border: 1px solid var(--color-rating-border);
-		color: var(--color-text-secondary);
+		background: var(--color-relationship-highlight);
+		border: 1px solid var(--color-relationship-icon);
+		color: var(--color-relationship-foreground);
 	}
 
 	.conversation-link:hover {
-		border-color: var(--accent-color);
-		color: var(--accent-color);
+		filter: brightness(0.97);
 	}
 
 	.link-icon {
 		width: 14px;
 		height: 14px;
 		flex-shrink: 0;
-		opacity: 0.5;
+		color: var(--color-relationship-foreground);
 	}
 </style>
