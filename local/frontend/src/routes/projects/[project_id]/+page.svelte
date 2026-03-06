@@ -8,9 +8,12 @@
 	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
 	import { projectLayoutData } from '$lib/stores/projectLayoutData.svelte';
 	import { dateStringToUnixMsRange } from '$lib/utils';
-	import type { ProjectDetail, DailyCommitSummary } from '$lib/types';
+	import type { Project, ProjectDetail, DailyCommitSummary } from '$lib/types';
 
 	const projectId = $derived(page.params.project_id ?? '');
+	const projects = $derived((page.data.projects ?? []) as Project[]);
+	const projectFromList = $derived(projects.find((p) => p.id === projectId));
+	const defaultBranch = $derived(projectFromList?.defaultBranch || 'main');
 	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.commitSortOrder);
 	const selectedDate = $derived(projectDateFilterStore.selectedDate);
 	const dateRange = $derived.by(() => {
@@ -82,6 +85,7 @@
 	<div class="column commits">
 		<Commits
 			{projectId}
+			branch={defaultBranch}
 			page={1}
 			pageSize={100}
 			limit={100}
