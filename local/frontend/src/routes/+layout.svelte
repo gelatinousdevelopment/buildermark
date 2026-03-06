@@ -121,8 +121,12 @@
 							</ul>
 						{/if}
 					{/snippet}
-					<a href={resolve('/projects')} class="item icon" onmouseenter={restartAnimation}>
-						<!-- <Icon name="buildermark" width="28px" /> -->
+					<a
+						href={resolve('/projects')}
+						class="item icon"
+						onmouseenter={restartAnimation}
+						data-sveltekit-preload-data="off"
+					>
 						<div class="static"><Icon name="buildermarkTall" width="29px" /></div>
 						<div class="animated" bind:this={animatedEl}>
 							<Icon name="buildermarkTallAnimated" width="29px" overflow="hidden" />
