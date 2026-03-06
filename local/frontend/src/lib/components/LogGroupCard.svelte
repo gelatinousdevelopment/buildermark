@@ -192,7 +192,7 @@
 
 	.log-item {
 		margin-bottom: 0.5rem;
-		padding: 0.75rem;
+		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--color-border-light);
 		border-radius: 4px;
 	}

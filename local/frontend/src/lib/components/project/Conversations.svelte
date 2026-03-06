@@ -459,7 +459,7 @@
 								})}
 							>
 								{#if conv.parentConversationId}<div class="document-icon">
-										<Icon name="document" width="13px" />
+										<Icon name="document" width="14px" />
 									</div>{/if}{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
 							</a>
 							{#if conv.userPromptCount > 1}
@@ -712,7 +712,20 @@
 	}
 
 	.title.child-title {
-		padding-left: 1.7rem;
+		padding-left: 1.5rem;
+		position: relative;
+	}
+
+	.title.child-title::after {
+		/*background: #e8e8e8;*/
+		background: var(--color-divider);
+		content: '';
+		height: 100%;
+		left: 14px;
+		position: absolute;
+		top: 0px;
+		width: 0.5px;
+		z-index: 99;
 	}
 
 	.title .title-content {

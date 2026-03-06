@@ -362,6 +362,7 @@
 						agentPercent={file.linePercent}
 						onToggle={fileExpanded ? () => toggleDiffPath(file.path) : undefined}
 						contentOnly={true}
+						toggleWithHeaderClick={true}
 					/>
 				</div>
 			{/each}
@@ -387,7 +388,7 @@
 				{@const msgExpanded = isExpanded(message.id)}
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<div
-					class="diff-card"
+					class="matched-message-diff-card"
 					class:diff-card-collapsed={!msgExpanded}
 					role={!msgExpanded ? 'button' : undefined}
 					tabindex={!msgExpanded ? 0 : undefined}
@@ -414,6 +415,7 @@
 						})}
 						linkLabel={`Conversation: ${(message.conversationTitle && singleLineTitle(message.conversationTitle)) || message.conversationId}`}
 						onToggle={msgExpanded ? () => toggleExpanded(message.id) : undefined}
+						toggleWithHeaderClick={true}
 					/>
 				</div>
 			{/each}
@@ -524,7 +526,7 @@
 		margin-top: 0.5rem;
 	}
 
-	.diff-card {
+	.matched-message-diff-card {
 		margin-bottom: 1rem;
 		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--color-border-light);

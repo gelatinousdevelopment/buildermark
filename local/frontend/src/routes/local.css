@@ -90,6 +90,9 @@
 	--color-code-bg: light-dark(rgb(0 0 0 / 0.03), rgb(255 255 255 / 0.06));
 	--color-code-inline-bg: light-dark(rgb(255 253 193 / 76%), rgb(80 70 20 / 50%));
 	--color-code-border: light-dark(#ddd, #444);
+	--color-code-block-json-background: light-dark(#fdf2ff, #291c2b);
+	--color-code-block-json-border: light-dark(#9600b7, #ad00d3);
+	--color-code-block-json-foreground: light-dark(#340034, #dfc3df);
 
 	/* Popover */
 	--color-popover-bg: light-dark(rgba(255, 255, 255, 0.85), rgba(40, 40, 44, 0.92));

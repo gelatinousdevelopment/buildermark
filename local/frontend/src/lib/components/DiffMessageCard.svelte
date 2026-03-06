@@ -23,6 +23,7 @@
 		/** When provided, the header becomes clickable to collapse. */
 		onToggle?: () => void;
 		/** Render only the diff body and omit metadata/header elements. */
+		toggleWithHeaderClick?: boolean;
 		contentOnly?: boolean;
 		/** Render agent role tag in subtle mode. */
 		subtleAgentTag?: boolean;
@@ -40,6 +41,7 @@
 		linkLabel = null,
 		agentPercent,
 		onToggle,
+		toggleWithHeaderClick = false,
 		contentOnly = false,
 		subtleAgentTag = false
 	}: Props = $props();
@@ -162,17 +164,17 @@
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div
 		class="message-header"
-		class:message-header-clickable={onToggle}
+		class:message-header-clickable={onToggle && toggleWithHeaderClick}
 		role={onToggle ? 'button' : undefined}
 		tabindex={onToggle ? 0 : undefined}
 		onclick={(e: MouseEvent) => {
-			if (onToggle) {
+			if (onToggle && toggleWithHeaderClick) {
 				e.stopPropagation();
 				onToggle();
 			}
 		}}
 		onkeydown={(e: KeyboardEvent) => {
-			if (onToggle && (e.key === 'Enter' || e.key === ' ')) {
+			if (onToggle && toggleWithHeaderClick && (e.key === 'Enter' || e.key === ' ')) {
 				e.preventDefault();
 				e.stopPropagation();
 				onToggle();

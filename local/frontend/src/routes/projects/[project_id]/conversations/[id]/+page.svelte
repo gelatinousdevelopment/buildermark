@@ -57,7 +57,6 @@
 	let selectedCombinedDiffId: string | null = $state(null);
 	let selectedCombinedDiffContent: string | null = $state(null);
 	let isWideMode = $state(false);
-	let wideModeQuery: MediaQueryList | null = null;
 	let leftColumn: HTMLDivElement | undefined = $state();
 	let mergeDiffsEnabled: boolean = $state(true);
 
@@ -111,10 +110,6 @@
 		selectedMessage = null;
 		selectedCombinedDiffId = null;
 		selectedCombinedDiffContent = null;
-	}
-
-	function updateWideMode(query: MediaQueryList | MediaQueryListEvent) {
-		isWideMode = query.matches;
 	}
 
 	function activateCombinedDiff(item: { id: string; content: string }, expanded: boolean) {
@@ -299,13 +294,9 @@
 	onMount(() => {
 		layoutStore.fixedHeight = true;
 		layoutStore.hideContainer = true;
-		// wideModeQuery = window.matchMedia('(min-width: 1024px)');
-		// updateWideMode(wideModeQuery);
-		// wideModeQuery.addEventListener('change', updateWideMode);
 	});
 
 	onDestroy(() => {
-		// wideModeQuery?.removeEventListener('change', updateWideMode);
 		layoutStore.fixedHeight = false;
 		layoutStore.hideContainer = false;
 	});
@@ -518,7 +509,12 @@
 					contentOnly={true}
 				/>
 			{:else}
-				<LogMessageCard message={selectedMessage} expanded={true} contentOnly={true} />
+				<LogMessageCard
+					message={selectedMessage}
+					expanded={true}
+					contentOnly={true}
+					showRawJson={true}
+				/>
 			{/if}
 		{:else}
 			<div class="empty">No message selected</div>
