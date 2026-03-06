@@ -829,7 +829,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if ts <= 0 {
 				ts = nextMessageTimestamp(messages)
 			}
-			role, messageType, display := classifyClaudeMessage(role, display, rawJSON)
+			role, messageType, display := classifyClaudeMessage(role, display, rawJSON, extractStopReasonFromJSON(rawJSON))
 
 			messages = append(messages, db.Message{
 				Timestamp:      ts,
@@ -865,7 +865,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if e.RawJSON != "" {
 				rawJSON = []byte(e.RawJSON)
 			}
-			role, messageType, content := classifyClaudeMessage(e.Role, e.Content, string(rawJSON))
+			role, messageType, content := classifyClaudeMessage(e.Role, e.Content, string(rawJSON), e.StopReason)
 
 			messages = append(messages, db.Message{
 				Timestamp:      normalizeMessageTimestamp(e.Timestamp, messages),

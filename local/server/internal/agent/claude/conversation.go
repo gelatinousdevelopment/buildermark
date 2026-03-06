@@ -32,18 +32,20 @@ type conversationEntry struct {
 		Answers   map[string]any       `json:"answers"`
 	} `json:"toolUseResult"`
 	Message struct {
-		Role    string          `json:"role"`
-		Model   string          `json:"model"`
-		Content json.RawMessage `json:"content"`
+		Role       string          `json:"role"`
+		Model      string          `json:"model"`
+		Content    json.RawMessage `json:"content"`
+		StopReason string          `json:"stop_reason"`
 	} `json:"message"`
 }
 
 type conversationLogEntry struct {
-	Type      string
-	Timestamp int64
-	Role      string
-	Content   string
-	RawJSON   string
+	Type       string
+	Timestamp  int64
+	Role       string
+	Content    string
+	RawJSON    string
+	StopReason string
 }
 
 // worktreePathMarker identifies /.claude/worktrees/ in filesystem paths (from cwd fields).
@@ -412,14 +414,16 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 			}
 		}
 
-		role, _, content = classifyClaudeMessage(role, content, line)
+		stopReason := strings.TrimSpace(entry.Message.StopReason)
+		role, _, content = classifyClaudeMessage(role, content, line, stopReason)
 
 		result = append(result, conversationLogEntry{
-			Type:      entry.Type,
-			Timestamp: ts,
-			Role:      role,
-			Content:   content,
-			RawJSON:   line,
+			Type:       entry.Type,
+			Timestamp:  ts,
+			Role:       role,
+			Content:    content,
+			RawJSON:    line,
+			StopReason: stopReason,
 		})
 	})
 

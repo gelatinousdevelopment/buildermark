@@ -3,6 +3,8 @@ package claude
 import (
 	"strings"
 	"testing"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
 func TestClassifyClaudeMessageQuestion(t *testing.T) {
@@ -30,7 +32,7 @@ func TestClassifyClaudeMessageQuestion(t *testing.T) {
 		}
 	}`
 
-	role, messageType, content := classifyClaudeMessage("agent", "", raw)
+	role, messageType, content := classifyClaudeMessage("agent", "", raw, "")
 	if role != "agent" {
 		t.Fatalf("role = %q, want %q", role, "agent")
 	}
@@ -64,7 +66,7 @@ func TestClassifyClaudeMessageAnswerWithCustomNote(t *testing.T) {
 		}
 	}`
 
-	role, messageType, content := classifyClaudeMessage("user", "", raw)
+	role, messageType, content := classifyClaudeMessage("user", "", raw, "")
 	if role != "user" {
 		t.Fatalf("role = %q, want %q", role, "user")
 	}
@@ -79,5 +81,34 @@ func TestClassifyClaudeMessageAnswerWithCustomNote(t *testing.T) {
 	}
 	if !strings.Contains(content, "Custom:") || !strings.Contains(content, "long custom answer") {
 		t.Fatalf("answer markdown missing custom note: %q", content)
+	}
+}
+
+func TestClassifyClaudeMessageFinalAnswer(t *testing.T) {
+	role, messageType, content := classifyClaudeMessage("agent", "Here is the result.", "{}", "end_turn")
+	if role != "agent" {
+		t.Fatalf("role = %q, want %q", role, "agent")
+	}
+	if messageType != db.MessageTypeFinalAnswer {
+		t.Fatalf("messageType = %q, want %q", messageType, db.MessageTypeFinalAnswer)
+	}
+	if content != "Here is the result." {
+		t.Fatalf("content = %q, want %q", content, "Here is the result.")
+	}
+}
+
+func TestClassifyClaudeMessageEndTurnEmptyContent(t *testing.T) {
+	// end_turn with empty content should NOT be final_answer
+	_, messageType, _ := classifyClaudeMessage("agent", "", "{}", "end_turn")
+	if messageType == db.MessageTypeFinalAnswer {
+		t.Fatalf("empty content with end_turn should not be final_answer")
+	}
+}
+
+func TestClassifyClaudeMessageToolUseStopReason(t *testing.T) {
+	// tool_use stop_reason should NOT be final_answer
+	_, messageType, _ := classifyClaudeMessage("agent", "some content", "{}", "tool_use")
+	if messageType == db.MessageTypeFinalAnswer {
+		t.Fatalf("tool_use stop_reason should not be final_answer")
 	}
 }

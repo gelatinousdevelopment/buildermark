@@ -3,6 +3,8 @@ package claude
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
 type claudeQuestionOption struct {
@@ -17,12 +19,15 @@ type claudeQuestionSpec struct {
 	Options  []claudeQuestionOption `json:"options"`
 }
 
-func classifyClaudeMessage(role, content, rawJSON string) (string, string, string) {
+func classifyClaudeMessage(role, content, rawJSON, stopReason string) (string, string, string) {
 	if questions, ok := extractAskUserQuestionsFromRaw(rawJSON); ok {
 		return "agent", "question", formatClaudeQuestionsMarkdown(questions)
 	}
 	if questions, answers, ok := extractAskUserAnswersFromRaw(rawJSON); ok {
 		return "user", "answer", formatClaudeAnswersMarkdown(questions, answers)
+	}
+	if role == "agent" && strings.TrimSpace(stopReason) == "end_turn" && strings.TrimSpace(content) != "" {
+		return role, db.MessageTypeFinalAnswer, content
 	}
 	return role, inferClaudeMessageType(role, content), content
 }

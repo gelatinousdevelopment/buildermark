@@ -234,6 +234,23 @@ func isAssistantAuthoredHistoryEntry(entry historyEntry) bool {
 		strings.TrimSpace(entry.AgentID) != ""
 }
 
+// extractStopReasonFromJSON extracts message.stop_reason from a raw JSON line.
+func extractStopReasonFromJSON(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	var obj struct {
+		Message struct {
+			StopReason string `json:"stop_reason"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(line), &obj); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(obj.Message.StopReason)
+}
+
 func extractModelFromJSONLine(line string) string {
 	line = strings.TrimSpace(line)
 	if line == "" {
