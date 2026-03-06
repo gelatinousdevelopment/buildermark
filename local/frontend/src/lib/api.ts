@@ -9,6 +9,7 @@ import type {
 	ConversationDetail,
 	ConversationBatchDetail,
 	Rating,
+	PluginInventoryResponse,
 	ProjectCommitCoverageResponse,
 	ProjectCommitDetailResponse,
 	ProjectCommitPageResponse,
@@ -60,6 +61,22 @@ export function listProjects(ignored = false, fetchFn?: APIFetch): Promise<Proje
 
 export function getLocalSettings(fetchFn?: APIFetch): Promise<LocalSettings> {
 	return api('/api/v1/settings', undefined, fetchFn);
+}
+
+export function listPlugins(fetchFn?: APIFetch): Promise<PluginInventoryResponse> {
+	return api('/api/v1/plugins', undefined, fetchFn);
+}
+
+export function setPluginInstalled(
+	homePath: string,
+	agent: string,
+	install: boolean
+): Promise<PluginInventoryResponse> {
+	return api('/api/v1/plugins', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ homePath, agent, install })
+	});
 }
 
 export function updateLocalSettings(

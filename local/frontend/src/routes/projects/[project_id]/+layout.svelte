@@ -186,6 +186,7 @@
 		gap: 1rem;
 		justify-content: center;
 		padding: 1rem;
+		min-height: 127px;
 	}
 
 	.inner {

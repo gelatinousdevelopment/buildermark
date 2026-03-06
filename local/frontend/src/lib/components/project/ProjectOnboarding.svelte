@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ProjectTrackingForm from '$lib/components/project/ProjectTrackingForm.svelte';
 	import type { ImportableProject, ProjectTrackingOption } from '$lib/types';
+	import { resolve } from '$app/paths';
 
 	type Props = {
 		detectedProjects: ImportableProject[];
@@ -62,10 +63,7 @@
 			with git commits.
 		</p>
 		<p>
-			Install the <a
-				href="https://github.com/gelatinousdevelopment/buildermark/plugins"
-				target="_blank">Buildermark plugins</a
-			>
+			<a href={resolve('/plugins')} target="_blank">Install the plugins</a>
 			for your agents, so you can rate and log analysis about each AI coding session by running the
 			<code>bbrate</code> skill.
 		</p>

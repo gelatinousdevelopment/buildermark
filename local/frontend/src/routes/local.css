@@ -157,6 +157,12 @@ body {
 	color: var(--color-text);
 }
 
+h1 {
+	margin: 0;
+	font-size: 1.2rem;
+	padding: 1.5rem;
+}
+
 a {
 	color: var(--color-link);
 	text-decoration: underline;
@@ -246,16 +252,16 @@ button.bordered:disabled {
 	opacity: 0.5;
 }
 
-a.bordered:hover,
-button.bordered:hover {
+a.bordered:not(:disabled):hover,
+button.bordered:not(:disabled):hover {
 	background: var(--accent-color-ultralight);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 	color: var(--accent-color);
 	border-color: var(--accent-color);
 }
 
-a.bordered:active,
-button.bordered:active {
+a.bordered:not(:disabled):active,
+button.bordered:not(:disabled):active {
 	background: var(--accent-color);
 	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 	color: var(--accent-color-ultralight);

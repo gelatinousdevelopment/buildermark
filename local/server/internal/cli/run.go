@@ -38,9 +38,11 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	if err != nil {
 		return fmt.Errorf("resolve config dir: %w", err)
 	}
-	cfg, err := LoadConfig(configDir)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+	cfg := DefaultConfig()
+	if loaded, err := LoadConfig(configDir); err != nil {
+		log.Printf("load config: %v; continuing with defaults", err)
+	} else {
+		cfg = loaded
 	}
 
 	registry := agent.NewRegistry()
@@ -78,7 +80,15 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		go w.Run(watchCtx)
 	}
 
-	hsrv := &handler.Server{DB: database, Agents: registry, DBPath: opts.DBPath, ListenAddr: opts.Addr, ReadOnly: readOnly, ConfigDir: configDir}
+	hsrv := &handler.Server{
+		DB:              database,
+		Agents:          registry,
+		DBPath:          opts.DBPath,
+		ListenAddr:      opts.Addr,
+		ReadOnly:        readOnly,
+		ConfigDir:       configDir,
+		PluginSourceDir: resolvePluginSourceDir(),
+	}
 
 	// ReloadWatchers reads the current config and starts watchers for any
 	// homes that aren't already being watched. Returns the new home paths.
@@ -163,4 +173,46 @@ func normalizeHomePath(candidate string) string {
 		clean = filepath.Dir(clean)
 	}
 	return clean
+}
+
+func resolvePluginSourceDir() string {
+	candidates := make([]string, 0, 2)
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, wd)
+	}
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Dir(exe))
+	}
+
+	for _, candidate := range candidates {
+		dir := filepath.Clean(candidate)
+		for {
+			pluginDir := filepath.Join(dir, "plugins")
+			if pluginBundleExists(pluginDir) {
+				return pluginDir
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	return ""
+}
+
+func pluginBundleExists(dir string) bool {
+	required := []string{
+		"claudecode/.claude-plugin/plugin.json",
+		"claudecode/skills/bbrate/SKILL.md",
+		"codex/skills/bbrate/SKILL.md",
+		"gemini/commands/bbrate.toml",
+	}
+	for _, rel := range required {
+		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
+			return false
+		}
+	}
+	return true
 }

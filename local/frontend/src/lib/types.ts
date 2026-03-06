@@ -35,6 +35,32 @@ export interface LocalSettings {
 	extraLocalUserEmails: string[];
 }
 
+export interface PluginAgentInfo {
+	agent: string;
+	name: string;
+	syntax: string;
+}
+
+export interface PluginStatus {
+	agent: string;
+	name: string;
+	status: 'installed' | 'partial' | 'missing' | string;
+	installed: boolean;
+	relativePaths: string[];
+	paths: string[];
+}
+
+export interface PluginHomeInfo {
+	homePath: string;
+	isPrimary: boolean;
+	plugins: PluginStatus[];
+}
+
+export interface PluginInventoryResponse {
+	agents: PluginAgentInfo[];
+	homes: PluginHomeInfo[];
+}
+
 export interface ProjectDetail {
 	id: string;
 	path: string;

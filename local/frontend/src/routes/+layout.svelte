@@ -188,8 +188,11 @@
 			<hr class="divider" />
 			<section>
 				<nav class="right">
-					<a href={resolve('/search')} class="item" title="Search"
-						><Icon name="search" width="19px" /></a
+					<a
+						href={resolve('/search')}
+						class="item"
+						class:selected={page.route.id === '/search'}
+						title="Search"><Icon name="search" width="20px" /></a
 					>
 				</nav>
 			</section>
@@ -197,8 +200,22 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<a href={resolve('/settings')} class="item" title="Buildermark Local Settings"
-					><Icon name="gear" width="17px" /></a
+				<a
+					href={resolve('/plugins')}
+					class="item"
+					class:selected={page.route.id === '/plugins'}
+					title="Plugins"><Icon name="puzzlePiece" width="16px" /></a
+				>
+			</nav>
+		</section>
+		<hr class="divider" />
+		<section>
+			<nav class="right">
+				<a
+					href={resolve('/settings')}
+					class="item"
+					class:selected={page.route.id === '/settings'}
+					title="Buildermark Local Settings"><Icon name="gear" width="18px" /></a
 				>
 			</nav>
 		</section>
@@ -477,6 +494,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+	}
+
+	header nav.right a.selected {
+		background: var(--accent-color-ultralight);
+		color: var(--accent-color);
 	}
 
 	.dashboard-content {

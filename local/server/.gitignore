@@ -33,3 +33,5 @@ internal/handler/frontend/*
 
 /buildermark
 /buildermark-server
+
+.gomodcache

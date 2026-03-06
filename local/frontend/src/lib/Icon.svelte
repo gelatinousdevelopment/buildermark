@@ -10,6 +10,9 @@
 	import documentSvg from '$lib/icons/document.svg?raw';
 	import userSvg from '$lib/icons/user.svg?raw';
 	import searchSvg from '$lib/icons/search.svg?raw';
+	import checkSvg from '$lib/icons/check.svg?raw';
+	import xSvg from '$lib/icons/x.svg?raw';
+	import puzzlePieceSvg from '$lib/icons/puzzlePiece.svg?raw';
 	import infoSvg from '$lib/icons/info.svg?raw';
 	import buildermarkSvg from '$lib/icons/buildermark.svg?raw';
 	import buildermarkWordmarkSvg from '$lib/icons/buildermarkWordmark.svg?raw';
@@ -34,6 +37,9 @@
 		document: documentSvg,
 		user: userSvg,
 		search: searchSvg,
+		check: checkSvg,
+		x: xSvg,
+		puzzlePiece: puzzlePieceSvg,
 		info: infoSvg,
 		buildermark: buildermarkSvg,
 		buildermarkWordmark: buildermarkWordmarkSvg,

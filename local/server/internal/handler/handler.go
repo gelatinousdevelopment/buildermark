@@ -19,6 +19,9 @@ type Server struct {
 	ListenAddr string          // address the server is listening on
 	ReadOnly   bool
 	ConfigDir  string
+	// PluginSourceDir optionally points at the repo-level plugins bundle used
+	// by the plugin management endpoints.
+	PluginSourceDir string
 
 	// ReloadWatchers is called after settings change to start watchers for
 	// any newly added agent homes. It returns the list of new home paths
@@ -99,6 +102,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/history/scan", s.handleHistoryScan)
 	mux.HandleFunc("GET /api/v1/settings", s.handleGetLocalSettings)
 	mux.HandleFunc("PUT /api/v1/settings", s.handlePutLocalSettings)
+	mux.HandleFunc("GET /api/v1/plugins", s.handleGetPlugins)
+	mux.HandleFunc("POST /api/v1/plugins", s.handlePostPlugins)
 	mux.Handle("GET /_app/", staticFrontendHandler())
 	mux.HandleFunc("GET /", s.handleDashboard)
 	return corsMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux)))

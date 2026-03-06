@@ -4,6 +4,7 @@
 	import type { TeamServer } from '$lib/types';
 	import Dialog from '$lib/Dialog.svelte';
 
+	let teamServersEnabled = false;
 	let teamServers: TeamServer[] = $state([]);
 	let loading = $state(true);
 	let error: string | null = $state(null);
@@ -142,7 +143,9 @@
 		{:else}
 			<p class="muted">No team servers configured.</p>
 		{/if}
-		<button class="bordered small add-btn" onclick={openAdd}>Add Team Server</button>
+		<button class="bordered small add-btn" onclick={openAdd} disabled={!teamServersEnabled}
+			>{teamServersEnabled ? 'Add Team Server' : 'Coming Soon'}</button
+		>
 	{/if}
 </div>
 
@@ -205,6 +208,10 @@
 		color: var(--accent-color-darkest);
 		margin: 0;
 		font-size: 1rem;
+	}
+
+	.team-servers-section p {
+		margin: 0.5rem 0;
 	}
 
 	.path {
