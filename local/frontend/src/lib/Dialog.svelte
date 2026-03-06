@@ -3,13 +3,14 @@
 
 	interface Props {
 		open: boolean;
-		title: string;
+		title?: string;
 		onclose: () => void;
 		children: Snippet;
 		actions: Snippet;
+		width?: string;
 	}
 
-	let { open, title, onclose, children, actions }: Props = $props();
+	let { open, title, onclose, children, actions, width }: Props = $props();
 </script>
 
 {#if open}
@@ -17,8 +18,10 @@
 	<div class="dialog-overlay" onkeydown={(e) => e.key === 'Escape' && onclose()}>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div class="dialog-backdrop" onclick={onclose}></div>
-		<div class="dialog-panel">
-			<h3>{title}</h3>
+		<div class="dialog-panel" style:max-width={width ?? '440px'}>
+			{#if title}
+				<h3>{title}</h3>
+			{/if}
 			<div class="dialog-body">
 				{@render children()}
 			</div>
@@ -50,7 +53,6 @@
 		background: var(--color-modal-bg);
 		border-radius: 8px;
 		padding: 1.5rem;
-		max-width: 440px;
 		width: 90%;
 		box-shadow: 0 4px 24px var(--color-popover-shadow);
 	}

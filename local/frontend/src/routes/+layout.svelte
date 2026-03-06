@@ -13,6 +13,7 @@
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import type { Project } from '$lib/types';
+	import { PUBLIC_READ_ONLY } from '$env/static/public';
 
 	let { children, data } = $props();
 
@@ -43,8 +44,7 @@
 	});
 
 	let projectId = $derived(page.params.project_id);
-	let showReadOnlyDialog = $state(false);
-	const isReadOnlyDemo = import.meta.env.PUBLIC_READ_ONLY === 'true';
+	let showReadOnlyDialog = $state(true);
 	let bigBrand = $derived(data.projects && data.projects.length == 0);
 
 	const projectTabs = [
@@ -165,7 +165,6 @@
 					<a href={resolve('/projects')} class="item" class:selected={page.route.id === '/projects'}
 						>Projects</a
 					>
-					<!-- <div class="chevron-right"><Icon name="chevronRight" width="15px" /></div> -->
 					<a
 						href={resolve('/projects/import')}
 						class="item"
@@ -174,14 +173,12 @@
 				{/if}
 			</nav>
 		</section>
-		<!-- <hr class="divider" /> -->
 		<section style:flex="1"></section>
-		{#if isReadOnlyDemo}
-			<hr class="divider" />
+		{#if PUBLIC_READ_ONLY}
 			<section>
 				<nav class="right">
 					<button class="read-only-pill" onclick={() => (showReadOnlyDialog = true)}>
-						Read-only demo
+						Read-only mode
 					</button>
 				</nav>
 			</section>
@@ -224,43 +221,64 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				<ServerStatusIndicator />
+				{#if PUBLIC_READ_ONLY}
+					<a
+						href="https://github.com/gelatinousdevelopment/buildermark"
+						class="item"
+						title="Buildermark on GitHub"
+						target="_blank"><Icon name="github" width="15px" /></a
+					>
+				{:else}
+					<ServerStatusIndicator />
+				{/if}
 			</nav>
 		</section>
-		<!-- <hr class="divider" />
-		<section>
-			<nav class="right">
-				<a
-					href="https://github.com/gelatinousdevelopment/buildermark"
-					class="item"
-					title="Buildermark on GitHub"><Icon name="github" width="15px" /></a
-				>
-			</nav>
-		</section> -->
 	</header>
 
 	<div class="dashboard-content">
 		{@render children()}
 	</div>
 
-	<Dialog
-		open={showReadOnlyDialog}
-		title="Read-only demo"
-		onclose={() => (showReadOnlyDialog = false)}
-	>
-		<p>
-			This is a read-only demo of Buildermark Local. You can browse data, but write actions are
-			disabled.
-		</p>
-		<p>
-			Learn more at <a href="https://buildermark.dev" target="_blank">buildermark.dev</a> or view
-			the source on
-			<a href="https://github.com/gelatinousdevelopment/buildermark" target="_blank">GitHub</a>.
-		</p>
-		<p>
-			Need multi-user collaboration and write access? Buildermark Team Server is available for that.
-		</p>
-
+	<Dialog open={showReadOnlyDialog} onclose={() => (showReadOnlyDialog = false)} width="500px">
+		<div class="read-only-dialog">
+			<a href="https://buildermark.dev" target="_blank" style:color="var(--color-text)"
+				><Icon name="buildermarkWordmark" width="140px" /></a
+			>
+			<hr style:height="2px" style:background="var(--color-text)" />
+			<h2>Rate, measure, and benchmark your AI coding sessions.</h2>
+			<p>
+				This website is a read-only demo of Buildermark Local. You can browse all of the prompts
+				that I wrote to create it in less than a month.
+			</p>
+			<h2>Open source, local-first, and free.</h2>
+			<p>
+				Buildermark Local runs on your dev computer (macOS, Linux, and Windows) with a very light
+				footprint (written in Go), a UI on localhost, and is <a
+					href="https://github.com/gelatinousdevelopment/buildermark"
+					target="_blank">open source on github</a
+				>. Nothing leaves your machine, not even usage data.
+			</p>
+			<!-- <h2>Download</h2> -->
+			<div style:display="flex" style:gap="0.5rem" style:align-items="center">
+				<span>Download at</span>
+				<a
+					href="https://buildermark.dev"
+					target="_blank"
+					class="bordered prominent small"
+					style:width="fit-content">buildermark.dev</a
+				>
+				<span>or</span>
+				<a
+					href="https://github.com/gelatinousdevelopment/buildermark/releases"
+					target="_blank"
+					class="bordered prominent small"
+					style:width="fit-content">GitHub</a
+				>
+			</div>
+			<p style:margin-top="1rem">
+				Buildermark <a href="https://buildermark.dev" target="_blank">Team Server</a> is coming soon.
+			</p>
+		</div>
 		{#snippet actions()}
 			<button class="bordered small" onclick={() => (showReadOnlyDialog = false)}>Close</button>
 		{/snippet}
@@ -463,16 +481,16 @@
 	}
 
 	header nav.right .read-only-pill {
-		background: var(--accent-color-ultralight);
-		border: 1px solid var(--accent-color);
+		background: #727272;
 		border-radius: 999px;
-		color: var(--accent-color);
+		border: 0;
+		color: #eee;
 		cursor: pointer;
-		font-size: 0.75rem;
-		font-weight: 700;
-		height: 28px;
-		line-height: 1;
-		padding: 0 0.75rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		height: 20px;
+		margin-right: 1rem;
+		padding: 0 0.8rem;
 		text-transform: uppercase;
 	}
 
@@ -540,5 +558,16 @@
 
 	footer a:hover {
 		text-decoration: underline;
+	}
+
+	.read-only-dialog h2 {
+		font-size: 1rem;
+		font-weight: bold;
+		margin: 1.2rem 0 0.8rem 0;
+		line-height: 1;
+	}
+
+	.read-only-dialog p {
+		font-size: 1rem;
 	}
 </style>

@@ -196,7 +196,7 @@ func pluginDefinitions() []pluginDefinition {
 	return []pluginDefinition{
 		{
 			agent:  "claude",
-			name:   "Claude Code",
+			name:   "Claude Code CLI",
 			syntax: "/bbrate",
 			files: []pluginFileDefinition{
 				{

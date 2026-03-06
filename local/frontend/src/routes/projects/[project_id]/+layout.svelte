@@ -147,6 +147,7 @@
 	class:limited-content-width={!layoutStore.hideContainer}
 	class:inset-when-limited-content-width={!layoutStore.hideContainer}
 	class:fixed-height={layoutStore.fixedHeight}
+	style:background={layoutStore.fixedHeight ? 'var(--color-background-content)' : ''}
 >
 	{@render children()}
 </div>
