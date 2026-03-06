@@ -1,4 +1,7 @@
 import { API_URL } from '$lib/config';
+import { env } from '$env/dynamic/public';
+
+const READ_ONLY = (env.PUBLIC_READ_ONLY ?? 'false') === 'true';
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
@@ -39,7 +42,10 @@ export function getWsUrl(): string {
 }
 
 function connect() {
-	if (_ws && (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) {
+	if (
+		READ_ONLY ||
+		(_ws && (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN))
+	) {
 		return;
 	}
 
