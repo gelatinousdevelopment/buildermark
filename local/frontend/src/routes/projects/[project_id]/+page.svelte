@@ -6,7 +6,9 @@
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
+	import { projectLayoutData } from '$lib/stores/projectLayoutData.svelte';
 	import { dateStringToUnixMsRange } from '$lib/utils';
+	import type { ProjectDetail, DailyCommitSummary } from '$lib/types';
 
 	const projectId = $derived(page.params.project_id ?? '');
 	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.commitSortOrder);
@@ -21,17 +23,28 @@
 
 	function handleCommitsLoaded(hashes: string[]) {
 		loadedCommitHashes = hashes;
-		triggerRelationshipLoad(hashes, loadedConversationIds);
 	}
 
 	function handleConversationsLoaded(ids: string[]) {
 		loadedConversationIds = ids;
-		triggerRelationshipLoad(loadedCommitHashes, ids);
 	}
 
-	function triggerRelationshipLoad(commitHashes: string[], conversationIds: string[]) {
-		if (commitHashes.length === 0 || !projectId) return;
-		void relationshipCache.loadRelationships(projectId, commitHashes, conversationIds);
+	$effect(() => {
+		if (loadedCommitHashes.length > 0 && loadedConversationIds.length > 0 && projectId) {
+			void relationshipCache.loadRelationships(
+				projectId,
+				loadedCommitHashes,
+				loadedConversationIds
+			);
+		}
+	});
+
+	function handleProjectLoaded(project: ProjectDetail) {
+		projectLayoutData.setProject(projectId, project);
+	}
+
+	function handleCommitsDataLoaded(data: { dailySummary: DailyCommitSummary[]; branch: string }) {
+		projectLayoutData.setCommitsData(projectId, data.dailySummary, data.branch);
 	}
 </script>
 
@@ -52,6 +65,7 @@
 			showRatingsColumn={true}
 			enableRelationshipHover={true}
 			onConversationsLoaded={handleConversationsLoaded}
+			onProjectLoaded={handleProjectLoaded}
 			{order}
 			start={dateRange?.from}
 			end={dateRange?.to}
@@ -77,6 +91,8 @@
 			showBranch={false}
 			enableRelationshipHover={true}
 			onCommitsLoaded={handleCommitsLoaded}
+			onCommitsDataLoaded={handleCommitsDataLoaded}
+			defaultToCurrentUser={false}
 			{order}
 			start={dateRange?.from}
 			end={dateRange?.to}

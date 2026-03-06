@@ -61,6 +61,10 @@
 		loadSignal?: number;
 		enableRelationshipHover?: boolean;
 		onCommitsLoaded?: (commitHashes: string[]) => void;
+		onCommitsDataLoaded?: (data: {
+			dailySummary: import('$lib/types').DailyCommitSummary[];
+			branch: string;
+		}) => void;
 		searchTerm?: string;
 		defaultToCurrentUser?: boolean;
 		start?: number;
@@ -100,6 +104,7 @@
 		loadSignal = 0,
 		enableRelationshipHover = false,
 		onCommitsLoaded = undefined,
+		onCommitsDataLoaded = undefined,
 		searchTerm = '',
 		defaultToCurrentUser = true,
 		start = undefined,
@@ -309,6 +314,9 @@
 			void loadIngestionStatus(branch ?? internalBranch);
 			if (onCommitsLoaded) {
 				onCommitsLoaded(loaded.commits.map((c) => c.commitHash));
+			}
+			if (onCommitsDataLoaded) {
+				onCommitsDataLoaded({ dailySummary: loaded.dailySummary ?? [], branch: loaded.branch });
 			}
 		} catch (e) {
 			if (myToken !== requestToken) return;

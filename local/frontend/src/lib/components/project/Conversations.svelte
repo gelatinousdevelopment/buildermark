@@ -54,6 +54,7 @@
 		initialError?: string | null;
 		enableRelationshipHover?: boolean;
 		onConversationsLoaded?: (conversationIds: string[]) => void;
+		onProjectLoaded?: (project: ProjectDetail) => void;
 		searchTerm?: string;
 		start?: number;
 		end?: number;
@@ -92,6 +93,7 @@
 		initialError = null,
 		enableRelationshipHover = false,
 		onConversationsLoaded = undefined,
+		onProjectLoaded = undefined,
 		searchTerm = '',
 		start = undefined,
 		end = undefined,
@@ -213,6 +215,9 @@
 			}
 			if (onConversationsLoaded) {
 				onConversationsLoaded(detail.conversations.map((c) => c.id));
+			}
+			if (onProjectLoaded) {
+				onProjectLoaded(detail);
 			}
 		} catch (e) {
 			if (myToken !== requestToken) return;

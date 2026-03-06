@@ -12,20 +12,18 @@
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 	import Popover from '$lib/components/Popover.svelte';
-	import { listProjects } from '$lib/api';
 	import type { Project } from '$lib/types';
 
 	let { children, data } = $props();
 
 	let animatedEl: HTMLDivElement;
 	let svgTemplate: Node;
-	let projects: Project[] = $state([]);
+	let projects: Project[] = $derived(
+		(data.projects ?? []).toSorted((a: Project, b: Project) => a.label.localeCompare(b.label))
+	);
 
 	onMount(() => {
 		websocketStore.connect();
-		listProjects()
-			.then((p) => (projects = p.sort((a, b) => a.label.localeCompare(b.label))))
-			.catch(() => {});
 		const svg = animatedEl?.querySelector('svg');
 		if (svg) {
 			svgTemplate = svg.cloneNode(true);

@@ -3,20 +3,14 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { getProject, listProjectCommitsPage } from '$lib/api';
-	import type { ProjectDetail, DailyCommitSummary } from '$lib/types';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
+	import { projectLayoutData } from '$lib/stores/projectLayoutData.svelte';
 
-	let { children } = $props();
+	let { children, data } = $props();
 
-	let project: ProjectDetail | null = $state(null);
-	let loading = $state(true);
-	let error: string | null = $state(null);
-	let dailySummary: DailyCommitSummary[] = $state([]);
-	let branch: string = $state('');
 	let order = $derived(page.url.searchParams.get('order') ?? 'desc');
 
 	function handleOrderChange(e: Event) {
@@ -29,47 +23,32 @@
 		});
 	}
 
+	// Reset store and date filter when project changes
 	$effect(() => {
 		const projectId = page.params.project_id;
 		if (!projectId) return;
-
-		// Reset state for the new project
-		project = null;
-		loading = true;
-		error = null;
-		dailySummary = [];
-		branch = '';
-
+		projectLayoutData.reset(projectId);
 		projectDateFilterStore.setProjectId(projectId);
-		navStore.projectName = navStore.getCachedLabel(projectId) ?? null;
+	});
 
-		(async () => {
-			try {
-				const p = await getProject(projectId);
-				// Guard against stale responses if project_id changed during fetch
-				if (page.params.project_id !== projectId) return;
-				project = p;
-				const label = p.label || p.path;
-				navStore.projectName = label;
-				navStore.setCachedLabel(projectId, label);
-
-				try {
-					const resp = await listProjectCommitsPage(projectId, 1, '', 1);
-					if (page.params.project_id !== projectId) return;
-					dailySummary = resp.dailySummary ?? [];
-					branch = resp.branch;
-				} catch {
-					// chart data is non-critical
-				}
-			} catch (e) {
-				if (page.params.project_id !== projectId) return;
-				error = e instanceof Error ? e.message : 'Failed to load project';
-			} finally {
-				if (page.params.project_id === projectId) {
-					loading = false;
-				}
-			}
-		})();
+	// Set nav label from best available source: child data > cache > projects list
+	$effect(() => {
+		const projectId = page.params.project_id;
+		if (!projectId) return;
+		const project = projectLayoutData.project;
+		if (project) {
+			const label = project.label || project.path;
+			navStore.projectName = label;
+			navStore.setCachedLabel(projectId, label);
+			return;
+		}
+		const cached = navStore.getCachedLabel(projectId);
+		if (cached) {
+			navStore.projectName = cached;
+			return;
+		}
+		const match = data.projects?.find((p) => p.id === projectId);
+		navStore.projectName = match ? match.label || match.path : null;
 	});
 
 	onDestroy(() => {
@@ -84,16 +63,12 @@
 	style:display={page.url.pathname.endsWith(page.params.project_id || '') ? 'flex' : 'none'}
 >
 	<div class="inner">
-		{#if loading}
-			<div class="loading">Loading project...</div>
-		{:else if error}
-			<div class="error">{error}</div>
-		{:else if project}
+		{#if projectLayoutData.project}
 			<div class="chart-area">
-				{#if dailySummary.length > 0}
+				{#if projectLayoutData.dailySummary.length > 0}
 					<DailyCommitsChart
-						{dailySummary}
-						{branch}
+						dailySummary={projectLayoutData.dailySummary}
+						branch={projectLayoutData.branch}
 						projectId={page.params.project_id}
 						compact={false}
 						selectedDate={projectDateFilterStore.selectedDate}
@@ -127,36 +102,36 @@
 							Oldest
 						</label>
 					</div>
-					{project.label}
+					{projectLayoutData.project.label}
 				</h3>
 				<div class="detail">
 					<div class="label">Local Path:</div>
-					<div class="value">{project.path}</div>
+					<div class="value">{projectLayoutData.project.path}</div>
 				</div>
-				{#if project.localUser || project.localEmail}
+				{#if projectLayoutData.project.localUser || projectLayoutData.project.localEmail}
 					<div class="detail">
 						<div class="label">Local User:</div>
 						<div class="value">
-							{#if project.localUser && project.localEmail}
-								{project.localUser} &lt;{project.localEmail}&gt;
+							{#if projectLayoutData.project.localUser && projectLayoutData.project.localEmail}
+								{projectLayoutData.project.localUser} &lt;{projectLayoutData.project.localEmail}&gt;
 							{:else}
-								{project.localUser || project.localEmail}
+								{projectLayoutData.project.localUser || projectLayoutData.project.localEmail}
 							{/if}
 						</div>
 					</div>
 				{/if}
-				{#if project.remoteUrl || project.remote}
+				{#if projectLayoutData.project.remoteUrl || projectLayoutData.project.remote}
 					<div class="detail">
 						<div class="value">
-							{#if project.remoteUrl}
+							{#if projectLayoutData.project.remoteUrl}
 								<a
-									href={project.remoteUrl}
+									href={projectLayoutData.project.remoteUrl}
 									target="_blank"
 									rel="noopener noreferrer"
-									class="remote-link">{project.remoteUrl}</a
+									class="remote-link">{projectLayoutData.project.remoteUrl}</a
 								>
 							{:else}
-								{project.remote}
+								{projectLayoutData.project.remote}
 							{/if}
 						</div>
 					</div>
