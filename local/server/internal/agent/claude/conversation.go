@@ -572,9 +572,11 @@ func isSystemMessage(text string) bool {
 	}
 	skipPrefixes := []string{
 		"<local-command",
-		"<command-name>",
-		"<system-reminder>",
-		"<user-prompt-submit-hook>",
+		"<command-name",
+		"<command-message",
+		"<command-args",
+		"<system-reminder",
+		"<user-prompt-submit-hook",
 		"[Request interrupted",
 	}
 	for _, p := range skipPrefixes {

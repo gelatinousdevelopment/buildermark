@@ -1040,6 +1040,9 @@ func TestIsSystemMessage(t *testing.T) {
 	}{
 		{"<local-command-caveat>...", true},
 		{"<command-name>/clear</command-name>", true},
+		{"<command-name source=\"shell\">/clear</command-name>", true},
+		{"<command-message>simplify</command-message>", true},
+		{"<command-args>in the @local/server/ go code</command-args>", true},
 		{"<system-reminder>...", true},
 		{"[Request interrupted by user for tool use]", true},
 		{"[]", true},
@@ -1260,6 +1263,30 @@ func TestReadSessionTitleFallbackToFirstPrompt(t *testing.T) {
 	title := readSessionTitle(tmpDir, projectPath, "sess-fallback")
 	if title != "Fix the login bug" {
 		t.Errorf("title = %q, want %q", title, "Fix the login bug")
+	}
+}
+
+func TestReadSessionTitleFallbackSkipsCommandWrapperMessages(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/a"
+	dirName := "-proj-a"
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-03-05T14:08:12.597Z","message":{"content":"<command-message>simplify</command-message>\n<command-name>/simplify</command-name>\n<command-args>in the @local/server/ go code</command-args>"}}`,
+		`{"type":"user","timestamp":"2026-03-05T14:08:12.598Z","message":{"content":[{"type":"text","text":"# Simplify: Code Review and Cleanup\n\nReview all changed files for reuse, quality, and efficiency. Fix any issues found."}]}}`,
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "sess-command-wrapper.jsonl"), []byte(strings.Join(convLines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	title := readSessionTitle(tmpDir, projectPath, "sess-command-wrapper")
+	want := "# Simplify: Code Review and Cleanup\n\nReview all changed files for reuse, quality, and efficiency. Fix any issues found."
+	if title != want {
+		t.Errorf("title = %q, want %q", title, want)
 	}
 }
 
@@ -2576,4 +2603,3 @@ func TestFindConversationPathCanonical(t *testing.T) {
 		t.Errorf("got %q, want %q", got, sessionFile)
 	}
 }
-
