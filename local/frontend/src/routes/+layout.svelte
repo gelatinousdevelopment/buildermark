@@ -13,7 +13,9 @@
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import type { Project } from '$lib/types';
-	import { PUBLIC_READ_ONLY } from '$env/static/public';
+	import { env } from '$env/dynamic/public';
+
+	const READ_ONLY = (env.PUBLIC_READ_ONLY ?? 'false') === 'true';
 
 	let { children, data } = $props();
 
@@ -174,7 +176,7 @@
 			</nav>
 		</section>
 		<section style:flex="1"></section>
-		{#if PUBLIC_READ_ONLY}
+		{#if READ_ONLY}
 			<section>
 				<nav class="right">
 					<button class="read-only-pill" onclick={() => (showReadOnlyDialog = true)}>
@@ -221,7 +223,7 @@
 		<hr class="divider" />
 		<section>
 			<nav class="right">
-				{#if PUBLIC_READ_ONLY}
+				{#if READ_ONLY}
 					<a
 						href="https://github.com/gelatinousdevelopment/buildermark"
 						class="item"
