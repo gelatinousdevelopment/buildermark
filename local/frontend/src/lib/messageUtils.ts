@@ -34,11 +34,14 @@ export function isUserPromptMessage(message: MessageRead): boolean {
 	return true;
 }
 
-export function messageType(message: MessageRead): 'prompt' | 'question' | 'answer' | 'log' {
+export function messageType(
+	message: MessageRead
+): 'prompt' | 'question' | 'answer' | 'final_answer' | 'log' {
 	const t = typeof message.messageType === 'string' ? message.messageType.trim().toLowerCase() : '';
 	if (t === 'prompt') return message.role === 'user' ? 'prompt' : 'log';
 	if (t === 'question') return message.role === 'agent' ? 'question' : 'log';
 	if (t === 'answer') return message.role === 'user' ? 'answer' : 'log';
+	if (t === 'final_answer') return message.role === 'agent' ? 'final_answer' : 'log';
 	if (t === 'log') return 'log';
 	if (isUserPromptMessageLegacy(message)) return 'prompt';
 	return 'log';
@@ -59,9 +62,13 @@ export function isAnswerMessage(message: MessageRead): boolean {
 	return messageType(message) === 'answer';
 }
 
+export function isFinalAnswerMessage(message: MessageRead): boolean {
+	return messageType(message) === 'final_answer';
+}
+
 export function isStandaloneTimelineMessage(message: MessageRead): boolean {
 	const t = messageType(message);
-	return t === 'prompt' || t === 'question' || t === 'answer';
+	return t === 'prompt' || t === 'question' || t === 'answer' || t === 'final_answer';
 }
 
 export function isDiffMessage(message: MessageRead): boolean {
@@ -83,6 +90,7 @@ export function messageModel(message: MessageRead): string {
 
 export function messageTypeLabel(message: MessageRead): string {
 	const type = messageType(message);
+	if (type === 'final_answer') return 'final answer';
 	if (type !== 'log') return type;
 	if (isDiffMessage(message)) return 'diff';
 	try {

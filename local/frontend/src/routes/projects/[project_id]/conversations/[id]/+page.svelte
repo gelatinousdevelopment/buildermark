@@ -10,6 +10,7 @@
 		isUserPromptMessage,
 		isQuestionMessage,
 		isAnswerMessage,
+		isFinalAnswerMessage,
 		isStandaloneTimelineMessage,
 		isDiffMessage,
 		messageModel
@@ -18,6 +19,7 @@
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import LogMessageCard from '$lib/components/LogMessageCard.svelte';
 	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
+	import AgentMessageCard from '$lib/components/AgentMessageCard.svelte';
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
 	import AgentTag from '$lib/components/AgentTag.svelte';
@@ -354,7 +356,11 @@
 			<p>No messages or ratings.</p>
 		{:else}
 			{#each displayItems as item (item.kind === 'message' ? item.message.id : item.kind === 'rating' ? item.rating.id : item.id)}
-				{#if item.kind === 'message' && (isUserPromptMessage(item.message) || isAnswerMessage(item.message))}
+				{#if item.kind === 'message' && isFinalAnswerMessage(item.message)}
+					<div class="message agent-message" data-message-id={item.message.id}>
+						<AgentMessageCard message={item.message} agent={conversation.agent} />
+					</div>
+				{:else if item.kind === 'message' && (isUserPromptMessage(item.message) || isAnswerMessage(item.message))}
 					<div class="message user-message" data-message-id={item.message.id}>
 						<UserPromptMessageCard message={item.message} />
 					</div>
@@ -619,6 +625,15 @@
 		color: var(--color-text);
 		margin-left: 10%;
 		margin-right: 0rem;
+	}
+
+	.message.agent-message {
+		color: var(--color-text);
+		margin-left: 0;
+		margin-right: 10%;
+		padding: 0;
+		border: none;
+		background: none;
 	}
 
 	h2 {

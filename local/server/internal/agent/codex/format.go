@@ -63,6 +63,7 @@ type codexResponseItemPayload struct {
 type codexEventMsgPayload struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
+	Phase   string `json:"phase"`
 }
 
 func parseCodexTimestamp(raw json.RawMessage) int64 {

@@ -38,14 +38,28 @@
 	/* Agent colors (known coding agents) */
 	--agent-color-generic: light-dark(#a7439b, #c76abb);
 	--agent-foreground-color-generic: rgb(255, 255, 255, 0.9);
+	--agent-background-color-generic: light-dark(#f8eef7, #2a1a28);
+	--agent-border-color-generic: light-dark(#c87ec0, #6a3a64);
+
 	--agent-color-manual: light-dark(#ccc, #3a3a3a);
 	--agent-foreground-color-manual: #fff;
+	--agent-background-color-manual: light-dark(#f0f0f0, #262628);
+	--agent-border-color-manual: light-dark(#bbb, #444);
+
 	--agent-color-claude: light-dark(#cf6f30, #af583b);
 	--agent-foreground-color-claude: light-dark(rgb(255, 255, 255, 0.9), rgb(54 23 0));
+	--agent-background-color-claude: light-dark(#fff5ee, #2a1a10);
+	--agent-border-color-claude: light-dark(#e8a870, #6a3a1e);
+
 	--agent-color-codex: light-dark(#5c5aff, #4840dd);
 	--agent-foreground-color-codex: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0, 0.9));
+	--agent-background-color-codex: light-dark(#f0f0ff, #1a1a2e);
+	--agent-border-color-codex: light-dark(#9090ee, #3a3088);
+
 	--agent-color-gemini: light-dark(#3180f7, #007bf9);
 	--agent-foreground-color-gemini: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0, 0.9));
+	--agent-background-color-gemini: light-dark(#eef4ff, #101a2e);
+	--agent-border-color-gemini: light-dark(#7ab0f5, #2060b0);
 
 	--font-family-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 

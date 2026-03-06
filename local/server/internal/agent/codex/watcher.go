@@ -483,6 +483,9 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			if strings.TrimSpace(content) == "" {
 				content = summarizeCodexEvent(event.Type, event.Payload, item.Type)
 			}
+			if messageType == "log" && isSkippableCodexContent(content) {
+				continue
+			}
 			rawJSON := enrichCodexRawJSON(line, workingDir)
 
 			isResponseItemUser := item.Type == "message" && item.Role == "user"
@@ -518,6 +521,7 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 				continue
 			}
 			role := "agent"
+			messageType := "log"
 			if msg.Type == "user_message" {
 				role = "user"
 				hasEventMsgUser = true
@@ -525,16 +529,23 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 					firstEventMsgUser = strings.TrimSpace(msg.Message)
 				}
 			}
+			if strings.TrimSpace(msg.Phase) == "final_answer" {
+				messageType = db.MessageTypeFinalAnswer
+			}
 			content := strings.TrimSpace(msg.Message)
 			if content == "" {
 				content = summarizeCodexEvent(event.Type, event.Payload, msg.Type)
 			}
+			if messageType == "log" && isSkippableCodexContent(content) {
+				continue
+			}
 			messages = append(messages, db.Message{
-				Timestamp: ts,
-				Role:      role,
-				Model:     currentModel,
-				Content:   content,
-				RawJSON:   line,
+				Timestamp:   ts,
+				Role:        role,
+				MessageType: messageType,
+				Model:       currentModel,
+				Content:     content,
+				RawJSON:     line,
 			})
 			if role == "user" {
 				if rating, note := parseRatingDisplay(msg.Message); rating >= 0 {
@@ -760,6 +771,14 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 		}
 	}
 	return len(messages) > 0
+}
+
+// isSkippableCodexContent returns true for synthesized noise messages that
+// provide no value in the conversation timeline.
+func isSkippableCodexContent(content string) bool {
+	return strings.HasPrefix(content, "[response_item:reasoning]") ||
+		strings.HasPrefix(content, "[event_msg:item_completed]") ||
+		strings.HasPrefix(content, "[event_msg:token_count]")
 }
 
 func summarizeCodexEvent(eventType string, payload json.RawMessage, subtype string) string {

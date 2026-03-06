@@ -3,10 +3,11 @@ package db
 import "strings"
 
 const (
-	MessageTypePrompt   = "prompt"
-	MessageTypeQuestion = "question"
-	MessageTypeAnswer   = "answer"
-	MessageTypeLog      = "log"
+	MessageTypePrompt      = "prompt"
+	MessageTypeQuestion    = "question"
+	MessageTypeAnswer      = "answer"
+	MessageTypeFinalAnswer = "final_answer"
+	MessageTypeLog         = "log"
 )
 
 func normalizeMessageType(messageType string) string {
@@ -17,6 +18,8 @@ func normalizeMessageType(messageType string) string {
 		return MessageTypeQuestion
 	case MessageTypeAnswer:
 		return MessageTypeAnswer
+	case MessageTypeFinalAnswer:
+		return MessageTypeFinalAnswer
 	default:
 		return MessageTypeLog
 	}
@@ -37,6 +40,11 @@ func canonicalMessageType(role, messageType, content string) string {
 	case MessageTypeAnswer:
 		if strings.TrimSpace(role) == "user" {
 			return MessageTypeAnswer
+		}
+		return MessageTypeLog
+	case MessageTypeFinalAnswer:
+		if strings.TrimSpace(role) == "agent" {
+			return MessageTypeFinalAnswer
 		}
 		return MessageTypeLog
 	default:
