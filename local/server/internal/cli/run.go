@@ -76,8 +76,18 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	watchCtx, watchCancel := context.WithCancel(ctx)
 	defer watchCancel()
 
-	for _, w := range registry.Watchers() {
-		go w.Run(watchCtx)
+	for i, w := range registry.Watchers() {
+		delay := time.Duration(i) * 5 * time.Second
+		go func(w agent.Watcher, d time.Duration) {
+			if d > 0 {
+				select {
+				case <-time.After(d):
+				case <-watchCtx.Done():
+					return
+				}
+			}
+			w.Run(watchCtx)
+		}(w, delay)
 	}
 
 	hsrv := &handler.Server{
@@ -113,8 +123,19 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		}
 		// Start the newly registered watchers.
 		watchers := registry.Watchers()
-		for _, w := range watchers[len(watchers)-len(added)*3:] {
-			go w.Run(watchCtx)
+		newWatchers := watchers[len(watchers)-len(added)*3:]
+		for i, w := range newWatchers {
+			delay := time.Duration(i) * 5 * time.Second
+			go func(w agent.Watcher, d time.Duration) {
+				if d > 0 {
+					select {
+					case <-time.After(d):
+					case <-watchCtx.Done():
+						return
+					}
+				}
+				w.Run(watchCtx)
+			}(w, delay)
 		}
 		if len(added) > 0 {
 			log.Printf("reload watchers: started watchers for %d new home(s)", len(added))

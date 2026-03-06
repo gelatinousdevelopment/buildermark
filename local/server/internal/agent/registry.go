@@ -1,5 +1,7 @@
 package agent
 
+import "time"
+
 // Registry manages registered coding agents.
 type Registry struct {
 	agents []Agent
@@ -59,6 +61,18 @@ func (r *Registry) Resolver(name string) SessionResolver {
 		}
 	}
 	return nil
+}
+
+// LatestPollTime returns the most recent LastPollTime across all watchers.
+// Returns the zero time if no watcher has polled yet.
+func (r *Registry) LatestPollTime() time.Time {
+	var latest time.Time
+	for _, w := range r.Watchers() {
+		if t := w.LastPollTime(); t.After(latest) {
+			latest = t
+		}
+	}
+	return latest
 }
 
 // Names returns the deduplicated names of all registered agents in registration order.

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
@@ -20,7 +21,9 @@ var (
 // for Gemini CLI.
 type Agent struct {
 	agent.Base
-	tmpDir string // full path to ~/.gemini/tmp/
+	tmpDir                 string // full path to ~/.gemini/tmp/
+	cachedSessionFiles     []string
+	cachedSessionFilesTime time.Time
 }
 
 // New creates a Gemini CLI agent that monitors ~/.gemini/tmp.

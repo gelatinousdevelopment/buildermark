@@ -38,7 +38,7 @@ func (a *Agent) Run(ctx context.Context) {
 	start := time.Now()
 	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter)
 	projectScanCount := a.scanProjectFilesSince(ctx, scanCutoff, true, trackedFilter, nil)
-	log.Printf("claude watcher: startup scan duration %s", time.Since(start))
+	log.Printf("claude watcher: startup scan duration %s", agent.FmtDuration(time.Since(start)))
 	if projectScanCount > 0 {
 		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
 	}
@@ -57,10 +57,30 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("claude watcher: stopped")
 			return
 		case <-ticker.C:
+			pollStart := time.Now()
 			trackedFilter = a.trackedProjectFilter(ctx)
-			a.pollFiltered(ctx, trackedFilter)
-			a.pollProjectFiles(ctx, trackedFilter)
-			a.BackfillGitIDs(ctx)
+			filterDone := time.Now()
+			historyCount := a.pollFiltered(ctx, trackedFilter)
+			historyDone := time.Now()
+			projectCount := a.pollProjectFiles(ctx, trackedFilter)
+			projectDone := time.Now()
+			a.BackfillGitIDsThrottled(ctx)
+			total := time.Since(pollStart)
+			var newInterval time.Duration
+			if historyCount > 0 || projectCount > 0 {
+				newInterval = a.MarkActive()
+			} else {
+				newInterval = a.MarkIdle()
+			}
+			a.RecordPoll()
+			f := agent.FmtDuration
+			log.Printf("claude watcher: poll took %s (filter=%s history=%s[%d] projects=%s[%d]) next=%s",
+				f(total),
+				f(filterDone.Sub(pollStart)),
+				f(historyDone.Sub(filterDone)), historyCount,
+				f(projectDone.Sub(historyDone)), projectCount,
+				f(newInterval))
+			ticker.Reset(newInterval)
 		}
 	}
 }
@@ -183,10 +203,10 @@ func (a *Agent) poll(ctx context.Context) {
 	a.pollFiltered(ctx, nil)
 }
 
-func (a *Agent) pollFiltered(ctx context.Context, filter agent.PathFilter) {
+func (a *Agent) pollFiltered(ctx context.Context, filter agent.PathFilter) int {
 	info, err := os.Stat(a.path)
 	if err != nil {
-		return
+		return 0
 	}
 
 	size := info.Size()
@@ -195,10 +215,11 @@ func (a *Agent) pollFiltered(ctx context.Context, filter agent.PathFilter) {
 		a.offset = 0
 	}
 	if size == a.offset {
-		return
+		return 0
 	}
 
 	entries, newOffset := a.readFrom(a.offset)
+	count := 0
 	if len(entries) > 0 {
 		filtered := entries
 		if filter != nil {
@@ -211,17 +232,16 @@ func (a *Agent) pollFiltered(ctx context.Context, filter agent.PathFilter) {
 		}
 		if len(filtered) > 0 {
 			a.processEntries(ctx, filtered)
+			count = len(filtered)
 		}
 	}
 	a.offset = newOffset
 	a.persistHistoryOffset(ctx, newOffset)
+	return count
 }
 
-func (a *Agent) pollProjectFiles(ctx context.Context, filter agent.PathFilter) {
-	n := a.scanProjectFilesSince(ctx, time.Time{}, true, filter, nil)
-	if n > 0 {
-		log.Printf("claude watcher: project poll processed %d entries", n)
-	}
+func (a *Agent) pollProjectFiles(ctx context.Context, filter agent.PathFilter) int {
+	return a.scanProjectFilesSince(ctx, time.Time{}, true, filter, nil)
 }
 
 func (a *Agent) trackedProjectFilter(ctx context.Context) agent.PathFilter {
@@ -240,7 +260,12 @@ func (a *Agent) trackedProjectFilter(ctx context.Context) agent.PathFilter {
 }
 
 func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter agent.PathFilter, progress agent.ScanProgressFunc) int {
-	paths := listProjectConversationFiles(a.Home)
+	var paths []string
+	if updateOffset {
+		paths = a.listProjectConversationFilesCached()
+	} else {
+		paths = listProjectConversationFiles(a.Home)
+	}
 	if len(paths) == 0 {
 		return 0
 	}

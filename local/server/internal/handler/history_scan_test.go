@@ -24,8 +24,9 @@ type mockWatcher struct {
 	lastPaths      []string
 }
 
-func (m *mockWatcher) Name() string            { return m.name }
-func (m *mockWatcher) Run(ctx context.Context) {}
+func (m *mockWatcher) Name() string              { return m.name }
+func (m *mockWatcher) Run(ctx context.Context)   {}
+func (m *mockWatcher) LastPollTime() time.Time   { return time.Time{} }
 func (m *mockWatcher) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
@@ -20,7 +21,9 @@ var (
 // for Codex CLI.
 type Agent struct {
 	agent.Base
-	sessionsDir string // full path to ~/.codex/sessions/
+	sessionsDir            string // full path to ~/.codex/sessions/
+	cachedSessionFiles     []sessionFileInfo
+	cachedSessionFilesTime time.Time
 }
 
 // New creates a Codex CLI agent that monitors ~/.codex/sessions/.

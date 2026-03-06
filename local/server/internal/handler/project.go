@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
@@ -310,6 +311,10 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If watchers haven't scanned in the last 15s, trigger a quick scan for
+	// this project's paths so the response includes the latest data.
+	s.maybeScanStaleProject(r.Context(), id)
+
 	page := 1
 	pageSize := 0
 	pageRaw := strings.TrimSpace(r.URL.Query().Get("page"))
@@ -362,6 +367,61 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 		RemoteURL:     remoteURL(project.Remote),
 		CurrentBranch: currentBranch,
 	})
+}
+
+const staleScanThreshold = 15 * time.Second
+
+// maybeScanStaleProject schedules a background path-scoped scan (after a short
+// delay) if no watcher has polled in the last staleScanThreshold. Duplicate
+// scans for the same project are coalesced so a page load that fires several
+// API requests doesn't queue redundant work.
+func (s *Server) maybeScanStaleProject(ctx context.Context, projectID string) {
+	if s.Agents == nil || len(s.Agents.Watchers()) == 0 {
+		return
+	}
+	latest := s.Agents.LatestPollTime()
+	if latest.IsZero() {
+		return // watchers haven't completed their first poll yet
+	}
+	age := time.Since(latest)
+	if age < staleScanThreshold {
+		return
+	}
+
+	paths, err := s.historyScanPaths(ctx, projectID)
+	if err != nil || len(paths) == 0 {
+		return
+	}
+
+	s.staleScanMu.Lock()
+	if s.staleScanInFlight == nil {
+		s.staleScanInFlight = make(map[string]struct{})
+	}
+	if _, running := s.staleScanInFlight[projectID]; running {
+		s.staleScanMu.Unlock()
+		return
+	}
+	s.staleScanInFlight[projectID] = struct{}{}
+	s.staleScanMu.Unlock()
+
+	go func() {
+		defer func() {
+			s.staleScanMu.Lock()
+			delete(s.staleScanInFlight, projectID)
+			s.staleScanMu.Unlock()
+		}()
+
+		// Short delay so the API response isn't blocked and concurrent
+		// requests for the same project coalesce into one scan.
+		time.Sleep(200 * time.Millisecond)
+
+		start := time.Now()
+		since := time.Now().Add(-5 * time.Minute)
+		bgCtx := context.Background()
+		count := s.scanWatchersSincePaths(bgCtx, since, "", paths, nil)
+		log.Printf("api: stale project scan for %s took %s (stale=%s, paths=%d, entries=%d)",
+			projectID, agent.FmtDuration(time.Since(start)), agent.FmtDuration(age), len(paths), count)
+	}()
 }
 
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {

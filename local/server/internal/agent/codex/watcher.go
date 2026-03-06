@@ -41,9 +41,10 @@ type rolloutEvent struct {
 	Timestamp  int64  `json:"timestamp"`
 }
 
-// processedFile tracks the last-seen modification time for a session file.
+// processedFile tracks the last-seen modification time and cached workingDir for a session file.
 type processedFile struct {
-	modTime time.Time
+	modTime    time.Time
+	workingDir string
 }
 
 const codexWatcherSourceKindSessionFile = "session_file"
@@ -68,7 +69,7 @@ func (a *Agent) Run(ctx context.Context) {
 	trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	start := time.Now()
 	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter)
-	log.Printf("codex watcher: startup scan duration %s", time.Since(start))
+	log.Printf("codex watcher: startup scan duration %s", agent.FmtDuration(time.Since(start)))
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
 
@@ -83,9 +84,28 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("codex watcher: stopped")
 			return
 		case <-ticker.C:
+			pollStart := time.Now()
 			trackedFilter = agent.TrackedProjectFilter(ctx, a.DB, nil)
-			a.pollFiltered(ctx, seen, trackedFilter)
-			a.BackfillGitIDs(ctx)
+			filterDone := time.Now()
+			count := a.pollFiltered(ctx, seen, trackedFilter)
+			pollDone := time.Now()
+			a.BackfillGitIDsThrottled(ctx)
+			total := time.Since(pollStart)
+			var newInterval time.Duration
+			if count > 0 {
+				newInterval = a.MarkActive()
+			} else {
+				newInterval = a.MarkIdle()
+			}
+			a.RecordPoll()
+			f := agent.FmtDuration
+			log.Printf("codex watcher: poll took %s (filter=%s sessions=%s[%d] files_cached=%d seen=%d) next=%s",
+				f(total),
+				f(filterDone.Sub(pollStart)),
+				f(pollDone.Sub(filterDone)), count,
+				len(a.cachedSessionFiles), len(seen),
+				f(newInterval))
+			ticker.Reset(newInterval)
 		}
 	}
 }
@@ -198,40 +218,57 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile) {
 	a.pollFiltered(ctx, seen, nil)
 }
 
-func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile, filter agent.PathFilter) {
-	filepath.Walk(a.sessionsDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ".jsonl") {
-			return nil
-		}
-
-		modTime := info.ModTime()
-		if prev, ok := seen[path]; ok && !modTime.After(prev.modTime) {
-			return nil
+func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile, filter agent.PathFilter) int {
+	processed := 0
+	files := a.listSessionFilesCached()
+	for _, fi := range files {
+		modTime := fi.modTime
+		if prev, ok := seen[fi.path]; ok && !modTime.After(prev.modTime) {
+			continue
 		}
 
 		if filter != nil {
-			workingDir := readWorkingDir(path)
-			if !filter.Match(workingDir) {
-				seen[path] = processedFile{modTime: modTime}
-				return nil
+			// Reuse cached workingDir from seen map if available for unchanged files.
+			wd := ""
+			if prev, ok := seen[fi.path]; ok && prev.workingDir != "" {
+				wd = prev.workingDir
+			} else {
+				wd = readWorkingDir(fi.path)
 			}
+			if !filter.Match(wd) {
+				seen[fi.path] = processedFile{modTime: modTime, workingDir: wd}
+				continue
+			}
+			seen[fi.path] = processedFile{modTime: modTime, workingDir: wd}
+		} else {
+			seen[fi.path] = processedFile{modTime: modTime}
 		}
 
-		a.processSessionFile(ctx, path, nil)
-		seen[path] = processedFile{modTime: modTime}
+		a.processSessionFile(ctx, fi.path, nil)
+		processed++
 		_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
 			Agent:       a.Name(),
 			SourceKind:  codexWatcherSourceKindSessionFile,
-			SourceKey:   path,
-			FileSize:    info.Size(),
+			SourceKey:   fi.path,
+			FileSize:    fi.size,
 			FileMtimeMs: modTime.UnixMilli(),
-			FileOffset:  info.Size(),
+			FileOffset:  fi.size,
 		})
-		return nil
-	})
+	}
+	return processed
+}
+
+const dirCacheTTL = 5 * time.Minute
+
+// listSessionFilesCached returns a cached listing of all session files,
+// refreshing the cache every dirCacheTTL.
+func (a *Agent) listSessionFilesCached() []sessionFileInfo {
+	if a.cachedSessionFiles != nil && time.Since(a.cachedSessionFilesTime) < dirCacheTTL {
+		return a.cachedSessionFiles
+	}
+	a.cachedSessionFiles = a.listSessionFiles(time.Time{})
+	a.cachedSessionFilesTime = time.Now()
+	return a.cachedSessionFiles
 }
 
 // listSessionFiles returns paths to all .jsonl files in the sessions directory

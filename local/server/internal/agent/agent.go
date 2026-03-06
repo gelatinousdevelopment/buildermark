@@ -54,6 +54,7 @@ type Watcher interface {
 	Agent
 	Run(ctx context.Context)
 	ScanSince(ctx context.Context, since time.Time, progress ScanProgressFunc) int
+	LastPollTime() time.Time
 }
 
 // PathFilteredWatcher can scan only entries/files that belong to specific project paths.

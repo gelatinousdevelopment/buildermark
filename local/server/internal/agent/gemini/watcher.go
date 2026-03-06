@@ -49,9 +49,28 @@ func (a *Agent) Run(ctx context.Context) {
 			log.Println("gemini watcher: stopped")
 			return
 		case <-ticker.C:
+			pollStart := time.Now()
 			trackedFilter = agent.TrackedProjectFilter(ctx, a.DB, nil)
-			a.poll(ctx, seen, trackedFilter)
-			a.BackfillGitIDs(ctx)
+			filterDone := time.Now()
+			count := a.poll(ctx, seen, trackedFilter)
+			pollDone := time.Now()
+			a.BackfillGitIDsThrottled(ctx)
+			total := time.Since(pollStart)
+			var newInterval time.Duration
+			if count > 0 {
+				newInterval = a.MarkActive()
+			} else {
+				newInterval = a.MarkIdle()
+			}
+			a.RecordPoll()
+			f := agent.FmtDuration
+			log.Printf("gemini watcher: poll took %s (filter=%s sessions=%s[%d] files_cached=%d seen=%d) next=%s",
+				f(total),
+				f(filterDone.Sub(pollStart)),
+				f(pollDone.Sub(filterDone)), count,
+				len(a.cachedSessionFiles), len(seen),
+				f(newInterval))
+			ticker.Reset(newInterval)
 		}
 	}
 }
@@ -138,32 +157,45 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter agent.PathFi
 	return processed
 }
 
-func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter agent.PathFilter) {
-	filepath.Walk(a.tmpDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
+func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter agent.PathFilter) int {
+	processed := 0
+	files := a.listSessionFilesCached()
+	for _, path := range files {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
 		}
-		if !strings.HasSuffix(info.Name(), ".json") || !strings.Contains(path, string(filepath.Separator)+"chats"+string(filepath.Separator)) {
-			return nil
-		}
-
 		modTime := info.ModTime()
 		if prev, ok := seen[path]; ok && !modTime.After(prev.modTime) {
-			return nil
+			continue
 		}
 
 		if filter != nil {
 			conv, err := readConversation(path)
 			if err != nil || !filter.Match(a.resolveProjectPath(conv)) {
 				seen[path] = processedFile{modTime: modTime}
-				return nil
+				continue
 			}
 		}
 
 		a.processSessionFile(ctx, path)
 		seen[path] = processedFile{modTime: modTime}
-		return nil
-	})
+		processed++
+	}
+	return processed
+}
+
+const dirCacheTTL = 5 * time.Minute
+
+// listSessionFilesCached returns a cached listing of session files,
+// refreshing the cache every dirCacheTTL.
+func (a *Agent) listSessionFilesCached() []string {
+	if a.cachedSessionFiles != nil && time.Since(a.cachedSessionFilesTime) < dirCacheTTL {
+		return a.cachedSessionFiles
+	}
+	a.cachedSessionFiles = a.listSessionFiles(time.Time{})
+	a.cachedSessionFilesTime = time.Now()
+	return a.cachedSessionFiles
 }
 
 func (a *Agent) listSessionFiles(since time.Time) []string {

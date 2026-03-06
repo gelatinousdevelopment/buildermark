@@ -440,6 +440,19 @@ func isSkillExpansion(content string) bool {
 	return strings.HasPrefix(strings.TrimSpace(content), "Base directory for this skill:")
 }
 
+const projectFileCacheTTL = 5 * time.Minute
+
+// listProjectConversationFilesCached returns a cached listing of project conversation files,
+// refreshing the cache every projectFileCacheTTL.
+func (a *Agent) listProjectConversationFilesCached() []string {
+	if a.cachedProjectFiles != nil && time.Since(a.cachedProjectFilesTime) < projectFileCacheTTL {
+		return a.cachedProjectFiles
+	}
+	a.cachedProjectFiles = listProjectConversationFiles(a.Home)
+	a.cachedProjectFilesTime = time.Now()
+	return a.cachedProjectFiles
+}
+
 func listProjectConversationFiles(home string) []string {
 	root := filepath.Join(home, ".claude", "projects")
 	files := make([]string, 0, 128)

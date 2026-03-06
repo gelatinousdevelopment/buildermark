@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
@@ -22,6 +23,9 @@ type Agent struct {
 	agent.Base
 	path   string // full path to history.jsonl
 	offset int64
+
+	cachedProjectFiles     []string
+	cachedProjectFilesTime time.Time
 }
 
 // New creates a Claude Code agent that monitors ~/.claude/history.jsonl.

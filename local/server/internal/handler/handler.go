@@ -6,6 +6,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
@@ -39,6 +40,9 @@ type Server struct {
 
 	ws       *wsHub
 	importMu sync.Mutex // guards against concurrent imports
+
+	staleScanMu       sync.Mutex
+	staleScanInFlight map[string]struct{} // project IDs with pending stale scans
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.
@@ -106,7 +110,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/plugins", s.handlePostPlugins)
 	mux.Handle("GET /_app/", staticFrontendHandler())
 	mux.HandleFunc("GET /", s.handleDashboard)
-	return corsMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux)))
+	return corsMiddleware(requestLogMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux))))
 }
 
 func (s *Server) readOnlyMiddleware(next http.Handler) http.Handler {
@@ -166,6 +170,16 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 func writeSuccess(w http.ResponseWriter, status int, data any) {
 	writeJSON(w, status, jsonEnvelope{OK: true, Data: data})
+}
+
+func requestLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip noisy endpoints (WebSocket upgrades, static assets).
+		if r.URL.Path != "/api/v1/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
+			log.Printf("%s %s", r.Method, r.URL.Path)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
