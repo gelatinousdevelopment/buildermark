@@ -214,6 +214,7 @@
 	const visibleCommits = $derived.by(() => {
 		let all = data?.commits ?? [];
 		if (limit > 0) all = all.slice(0, limit);
+		if (searchTerm.trim()) all = all.filter((c) => !c.workingCopy);
 
 		if (selectedOrder === 'asc') {
 			const hasMore =
