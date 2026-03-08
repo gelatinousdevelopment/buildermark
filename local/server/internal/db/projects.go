@@ -462,6 +462,10 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 				if projectPrefix != "" {
 					fp = strings.TrimPrefix(fp, projectPrefix)
 				}
+				r := []rune(fp)
+				if len(r) > 1024 {
+					fp = string(r[:1024])
+				}
 				// Deduplicate.
 				found := false
 				for _, existing := range c.FilesEdited {
