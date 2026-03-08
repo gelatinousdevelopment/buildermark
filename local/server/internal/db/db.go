@@ -133,6 +133,8 @@ func runPostMigration(ctx context.Context, db *sql.DB, version int) error {
 		return backfillMessageTypes(ctx, db)
 	case 38:
 		return backfillMessageTypes(ctx, db)
+	case 43:
+		return backfillAllFilesEdited(ctx, db)
 	default:
 		return nil
 	}

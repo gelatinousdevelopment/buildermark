@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -350,7 +349,8 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 			c.parent_conversation_id,
 			c.hidden,
 			CASE WHEN c.id = pf.family_root_id THEN pf.group_latest_ts ELSE c.ended_at END AS display_ended_at,
-			c.user_prompt_count
+			c.user_prompt_count,
+			c.files_edited
 		FROM page_families pf
 		JOIN conversations c
 			ON c.project_id = ?
@@ -373,13 +373,30 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	var convIDs []string
 	p.Conversations = []ConversationWithRatings{}
 
+	projectPrefix := p.Path
+	if projectPrefix != "" && !strings.HasSuffix(projectPrefix, "/") {
+		projectPrefix += "/"
+	}
 	for convRows.Next() {
 		var c ConversationWithRatings
-		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title, &c.ParentConversationID, &c.Hidden, &c.LastMessageTimestamp, &c.UserPromptCount); err != nil {
+		var filesEditedRaw string
+		if err := convRows.Scan(&c.ID, &c.Agent, &c.Title, &c.ParentConversationID, &c.Hidden, &c.LastMessageTimestamp, &c.UserPromptCount, &filesEditedRaw); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		c.Ratings = []Rating{}
 		c.FilesEdited = []string{}
+		if filesEditedRaw != "" {
+			for _, fp := range strings.Split(filesEditedRaw, "\n") {
+				fp = strings.TrimSpace(fp)
+				if fp == "" {
+					continue
+				}
+				if projectPrefix != "" {
+					fp = strings.TrimPrefix(fp, projectPrefix)
+				}
+				c.FilesEdited = append(c.FilesEdited, fp)
+			}
+		}
 		p.Conversations = append(p.Conversations, c)
 		convIDs = append(convIDs, c.ID)
 	}
@@ -424,64 +441,6 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 			return nil, fmt.Errorf("iterate ratings: %w", err)
 		}
 
-		// Fetch file paths edited per conversation by parsing diff headers from message content.
-		// This covers all agents (Claude's tool use results and Codex's apply_patch).
-		diffRe := regexp.MustCompile(`diff --git a/(.+?) b/`)
-
-		fileRows, err := db.QueryContext(ctx,
-			fmt.Sprintf(`SELECT conversation_id, content
-				FROM messages
-				WHERE conversation_id IN (%s)
-				  AND content LIKE '%%diff --git a/%%'`, placeholders),
-			idArgs...,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("query files edited: %w", err)
-		}
-		defer fileRows.Close()
-
-		// Collect unique file paths per conversation, stripping the project path prefix.
-		projectPrefix := p.Path
-		if projectPrefix != "" && !strings.HasSuffix(projectPrefix, "/") {
-			projectPrefix += "/"
-		}
-		for fileRows.Next() {
-			var convID, content string
-			if err := fileRows.Scan(&convID, &content); err != nil {
-				return nil, fmt.Errorf("scan file content: %w", err)
-			}
-			c, ok := convMap[convID]
-			if !ok {
-				continue
-			}
-			for _, match := range diffRe.FindAllStringSubmatch(content, -1) {
-				fp := strings.TrimSpace(match[1])
-				if fp == "" {
-					continue
-				}
-				if projectPrefix != "" {
-					fp = strings.TrimPrefix(fp, projectPrefix)
-				}
-				r := []rune(fp)
-				if len(r) > 1024 {
-					fp = string(r[:1024])
-				}
-				// Deduplicate.
-				found := false
-				for _, existing := range c.FilesEdited {
-					if existing == fp {
-						found = true
-						break
-					}
-				}
-				if !found {
-					c.FilesEdited = append(c.FilesEdited, fp)
-				}
-			}
-		}
-		if err := fileRows.Err(); err != nil {
-			return nil, fmt.Errorf("iterate files edited: %w", err)
-		}
 	}
 
 	return &p, nil

@@ -287,6 +287,13 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 		}
 	}
 
+	// Recalculate files_edited for each affected conversation.
+	for conversationID := range conversationIDs {
+		if err := RecalcFilesEdited(ctx, tx, conversationID); err != nil {
+			return fmt.Errorf("recalc files edited: %w", err)
+		}
+	}
+
 	return tx.Commit()
 }
 
@@ -363,4 +370,85 @@ func absInt64(n int64) int64 {
 		return -n
 	}
 	return n
+}
+
+var diffHeaderRe = regexp.MustCompile(`diff --git a/(.+?) b/`)
+
+// RecalcFilesEdited recomputes the files_edited column for a single conversation.
+// It accepts either a *sql.Tx or *sql.DB as the executor.
+func RecalcFilesEdited(ctx context.Context, execer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}, conversationID string) error {
+	rows, err := execer.QueryContext(ctx,
+		`SELECT content FROM messages WHERE conversation_id = ? AND content LIKE '%diff --git a/%'`,
+		conversationID,
+	)
+	if err != nil {
+		return fmt.Errorf("query diff messages: %w", err)
+	}
+	defer rows.Close()
+
+	seen := make(map[string]struct{})
+	var files []string
+	for rows.Next() {
+		var content string
+		if err := rows.Scan(&content); err != nil {
+			return fmt.Errorf("scan diff content: %w", err)
+		}
+		for _, match := range diffHeaderRe.FindAllStringSubmatch(content, -1) {
+			fp := strings.TrimSpace(match[1])
+			if fp == "" || fp == "(.+?)" {
+				continue
+			}
+			r := []rune(fp)
+			if len(r) > 1024 {
+				fp = string(r[:1024])
+			}
+			if _, ok := seen[fp]; !ok {
+				seen[fp] = struct{}{}
+				files = append(files, fp)
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate diff messages: %w", err)
+	}
+
+	filesEdited := strings.Join(files, "\n")
+	if _, err := execer.ExecContext(ctx,
+		`UPDATE conversations SET files_edited = ? WHERE id = ?`,
+		filesEdited, conversationID,
+	); err != nil {
+		return fmt.Errorf("update files_edited: %w", err)
+	}
+	return nil
+}
+
+// backfillAllFilesEdited recalculates files_edited for all conversations.
+func backfillAllFilesEdited(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT conversation_id FROM messages WHERE content LIKE '%diff --git a/%'`)
+	if err != nil {
+		return fmt.Errorf("query conversations with diffs: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("scan conversation id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate conversation ids: %w", err)
+	}
+
+	for _, id := range ids {
+		if err := RecalcFilesEdited(ctx, db, id); err != nil {
+			return fmt.Errorf("backfill files_edited for %s: %w", id, err)
+		}
+	}
+	return nil
 }
