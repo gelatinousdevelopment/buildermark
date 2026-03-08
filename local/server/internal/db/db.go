@@ -8,9 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 )
 
 //go:embed migrations/*.sql
@@ -24,10 +25,13 @@ func InitDB(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", path+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
-	if err != nil {
-		return nil, fmt.Errorf("open database: %w", err)
-	}
+	LogQueries, _ = strconv.ParseBool(os.Getenv("LOG_SQL"))
+
+	dsn := path + "?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000"
+	db := sql.OpenDB(&loggingConnector{
+		dsn:    dsn,
+		driver: &sqlite3.SQLiteDriver{},
+	})
 
 	if err := db.Ping(); err != nil {
 		db.Close()
