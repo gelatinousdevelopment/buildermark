@@ -46,7 +46,7 @@
 	});
 
 	let projectId = $derived(page.params.project_id);
-	let showReadOnlyDialog = $state(true);
+	let showReadOnlyDialog = $state(READ_ONLY);
 	let bigBrand = $derived(data.projects && data.projects.length == 0);
 
 	const projectTabs = [

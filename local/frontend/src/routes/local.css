@@ -51,6 +51,11 @@
 	--agent-background-color-claude: light-dark(#fff5ee, #2a1a10);
 	--agent-border-color-claude: light-dark(#e8a870, #6a3a1e);
 
+	--agent-color-claude-cloud: light-dark(#af4f10, #8f381b);
+	--agent-foreground-color-claude-cloud: light-dark(rgb(255, 255, 255, 0.9), rgb(54 23 0));
+	--agent-background-color-claude-cloud: light-dark(#fff5ee, #2a1a10);
+	--agent-border-color-claude-cloud: light-dark(#e8a870, #6a3a1e);
+
 	--agent-color-codex: light-dark(#5c5aff, #4840dd);
 	--agent-foreground-color-codex: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0, 0.9));
 	--agent-background-color-codex: light-dark(#f0f0ff, #1a1a2e);
@@ -110,7 +115,7 @@
 
 	/* Popover */
 	--color-popover-bg: light-dark(rgba(255, 255, 255, 0.85), rgba(40, 40, 44, 0.92));
-	--color-popover-border: light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.1));
+	--color-popover-border: light-dark(rgba(0, 0, 0, 0.22), rgba(255, 255, 255, 0.1));
 	--color-popover-shadow: light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.4));
 
 	/* Modal */

@@ -31,6 +31,7 @@ func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCover
 		LinesAdded:          c.LinesAdded,
 		LinesRemoved:        c.LinesRemoved,
 		OverrideLinePercent: c.OverrideLinePercent,
+		NeedsParent:         c.NeedsParent,
 	}
 }
 

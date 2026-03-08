@@ -90,6 +90,7 @@ type projectCommitCoverage struct {
 	LinesRemoved        int                    `json:"linesRemoved"`
 	AgentSegments       []agentCoverageSegment `json:"agentSegments,omitempty"`
 	OverrideLinePercent *float64               `json:"overrideLinePercent,omitempty"`
+	NeedsParent         bool                   `json:"needsParent,omitempty"`
 }
 
 type projectCommitDetailResponse struct {

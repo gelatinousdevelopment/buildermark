@@ -1001,34 +1001,34 @@ func TestReadFirstPromptSkipsSystemMessages(t *testing.T) {
 
 func TestExtractUserTextString(t *testing.T) {
 	raw := json.RawMessage(`"hello world"`)
-	if text := extractUserText(raw); text != "hello world" {
+	if text := ExtractUserText(raw); text != "hello world" {
 		t.Errorf("text = %q, want %q", text, "hello world")
 	}
 }
 
 func TestExtractUserTextArray(t *testing.T) {
 	raw := json.RawMessage(`[{"type":"text","text":"from array"}]`)
-	if text := extractUserText(raw); text != "from array" {
+	if text := ExtractUserText(raw); text != "from array" {
 		t.Errorf("text = %q, want %q", text, "from array")
 	}
 }
 
 func TestExtractUserTextToolResult(t *testing.T) {
 	raw := json.RawMessage(`[{"type":"tool_result","tool_use_id":"abc"}]`)
-	if text := extractUserText(raw); text != "" {
+	if text := ExtractUserText(raw); text != "" {
 		t.Errorf("text = %q, want empty", text)
 	}
 }
 
 func TestExtractUserTextToolResultContent(t *testing.T) {
 	raw := json.RawMessage(`[{"type":"tool_result","tool_use_id":"abc","content":"patch output"}]`)
-	if text := extractUserText(raw); text != "patch output" {
+	if text := ExtractUserText(raw); text != "patch output" {
 		t.Errorf("text = %q, want %q", text, "patch output")
 	}
 }
 
 func TestExtractUserTextEmpty(t *testing.T) {
-	if text := extractUserText(nil); text != "" {
+	if text := ExtractUserText(nil); text != "" {
 		t.Errorf("text = %q, want empty", text)
 	}
 }
@@ -1051,8 +1051,8 @@ func TestIsSystemMessage(t *testing.T) {
 		{"<div>html content</div>", false},
 	}
 	for _, tt := range tests {
-		if got := isSystemMessage(tt.text); got != tt.want {
-			t.Errorf("isSystemMessage(%q) = %v, want %v", tt.text, got, tt.want)
+		if got := IsSystemMessage(tt.text); got != tt.want {
+			t.Errorf("IsSystemMessage(%q) = %v, want %v", tt.text, got, tt.want)
 		}
 	}
 }

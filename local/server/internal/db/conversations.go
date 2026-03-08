@@ -17,6 +17,7 @@ type Conversation struct {
 	EndedAt              int64  `json:"endedAt"`
 	Hidden               bool   `json:"hidden"`
 	ParentConversationID string `json:"parentConversationId"`
+	URL                  string `json:"url"`
 }
 
 // MessageRead is a message as returned by read queries.
@@ -47,6 +48,7 @@ type ConversationDetail struct {
 	EndedAt              int64             `json:"endedAt"`
 	Hidden               bool              `json:"hidden"`
 	ParentConversationID string            `json:"parentConversationId"`
+	URL                  string            `json:"url"`
 	ChildConversations   []ConversationRef `json:"childConversations"`
 	Messages             []MessageRead     `json:"messages"`
 	Ratings              []Rating          `json:"ratings"`
@@ -63,7 +65,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int, hiddenOnly bo
 		hidden = 1
 	}
 
-	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE hidden = ? ORDER BY id LIMIT ?", hidden, limit)
+	rows, err := db.QueryContext(ctx, "SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id, url FROM conversations WHERE hidden = ? ORDER BY id LIMIT ?", hidden, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query conversations: %w", err)
 	}
@@ -72,7 +74,7 @@ func ListConversations(ctx context.Context, db *sql.DB, limit int, hiddenOnly bo
 	conversations := []Conversation{}
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID); err != nil {
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID, &c.URL); err != nil {
 			return nil, fmt.Errorf("scan conversation: %w", err)
 		}
 		conversations = append(conversations, c)
@@ -85,8 +87,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 	resolvedID := conversationID
 	var c ConversationDetail
 	err := db.QueryRowContext(ctx,
-		"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
-	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID)
+		"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id, url FROM conversations WHERE id = ?", resolvedID,
+	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID, &c.URL)
 	if err == sql.ErrNoRows {
 		aliasConversationID, found, resolveErr := ResolveConversationIDByTempID(ctx, db, conversationID)
 		if resolveErr != nil {
@@ -97,8 +99,8 @@ func GetConversationDetail(ctx context.Context, db *sql.DB, conversationID strin
 		}
 		resolvedID = aliasConversationID
 		err = db.QueryRowContext(ctx,
-			"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE id = ?", resolvedID,
-		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID)
+			"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id, url FROM conversations WHERE id = ?", resolvedID,
+		).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID, &c.URL)
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -247,9 +249,9 @@ func GetConversation(ctx context.Context, db *sql.DB, conversationID string) (*C
 	var c Conversation
 	err := db.QueryRowContext(
 		ctx,
-		"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id FROM conversations WHERE id = ?",
+		"SELECT id, project_id, agent, title, started_at, ended_at, hidden, parent_conversation_id, url FROM conversations WHERE id = ?",
 		conversationID,
-	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID)
+	).Scan(&c.ID, &c.ProjectID, &c.Agent, &c.Title, &c.StartedAt, &c.EndedAt, &c.Hidden, &c.ParentConversationID, &c.URL)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

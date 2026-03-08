@@ -19,7 +19,8 @@ type claudeQuestionSpec struct {
 	Options  []claudeQuestionOption `json:"options"`
 }
 
-func classifyClaudeMessage(role, content, rawJSON, stopReason string) (string, string, string) {
+// ClassifyClaudeMessage classifies a message into role, type, and content.
+func ClassifyClaudeMessage(role, content, rawJSON, stopReason string) (string, string, string) {
 	if questions, ok := extractAskUserQuestionsFromRaw(rawJSON); ok {
 		return "agent", "question", formatClaudeQuestionsMarkdown(questions)
 	}

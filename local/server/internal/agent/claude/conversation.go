@@ -14,7 +14,9 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
 
-// conversationEntry represents a single entry in a Claude conversation JSONL file.
+// ConversationEntry represents a single entry in a Claude conversation JSONL file.
+type ConversationEntry = conversationEntry
+
 type conversationEntry struct {
 	Type                    string `json:"type"`
 	Timestamp               string `json:"timestamp"`
@@ -168,8 +170,8 @@ func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
 			return
 		}
 
-		text := extractUserText(entry.Message.Content)
-		if text == "" || isSystemMessage(text) || isSkillExpansion(text) {
+		text := ExtractUserText(entry.Message.Content)
+		if text == "" || IsSystemMessage(text) || IsSkillExpansion(text) {
 			return
 		}
 
@@ -189,7 +191,8 @@ const maxExtractedContentLen = 64 * 1024
 
 // extractUserText extracts text from a conversation entry's content field,
 // which can be either a JSON string or an array of content blocks.
-func extractUserText(raw json.RawMessage) string {
+// ExtractUserText extracts text from a conversation entry's content field.
+func ExtractUserText(raw json.RawMessage) string {
 	return joinTextParts(extractContentTextParts(raw))
 }
 
@@ -297,7 +300,8 @@ func joinTextParts(parts []string) string {
 	return joined[:maxExtractedContentLen] + "\n...[truncated]"
 }
 
-func contentFromConversationEntry(entry conversationEntry) string {
+// ContentFromConversationEntry extracts text content from a conversation entry.
+func ContentFromConversationEntry(entry conversationEntry) string {
 	parts := extractContentTextParts(entry.Message.Content)
 	appendPreferredText(&parts, entry.ToolUseResult.Content)
 	if s := strings.TrimSpace(entry.PlanContent); s != "" {
@@ -332,7 +336,7 @@ func parseProjectConversationLine(line string) (historyEntry, bool) {
 		typ = "user"
 	}
 
-	display := contentFromConversationEntry(entry)
+	display := ContentFromConversationEntry(entry)
 	if typ == "summary" && strings.TrimSpace(entry.Summary) != "" {
 		display = strings.TrimSpace(entry.Summary)
 	}
@@ -367,7 +371,7 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 			return
 		}
 
-		content := contentFromConversationEntry(entry)
+		content := ContentFromConversationEntry(entry)
 		if entry.Type == "summary" && strings.TrimSpace(entry.Summary) != "" {
 			content = strings.TrimSpace(entry.Summary)
 		}
@@ -379,7 +383,7 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 		}
 
 		// Skip system/meta messages (command XML, caveats, interruptions).
-		if content != "" && isSystemMessage(content) {
+		if content != "" && IsSystemMessage(content) {
 			return
 		}
 
@@ -406,7 +410,7 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 		role := "agent"
 		if entry.Type == "user" {
 			role = "user"
-			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" || isAssistantAuthoredConversationEntry(entry) || isSkillExpansion(content) {
+			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" || IsAssistantAuthoredConversationEntry(entry) || IsSkillExpansion(content) {
 				// Claude logs tool_result as type=user; this is assistant-produced output.
 				// Skill expansions (injected prompts starting with "Base directory for
 				// this skill:") are system-generated, not typed by the user.
@@ -415,7 +419,7 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 		}
 
 		stopReason := strings.TrimSpace(entry.Message.StopReason)
-		role, _, content = classifyClaudeMessage(role, content, line, stopReason)
+		role, _, content = ClassifyClaudeMessage(role, content, line, stopReason)
 
 		result = append(result, conversationLogEntry{
 			Type:       entry.Type,
@@ -430,7 +434,8 @@ func readConversationLogEntries(home, projectPath, sessionID string) []conversat
 	return result
 }
 
-func isAssistantAuthoredConversationEntry(entry conversationEntry) bool {
+// IsAssistantAuthoredConversationEntry returns true for user entries that are actually agent-produced.
+func IsAssistantAuthoredConversationEntry(entry conversationEntry) bool {
 	return strings.TrimSpace(entry.Type) == "user" &&
 		entry.IsSidechain &&
 		strings.EqualFold(strings.TrimSpace(entry.UserType), "external") &&
@@ -440,7 +445,8 @@ func isAssistantAuthoredConversationEntry(entry conversationEntry) bool {
 // isSkillExpansion returns true when content is a system-injected skill
 // expansion prompt (e.g. the expanded SKILL.md injected by Claude Code when
 // the user runs /bbrate). These are not user-authored messages.
-func isSkillExpansion(content string) bool {
+// IsSkillExpansion returns true when content is a system-injected skill expansion prompt.
+func IsSkillExpansion(content string) bool {
 	return strings.HasPrefix(strings.TrimSpace(content), "Base directory for this skill:")
 }
 
@@ -569,7 +575,7 @@ func extractParentSessionID(entries []conversationLogEntry) string {
 			continue
 		}
 		text := strings.TrimSpace(e.Content)
-		if text == "" || isSystemMessage(text) {
+		if text == "" || IsSystemMessage(text) {
 			continue
 		}
 		if m := parentSessionIDRe.FindStringSubmatch(text); len(m) > 1 {
@@ -583,7 +589,8 @@ func extractParentSessionID(entries []conversationLogEntry) string {
 
 // isSystemMessage returns true for system/meta messages that should be skipped
 // when looking for the first substantive user prompt.
-func isSystemMessage(text string) bool {
+// IsSystemMessage returns true for system/meta messages that should be skipped.
+func IsSystemMessage(text string) bool {
 	if text == "[]" {
 		return true
 	}

@@ -223,7 +223,7 @@ func isAssistantAuthoredHistoryEntry(entry historyEntry) bool {
 	}
 	// Skill expansion prompts (e.g. the expanded SKILL.md injected by Claude
 	// Code when the user runs /bbrate) are system-generated, not user-authored.
-	if entry.Type == "user" && isSkillExpansion(entry.Display) {
+	if entry.Type == "user" && IsSkillExpansion(entry.Display) {
 		return true
 	}
 	// Claude can log assistant-generated subagent prompts as type=user entries.

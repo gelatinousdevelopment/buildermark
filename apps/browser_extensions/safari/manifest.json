@@ -1,0 +1,61 @@
+{
+  "manifest_version": 2,
+  "name": "Buildermark Conversation Importer",
+  "version": "0.1.0",
+  "description": "Import coding agent conversations from Claude Cloud and Codex Cloud into Buildermark.",
+  "permissions": [
+    "tabs",
+    "http://localhost:7022/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.claude.ai/chat/*",
+        "*://*.claude.ai/project/*/chat/*",
+        "*://chatgpt.com/codex/*",
+        "*://codex.openai.com/*"
+      ],
+      "js": [
+        "shared/agents/base.js",
+        "shared/agents/claude_cloud.js",
+        "shared/agents/codex_cloud.js",
+        "shared/api.js",
+        "shared/importer.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.claude.ai/code/*"
+      ],
+      "js": [
+        "shared/api.js",
+        "shared/claude_code_cloud.js",
+        "content_code_cloud.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    "shared/fetch_interceptor.js"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "browser_action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "Buildermark"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

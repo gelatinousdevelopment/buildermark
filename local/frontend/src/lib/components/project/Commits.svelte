@@ -730,6 +730,12 @@
 									segments={c.overrideLinePercent != null ? [] : toBarSegments(c.agentSegments)}
 									totalLines={c.linesTotal}
 									showKey={false}
+									needsParent={c.needsParent}
+									commitHref={selectedBranch || data?.branch
+										? resolve(
+												`/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
+											)
+										: undefined}
 								/>{/if}</td
 						>
 					{/if}

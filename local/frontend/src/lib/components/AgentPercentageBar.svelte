@@ -31,6 +31,10 @@
 		/** Include the Manual label in the key. */
 		showManual?: boolean;
 		height?: string;
+		/** When true, the commit's parent is missing (shallow clone boundary). */
+		needsParent?: boolean;
+		/** Link to the commit detail page (used when needsParent is true). */
+		commitHref?: string;
 	}
 
 	let {
@@ -39,7 +43,9 @@
 		totalLines = -1,
 		showKey = true,
 		showManual = false,
-		height = undefined
+		height = undefined,
+		needsParent = false,
+		commitHref = undefined
 	}: Props = $props();
 
 	interface ResolvedSegment {
@@ -100,7 +106,28 @@
 </script>
 
 <div class="apb" style:--bar-height={height}>
-	{#if showKey}
+	{#if needsParent}
+		<Popover position="leading">
+			{#if commitHref}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- href is pre-resolved by caller -->
+				<a
+					href={commitHref}
+					class="apb-bar apb-bar-warning"
+					aria-label="Shallow clone — parent missing"><span class="apb-warning-icon">⚠</span></a
+				>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			{:else}
+				<div class="apb-bar apb-bar-warning" role="img" aria-label="Shallow clone — parent missing">
+					<span class="apb-warning-icon">⚠</span>
+				</div>
+			{/if}
+			{#snippet popover()}
+				<div class="apb-popover-content">
+					This commit's parent isn't available locally. Click to resolve.
+				</div>
+			{/snippet}
+		</Popover>
+	{:else if showKey}
 		<div class="apb-bar" role="img" aria-label="Agent percentage bar">
 			{#each barSegments as seg (seg.name)}
 				<span class="apb-segment" style="width:{seg.percent}%;background:{seg.color}"></span>
@@ -180,6 +207,20 @@
 		height: var(--bar-height, 10px);
 		overflow: hidden;
 		width: 100%;
+	}
+
+	.apb-bar-warning {
+		justify-content: center;
+		align-items: center;
+		background: var(--color-background-empty, #f0f0f0);
+		text-decoration: none;
+		cursor: pointer;
+	}
+
+	.apb-warning-icon {
+		font-size: 0.65rem;
+		line-height: 1;
+		color: var(--color-status-yellow, #b08800);
 	}
 
 	.apb-segment {

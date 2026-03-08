@@ -344,6 +344,7 @@ export interface ProjectCommitCoverage {
 	linesRemoved: number;
 	agentSegments?: AgentCoverageSegment[];
 	overrideLinePercent?: number | null;
+	needsParent?: boolean;
 }
 
 export interface ProjectSearchMatch {

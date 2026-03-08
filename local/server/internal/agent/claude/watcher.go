@@ -800,7 +800,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if strings.TrimSpace(display) == "" && e.Type != "summary" {
 				continue
 			}
-			if strings.TrimSpace(display) != "" && isSystemMessage(strings.TrimSpace(display)) {
+			if strings.TrimSpace(display) != "" && IsSystemMessage(strings.TrimSpace(display)) {
 				continue
 			}
 			// Skip user messages with unresolved paste placeholders — the conversation
@@ -829,7 +829,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if ts <= 0 {
 				ts = nextMessageTimestamp(messages)
 			}
-			role, messageType, display := classifyClaudeMessage(role, display, rawJSON, extractStopReasonFromJSON(rawJSON))
+			role, messageType, display := ClassifyClaudeMessage(role, display, rawJSON, extractStopReasonFromJSON(rawJSON))
 
 			messages = append(messages, db.Message{
 				Timestamp:      ts,
@@ -865,7 +865,7 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			if e.RawJSON != "" {
 				rawJSON = []byte(e.RawJSON)
 			}
-			role, messageType, content := classifyClaudeMessage(e.Role, e.Content, string(rawJSON), e.StopReason)
+			role, messageType, content := ClassifyClaudeMessage(e.Role, e.Content, string(rawJSON), e.StopReason)
 
 			messages = append(messages, db.Message{
 				Timestamp:      normalizeMessageTimestamp(e.Timestamp, messages),
@@ -982,7 +982,7 @@ func firstPromptFromConversationLogs(entries []conversationLogEntry) (string, in
 			continue
 		}
 		text := strings.TrimSpace(e.Content)
-		if text == "" || isSystemMessage(text) {
+		if text == "" || IsSystemMessage(text) {
 			continue
 		}
 		return text, e.Timestamp
@@ -997,7 +997,7 @@ func titleFromConversationLogs(entries []conversationLogEntry) string {
 			continue
 		}
 		text := strings.TrimSpace(e.Content)
-		if text == "" || isSystemMessage(text) {
+		if text == "" || IsSystemMessage(text) {
 			continue
 		}
 		if title := agent.TitleFromPlanPrompt(text); title != "" {

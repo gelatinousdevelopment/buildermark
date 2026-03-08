@@ -1,10 +1,17 @@
 <script lang="ts">
+	import Icon from '$lib/Icon.svelte';
+
+	const CLOUD_SUFFIX = '_cloud';
+
 	interface Props {
 		agent: string;
 		subtle?: boolean;
 	}
 
 	let { agent, subtle = false }: Props = $props();
+	let agentDisplay = $derived(
+		agent.endsWith(CLOUD_SUFFIX) ? agent.slice(0, -CLOUD_SUFFIX.length) : agent
+	);
 
 	function normalizeAgentName(name: string): string {
 		return name
@@ -26,7 +33,10 @@
 		class="agent-tag"
 		style={`--agent-tag-bg: var(--agent-color-${normalized}, #777); --agent-tag-fg: var(--agent-foreground-color-${normalized}, #fff);`}
 	>
-		{agent}
+		{agentDisplay}
+		{#if agent.endsWith(CLOUD_SUFFIX)}
+			<Icon name="cloud" width="13px" />
+		{/if}
 	</span>
 {/if}
 
@@ -39,9 +49,10 @@
 		color: var(--agent-tag-fg);
 		font-family: var(--font-family-monospace);
 		font-size: 0.8rem;
+		gap: 0.25rem;
 		line-height: 1.2;
 		margin: -0.2rem 0;
-		padding: 0.16rem 0.6rem;
+		padding: 0.15rem 0.5rem 0.1rem 0.5rem;
 		white-space: nowrap;
 	}
 

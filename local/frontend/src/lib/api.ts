@@ -208,6 +208,17 @@ export function setCommitOverrideLinePercent(
 	);
 }
 
+export function deepenCommit(
+	projectId: string,
+	commitHash: string,
+	branch: string
+): Promise<{ needsParent: boolean; success: boolean }> {
+	return api(
+		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/deepen?branch=${encodeURIComponent(branch)}`,
+		{ method: 'POST' }
+	);
+}
+
 export function getConversationsBatchDetail(ids: string[]): Promise<ConversationBatchDetail[]> {
 	return api(`/api/v1/conversations/batch-detail?ids=${ids.map(encodeURIComponent).join(',')}`);
 }
@@ -304,9 +315,13 @@ export function getCommitIngestionStatus(
 
 export function refreshProjectCommits(
 	projectId: string,
-	branch = ''
+	branch = '',
+	days?: number
 ): Promise<{ queued: boolean }> {
-	const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+	const params = new URLSearchParams();
+	if (branch) params.set('branch', branch);
+	if (days && days > 0) params.set('days', String(days));
+	const q = params.size > 0 ? `?${params.toString()}` : '';
 	return api(`/api/v1/projects/${projectId}/refresh-commits${q}`, {
 		method: 'POST'
 	});

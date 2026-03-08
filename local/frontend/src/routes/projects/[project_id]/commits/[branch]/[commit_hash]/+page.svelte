@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getProjectCommitDetail, setCommitOverrideLinePercent } from '$lib/api';
+	import { getProjectCommitDetail, setCommitOverrideLinePercent, deepenCommit } from '$lib/api';
 	import { fmtTime, singleLineTitle } from '$lib/utils';
 	import type { ProjectCommitDetailResponse, AgentCoverageSegment } from '$lib/types';
+	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
@@ -89,6 +90,66 @@
 			: String(Math.round(percent(agentLinesFromAgent, agentLinesTotal)));
 		editingOverride = true;
 	}
+
+	let isNeedsParent = $derived.by(() => !!detail?.commit?.needsParent);
+	let deepening = $state(false);
+	let deepenOutput: string[] = $state([]);
+	let deepenError: string | null = $state(null);
+	let checkingAgain = $state(false);
+
+	async function handleDeepen() {
+		if (!detail || deepening) return;
+		deepening = true;
+		deepenError = null;
+		deepenOutput = [];
+		try {
+			const projectId = page.params.project_id!;
+			const branch = page.params.branch!;
+			const result = await deepenCommit(projectId, detail.commit.commitHash, branch);
+			if (result.success && !result.needsParent) {
+				// Reload the page data.
+				detail = await getProjectCommitDetail(projectId, detail.commit.commitHash, branch);
+			} else if (result.needsParent) {
+				deepenError =
+					'Parent still not found after deepening. Try running the command manually with a larger depth.';
+			}
+		} catch (e) {
+			deepenError = e instanceof Error ? e.message : 'Failed to deepen';
+		} finally {
+			deepening = false;
+		}
+	}
+
+	async function handleCheckAgain() {
+		if (!detail || checkingAgain) return;
+		checkingAgain = true;
+		deepenError = null;
+		try {
+			const projectId = page.params.project_id!;
+			const branch = page.params.branch!;
+			detail = await getProjectCommitDetail(projectId, detail.commit.commitHash, branch);
+			if (detail?.commit?.needsParent) {
+				deepenError =
+					'Parent still not found. Try running the command again or with a larger depth.';
+			}
+		} catch (e) {
+			deepenError = e instanceof Error ? e.message : 'Failed to check';
+		} finally {
+			checkingAgain = false;
+		}
+	}
+
+	// Watch for deepen job updates via websocket.
+	$effect(() => {
+		const job = websocketStore.getJob('commit_deepen');
+		if (!job) return;
+		if (job.message) {
+			deepenOutput = [...deepenOutput, job.message];
+		}
+		if (job.state === 'complete' || job.state === 'error') {
+			websocketStore.clearJob('commit_deepen');
+		}
+	});
 
 	let allMessagesExpanded = $derived.by(() => {
 		if (!detail) return false;
@@ -267,7 +328,31 @@
 				>
 			</p>
 		{/if}
-		{#if isWorkingCopyUnknown}
+		{#if isNeedsParent}
+			<div class="shallow-banner">
+				<p class="shallow-info">
+					This commit's parent doesn't exist locally (shallow clone). The diff and attribution
+					cannot be computed.
+				</p>
+				<div class="shallow-command">
+					<code>git fetch --deepen=2 origin {page.params.branch}</code>
+				</div>
+				<div class="shallow-actions">
+					<button class="btn-override-action" onclick={handleDeepen} disabled={deepening}>
+						{deepening ? 'Fetching...' : 'Fetch Parent'}
+					</button>
+					<button class="btn-override-action" onclick={handleCheckAgain} disabled={checkingAgain}>
+						{checkingAgain ? 'Checking...' : 'Check Again'}
+					</button>
+				</div>
+				{#if deepenOutput.length > 0}
+					<pre class="shallow-output">{deepenOutput.join('\n')}</pre>
+				{/if}
+				{#if deepenError}
+					<p class="shallow-error">{deepenError}</p>
+				{/if}
+			</div>
+		{:else if isWorkingCopyUnknown}
 			<p class="unknown-attribution">Agent attribution: Unknown</p>
 		{:else}
 			<div class="detail-bar">
@@ -280,145 +365,147 @@
 				/>
 			</div>
 		{/if}
-		<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
+		{#if !isNeedsParent}
+			<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 
-		<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
-		{#if visibleFiles.length === 0}
-			<p>No changed files in this diff.</p>
-		{:else}
-			<div class="file-table-wrap">
-				<table class="file-table">
-					<!-- <thead>
+			<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
+			{#if visibleFiles.length === 0}
+				<p>No changed files in this diff.</p>
+			{:else}
+				<div class="file-table-wrap">
+					<table class="file-table">
+						<!-- <thead>
 						<tr>
 							<th>File</th>
 							<th>Changes</th>
 							<th class="pct-col">Agents</th>
 						</tr>
 					</thead> -->
-					<tbody>
-						{#each visibleFiles as file (file.path)}
-							<tr class:ignored-row={file.ignored || file.moved}>
-								<td>
-									{#if !file.ignored && diffSectionByPath.has(file.path)}
-										<a href={`#${diffAnchor(file.path)}`}>{file.path}</a>
-									{:else}
-										{file.path}
-									{/if}
-									{#if file.moved}
-										<span class="file-tag">[moved]</span>
-									{:else if file.copiedFromAgent}
-										<span class="file-tag">[copied-from-agent]</span>
-									{/if}
-								</td>
-								<td class="changes-col">
-									{#if !file.ignored}
-										<DiffCount added={file.added} removed={file.removed} />
-									{/if}
-								</td>
-								<td class="pct-col">
-									{#if !file.ignored && !file.moved}
-										<div class="file-bar-wrap">
-											<AgentPercentageBar
-												agentPercent={file.linePercent}
-												segments={toBarSegments(file.agentSegments)}
-												totalLines={file.added + file.removed}
-												showKey={true}
-											/>
-										</div>
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{/if}
-		{#if renderableDiffFiles.length === 0}
-			<p>No non-ignored file diffs to display.</p>
-		{:else}
-			{#each renderableDiffFiles as file (file.path)}
-				{@const fileExpanded = isDiffExpanded(file.path)}
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div
-					class="commit-diff-section diff-card"
-					class:diff-card-collapsed={!fileExpanded}
-					id={diffAnchor(file.path)}
-					role={!fileExpanded ? 'button' : undefined}
-					tabindex={!fileExpanded ? 0 : undefined}
-					onclick={!fileExpanded ? () => toggleDiffPath(file.path) : undefined}
-					onkeydown={!fileExpanded
-						? (e: KeyboardEvent) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									toggleDiffPath(file.path);
-								}
-							}
-						: undefined}
-				>
-					<DiffMessageCard
-						label={file.path}
-						content={diffSectionByPath.get(file.path) ?? ''}
-						expanded={fileExpanded}
-						agentPercent={file.linePercent}
-						onToggle={fileExpanded ? () => toggleDiffPath(file.path) : undefined}
-						contentOnly={true}
-						toggleWithHeaderClick={true}
-					/>
+						<tbody>
+							{#each visibleFiles as file (file.path)}
+								<tr class:ignored-row={file.ignored || file.moved}>
+									<td>
+										{#if !file.ignored && diffSectionByPath.has(file.path)}
+											<a href={`#${diffAnchor(file.path)}`}>{file.path}</a>
+										{:else}
+											{file.path}
+										{/if}
+										{#if file.moved}
+											<span class="file-tag">[moved]</span>
+										{:else if file.copiedFromAgent}
+											<span class="file-tag">[copied-from-agent]</span>
+										{/if}
+									</td>
+									<td class="changes-col">
+										{#if !file.ignored}
+											<DiffCount added={file.added} removed={file.removed} />
+										{/if}
+									</td>
+									<td class="pct-col">
+										{#if !file.ignored && !file.moved}
+											<div class="file-bar-wrap">
+												<AgentPercentageBar
+													agentPercent={file.linePercent}
+													segments={toBarSegments(file.agentSegments)}
+													totalLines={file.added + file.removed}
+													showKey={true}
+												/>
+											</div>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
-			{/each}
-		{/if}
+			{/if}
+			{#if renderableDiffFiles.length === 0}
+				<p>No non-ignored file diffs to display.</p>
+			{:else}
+				{#each renderableDiffFiles as file (file.path)}
+					{@const fileExpanded = isDiffExpanded(file.path)}
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div
+						class="commit-diff-section diff-card"
+						class:diff-card-collapsed={!fileExpanded}
+						id={diffAnchor(file.path)}
+						role={!fileExpanded ? 'button' : undefined}
+						tabindex={!fileExpanded ? 0 : undefined}
+						onclick={!fileExpanded ? () => toggleDiffPath(file.path) : undefined}
+						onkeydown={!fileExpanded
+							? (e: KeyboardEvent) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										toggleDiffPath(file.path);
+									}
+								}
+							: undefined}
+					>
+						<DiffMessageCard
+							label={file.path}
+							content={diffSectionByPath.get(file.path) ?? ''}
+							expanded={fileExpanded}
+							agentPercent={file.linePercent}
+							onToggle={fileExpanded ? () => toggleDiffPath(file.path) : undefined}
+							contentOnly={true}
+							toggleWithHeaderClick={true}
+						/>
+					</div>
+				{/each}
+			{/if}
 
-		<div class="section-header">
-			<h3>Matched Messages</h3>
-			<button class="btn-expand-all" onclick={toggleExpandAllMessages}>
-				{allMessagesExpanded ? 'Collapse All' : 'Expand All'}
-			</button>
-		</div>
-		{#if detail.attribution?.hasFallbackAttribution}
-			<p class="fallback-note">
-				Attribution includes fallback copied-line matching ({detail.attribution
-					.fallbackMatchedLines}
-				lines). Exact matched-message lines: {detail.attribution.exactMatchedLines}.
-			</p>
-		{/if}
-		{#if detail.messages.length === 0}
-			<p>No tracked diff messages matched this commit.</p>
-		{:else}
-			{#each detail.messages as message (message.id)}
-				{@const msgExpanded = isExpanded(message.id)}
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div
-					class="matched-message-diff-card"
-					class:diff-card-collapsed={!msgExpanded}
-					role={!msgExpanded ? 'button' : undefined}
-					tabindex={!msgExpanded ? 0 : undefined}
-					onclick={!msgExpanded ? () => toggleExpanded(message.id) : undefined}
-					onkeydown={!msgExpanded
-						? (e: KeyboardEvent) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									toggleExpanded(message.id);
+			<div class="section-header">
+				<h3>Matched Messages</h3>
+				<button class="btn-expand-all" onclick={toggleExpandAllMessages}>
+					{allMessagesExpanded ? 'Collapse All' : 'Expand All'}
+				</button>
+			</div>
+			{#if detail.attribution?.hasFallbackAttribution}
+				<p class="fallback-note">
+					Attribution includes fallback copied-line matching ({detail.attribution
+						.fallbackMatchedLines}
+					lines). Exact matched-message lines: {detail.attribution.exactMatchedLines}.
+				</p>
+			{/if}
+			{#if detail.messages.length === 0}
+				<p>No tracked diff messages matched this commit.</p>
+			{:else}
+				{#each detail.messages as message (message.id)}
+					{@const msgExpanded = isExpanded(message.id)}
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div
+						class="matched-message-diff-card"
+						class:diff-card-collapsed={!msgExpanded}
+						role={!msgExpanded ? 'button' : undefined}
+						tabindex={!msgExpanded ? 0 : undefined}
+						onclick={!msgExpanded ? () => toggleExpanded(message.id) : undefined}
+						onkeydown={!msgExpanded
+							? (e: KeyboardEvent) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										toggleExpanded(message.id);
+									}
 								}
-							}
-						: undefined}
-				>
-					<DiffMessageCard
-						timestamp={message.timestamp}
-						role={message.agent || 'agent'}
-						model={message.model ?? ''}
-						content={message.content}
-						expanded={msgExpanded}
-						statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
-						linkHref={resolve('/projects/[project_id]/conversations/[id]', {
-							project_id: detail.commit.projectId,
-							id: message.conversationId
-						})}
-						linkLabel={`Conversation: ${(message.conversationTitle && singleLineTitle(message.conversationTitle)) || message.conversationId}`}
-						onToggle={msgExpanded ? () => toggleExpanded(message.id) : undefined}
-						toggleWithHeaderClick={true}
-					/>
-				</div>
-			{/each}
+							: undefined}
+					>
+						<DiffMessageCard
+							timestamp={message.timestamp}
+							role={message.agent || 'agent'}
+							model={message.model ?? ''}
+							content={message.content}
+							expanded={msgExpanded}
+							statsLabel={`matched ${message.linesMatched} lines, ${message.charsMatched} chars`}
+							linkHref={resolve('/projects/[project_id]/conversations/[id]', {
+								project_id: detail.commit.projectId,
+								id: message.conversationId
+							})}
+							linkLabel={`Conversation: ${(message.conversationTitle && singleLineTitle(message.conversationTitle)) || message.conversationId}`}
+							onToggle={msgExpanded ? () => toggleExpanded(message.id) : undefined}
+							toggleWithHeaderClick={true}
+						/>
+					</div>
+				{/each}
+			{/if}
 		{/if}
 	{/if}
 </div>
@@ -602,5 +689,56 @@
 		align-items: center;
 		gap: 0.4rem;
 		min-width: 100px;
+	}
+
+	.shallow-banner {
+		margin: 1rem 0;
+		padding: 1rem;
+		border: 1px solid var(--color-status-yellow, #b08800);
+		border-radius: 6px;
+		background: var(--color-background-subtle);
+	}
+
+	.shallow-info {
+		margin: 0 0 0.75rem 0;
+		color: var(--color-text-secondary);
+	}
+
+	.shallow-command {
+		margin-bottom: 0.75rem;
+	}
+
+	.shallow-command code {
+		display: block;
+		padding: 0.5rem 0.75rem;
+		background: var(--color-background-surface, #1a1a1a);
+		border: 1px solid var(--color-border-light);
+		border-radius: 4px;
+		font-size: 0.85rem;
+		word-break: break-all;
+	}
+
+	.shallow-actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.shallow-output {
+		margin-top: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--color-background-surface, #1a1a1a);
+		border: 1px solid var(--color-border-light);
+		border-radius: 4px;
+		font-size: 0.8rem;
+		max-height: 200px;
+		overflow-y: auto;
+		white-space: pre-wrap;
+		color: var(--color-text-secondary);
+	}
+
+	.shallow-error {
+		margin-top: 0.5rem;
+		color: var(--color-status-red);
+		font-size: 0.9rem;
 	}
 </style>

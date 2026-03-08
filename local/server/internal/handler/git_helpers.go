@@ -308,6 +308,50 @@ func ensureProjectRemote(ctx context.Context, database *sql.DB, project *db.Proj
 	return remote
 }
 
+// shallowBoundaryHashes returns the set of commit hashes at the shallow clone
+// boundary. Returns nil for non-shallow repos.
+func shallowBoundaryHashes(ctx context.Context, repoPath string) map[string]bool {
+	out, err := runGit(ctx, repoPath, "rev-parse", "--is-shallow-repository")
+	if err != nil || strings.TrimSpace(out) != "true" {
+		return nil
+	}
+	// Read the .git/shallow file which contains one hash per line.
+	gitDir := repoPath + "/.git"
+	// Handle worktrees where .git is a file pointing to the actual git dir.
+	if info, statErr := os.Stat(gitDir); statErr == nil && !info.IsDir() {
+		content, readErr := os.ReadFile(gitDir)
+		if readErr == nil {
+			line := strings.TrimSpace(string(content))
+			if strings.HasPrefix(line, "gitdir: ") {
+				gitDir = strings.TrimPrefix(line, "gitdir: ")
+				if !strings.HasPrefix(gitDir, "/") {
+					gitDir = repoPath + "/" + gitDir
+				}
+				// Go up from worktree git dir to find the main .git dir.
+				if idx := strings.Index(gitDir, "/worktrees/"); idx >= 0 {
+					gitDir = gitDir[:idx]
+				}
+			}
+		}
+	}
+	shallowFile := gitDir + "/shallow"
+	data, err := os.ReadFile(shallowFile)
+	if err != nil {
+		return nil
+	}
+	hashes := make(map[string]bool)
+	for _, line := range strings.Split(string(data), "\n") {
+		h := strings.TrimSpace(line)
+		if h != "" {
+			hashes[h] = true
+		}
+	}
+	if len(hashes) == 0 {
+		return nil
+	}
+	return hashes
+}
+
 func ensureProjectLocalUser(ctx context.Context, database *sql.DB, p *db.ProjectDetail) {
 	if p.LocalUser != "" {
 		return

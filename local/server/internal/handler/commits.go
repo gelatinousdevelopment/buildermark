@@ -229,6 +229,27 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	var commitDiff string
 	var tokenDiff string
 
+	if dbCommit != nil && dbCommit.NeedsParent {
+		// Shallow boundary commit — return stub response with no diff/attribution.
+		writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
+			Branch:   branch,
+			Branches: branches,
+			Commit: projectCommitCoverage{
+				ProjectID:        project.ID,
+				ProjectLabel:     project.Label,
+				ProjectPath:      project.Path,
+				ProjectGitID:     project.GitID,
+				CommitHash:       dbCommit.CommitHash,
+				Subject:          dbCommit.Subject,
+				UserName:         dbCommit.UserName,
+				UserEmail:        dbCommit.UserEmail,
+				AuthoredAtUnixMs: dbCommit.AuthoredAt * 1000,
+				NeedsParent:      true,
+			},
+		})
+		return
+	}
+
 	if dbCommit != nil {
 		// Use stored diff from database.
 		commit = gitCommit{

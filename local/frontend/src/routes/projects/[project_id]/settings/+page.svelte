@@ -73,7 +73,28 @@
 	let notice: string | null = $state(null);
 
 	let refreshing = $state(false);
-	let refreshNotice: string | null = $state(null);
+	let refreshDays = $state('0');
+
+	const refreshDayOptions = [
+		{ value: '0', label: 'Recent only' },
+		{ value: '7', label: '7 days' },
+		{ value: '14', label: '14 days' },
+		{ value: '30', label: '30 days' },
+		{ value: '60', label: '60 days' },
+		{ value: '90', label: '90 days' },
+		{ value: '180', label: '180 days' },
+		{ value: '365', label: '365 days' },
+		{ value: '36500', label: 'All' }
+	];
+
+	let refreshStatus = $derived.by(() => {
+		const job = websocketStore.getJob('commit_refresh');
+		if (!job || !project.id) return null;
+		if (job.projectId && job.projectId !== project.id) return null;
+		return job;
+	});
+
+	let refreshBusy = $derived(refreshing || refreshStatus?.state === 'running');
 
 	let showDeleteModal = $state(false);
 	let deleteConfirmName = $state('');
@@ -110,15 +131,15 @@
 
 	async function refreshCommits() {
 		refreshing = true;
-		refreshNotice = null;
+		websocketStore.clearJob('commit_refresh');
 		try {
-			const res = await refreshProjectCommits(project.id);
-			refreshNotice = res.queued ? 'Refresh queued.' : 'Refresh already in progress.';
-		} catch (e) {
-			refreshNotice = e instanceof Error ? e.message : 'Failed to refresh commits';
-		} finally {
+			const days = Number(refreshDays);
+			await refreshProjectCommits(project.id, '', days > 0 ? days : undefined);
+		} catch {
 			refreshing = false;
+			return;
 		}
+		refreshing = false;
 	}
 
 	async function confirmDeleteProject() {
@@ -176,7 +197,7 @@
 				</div>
 
 				<div class="section">
-					<h2>Ignore Paths for Diff Matching</h2>
+					<h2>Ignore Paths for Agent Attribution</h2>
 					<div class="defaults-row">
 						<label class="checkbox-label">
 							<input type="checkbox" bind:checked={ignoreDefaultDiffPaths} />
@@ -267,17 +288,24 @@
 				<div class="advanced-zone">
 					<h2>Advanced Actions</h2>
 					<p class="advanced-description">
-						Re-scan and recompute commit attribution for this project. This is typically not
-						necessary as commits are refreshed automatically.
+						Re-scan and recompute commit attribution for this project. Select a time window to check
+						for missed commits and resolve any with missing parents (shallow clones).
 					</p>
 					<div class="actions">
-						<button class="bordered" disabled={refreshing} onclick={refreshCommits}
-							>{refreshing ? 'Refreshing...' : 'Refresh Commits'}</button
+						<select bind:value={refreshDays} disabled={refreshBusy} class="refresh-days-select">
+							{#each refreshDayOptions as opt (opt.value)}
+								<option value={opt.value}>{opt.label}</option>
+							{/each}
+						</select>
+						<button class="bordered small" disabled={refreshBusy} onclick={refreshCommits}
+							>{refreshBusy ? 'Refreshing...' : 'Refresh Commits'}</button
 						>
-						{#if refreshNotice}
-							<span class="notice">{refreshNotice}</span>
-						{/if}
 					</div>
+					{#if refreshStatus}
+						<p class="refresh-status" class:refresh-error={refreshStatus.state === 'error'}>
+							{refreshStatus.message}
+						</p>
+					{/if}
 				</div>
 
 				<div class="danger-zone">
@@ -514,6 +542,16 @@
 		color: var(--color-notice);
 	}
 
+	.refresh-status {
+		margin: 0.4rem 0 0;
+		font-size: 0.85rem;
+		color: var(--color-notice);
+	}
+
+	.refresh-error {
+		color: var(--color-danger, #d32f2f);
+	}
+
 	.advanced-zone {
 		padding-top: 1rem;
 		/*border-top: 0.5px solid var(--color-divider);*/
@@ -567,5 +605,14 @@
 	.btn-danger:disabled {
 		opacity: 0.5;
 		cursor: default;
+	}
+
+	.refresh-days-select {
+		padding: 0.25rem 0.5rem;
+		border: 1px solid var(--color-border-input);
+		border-radius: 4px;
+		background: var(--color-background-surface);
+		color: var(--color-text);
+		font-size: 0.85rem;
 	}
 </style>

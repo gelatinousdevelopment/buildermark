@@ -333,7 +333,7 @@
 					>
 						<div class="dc-bar-area">
 							{#if col.total > 0}
-								<Popover position="below" width="200px" padding="0" fixed={true}>
+								<Popover position="below" width="220px" padding="0" fixed={true}>
 									<div class="dc-bar">
 										{#each col.segments as seg (seg.key)}
 											<div
@@ -619,7 +619,7 @@
 		outline-offset: -1px;
 	}
 
-	.dc-col:hover .dc-bar {
+	.dc-col:hover:not(:has(.dc-bar-empty)) .dc-bar {
 		filter: brightness(1.05);
 	}
 
@@ -722,7 +722,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		max-height: 150px;
+		max-height: 203px;
 		overflow-y: auto;
 		padding: 1rem;
 	}

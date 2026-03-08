@@ -32,7 +32,7 @@ func TestClassifyClaudeMessageQuestion(t *testing.T) {
 		}
 	}`
 
-	role, messageType, content := classifyClaudeMessage("agent", "", raw, "")
+	role, messageType, content := ClassifyClaudeMessage("agent", "", raw, "")
 	if role != "agent" {
 		t.Fatalf("role = %q, want %q", role, "agent")
 	}
@@ -66,7 +66,7 @@ func TestClassifyClaudeMessageAnswerWithCustomNote(t *testing.T) {
 		}
 	}`
 
-	role, messageType, content := classifyClaudeMessage("user", "", raw, "")
+	role, messageType, content := ClassifyClaudeMessage("user", "", raw, "")
 	if role != "user" {
 		t.Fatalf("role = %q, want %q", role, "user")
 	}
@@ -85,7 +85,7 @@ func TestClassifyClaudeMessageAnswerWithCustomNote(t *testing.T) {
 }
 
 func TestClassifyClaudeMessageFinalAnswer(t *testing.T) {
-	role, messageType, content := classifyClaudeMessage("agent", "Here is the result.", "{}", "end_turn")
+	role, messageType, content := ClassifyClaudeMessage("agent", "Here is the result.", "{}", "end_turn")
 	if role != "agent" {
 		t.Fatalf("role = %q, want %q", role, "agent")
 	}
@@ -99,7 +99,7 @@ func TestClassifyClaudeMessageFinalAnswer(t *testing.T) {
 
 func TestClassifyClaudeMessageEndTurnEmptyContent(t *testing.T) {
 	// end_turn with empty content should NOT be final_answer
-	_, messageType, _ := classifyClaudeMessage("agent", "", "{}", "end_turn")
+	_, messageType, _ := ClassifyClaudeMessage("agent", "", "{}", "end_turn")
 	if messageType == db.MessageTypeFinalAnswer {
 		t.Fatalf("empty content with end_turn should not be final_answer")
 	}
@@ -107,7 +107,7 @@ func TestClassifyClaudeMessageEndTurnEmptyContent(t *testing.T) {
 
 func TestClassifyClaudeMessageToolUseStopReason(t *testing.T) {
 	// tool_use stop_reason should NOT be final_answer
-	_, messageType, _ := classifyClaudeMessage("agent", "some content", "{}", "tool_use")
+	_, messageType, _ := ClassifyClaudeMessage("agent", "some content", "{}", "tool_use")
 	if messageType == db.MessageTypeFinalAnswer {
 		t.Fatalf("tool_use stop_reason should not be final_answer")
 	}

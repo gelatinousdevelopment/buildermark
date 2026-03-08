@@ -20,5 +20,6 @@ declare global {
 		| 'buildermark'
 		| 'buildermarkWordmark'
 		| 'buildermarkTall'
-		| 'buildermarkTallAnimated';
+		| 'buildermarkTallAnimated'
+		| 'cloud';
 }

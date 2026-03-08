@@ -328,6 +328,7 @@ func ingestCommits(
 		return 0, nil
 	}
 
+	shallowHashes := shallowBoundaryHashes(ctx, repoProject.Path)
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 	pIDs := projectIDs(group)
 
@@ -345,6 +346,22 @@ func ingestCommits(
 	perCommitConvLinks := make(map[string][]string)
 
 	for _, gc := range toIngest {
+		// Skip diff computation for shallow boundary commits.
+		if shallowHashes[gc.Hash] {
+			dbCommits = append(dbCommits, db.Commit{
+				ProjectID:       repoProject.ID,
+				BranchName:      branch,
+				CommitHash:      gc.Hash,
+				Subject:         gc.Subject,
+				UserName:        gc.UserName,
+				UserEmail:       gc.UserEmail,
+				AuthoredAt:      gc.TimestampUnix,
+				CoverageVersion: currentCommitCoverageVersion,
+				NeedsParent:     true,
+			})
+			continue
+		}
+
 		rawDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", gc.Hash)
 		if err != nil {
 			log.Printf("warning: could not get diff for commit %s: %v", gc.Hash, err)
@@ -518,6 +535,22 @@ func recomputeSingleCommit(
 	identity *gitIdentity,
 	extraEmails []string,
 ) (db.Commit, map[string]agentStats, []string, error) {
+	// If this commit is at a shallow boundary, keep it as a stub.
+	if shallow := shallowBoundaryHashes(ctx, repoPath); shallow[c.CommitHash] {
+		return db.Commit{
+			ID:              c.ID,
+			ProjectID:       c.ProjectID,
+			BranchName:      c.BranchName,
+			CommitHash:      c.CommitHash,
+			Subject:         c.Subject,
+			UserName:        c.UserName,
+			UserEmail:       c.UserEmail,
+			AuthoredAt:      c.AuthoredAt,
+			CoverageVersion: currentCommitCoverageVersion,
+			NeedsParent:     true,
+		}, nil, nil, nil
+	}
+
 	cleanDiff := c.DiffContent
 	rawDiff, rawErr := runGit(ctx, repoPath, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
 	if rawErr == nil {
