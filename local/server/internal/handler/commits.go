@@ -980,6 +980,61 @@ func (s *Server) handleSetCommitOverrideLinePercent(w http.ResponseWriter, r *ht
 	})
 }
 
+func (s *Server) handleRecalculateCommitDiffMatch(w http.ResponseWriter, r *http.Request) {
+	projectID := strings.TrimSpace(r.PathValue("projectId"))
+	commitHash := strings.TrimSpace(r.PathValue("commitHash"))
+	if projectID == "" || commitHash == "" {
+		writeError(w, http.StatusBadRequest, "project id and commit hash are required")
+		return
+	}
+
+	project, err := getProjectByID(r.Context(), s.DB, projectID)
+	if err != nil {
+		log.Printf("error loading project %s: %v", projectID, err)
+		writeError(w, http.StatusInternalServerError, "failed to load project")
+		return
+	}
+	if project == nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	groups, err := listAllProjectGroups(r.Context(), s.DB)
+	if err != nil {
+		log.Printf("error listing project groups: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to list projects")
+		return
+	}
+	group, ok := findProjectGroupByProjectID(groups, project.ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "project group not found")
+		return
+	}
+	repoProject, err := resolveRepoProject(r.Context(), group)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "repository for project not found")
+		return
+	}
+
+	identity, _ := resolveGitIdentity(r.Context(), repoProject.Path)
+	n, err := recomputeCommitCoverageForProjectHashes(
+		r.Context(), s.DB, repoProject, group, []string{commitHash}, nil, &identity, s.loadExtraLocalUserEmails(),
+	)
+	if err != nil {
+		log.Printf("error recalculating diff match for commit %s: %v", commitHash, err)
+		writeError(w, http.StatusInternalServerError, "failed to recalculate diff match")
+		return
+	}
+
+	s.commitDetailCache.clearProject(projectID)
+
+	writeSuccess(w, http.StatusOK, map[string]any{
+		"projectId":  projectID,
+		"commitHash": commitHash,
+		"recomputed": n,
+	})
+}
+
 func shouldQueueCommitRefresh(
 	ctx context.Context,
 	database *sql.DB,

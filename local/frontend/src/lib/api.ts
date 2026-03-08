@@ -219,6 +219,16 @@ export function deepenCommit(
 	);
 }
 
+export function recalculateCommitDiffMatch(
+	projectId: string,
+	commitHash: string
+): Promise<{ recomputed: number }> {
+	return api(
+		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/recalculate`,
+		{ method: 'POST' }
+	);
+}
+
 export function getConversationsBatchDetail(ids: string[]): Promise<ConversationBatchDetail[]> {
 	return api(`/api/v1/conversations/batch-detail?ids=${ids.map(encodeURIComponent).join(',')}`);
 }

@@ -2,7 +2,12 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { getProjectCommitDetail, setCommitOverrideLinePercent, deepenCommit } from '$lib/api';
+	import {
+		getProjectCommitDetail,
+		setCommitOverrideLinePercent,
+		deepenCommit,
+		recalculateCommitDiffMatch
+	} from '$lib/api';
 	import { fmtTime, singleLineTitle } from '$lib/utils';
 	import type { ProjectCommitDetailResponse, AgentCoverageSegment } from '$lib/types';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
@@ -42,6 +47,8 @@
 	let editingOverride = $state(false);
 	let overrideInput = $state('');
 	let savingOverride = $state(false);
+	let actionsOpen = $state(false);
+	let recalculating = $state(false);
 
 	let hasOverride = $derived.by(() => detail?.commit?.overrideLinePercent != null);
 	let isWorkingCopyUnknown = $derived.by(
@@ -89,6 +96,23 @@
 			? String(detail!.commit.overrideLinePercent)
 			: String(Math.round(percent(agentLinesFromAgent, agentLinesTotal)));
 		editingOverride = true;
+		actionsOpen = false;
+	}
+
+	async function handleRecalculate() {
+		if (!detail || recalculating) return;
+		actionsOpen = false;
+		recalculating = true;
+		try {
+			await recalculateCommitDiffMatch(detail.commit.projectId, detail.commit.commitHash);
+			const projectId = page.params.project_id!;
+			const branch = page.params.branch!;
+			detail = await getProjectCommitDetail(projectId, detail.commit.commitHash, branch);
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to recalculate';
+		} finally {
+			recalculating = false;
+		}
 	}
 
 	let isNeedsParent = $derived.by(() => !!detail?.commit?.needsParent);
@@ -302,9 +326,51 @@
 							disabled={savingOverride}>Cancel</button
 						>
 					{:else}
-						<button class="btn-override-action" onclick={startEditOverride}>
-							{hasOverride ? 'Edit Override' : 'Override Agent Attribution'}
-						</button>
+						<div class="actions-dropdown">
+							<button
+								class="btn-override-action"
+								onclick={() => (actionsOpen = !actionsOpen)}
+								disabled={recalculating}
+							>
+								{recalculating ? 'Recalculating...' : 'Commit Actions'}
+								<svg
+									class="chevron"
+									class:chevron-open={actionsOpen}
+									width="10"
+									height="6"
+									viewBox="0 0 10 6"
+									fill="none"
+								>
+									<path
+										d="M1 1L5 5L9 1"
+										stroke="currentColor"
+										stroke-width="1.5"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									/>
+								</svg>
+							</button>
+							{#if actionsOpen}
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="actions-backdrop"
+									onclick={() => (actionsOpen = false)}
+									onkeydown={() => {}}
+								></div>
+								<div class="actions-menu">
+									<button class="actions-menu-item" onclick={startEditOverride}>
+										{hasOverride ? 'Edit Override' : 'Override Agent Attribution'}
+									</button>
+									<button
+										class="actions-menu-item"
+										onclick={handleRecalculate}
+										disabled={recalculating}
+									>
+										Recalculate Diff Match
+									</button>
+								</div>
+							{/if}
+						</div>
 					{/if}
 				</div>
 			{/if}
@@ -669,6 +735,61 @@
 	}
 
 	.btn-override-action:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.actions-dropdown {
+		position: relative;
+	}
+
+	.chevron {
+		margin-left: 0.3rem;
+		transition: transform 0.15s;
+	}
+
+	.chevron-open {
+		transform: rotate(180deg);
+	}
+
+	.actions-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 9;
+	}
+
+	.actions-menu {
+		position: absolute;
+		right: 0;
+		top: 100%;
+		margin-top: 0.25rem;
+		min-width: 12rem;
+		background: var(--color-background-surface);
+		border: 1px solid var(--color-border-input);
+		border-radius: 4px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+		z-index: 10;
+		overflow: hidden;
+	}
+
+	.actions-menu-item {
+		display: block;
+		width: 100%;
+		padding: 0.45rem 0.75rem;
+		font-size: 0.85rem;
+		text-align: left;
+		background: none;
+		border: none;
+		color: var(--color-text-secondary);
+		cursor: pointer;
+	}
+
+	.actions-menu-item:hover {
+		background: var(--accent-color-ultralight);
+		color: var(--accent-color);
+	}
+
+	.actions-menu-item:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
