@@ -82,7 +82,7 @@
 		<p class="message">No matching results found.</p>
 	{:else}
 		<div class="projects">
-			{#each results as row, index (row.project.id)}
+			{#each results as row (row.project.id)}
 				<div class="project">
 					<div class="meta">
 						<div class="label">
@@ -114,8 +114,7 @@
 								showAgentColumn={true}
 								showRatingsColumn={true}
 								searchTerm={currentQuery}
-								useLoadQueue={true}
-								loadPriority={index * 2}
+								useLoadQueue={false}
 							/>
 						</div>
 						<div class="column commits">
@@ -129,8 +128,7 @@
 								headerLink={resolve(`/projects/${encodeURIComponent(row.project.id)}/commits`)}
 								showBranch={false}
 								searchTerm={currentQuery}
-								useLoadQueue={true}
-								loadPriority={index * 2 + 1}
+								useLoadQueue={false}
 								defaultToCurrentUser={false}
 							/>
 						</div>

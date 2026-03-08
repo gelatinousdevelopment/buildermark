@@ -84,7 +84,13 @@
 	function handleKeydown(e: KeyboardEvent) {
 		if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 			e.preventDefault();
-			goto(resolve('/search'));
+			/* eslint-disable svelte/no-navigation-without-resolve */
+			goto(
+				projectId
+					? `${resolve('/search')}?project=${encodeURIComponent(projectId)}`
+					: resolve('/search')
+			);
+			/* eslint-enable svelte/no-navigation-without-resolve */
 		}
 	}
 </script>
@@ -189,12 +195,16 @@
 			<hr class="divider" />
 			<section>
 				<nav class="right">
+					<!-- eslint-disable svelte/no-navigation-without-resolve -->
 					<a
-						href={resolve('/search')}
+						href={projectId
+							? `${resolve('/search')}?project=${encodeURIComponent(projectId)}`
+							: resolve('/search')}
 						class="item"
 						class:selected={page.route.id === '/search'}
 						title="Search"><Icon name="search" width="20px" /></a
 					>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
 				</nav>
 			</section>
 		{/if}

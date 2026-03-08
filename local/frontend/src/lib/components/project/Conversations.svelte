@@ -399,7 +399,7 @@
 {:else if error}
 	<p class="message error">{error}</p>
 {:else if !project || visibleConversations.length === 0}
-	<p class="message">No conversations.</p>
+	<p class="message">No Results</p>
 {:else}
 	<table class="data" class:compact class:detailed>
 		<colgroup>
@@ -477,10 +477,7 @@
 						{#if detailed && detail}
 							<div class="detail-messages">
 								{#each detail.userMessages as msg (msg.id)}
-									<div
-										class="detail-user-message"
-										class:plan-message={isPlanPromptMessage(msg)}
-									>
+									<div class="detail-user-message" class:plan-message={isPlanPromptMessage(msg)}>
 										<UserPromptMessageCard message={msg} />
 									</div>
 								{/each}

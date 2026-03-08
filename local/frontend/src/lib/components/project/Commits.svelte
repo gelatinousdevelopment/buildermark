@@ -521,7 +521,7 @@
 {:else if error}
 	<p class="message error">{error}</p>
 {:else if !data || visibleCommits.length === 0}
-	<p class="message">No commits found for this project and current git user.</p>
+	<p class="message">No Results</p>
 {:else}
 	{#if showBranchPicker || showUserPicker || showAgentPicker || showDateFilter}
 		<div class="top-row">

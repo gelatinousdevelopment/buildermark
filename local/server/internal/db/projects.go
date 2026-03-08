@@ -192,11 +192,11 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	if search := strings.TrimSpace(filters.Search); search != "" {
 		ftsQuery := buildFTSMatchQuery(search)
 		if !supportsFTS5(ctx, db) || isShortSearchOnly(search) || ftsQuery == "" {
-			filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages_fts WHERE project_id = c.project_id AND instr(lower(content), lower(?)) > 0)")
-			filterArgs = append(filterArgs, search)
+			filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages_fts WHERE project_id = ? AND instr(lower(content), lower(?)) > 0)")
+			filterArgs = append(filterArgs, projectID, search)
 		} else {
-			filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages_fts WHERE project_id = c.project_id AND messages_fts MATCH ?)")
-			filterArgs = append(filterArgs, ftsQuery)
+			filterClauses = append(filterClauses, "c.id IN (SELECT DISTINCT conversation_id FROM messages_fts WHERE project_id = ? AND messages_fts MATCH ?)")
+			filterArgs = append(filterArgs, projectID, ftsQuery)
 		}
 	}
 
