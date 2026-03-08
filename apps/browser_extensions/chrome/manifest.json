@@ -3,12 +3,8 @@
   "name": "Buildermark Conversation Importer",
   "version": "0.1.0",
   "description": "Import coding agent conversations from Claude Cloud and Codex Cloud into Buildermark.",
-  "permissions": [
-    "tabs"
-  ],
-  "host_permissions": [
-    "http://localhost:7022/*"
-  ],
+  "permissions": ["tabs"],
+  "host_permissions": ["http://localhost:7022/*"],
   "content_scripts": [
     {
       "matches": [
@@ -17,36 +13,23 @@
         "*://chatgpt.com/codex/*",
         "*://codex.openai.com/*"
       ],
-      "js": [
-        "shared/agents/base.js",
-        "shared/agents/claude_cloud.js",
-        "shared/agents/codex_cloud.js",
-        "shared/api.js",
-        "shared/importer.js",
-        "content.js"
-      ],
+      "js": ["content/api.js", "content/importer.js"],
       "run_at": "document_idle"
     },
     {
-      "matches": [
-        "*://*.claude.ai/code/*"
-      ],
-      "js": [
-        "shared/api.js",
-        "shared/claude_code_cloud.js",
-        "content_code_cloud.js"
-      ],
+      "matches": ["*://*.claude.ai/code/*"],
+      "js": ["content/api.js", "content/claude_code_cloud.js", "content/content.js"],
       "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["shared/fetch_interceptor.js"],
+      "resources": ["web_accessible/fetch_interceptor.js"],
       "matches": ["*://*.claude.ai/*"]
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background/background.js"
   },
   "action": {
     "default_icon": {
@@ -55,7 +38,8 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Buildermark"
+    "default_title": "Buildermark",
+    "default_popup": "popup/popup.html"
   },
   "icons": {
     "16": "icons/icon16.png",

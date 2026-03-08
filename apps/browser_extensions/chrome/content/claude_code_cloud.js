@@ -3,6 +3,28 @@
  * Receives events from the page-world fetch interceptor via postMessage,
  * debounces, and sends to the Buildermark server.
  */
+
+// Current page import state, queryable by the popup.
+let _buildermarkPageState = 'waiting';
+
+function _setPageState(state) {
+  _buildermarkPageState = state;
+  try {
+    chrome.runtime.sendMessage({ type: 'pageStateChanged', state });
+  } catch {
+    // Popup may not be open — ignore.
+  }
+}
+
+// Listen for state queries from the popup.
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'getPageState') {
+      sendResponse({ state: _buildermarkPageState });
+    }
+  });
+}
+
 class ClaudeCodeCloudListener {
   constructor(setBadge) {
     this.setBadge = setBadge;
@@ -46,6 +68,7 @@ class ClaudeCodeCloudListener {
     this._pending = null;
 
     try {
+      _setPageState('importing');
       this.setBadge("loading");
       const params = {
         ...payload,
@@ -63,9 +86,11 @@ class ClaudeCodeCloudListener {
       );
       const result = await BuildermarkAPI.importConversation(params);
       console.log("[Buildermark] Import result:", JSON.stringify(result));
+      _setPageState(result.alreadyExisted ? 'already' : 'done');
       this.setBadge(result.alreadyExisted ? "exists" : "done");
     } catch (e) {
       console.warn("[Buildermark] Failed to import Claude Code events:", e.message);
+      _setPageState('error');
       this.setBadge("error");
     }
   }

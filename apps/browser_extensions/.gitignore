@@ -1,4 +1,0 @@
-# Shared files are copied into each extension by build.sh
-chrome/shared/
-firefox/shared/
-safari/shared/

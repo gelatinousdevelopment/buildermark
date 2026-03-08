@@ -47,17 +47,17 @@
 	--agent-border-color-manual: light-dark(#bbb, #444);
 
 	--agent-color-claude: light-dark(#cf6f30, #af583b);
-	--agent-foreground-color-claude: light-dark(rgb(255, 255, 255, 0.9), rgb(54 23 0));
+	--agent-foreground-color-claude: light-dark(rgb(255, 255, 255, 0.9), rgb(24 13 0));
 	--agent-background-color-claude: light-dark(#fff5ee, #2a1a10);
 	--agent-border-color-claude: light-dark(#e8a870, #6a3a1e);
 
-	--agent-color-claude-cloud: light-dark(#af4f10, #8f381b);
-	--agent-foreground-color-claude-cloud: light-dark(rgb(255, 255, 255, 0.9), rgb(54 23 0));
+	--agent-color-claude-cloud: light-dark(#af4f10, #92452b);
+	--agent-foreground-color-claude-cloud: light-dark(rgb(255, 255, 255, 0.9), rgb(24 13 0));
 	--agent-background-color-claude-cloud: light-dark(#fff5ee, #2a1a10);
 	--agent-border-color-claude-cloud: light-dark(#e8a870, #6a3a1e);
 
-	--agent-color-codex: light-dark(#5c5aff, #4840dd);
-	--agent-foreground-color-codex: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0, 0.9));
+	--agent-color-codex: light-dark(#5c5aff, #3c4bfd);
+	--agent-foreground-color-codex: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0));
 	--agent-background-color-codex: light-dark(#f0f0ff, #1a1a2e);
 	--agent-border-color-codex: light-dark(#9090ee, #3a3088);
 
