@@ -133,6 +133,23 @@ func listBranchCommitHashes(ctx context.Context, repoPath, branch string) ([]str
 	return hashes, nil
 }
 
+// listBranchCommitHashesSince returns commit hashes unique to branch (not on base), newest first.
+func listBranchCommitHashesSince(ctx context.Context, repoPath, base, branch string) ([]string, error) {
+	out, err := runGit(ctx, repoPath, "log", base+".."+branch, "--format=%H")
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	hashes := make([]string, 0, len(lines))
+	for _, line := range lines {
+		h := strings.TrimSpace(line)
+		if h != "" {
+			hashes = append(hashes, h)
+		}
+	}
+	return hashes, nil
+}
+
 // countBranchCommits returns the total number of commits on a branch.
 func countBranchCommits(ctx context.Context, repoPath, branch string) (int, error) {
 	out, err := runGit(ctx, repoPath, "rev-list", "--count", branch)

@@ -205,7 +205,7 @@
 					href={resolve('/plugins')}
 					class="item"
 					class:selected={page.route.id === '/plugins'}
-					title="Plugins"><Icon name="puzzlePiece" width="16px" /></a
+					title="Plugins"><Icon name="puzzlePiece" width="18px" /></a
 				>
 			</nav>
 		</section>

@@ -522,7 +522,7 @@ func recomputeCommitCoverageForProject(
 	identity *gitIdentity,
 	extraEmails []string,
 ) (int, error) {
-	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, nil, identity, extraEmails)
+	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, "", nil, identity, extraEmails, nil)
 }
 
 // recomputeSingleCommit recomputes coverage for one commit.
@@ -740,12 +740,21 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 	repoProject *db.Project,
 	group projectGroup,
 	branch string,
+	defaultBranch string,
 	changedPatterns []string,
 	identity *gitIdentity,
 	extraEmails []string,
+	commitProgress func(message string, processed int),
 ) (int, error) {
 	// Get branch hashes and query DB by hash list so recompute works across branches.
-	branchHashes, err := listBranchCommitHashes(ctx, repoProject.Path, branch)
+	// For non-default branches, only load commits unique to the branch (not on defaultBranch).
+	var branchHashes []string
+	var err error
+	if defaultBranch != "" && defaultBranch != branch {
+		branchHashes, err = listBranchCommitHashesSince(ctx, repoProject.Path, defaultBranch, branch)
+	} else {
+		branchHashes, err = listBranchCommitHashes(ctx, repoProject.Path, branch)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("list branch hashes: %w", err)
 	}
@@ -783,6 +792,34 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 		}
 	}
 
+	// Only recompute commits as far back as conversation history exists.
+	if changedPatterns != nil {
+		pIDs := projectIDs(group)
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(pIDs)), ",")
+		args := make([]any, len(pIDs))
+		for i, id := range pIDs {
+			args[i] = id
+		}
+		var earliestMs sql.NullInt64
+		_ = database.QueryRowContext(ctx,
+			"SELECT MIN(started_at) FROM conversations WHERE project_id IN ("+ph+") AND hidden = false AND started_at > 0",
+			args...,
+		).Scan(&earliestMs)
+		if earliestMs.Valid && earliestMs.Int64 > 0 {
+			cutoff := earliestMs.Int64 - defaultMessageWindowMs
+			filtered := commits[:0]
+			for _, c := range commits {
+				if c.AuthoredAt*1000 >= cutoff {
+					filtered = append(filtered, c)
+				}
+			}
+			commits = filtered
+			if len(commits) == 0 {
+				return 0, nil
+			}
+		}
+	}
+
 	minTs := commits[0].AuthoredAt * 1000
 	maxTs := commits[0].AuthoredAt * 1000
 	for _, c := range commits {
@@ -804,7 +841,14 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 	perCommitAgent := make(map[string]map[string]agentStats)
 	perCommitConvLinks := make(map[string][]string)
 
-	for _, c := range commits {
+	for i, c := range commits {
+		if commitProgress != nil {
+			hashPrefix := c.CommitHash
+			if len(hashPrefix) > 8 {
+				hashPrefix = hashPrefix[:8]
+			}
+			commitProgress(fmt.Sprintf("Recomputing commit %s (%d/%d)...", hashPrefix, i+1, len(commits)), i)
+		}
 		updated, byAgent, convIDs, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
 		if err != nil {
 			continue

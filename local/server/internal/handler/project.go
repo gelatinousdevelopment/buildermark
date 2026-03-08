@@ -238,11 +238,35 @@ func (s *Server) recomputeProjectCoverageAllBranchesWithChangedPatterns(
 		}
 	}
 
+	// Query latest commit date per branch for sorting by recency.
+	latestByBranch := map[string]int64{}
+	if rows, err := s.DB.QueryContext(ctx,
+		"SELECT branch_name, MAX(authored_at) FROM commits WHERE project_id = ? GROUP BY branch_name",
+		repoProject.ID); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var b string
+			var ts int64
+			if err := rows.Scan(&b, &ts); err == nil {
+				latestByBranch[b] = ts
+			}
+		}
+	}
+
 	branchList := make([]string, 0, len(branches))
 	for b := range branches {
-		branchList = append(branchList, b)
+		if b != defaultBranch {
+			branchList = append(branchList, b)
+		}
 	}
-	sort.Strings(branchList)
+	sort.Slice(branchList, func(i, j int) bool {
+		ti, tj := latestByBranch[branchList[i]], latestByBranch[branchList[j]]
+		if ti != tj {
+			return ti > tj
+		}
+		return branchList[i] < branchList[j]
+	})
+	branchList = append([]string{defaultBranch}, branchList...)
 
 	recomputedBranches := 0
 	recomputedCommits := 0
@@ -252,7 +276,13 @@ func (s *Server) recomputeProjectCoverageAllBranchesWithChangedPatterns(
 		}
 		identity, _ := resolveGitIdentity(ctx, repoProject.Path)
 		extraEmails := s.loadExtraLocalUserEmails()
-		n, err := recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, repoProject, group, branch, changedPatterns, &identity, extraEmails)
+		var commitProgressFn func(string, int)
+		if progress != nil {
+			commitProgressFn = func(message string, _ int) {
+				progress(message)
+			}
+		}
+		n, err := recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, repoProject, group, branch, defaultBranch, changedPatterns, &identity, extraEmails, commitProgressFn)
 		if err != nil {
 			log.Printf("warning: recompute commit coverage failed for project=%s branch=%s: %v", projectID, branch, err)
 			continue

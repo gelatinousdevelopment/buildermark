@@ -102,12 +102,11 @@
 	let deleteError: string | null = $state(null);
 
 	let projectDisplayName = $derived(label || path || project.path);
-	let recomputeStatusMessage = $derived.by(() => {
-		const job = websocketStore.getJob('diff_recompute');
-		if (!job || !project.id) return null;
-		if (job.message?.includes(project.id)) return job.message;
-		return null;
-	});
+	let recomputeStatusMessage = $derived(
+		websocketStore.getJob('diff_recompute')?.state === 'running'
+			? (websocketStore.getJob('diff_recompute')?.message ?? null)
+			: null
+	);
 
 	async function save() {
 		saving = true;
@@ -121,7 +120,7 @@
 			await setProjectOldPaths(project.id, oldPaths);
 			await setProjectIgnoreDiffPaths(project.id, ignoreDiffPaths);
 			await setProjectIgnoreDefaultDiffPaths(project.id, ignoreDefaultDiffPaths);
-			notice = 'Saved. Diff recompute started.';
+			notice = 'Saved.';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to save settings';
 		} finally {
@@ -270,11 +269,10 @@
 					<button class="bordered prominent" disabled={saving} onclick={save}
 						>{saving ? 'Saving...' : 'Save Settings'}</button
 					>
-					{#if notice}
-						<span class="notice">{notice}</span>
-					{/if}
 					{#if recomputeStatusMessage}
 						<span class="notice">{recomputeStatusMessage}</span>
+					{:else if notice}
+						<span class="notice">{notice}</span>
 					{/if}
 				</div>
 				{#if error}
