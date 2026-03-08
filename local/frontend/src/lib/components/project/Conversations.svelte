@@ -12,6 +12,7 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import UserPromptMessageCard from '$lib/components/UserPromptMessageCard.svelte';
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
+	import { isPlanPromptMessage } from '$lib/messageUtils';
 	import { resolve } from '$app/paths';
 	import { SvelteMap } from 'svelte/reactivity';
 	import type { ProjectDetail, ConversationBatchDetail } from '$lib/types';
@@ -476,7 +477,10 @@
 						{#if detailed && detail}
 							<div class="detail-messages">
 								{#each detail.userMessages as msg (msg.id)}
-									<div class="detail-user-message">
+									<div
+										class="detail-user-message"
+										class:plan-message={isPlanPromptMessage(msg)}
+									>
 										<UserPromptMessageCard message={msg} />
 									</div>
 								{/each}
@@ -799,6 +803,12 @@
 		border-radius: 8px;
 		color: var(--color-text);
 		padding: 0.5rem 0.75rem;
+	}
+
+	.detail-user-message.plan-message {
+		background: var(--color-relationship-highlight);
+		border-color: var(--color-relationship-icon);
+		color: var(--color-relationship-foreground);
 	}
 
 	.ratings-detail {

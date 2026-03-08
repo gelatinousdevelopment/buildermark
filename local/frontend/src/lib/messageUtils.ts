@@ -34,6 +34,29 @@ export function isUserPromptMessage(message: MessageRead): boolean {
 	return true;
 }
 
+export function planPromptTitle(text: string): string {
+	const trimmed = text.trim();
+	if (!trimmed.startsWith('Implement the following plan:')) {
+		return '';
+	}
+	for (const line of trimmed.split('\n').slice(1)) {
+		const heading = line.trim();
+		if (!heading) continue;
+		if (heading.startsWith('# Plan: ')) {
+			return heading.slice('# Plan: '.length).trim();
+		}
+		if (heading.startsWith('# ')) {
+			return heading.slice('# '.length).trim();
+		}
+		break;
+	}
+	return '';
+}
+
+export function isPlanPromptMessage(message: MessageRead): boolean {
+	return planPromptTitle(message.content) !== '';
+}
+
 export function messageType(
 	message: MessageRead
 ): 'prompt' | 'question' | 'answer' | 'final_answer' | 'log' {

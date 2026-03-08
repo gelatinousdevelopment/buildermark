@@ -7,6 +7,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import type { ConversationDetail, MessageRead, Rating } from '$lib/types';
 	import {
+		isPlanPromptMessage,
 		isUserPromptMessage,
 		isQuestionMessage,
 		isAnswerMessage,
@@ -361,7 +362,11 @@
 						<AgentMessageCard message={item.message} agent={conversation.agent} />
 					</div>
 				{:else if item.kind === 'message' && (isUserPromptMessage(item.message) || isAnswerMessage(item.message))}
-					<div class="message user-message" data-message-id={item.message.id}>
+					<div
+						class="message user-message"
+						class:plan-message={isPlanPromptMessage(item.message)}
+						data-message-id={item.message.id}
+					>
 						<UserPromptMessageCard message={item.message} />
 					</div>
 				{:else if item.kind === 'combined-diff'}
@@ -625,6 +630,12 @@
 		color: var(--color-text);
 		margin-left: 10%;
 		margin-right: 0rem;
+	}
+
+	.message.user-message.plan-message {
+		background: var(--color-relationship-highlight);
+		border-color: var(--color-relationship-icon);
+		color: var(--color-relationship-foreground);
 	}
 
 	.message.agent-message {
