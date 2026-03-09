@@ -86,7 +86,7 @@
 
 	.activity-ring {
 		position: absolute;
-		inset: -2px;
+		inset: -3px;
 		border-radius: 50%;
 		background: conic-gradient(
 			var(--color-status-green) 0deg,
@@ -95,16 +95,16 @@
 		);
 		-webkit-mask: radial-gradient(
 			farthest-side,
-			transparent calc(100% - 1px),
-			#000 calc(100% - 1px)
+			transparent calc(100% - 2px),
+			#000 calc(100% - 2px)
 		);
-		mask: radial-gradient(farthest-side, transparent calc(100% - 1px), #000 calc(100% - 1px));
-		animation: spin 0.4s linear infinite reverse;
+		mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+		animation: spin 0.3s linear infinite reverse;
 	}
 
 	.activity-ring2 {
 		position: absolute;
-		inset: -4px;
+		inset: -8px;
 		border-radius: 50%;
 		background: conic-gradient(
 			transparent 0deg,
@@ -114,11 +114,11 @@
 		);
 		-webkit-mask: radial-gradient(
 			farthest-side,
-			transparent calc(100% - 1px),
-			#000 calc(100% - 1px)
+			transparent calc(100% - 2px),
+			#000 calc(100% - 2px)
 		);
-		mask: radial-gradient(farthest-side, transparent calc(100% - 1px), #000 calc(100% - 1px));
-		animation: spin 0.8s linear infinite;
+		mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+		animation: spin 0.5s linear infinite;
 	}
 
 	@keyframes pulse {

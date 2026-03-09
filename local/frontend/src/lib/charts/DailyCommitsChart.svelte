@@ -405,9 +405,8 @@
 		<div class="dc-history-agent info-box">
 			<div class="title">{Math.round(historyAgentPercent)}% by agents</div>
 			<div class="title" style:font-size="0.9rem">
-				{Math.round(historyTotalLines * (historyAgentPercent / 100)).toLocaleString()} lines by agents
+				last {columns.length} day{columns.length === 1 ? '' : 's'}
 			</div>
-			<div class="subtitle">last {columns.length} day{columns.length === 1 ? '' : 's'}</div>
 			{#if projectId}
 				<div class="subtitle">
 					<a
