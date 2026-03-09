@@ -12,6 +12,27 @@
 	let busyKey: string | null = $state(null);
 	let initialized = $state(false);
 
+	const browserExtensions = [
+		{
+			name: 'Chrome',
+			storeLabel: 'Chrome Web Store',
+			storeUrl: 'https://chromewebstore.google.com/search/buildermark',
+			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser/chrome'
+		},
+		{
+			name: 'Safari',
+			storeLabel: 'Mac App Store',
+			storeUrl: 'https://apps.apple.com/us/search?term=buildermark',
+			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser/safari'
+		},
+		{
+			name: 'Firefox',
+			storeLabel: 'Firefox Add-ons',
+			storeUrl: 'https://addons.mozilla.org/en-US/firefox/search/?q=buildermark',
+			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser/firefox'
+		}
+	] as const;
+
 	$effect(() => {
 		if (initialized) return;
 		inventory = data.inventory;
@@ -148,6 +169,31 @@
 			You can add extra home folders, such as from mounted virtual machine filesystems or other
 			local accounts in <a href={resolve('/settings')}>Settings</a>.
 		</p>
+
+		<section class="browser-extensions">
+			<h2>Browser Extension</h2>
+			<p class="muted">
+				Install Buildermark in your browser to rate sessions from web-based tools. You can install
+				directly from each browser’s extension store or install from source in developer mode.
+			</p>
+			<div class="browser-extension-grid">
+				{#each browserExtensions as extension (extension.name)}
+					<article class="browser-extension-card">
+						<h3>{extension.name}</h3>
+						<div class="browser-extension-links">
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+							<a href={extension.storeUrl} target="_blank" rel="noreferrer noopener"
+								>Install from {extension.storeLabel}</a
+							>
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+							<a href={extension.sourceUrl} target="_blank" rel="noreferrer noopener"
+								>Install from GitHub source</a
+							>
+						</div>
+					</article>
+				{/each}
+			</div>
+		</section>
 	</div>
 </div>
 
@@ -329,5 +375,42 @@
 
 	p.muted {
 		margin: 0;
+	}
+
+	.browser-extensions {
+		border-top: 0.5px solid var(--color-divider);
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+	}
+
+	.browser-extensions h2 {
+		font-size: 1.1rem;
+		margin: 0;
+	}
+
+	.browser-extension-grid {
+		display: grid;
+		gap: 1rem;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		margin-top: 1rem;
+	}
+
+	.browser-extension-card {
+		background: var(--color-surface);
+		border: 1px solid var(--color-divider);
+		border-radius: 6px;
+		padding: 0.9rem;
+	}
+
+	.browser-extension-card h3 {
+		font-size: 1rem;
+		margin: 0;
+	}
+
+	.browser-extension-links {
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+		margin-top: 0.6rem;
 	}
 </style>
