@@ -1,6 +1,5 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
-	import { browser } from '$app/environment';
 	import { resolve } from '$app/paths';
 	import { listProjectCommitsPage, ingestMoreCommits, getCommitIngestionStatus } from '$lib/api';
 	import { withOptionalQueue } from '$lib/loadQueue';
@@ -26,7 +25,6 @@
 		return segs.map((s) => ({ name: s.agent, percent: s.linePercent }));
 	}
 
-	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type BranchChangeHandler = (branch: string) => void | Promise<void>;
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
 
@@ -35,6 +33,8 @@
 		page?: number;
 		pageSize?: number;
 		branch?: string;
+		user?: string;
+		agent?: string;
 		limit?: number;
 		compact?: boolean;
 		showHeader?: boolean;
@@ -43,16 +43,15 @@
 		showBranchPicker?: boolean;
 		showUserPicker?: boolean;
 		showAgentPicker?: boolean;
-		showPagination?: boolean;
 		showLoadMore?: boolean;
 		showBranch?: boolean;
 		showDiffCount?: boolean;
 		showUser?: boolean;
 		showCoverageBar?: boolean;
 		showColumnNames?: boolean;
-		syncPaginationWithUrl?: boolean;
-		onPageChange?: PageChangeHandler;
 		onBranchChange?: BranchChangeHandler;
+		onUserChange?: FilterChangeHandler;
+		onAgentChange?: FilterChangeHandler;
 		onOrderChange?: FilterChangeHandler;
 		order?: string;
 		autoload?: boolean;
@@ -64,6 +63,7 @@
 		onCommitsDataLoaded?: (data: {
 			dailySummary: import('$lib/types').DailyCommitSummary[];
 			branch: string;
+			pagination: import('$lib/types').ProjectCommitPagination;
 		}) => void;
 		searchTerm?: string;
 		defaultToCurrentUser?: boolean;
@@ -78,6 +78,8 @@
 		page = undefined,
 		pageSize = 10,
 		branch = undefined,
+		user = undefined,
+		agent = undefined,
 		limit = 0,
 		compact = false,
 		showHeader = false,
@@ -86,16 +88,15 @@
 		showBranchPicker = false,
 		showUserPicker = false,
 		showAgentPicker = false,
-		showPagination = false,
 		showLoadMore = false,
 		showBranch = false,
 		showDiffCount = true,
 		showUser = false,
 		showCoverageBar = true,
 		showColumnNames = false,
-		syncPaginationWithUrl = false,
-		onPageChange,
 		onBranchChange,
+		onUserChange,
+		onAgentChange,
 		onOrderChange,
 		order = undefined,
 		autoload = true,
@@ -132,57 +133,23 @@
 	let requestToken = 0;
 	let lastLoadKey = '';
 
-	function parsePositivePage(value: string | null | undefined): number {
-		if (!value) return 1;
-		const parsed = Number.parseInt(value, 10);
-		return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
-	}
-
 	$effect(() => {
 		if (initialized) return;
 		initialized = true;
-		if (syncPaginationWithUrl && browser) {
-			const params = new URLSearchParams(window.location.search);
-			internalPage = page ?? parsePositivePage(params.get('page'));
-			const urlUser = params.get('user');
-			if (urlUser !== null) {
-				internalUser = urlUser;
-				userDefaultApplied = true;
-			} else if (defaultToCurrentUser) {
-				// Pre-set the default user filter before the first API call
-				// so we don't need a round-trip to discover currentEmail.
-				internalUser = USER_AND_AGENTS;
-				userDefaultApplied = true;
-				const url = new URL(window.location.href);
-				url.searchParams.set('user', USER_AND_AGENTS);
-				window.history.replaceState(window.history.state, '', url);
-			}
-			const urlAgent = params.get('agent');
-			if (urlAgent !== null) {
-				internalAgent = urlAgent;
-			}
-			const urlOrder = params.get('order');
-			if (urlOrder === 'asc') {
-				internalOrder = 'asc';
-			}
-			const urlStart = params.get('start');
-			const urlEnd = params.get('end');
-			if (urlStart) {
-				const t = new Date(urlStart).getTime();
-				if (Number.isFinite(t)) internalStart = t;
-			}
-			if (urlEnd) {
-				const t = new Date(urlEnd).getTime();
-				if (Number.isFinite(t)) internalEnd = t;
-			}
-		} else {
-			internalPage = page ?? 1;
-			if (defaultToCurrentUser && !userDefaultApplied) {
-				internalUser = USER_AND_AGENTS;
-				userDefaultApplied = true;
-			}
+		internalPage = page ?? 1;
+		if (user !== undefined) {
+			internalUser = user;
+			userDefaultApplied = true;
+		} else if (defaultToCurrentUser && !userDefaultApplied) {
+			internalUser = USER_AND_AGENTS;
+			userDefaultApplied = true;
+		}
+		if (agent !== undefined) {
+			internalAgent = agent;
 		}
 		internalBranch = branch ?? '';
+		if (start !== undefined) internalStart = start;
+		if (end !== undefined) internalEnd = end;
 		if (order !== undefined) internalOrder = order as CommitSortOrder;
 		loading = autoload;
 	});
@@ -196,7 +163,26 @@
 	});
 
 	$effect(() => {
+		if (user !== undefined) {
+			internalUser = user;
+			userDefaultApplied = true;
+		}
+	});
+
+	$effect(() => {
+		if (agent !== undefined) internalAgent = agent;
+	});
+
+	$effect(() => {
 		if (order !== undefined) internalOrder = order as CommitSortOrder;
+	});
+
+	$effect(() => {
+		if (start !== undefined) internalStart = start;
+	});
+
+	$effect(() => {
+		if (end !== undefined) internalEnd = end;
 	});
 
 	// Reset to page 1 when date filter changes.
@@ -211,8 +197,8 @@
 
 	const currentPage = $derived(page ?? internalPage);
 	const selectedBranch = $derived(branch ?? internalBranch);
-	const selectedUser = $derived(internalUser);
-	const selectedAgent = $derived(internalAgent);
+	const selectedUser = $derived(user ?? internalUser);
+	const selectedAgent = $derived(agent ?? internalAgent);
 	const selectedOrder = $derived(order ?? internalOrder);
 	const effectiveStart = $derived(start ?? internalStart);
 	const effectiveEnd = $derived(end ?? internalEnd);
@@ -302,7 +288,11 @@
 				onCommitsLoaded(loaded.commits.map((c) => c.commitHash));
 			}
 			if (onCommitsDataLoaded) {
-				onCommitsDataLoaded({ dailySummary: loaded.dailySummary ?? [], branch: loaded.branch });
+				onCommitsDataLoaded({
+					dailySummary: loaded.dailySummary ?? [],
+					branch: loaded.branch,
+					pagination: loaded.pagination
+				});
 			}
 		} catch (e) {
 			if (myToken !== requestToken) return;
@@ -330,99 +320,41 @@
 		void loadCommitsData();
 	});
 
-	async function goToPage(nextPage: number) {
-		if (!data?.pagination) return;
-		if (nextPage < 1 || nextPage > data.pagination.totalPages) return;
-		if (page === undefined) {
-			internalPage = nextPage;
-		}
-		if (syncPaginationWithUrl && browser && !onPageChange) {
-			const url = new URL(window.location.href);
-			if (nextPage <= 1) {
-				url.searchParams.delete('page');
-			} else {
-				url.searchParams.set('page', String(nextPage));
-			}
-			window.history.replaceState(window.history.state, '', url);
-		}
-		if (onPageChange) {
-			await onPageChange(nextPage);
-		}
-		if (!autoload) {
-			void loadCommitsData();
-		}
-	}
-
 	async function handleBranchChange(event: Event) {
 		const value = (event.currentTarget as HTMLSelectElement).value;
 		if (branch === undefined) {
 			internalBranch = value;
 		}
-		// Reset author filter to current user when branch changes.
-		internalUser = data?.currentEmail ?? '';
-		if (syncPaginationWithUrl && browser) {
-			const url = new URL(window.location.href);
-			if (internalUser) {
-				url.searchParams.set('user', internalUser);
-			} else {
-				url.searchParams.delete('user');
-			}
-			window.history.replaceState(window.history.state, '', url);
-		}
 		if (onBranchChange) {
 			await onBranchChange(value);
 			return;
 		}
-		await goToPage(1);
+		internalPage = 1;
 	}
 
 	function handleUserChange(event: Event) {
 		const value = (event.currentTarget as HTMLSelectElement).value;
 		userDefaultApplied = true;
-		internalUser = value;
-		if (syncPaginationWithUrl && browser) {
-			const url = new URL(window.location.href);
-			if (value) {
-				url.searchParams.set('user', value);
-			} else {
-				url.searchParams.delete('user');
-			}
-			url.searchParams.delete('page');
-			window.history.replaceState(window.history.state, '', url);
-		}
+		if (user === undefined) internalUser = value;
 		internalPage = 1;
+		if (onUserChange) {
+			onUserChange(value);
+		}
 	}
 
 	function handleAgentChange(event: Event) {
 		const value = (event.currentTarget as HTMLSelectElement).value;
-		internalAgent = value;
-		if (syncPaginationWithUrl && browser) {
-			const url = new URL(window.location.href);
-			if (value) {
-				url.searchParams.set('agent', value);
-			} else {
-				url.searchParams.delete('agent');
-			}
-			url.searchParams.delete('page');
-			window.history.replaceState(window.history.state, '', url);
-		}
+		if (agent === undefined) internalAgent = value;
 		internalPage = 1;
+		if (onAgentChange) {
+			onAgentChange(value);
+		}
 	}
 
 	function handleOrderChange(event: Event) {
 		const value = (event.currentTarget as HTMLSelectElement).value as CommitSortOrder;
 		internalOrder = value;
 		settingsStore.commitSortOrder = value;
-		if (syncPaginationWithUrl && browser) {
-			const url = new URL(window.location.href);
-			if (value === 'asc') {
-				url.searchParams.set('order', 'asc');
-			} else {
-				url.searchParams.delete('order');
-			}
-			url.searchParams.delete('page');
-			window.history.replaceState(window.history.state, '', url);
-		}
 		internalPage = 1;
 		if (onOrderChange) {
 			onOrderChange(value);
@@ -433,26 +365,12 @@
 		if (range) {
 			internalStart = range.from;
 			internalEnd = range.to;
-			if (syncPaginationWithUrl && browser) {
-				const url = new URL(window.location.href);
-				url.searchParams.set('start', new Date(range.from).toISOString());
-				url.searchParams.set('end', new Date(range.to).toISOString());
-				url.searchParams.delete('page');
-				window.history.replaceState(window.history.state, '', url);
-			}
 			if (onDateChange) {
 				onDateChange(new Date(range.from).toISOString(), new Date(range.to).toISOString());
 			}
 		} else {
 			internalStart = undefined;
 			internalEnd = undefined;
-			if (syncPaginationWithUrl && browser) {
-				const url = new URL(window.location.href);
-				url.searchParams.delete('start');
-				url.searchParams.delete('end');
-				url.searchParams.delete('page');
-				window.history.replaceState(window.history.state, '', url);
-			}
 			if (onDateChange) {
 				onDateChange(null, null);
 			}
@@ -725,26 +643,6 @@
 		</tbody>
 	</table>
 
-	{#if showPagination && data.pagination.totalPages > 1}
-		<div class="pager">
-			<button
-				class="bordered small"
-				disabled={loading || currentPage <= 1}
-				onclick={() => goToPage(currentPage - 1)}
-			>
-				Previous
-			</button>
-			<span>Page {data.pagination.page} of {data.pagination.totalPages}</span>
-			<button
-				class="bordered small"
-				disabled={loading || currentPage >= data.pagination.totalPages}
-				onclick={() => goToPage(currentPage + 1)}
-			>
-				Next
-			</button>
-		</div>
-	{/if}
-
 	{#if showLoadMore && ingestionStatus && !ingestionStatus.reachedRoot}
 		<div class="load-more">
 			<span class="load-more-info">
@@ -833,14 +731,6 @@
 
 	.link-button:hover {
 		text-decoration: underline;
-	}
-
-	.pager {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		margin-top: 1rem;
-		padding: 0 1rem;
 	}
 
 	.load-more {

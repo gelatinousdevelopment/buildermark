@@ -20,7 +20,6 @@
 	import Icon from '$lib/Icon.svelte';
 	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
 
-	type PageChangeHandler = (page: number) => void | Promise<void>;
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
 	type HiddenChangeHandler = (value: boolean) => void | Promise<void>;
 
@@ -36,10 +35,8 @@
 		showAgentColumn?: boolean;
 		showFilesColumn?: boolean;
 		showRatingsColumn?: boolean;
-		showPagination?: boolean;
 		showColumnNames?: boolean;
 		showHidden?: boolean;
-		onPageChange?: PageChangeHandler;
 		onAgentChange?: FilterChangeHandler;
 		onRatingChange?: FilterChangeHandler;
 		onHiddenChange?: HiddenChangeHandler;
@@ -75,10 +72,8 @@
 		showAgentColumn = true,
 		showFilesColumn = false,
 		showRatingsColumn = true,
-		showPagination = false,
 		showColumnNames = false,
 		showHidden = undefined,
-		onPageChange,
 		onAgentChange,
 		onRatingChange,
 		onHiddenChange,
@@ -255,20 +250,6 @@
 			}
 		} catch {
 			// Silently fail — detailed data is supplementary
-		}
-	}
-
-	async function goToPage(nextPage: number) {
-		if (!project?.conversationPagination) return;
-		if (nextPage < 1 || nextPage > project.conversationPagination.totalPages) return;
-		if (page === undefined) {
-			internalPage = nextPage;
-		}
-		if (onPageChange) {
-			await onPageChange(nextPage);
-		}
-		if (!autoload) {
-			void loadProjectData();
 		}
 	}
 
@@ -526,28 +507,6 @@
 		</tbody>
 	</table>
 
-	{#if showPagination && (project.conversationPagination.totalPages ?? 0) > 1}
-		<div class="pager">
-			<button
-				class="bordered small"
-				disabled={currentPage <= 1}
-				onclick={() => goToPage(currentPage - 1)}
-			>
-				Previous
-			</button>
-			<span
-				>Page {project.conversationPagination.page} of {project.conversationPagination
-					.totalPages}</span
-			>
-			<button
-				class="bordered small"
-				disabled={currentPage >= project.conversationPagination.totalPages}
-				onclick={() => goToPage(currentPage + 1)}
-			>
-				Next
-			</button>
-		</div>
-	{/if}
 {/if}
 
 <style>
@@ -842,14 +801,6 @@
 		align-items: center;
 		display: flex;
 		gap: 0.5rem;
-	}
-
-	.pager {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		margin-top: 1rem;
-		padding: 0 1rem;
 	}
 
 	tr.relationship-highlight {

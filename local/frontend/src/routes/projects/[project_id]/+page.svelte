@@ -46,7 +46,11 @@
 		projectLayoutData.setProject(projectId, project);
 	}
 
-	function handleCommitsDataLoaded(data: { dailySummary: DailyCommitSummary[]; branch: string }) {
+	function handleCommitsDataLoaded(data: {
+		dailySummary: DailyCommitSummary[];
+		branch: string;
+		pagination: import('$lib/types').ProjectCommitPagination;
+	}) {
 		projectLayoutData.setCommitsData(projectId, data.dailySummary, data.branch);
 	}
 </script>
