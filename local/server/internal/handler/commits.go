@@ -794,7 +794,7 @@ func (s *Server) writeCommitResponse(
 	staleCoverage, _ := db.HasStaleCommitCoverageByBranch(r.Context(), s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
 	syncState, _ := db.GetCommitSyncState(r.Context(), s.DB, repoProject.ID, branch)
 
-	if shouldQueueCommitRefresh(r.Context(), s.DB, repoProject, identity, branch, total, syncState, staleCoverage) {
+	if shouldQueueCommitRefresh(r.Context(), s.DB, repoProject, identity, branch, total, syncState) {
 		if refreshQueued, _ := s.enqueueCommitRefresh(*repoProject, group, identity, branch); refreshQueued {
 			syncState = &db.CommitSyncState{
 				ProjectID:  repoProject.ID,
@@ -998,12 +998,11 @@ func shouldQueueCommitRefresh(
 	branch string,
 	total int,
 	syncState *db.CommitSyncState,
-	staleCoverage bool,
 ) bool {
 	if syncState != nil && (syncState.State == "queued" || syncState.State == "running") {
 		return false
 	}
-	if total == 0 || staleCoverage {
+	if total == 0 {
 		return true
 	}
 	head, err := latestCommitByIdentity(ctx, repoProject.Path, branch, identity)
