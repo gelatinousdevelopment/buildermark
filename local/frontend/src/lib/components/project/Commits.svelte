@@ -285,7 +285,7 @@
 			}
 			void loadIngestionStatus(branch ?? internalBranch);
 			if (onCommitsLoaded) {
-				onCommitsLoaded(loaded.commits.map((c) => c.commitHash));
+				onCommitsLoaded(loaded.commits.filter((c) => !c.workingCopy).map((c) => c.commitHash));
 			}
 			if (onCommitsDataLoaded) {
 				onCommitsDataLoaded({
@@ -536,11 +536,16 @@
 			{#each visibleCommits as c (c.commitHash)}
 				<tr
 					class:relationship-highlight={enableRelationshipHover &&
+						!c.workingCopy &&
 						relationshipCache.highlightedCommitHashes.has(c.commitHash)}
 					class:relationship-source={enableRelationshipHover &&
+						!c.workingCopy &&
 						relationshipCache.hoveredCommitHash === c.commitHash}
 					onmouseenter={() => {
-						if (enableRelationshipHover) relationshipCache.hoverCommit(projectId, c.commitHash);
+						if (enableRelationshipHover) {
+							if (c.workingCopy) relationshipCache.clearHover();
+							else relationshipCache.hoverCommit(projectId, c.commitHash);
+						}
 					}}
 				>
 					{#if !compact}
