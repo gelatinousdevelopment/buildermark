@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 )
@@ -178,11 +179,12 @@ func writeSuccess(w http.ResponseWriter, status int, data any) {
 
 func requestLogMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
 		// Skip noisy endpoints (WebSocket upgrades, static assets).
 		if r.URL.Path != "/api/v1/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
-			log.Printf("%s %s", r.Method, r.URL.Path)
+			log.Printf("%s %dms %s", r.Method, time.Since(start).Milliseconds(), r.URL.Path)
 		}
-		next.ServeHTTP(w, r)
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-sqlite3"
 )
@@ -58,21 +59,25 @@ func (c *loggingConn) BeginTx(ctx context.Context, opts driver.TxOptions) (drive
 }
 
 func (c *loggingConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	if LogQueries {
-		logQuery(query, namedValuesToValues(args))
-	}
+	start := time.Now()
 	if ec, ok := c.conn.(driver.ExecerContext); ok {
-		return ec.ExecContext(ctx, query, args)
+		res, err := ec.ExecContext(ctx, query, args)
+		if LogQueries {
+			logQuery(time.Since(start), query, namedValuesToValues(args))
+		}
+		return res, err
 	}
 	return nil, driver.ErrSkip
 }
 
 func (c *loggingConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	if LogQueries {
-		logQuery(query, namedValuesToValues(args))
-	}
+	start := time.Now()
 	if qc, ok := c.conn.(driver.QueryerContext); ok {
-		return qc.QueryContext(ctx, query, args)
+		rows, err := qc.QueryContext(ctx, query, args)
+		if LogQueries {
+			logQuery(time.Since(start), query, namedValuesToValues(args))
+		}
+		return rows, err
 	}
 	return nil, driver.ErrSkip
 }
@@ -91,17 +96,21 @@ func (s *loggingStmt) NumInput() int {
 }
 
 func (s *loggingStmt) Exec(args []driver.Value) (driver.Result, error) {
+	start := time.Now()
+	res, err := s.stmt.Exec(args) //nolint:staticcheck
 	if LogQueries {
-		logQuery(s.query, args)
+		logQuery(time.Since(start), s.query, args)
 	}
-	return s.stmt.Exec(args) //nolint:staticcheck
+	return res, err
 }
 
 func (s *loggingStmt) Query(args []driver.Value) (driver.Rows, error) {
+	start := time.Now()
+	rows, err := s.stmt.Query(args) //nolint:staticcheck
 	if LogQueries {
-		logQuery(s.query, args)
+		logQuery(time.Since(start), s.query, args)
 	}
-	return s.stmt.Query(args) //nolint:staticcheck
+	return rows, err
 }
 
 func namedValuesToValues(named []driver.NamedValue) []driver.Value {
@@ -112,8 +121,29 @@ func namedValuesToValues(named []driver.NamedValue) []driver.Value {
 	return vals
 }
 
-func logQuery(query string, args []driver.Value) {
-	log.Printf("[SQL] %s", interpolateQuery(query, args))
+func logQuery(d time.Duration, query string, args []driver.Value) {
+	ms := d.Milliseconds()
+	if ms >= 1 {
+		log.Printf("[SQL] %dms %s", ms, minimizeQuery(interpolateQuery(query, args)))
+	}
+}
+
+// minimizeQuery collapses all whitespace runs into a single space.
+func minimizeQuery(q string) string {
+	var b strings.Builder
+	inSpace := false
+	for _, c := range q {
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			if !inSpace {
+				b.WriteByte(' ')
+				inSpace = true
+			}
+		} else {
+			b.WriteRune(c)
+			inSpace = false
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func interpolateQuery(query string, args []driver.Value) string {
