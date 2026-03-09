@@ -22,8 +22,8 @@ type wsMessage struct {
 
 // jobStatusEvent is broadcast over WebSocket for any background job.
 type jobStatusEvent struct {
-	JobType   string `json:"jobType"`             // "import", "history_scan", "diff_recompute", "commit_ingest"
-	State     string `json:"state"`               // "running", "complete", "error"
+	JobType   string `json:"jobType"` // "import", "history_scan", "diff_recompute", "commit_ingest"
+	State     string `json:"state"`   // "running", "complete", "error"
 	Message   string `json:"message"`
 	ProjectID string `json:"projectId,omitempty"`
 	Branch    string `json:"branch,omitempty"`
@@ -37,18 +37,34 @@ type wsClient struct {
 
 // wsHub manages connected WebSocket clients and broadcasts messages.
 type wsHub struct {
-	mu      sync.RWMutex
-	clients map[*wsClient]struct{}
+	mu               sync.RWMutex
+	clients          map[*wsClient]struct{}
+	runningJobStatus map[string][]byte
 }
 
 func newWSHub() *wsHub {
-	return &wsHub{clients: make(map[*wsClient]struct{})}
+	return &wsHub{
+		clients:          make(map[*wsClient]struct{}),
+		runningJobStatus: make(map[string][]byte),
+	}
 }
 
 func (h *wsHub) register(c *wsClient) {
 	h.mu.Lock()
 	h.clients[c] = struct{}{}
+	running := make([][]byte, 0, len(h.runningJobStatus))
+	for _, msg := range h.runningJobStatus {
+		running = append(running, msg)
+	}
 	h.mu.Unlock()
+
+	for _, msg := range running {
+		select {
+		case c.send <- msg:
+		default:
+			return
+		}
+	}
 }
 
 func (h *wsHub) unregister(c *wsClient) {
@@ -78,7 +94,27 @@ func (h *wsHub) broadcastEvent(eventType string, data any) {
 	if err != nil {
 		return
 	}
+
+	h.trackRunningJobStatus(eventType, data, msg)
 	h.broadcast(msg)
+}
+
+func (h *wsHub) trackRunningJobStatus(eventType string, data any, msg []byte) {
+	if eventType != "job_status" {
+		return
+	}
+	status, ok := data.(jobStatusEvent)
+	if !ok || status.JobType == "" {
+		return
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if status.State == "running" {
+		h.runningJobStatus[status.JobType] = append([]byte(nil), msg...)
+		return
+	}
+	delete(h.runningJobStatus, status.JobType)
 }
 
 func (h *wsHub) clientCount() int {
