@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestCORSHeaders(t *testing.T) {
@@ -137,5 +141,63 @@ func TestWriteSuccessFormat(t *testing.T) {
 	ct := rec.Header().Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+	}
+}
+
+func TestWebSocketReceivesRunningJobsOnReconnect(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	dialURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/api/v1/ws"
+
+	firstConn, _, err := websocket.DefaultDialer.Dial(dialURL, nil)
+	if err != nil {
+		t.Fatalf("dial first websocket: %v", err)
+	}
+
+	s.ws.broadcastEvent("job_status", jobStatusEvent{
+		JobType: "history_scan",
+		State:   "running",
+		Message: "still scanning",
+	})
+
+	if err := firstConn.Close(); err != nil {
+		t.Fatalf("close first websocket: %v", err)
+	}
+
+	secondConn, _, err := websocket.DefaultDialer.Dial(dialURL, nil)
+	if err != nil {
+		t.Fatalf("dial second websocket: %v", err)
+	}
+	t.Cleanup(func() { _ = secondConn.Close() })
+
+	if err := secondConn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+	_, payload, err := secondConn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read websocket message: %v", err)
+	}
+
+	var msg wsMessage
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		t.Fatalf("unmarshal websocket envelope: %v", err)
+	}
+	if msg.Type != "job_status" {
+		t.Fatalf("message type = %q, want %q", msg.Type, "job_status")
+	}
+
+	var status jobStatusEvent
+	if err := json.Unmarshal(msg.Data, &status); err != nil {
+		t.Fatalf("unmarshal websocket data: %v", err)
+	}
+	if status.JobType != "history_scan" {
+		t.Fatalf("job type = %q, want %q", status.JobType, "history_scan")
+	}
+	if status.State != "running" {
+		t.Fatalf("state = %q, want %q", status.State, "running")
 	}
 }
