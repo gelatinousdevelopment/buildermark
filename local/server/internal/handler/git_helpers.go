@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
@@ -22,14 +24,45 @@ func runGit(ctx context.Context, repoPath string, args ...string) (string, error
 	return string(out), nil
 }
 
+// gitIdentityCache caches resolved git identities per repo path to avoid
+// repeated git config calls (each ~8ms). Cache entries expire after 60s.
+var gitIdentityCache struct {
+	mu      sync.Mutex
+	entries map[string]gitIdentityCacheEntry
+}
+
+type gitIdentityCacheEntry struct {
+	identity gitIdentity
+	err      error
+	at       time.Time
+}
+
+const gitIdentityCacheTTL = 60 * time.Second
+
 func resolveGitIdentity(ctx context.Context, path string) (gitIdentity, error) {
+	gitIdentityCache.mu.Lock()
+	if e, ok := gitIdentityCache.entries[path]; ok && time.Since(e.at) < gitIdentityCacheTTL {
+		gitIdentityCache.mu.Unlock()
+		return e.identity, e.err
+	}
+	gitIdentityCache.mu.Unlock()
+
 	name, _ := runGit(ctx, path, "config", "--get", "user.name")
 	email, _ := runGit(ctx, path, "config", "--get", "user.email")
 	id := gitIdentity{Name: strings.TrimSpace(name), Email: strings.TrimSpace(email)}
+	var err error
 	if id.Name == "" && id.Email == "" {
-		return gitIdentity{}, fmt.Errorf("missing git identity for %q", path)
+		err = fmt.Errorf("missing git identity for %q", path)
 	}
-	return id, nil
+
+	gitIdentityCache.mu.Lock()
+	if gitIdentityCache.entries == nil {
+		gitIdentityCache.entries = make(map[string]gitIdentityCacheEntry)
+	}
+	gitIdentityCache.entries[path] = gitIdentityCacheEntry{identity: id, err: err, at: time.Now()}
+	gitIdentityCache.mu.Unlock()
+
+	return id, err
 }
 
 func commitMatchesIdentity(c gitCommit, identity gitIdentity) bool {
@@ -106,18 +139,70 @@ func listCommitsByIdentity(ctx context.Context, path, branch string, identity gi
 }
 
 func latestCommitByIdentity(ctx context.Context, path, branch string, identity gitIdentity) (*gitCommit, error) {
-	commits, err := listCommitsByIdentity(ctx, path, branch, identity)
+	// Use --author flag and --max-count=1 for a fast single-commit lookup
+	// instead of fetching up to 1000 commits and filtering in Go.
+	authorArg := identity.Email
+	if authorArg == "" {
+		authorArg = identity.Name
+	}
+	if authorArg == "" {
+		return nil, nil
+	}
+	out, err := runGit(ctx, path,
+		"log", branch,
+		"--pretty=format:%H%x1f%an%x1f%ae%x1f%ct%x1f%s%x1e",
+		fmt.Sprintf("--author=%s", authorArg),
+		"--max-count=1",
+	)
 	if err != nil {
 		return nil, err
 	}
-	if len(commits) == 0 {
+	rec := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(out), "\x1e"))
+	if rec == "" {
 		return nil, nil
 	}
-	return &commits[len(commits)-1], nil
+	parts := strings.Split(rec, "\x1f")
+	if len(parts) < 5 {
+		return nil, nil
+	}
+	ts, err := strconv.ParseInt(strings.TrimSpace(parts[3]), 10, 64)
+	if err != nil {
+		return nil, nil
+	}
+	c := gitCommit{
+		Hash:          strings.TrimSpace(parts[0]),
+		UserName:      strings.TrimSpace(parts[1]),
+		UserEmail:     strings.TrimSpace(parts[2]),
+		TimestampUnix: ts,
+		Subject:       strings.TrimSpace(parts[4]),
+	}
+	return &c, nil
 }
+
+// branchHashCache caches commit hash lists per repo+branch to avoid repeated
+// git log calls (~12ms each). Entries expire after 5 seconds.
+var branchHashCache struct {
+	mu      sync.Mutex
+	entries map[string]branchHashCacheEntry
+}
+
+type branchHashCacheEntry struct {
+	hashes []string
+	at     time.Time
+}
+
+const branchHashCacheTTL = 5 * time.Second
 
 // listBranchCommitHashes returns all commit hashes on a branch, newest first.
 func listBranchCommitHashes(ctx context.Context, repoPath, branch string) ([]string, error) {
+	cacheKey := repoPath + "\x00" + branch
+	branchHashCache.mu.Lock()
+	if e, ok := branchHashCache.entries[cacheKey]; ok && time.Since(e.at) < branchHashCacheTTL {
+		branchHashCache.mu.Unlock()
+		return e.hashes, nil
+	}
+	branchHashCache.mu.Unlock()
+
 	out, err := runGit(ctx, repoPath, "log", branch, "--format=%H")
 	if err != nil {
 		return nil, err
@@ -130,6 +215,14 @@ func listBranchCommitHashes(ctx context.Context, repoPath, branch string) ([]str
 			hashes = append(hashes, h)
 		}
 	}
+
+	branchHashCache.mu.Lock()
+	if branchHashCache.entries == nil {
+		branchHashCache.entries = make(map[string]branchHashCacheEntry)
+	}
+	branchHashCache.entries[cacheKey] = branchHashCacheEntry{hashes: hashes, at: time.Now()}
+	branchHashCache.mu.Unlock()
+
 	return hashes, nil
 }
 

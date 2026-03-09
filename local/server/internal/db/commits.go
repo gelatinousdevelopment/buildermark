@@ -247,6 +247,171 @@ func CountCommitsByProjectAndUser(ctx context.Context, db *sql.DB, projectID, br
 	return count, nil
 }
 
+// ListCommitsByBranchAndUsers returns paginated commits filtered by branch and
+// optional user emails, with configurable sort order and date range.
+func ListCommitsByBranchAndUsers(ctx context.Context, db *sql.DB, projectID, branchName string, userEmails []string, limit, offset int, orderAsc bool, dateFromSec, dateToSec int64) ([]Commit, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	orderDir := "DESC"
+	if orderAsc {
+		orderDir = "ASC"
+	}
+	var clauses []string
+	args := []any{projectID, branchName}
+	clauses = append(clauses, "project_id = ?", "branch_name = ?")
+	if len(userEmails) == 1 {
+		clauses = append(clauses, "user_email = ?")
+		args = append(args, userEmails[0])
+	} else if len(userEmails) > 1 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(userEmails)), ",")
+		clauses = append(clauses, fmt.Sprintf("user_email IN (%s)", placeholders))
+		for _, e := range userEmails {
+			args = append(args, e)
+		}
+	}
+	if dateFromSec > 0 {
+		clauses = append(clauses, "authored_at >= ?")
+		args = append(args, dateFromSec)
+	}
+	if dateToSec > 0 {
+		clauses = append(clauses, "authored_at < ?")
+		args = append(args, dateToSec)
+	}
+	args = append(args, limit, offset)
+	query := fmt.Sprintf(
+		`SELECT id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at,
+		        lines_total, lines_from_agent, lines_added, lines_removed, coverage_version, override_line_percent, needs_parent
+		 FROM commits
+		 WHERE %s
+		 ORDER BY authored_at %s
+		 LIMIT ? OFFSET ?`,
+		strings.Join(clauses, " AND "), orderDir,
+	)
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query commits by branch and users: %w", err)
+	}
+	defer rows.Close()
+	return scanCommits(rows)
+}
+
+// CountCommitsByBranchAndUsers counts commits matching branch and optional user/date filters.
+func CountCommitsByBranchAndUsers(ctx context.Context, db *sql.DB, projectID, branchName string, userEmails []string, dateFromSec, dateToSec int64) (int, error) {
+	var clauses []string
+	args := []any{projectID, branchName}
+	clauses = append(clauses, "project_id = ?", "branch_name = ?")
+	if len(userEmails) == 1 {
+		clauses = append(clauses, "user_email = ?")
+		args = append(args, userEmails[0])
+	} else if len(userEmails) > 1 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(userEmails)), ",")
+		clauses = append(clauses, fmt.Sprintf("user_email IN (%s)", placeholders))
+		for _, e := range userEmails {
+			args = append(args, e)
+		}
+	}
+	if dateFromSec > 0 {
+		clauses = append(clauses, "authored_at >= ?")
+		args = append(args, dateFromSec)
+	}
+	if dateToSec > 0 {
+		clauses = append(clauses, "authored_at < ?")
+		args = append(args, dateToSec)
+	}
+	var count int
+	err := db.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM commits WHERE %s", strings.Join(clauses, " AND ")),
+		args...,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count commits by branch and users: %w", err)
+	}
+	return count, nil
+}
+
+// HasStaleCommitCoverageByBranch reports whether any commit on a branch has
+// stale coverage (version < minVersion or missing diff).
+func HasStaleCommitCoverageByBranch(ctx context.Context, db *sql.DB, projectID, branchName string, minVersion int) (bool, error) {
+	var count int
+	err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM commits
+		 WHERE project_id = ? AND branch_name = ?
+		   AND (coverage_version < ? OR (lines_total > 0 AND trim(diff_content) = ''))`,
+		projectID, branchName, minVersion,
+	).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("count stale commit coverage: %w", err)
+	}
+	return count > 0, nil
+}
+
+// ListDistinctAgentsByBranch returns distinct agent names for commits on a branch.
+func ListDistinctAgentsByBranch(ctx context.Context, db *sql.DB, projectID, branchName string, userEmails []string, dateFromSec, dateToSec int64) ([]string, error) {
+	var clauses []string
+	args := []any{projectID, branchName}
+	clauses = append(clauses, "c.project_id = ?", "c.branch_name = ?")
+	if len(userEmails) == 1 {
+		clauses = append(clauses, "c.user_email = ?")
+		args = append(args, userEmails[0])
+	} else if len(userEmails) > 1 {
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(userEmails)), ",")
+		clauses = append(clauses, fmt.Sprintf("c.user_email IN (%s)", placeholders))
+		for _, e := range userEmails {
+			args = append(args, e)
+		}
+	}
+	if dateFromSec > 0 {
+		clauses = append(clauses, "c.authored_at >= ?")
+		args = append(args, dateFromSec)
+	}
+	if dateToSec > 0 {
+		clauses = append(clauses, "c.authored_at < ?")
+		args = append(args, dateToSec)
+	}
+	query := fmt.Sprintf(
+		`SELECT DISTINCT cac.agent FROM commit_agent_coverage cac
+		 JOIN commits c ON c.id = cac.commit_id
+		 WHERE %s
+		 ORDER BY cac.agent`,
+		strings.Join(clauses, " AND "),
+	)
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list distinct agents by branch: %w", err)
+	}
+	defer rows.Close()
+	var agents []string
+	for rows.Next() {
+		var a string
+		if err := rows.Scan(&a); err != nil {
+			return nil, fmt.Errorf("scan agent: %w", err)
+		}
+		agents = append(agents, a)
+	}
+	return agents, rows.Err()
+}
+
+// scanCommits scans commit rows into a slice.
+func scanCommits(rows *sql.Rows) ([]Commit, error) {
+	commits := []Commit{}
+	for rows.Next() {
+		var c Commit
+		var olp sql.NullFloat64
+		var np int
+		if err := rows.Scan(&c.ID, &c.ProjectID, &c.BranchName, &c.CommitHash, &c.Subject, &c.UserName, &c.UserEmail, &c.AuthoredAt,
+			&c.LinesTotal, &c.LinesFromAgent, &c.LinesAdded, &c.LinesRemoved, &c.CoverageVersion, &olp, &np); err != nil {
+			return nil, fmt.Errorf("scan commit: %w", err)
+		}
+		if olp.Valid {
+			c.OverrideLinePercent = &olp.Float64
+		}
+		c.NeedsParent = np != 0
+		commits = append(commits, c)
+	}
+	return commits, rows.Err()
+}
+
 // GetCommitByHash returns a single commit by project ID and commit hash.
 func GetCommitByHash(ctx context.Context, db *sql.DB, projectID, branchName, commitHash string) (*Commit, error) {
 	var c Commit

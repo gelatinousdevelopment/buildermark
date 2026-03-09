@@ -148,6 +148,14 @@
 			if (urlUser !== null) {
 				internalUser = urlUser;
 				userDefaultApplied = true;
+			} else if (defaultToCurrentUser) {
+				// Pre-set the default user filter before the first API call
+				// so we don't need a round-trip to discover currentEmail.
+				internalUser = USER_AND_AGENTS;
+				userDefaultApplied = true;
+				const url = new URL(window.location.href);
+				url.searchParams.set('user', USER_AND_AGENTS);
+				window.history.replaceState(window.history.state, '', url);
 			}
 			const urlAgent = params.get('agent');
 			if (urlAgent !== null) {
@@ -169,6 +177,10 @@
 			}
 		} else {
 			internalPage = page ?? 1;
+			if (defaultToCurrentUser && !userDefaultApplied) {
+				internalUser = USER_AND_AGENTS;
+				userDefaultApplied = true;
+			}
 		}
 		internalBranch = branch ?? '';
 		if (order !== undefined) internalOrder = order as CommitSortOrder;
@@ -246,14 +258,8 @@
 		}
 	}
 
-	function resolveUserFilter(
-		raw: string,
-		currentEmail: string | undefined,
-		extraEmails: string[]
-	): string {
-		if (raw !== USER_AND_AGENTS) return raw;
-		if (!currentEmail) return '';
-		return [currentEmail, ...extraEmails].join(',');
+	function resolveUserFilter(raw: string): string {
+		return raw;
 	}
 
 	async function loadCommitsData() {
@@ -266,11 +272,7 @@
 		error = null;
 		try {
 			const pageNum = Math.max(1, currentPage);
-			const resolvedUser = resolveUserFilter(
-				selectedUser,
-				data?.currentEmail,
-				data?.extraLocalUserEmails ?? []
-			);
+			const resolvedUser = resolveUserFilter(selectedUser);
 			const loaded = await withOptionalQueue(
 				() =>
 					listProjectCommitsPage(
@@ -295,23 +297,6 @@
 			if (branch === undefined && !internalBranch && loaded.branch) {
 				internalBranch = loaded.branch;
 			}
-			// Default to "Local User" filter on first load.
-			if (defaultToCurrentUser && !userDefaultApplied && loaded.currentEmail) {
-				userDefaultApplied = true;
-				if (!internalUser) {
-					internalUser = USER_AND_AGENTS;
-					if (syncPaginationWithUrl && browser) {
-						const url = new URL(window.location.href);
-						url.searchParams.set('user', USER_AND_AGENTS);
-						window.history.replaceState(window.history.state, '', url);
-					}
-					return; // effect will re-fire with user filter
-				}
-			}
-			// Re-fire if we had a sentinel that needed currentEmail to resolve.
-			if (selectedUser === USER_AND_AGENTS && resolvedUser === '' && loaded.currentEmail) {
-				return; // data is now set with currentEmail; effect will re-fire
-			}
 			void loadIngestionStatus(branch ?? internalBranch);
 			if (onCommitsLoaded) {
 				onCommitsLoaded(loaded.commits.map((c) => c.commitHash));
@@ -329,11 +314,7 @@
 
 	$effect(() => {
 		if (!autoload) return;
-		const resolved = resolveUserFilter(
-			selectedUser,
-			data?.currentEmail,
-			data?.extraLocalUserEmails ?? []
-		);
+		const resolved = resolveUserFilter(selectedUser);
 		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${selectedOrder}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
