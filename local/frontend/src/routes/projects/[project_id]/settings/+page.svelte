@@ -102,11 +102,11 @@
 	let deleteError: string | null = $state(null);
 
 	let projectDisplayName = $derived(label || path || project.path);
-	let recomputeStatusMessage = $derived(
-		websocketStore.getJob('diff_recompute')?.state === 'running'
-			? (websocketStore.getJob('diff_recompute')?.message ?? null)
-			: null
-	);
+	let recomputeStatus = $derived.by(() => {
+		const job = websocketStore.getJob('diff_recompute');
+		if (!job) return null;
+		return job;
+	});
 
 	async function save() {
 		saving = true;
@@ -269,9 +269,7 @@
 					<button class="bordered prominent" disabled={saving} onclick={save}
 						>{saving ? 'Saving...' : 'Save Settings'}</button
 					>
-					{#if recomputeStatusMessage}
-						<span class="notice">{recomputeStatusMessage}</span>
-					{:else if notice}
+					{#if notice}
 						<span class="notice">{notice}</span>
 					{/if}
 				</div>
@@ -302,6 +300,10 @@
 					{#if refreshStatus}
 						<p class="refresh-status" class:refresh-error={refreshStatus.state === 'error'}>
 							{refreshStatus.message}
+						</p>
+					{:else if recomputeStatus}
+						<p class="refresh-status" class:refresh-error={recomputeStatus.state === 'error'}>
+							{recomputeStatus.message}
 						</p>
 					{/if}
 				</div>

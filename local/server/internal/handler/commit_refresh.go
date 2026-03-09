@@ -171,6 +171,18 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 	}
 
 	if err == nil {
+		// Reset coverage_version for commits in the refresh window so they
+		// get recomputed even if they already had the current version.
+		var sinceSec int64
+		if days > 0 {
+			sinceSec = time.Now().AddDate(0, 0, -days).Unix()
+		}
+		if reset, resetErr := db.ResetCoverageVersionByDateRange(ctx, s.DB, repoProject.ID, branch, sinceSec); resetErr != nil {
+			log.Printf("warning: failed to reset coverage version: %v", resetErr)
+		} else if reset > 0 {
+			log.Printf("reset coverage_version for %d commits in refresh window", reset)
+		}
+
 		s.broadcastRefreshStatus("running", "Checking commit coverage...", repoProject.ID, branch)
 		branchHashes, hashErr := listBranchCommitHashes(ctx, repoProject.Path, branch)
 		if hashErr != nil {

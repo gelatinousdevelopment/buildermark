@@ -849,6 +849,31 @@ func DeleteCommitAgentCoverageByCommitID(ctx context.Context, database *sql.DB, 
 	return nil
 }
 
+// ResetCoverageVersionByDateRange sets coverage_version = 0 for all commits
+// in a project+branch within the given authored_at range (unix seconds).
+// If sinceSec is 0, all commits on the branch are reset.
+func ResetCoverageVersionByDateRange(ctx context.Context, database *sql.DB, projectID, branchName string, sinceSec int64) (int64, error) {
+	var result sql.Result
+	var err error
+	if sinceSec > 0 {
+		result, err = database.ExecContext(ctx,
+			`UPDATE commits SET coverage_version = 0
+			 WHERE project_id = ? AND branch_name = ? AND authored_at >= ?`,
+			projectID, branchName, sinceSec,
+		)
+	} else {
+		result, err = database.ExecContext(ctx,
+			`UPDATE commits SET coverage_version = 0
+			 WHERE project_id = ? AND branch_name = ?`,
+			projectID, branchName,
+		)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("reset coverage version: %w", err)
+	}
+	return result.RowsAffected()
+}
+
 // HasStaleCommitCoverage reports whether any commit in a project+branch has a
 // coverage_version lower than minVersion.
 func HasStaleCommitCoverage(ctx context.Context, database *sql.DB, projectID, branchName string, minVersion int) (bool, error) {
