@@ -25,9 +25,6 @@ func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCover
 		LinesTotal:          c.LinesTotal,
 		LinesFromAgent:      c.LinesFromAgent,
 		LinePercent:         lp,
-		CharsTotal:          c.CharsTotal,
-		CharsFromAgent:      c.CharsFromAgent,
-		CharacterPercent:    percentage(c.CharsFromAgent, c.CharsTotal),
 		LinesAdded:          c.LinesAdded,
 		LinesRemoved:        c.LinesRemoved,
 		OverrideLinePercent: c.OverrideLinePercent,
@@ -37,21 +34,15 @@ func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCover
 
 func summarizeCommitCoverage(commits []projectCommitCoverage) projectCommitSummary {
 	s := projectCommitSummary{CommitCount: len(commits)}
-	agentTotals := make(map[string][2]int) // agent -> [lines, chars]
+	agentTotals := make(map[string]int)
 	for _, c := range commits {
 		s.LinesTotal += c.LinesTotal
 		s.LinesFromAgent += c.LinesFromAgent
-		s.CharsTotal += c.CharsTotal
-		s.CharsFromAgent += c.CharsFromAgent
 		for _, seg := range c.AgentSegments {
-			t := agentTotals[seg.Agent]
-			t[0] += seg.LinesFromAgent
-			t[1] += seg.CharsFromAgent
-			agentTotals[seg.Agent] = t
+			agentTotals[seg.Agent] += seg.LinesFromAgent
 		}
 	}
 	s.LinePercent = percentage(s.LinesFromAgent, s.LinesTotal)
-	s.CharacterPercent = percentage(s.CharsFromAgent, s.CharsTotal)
 	if len(agentTotals) > 0 {
 		agents := make([]string, 0, len(agentTotals))
 		for a := range agentTotals {
@@ -59,12 +50,10 @@ func summarizeCommitCoverage(commits []projectCommitCoverage) projectCommitSumma
 		}
 		sort.Strings(agents)
 		for _, a := range agents {
-			t := agentTotals[a]
 			s.AgentSegments = append(s.AgentSegments, agentCoverageSegment{
 				Agent:          a,
-				LinesFromAgent: t[0],
-				CharsFromAgent: t[1],
-				LinePercent:    percentage(t[0], s.LinesTotal),
+				LinesFromAgent: agentTotals[a],
+				LinePercent:    percentage(agentTotals[a], s.LinesTotal),
 			})
 		}
 	}
@@ -171,7 +160,6 @@ func agentSegmentsFromDBCoverage(rows []db.CommitAgentCoverage, linesTotal int) 
 		out = append(out, agentCoverageSegment{
 			Agent:          r.Agent,
 			LinesFromAgent: r.LinesFromAgent,
-			CharsFromAgent: r.CharsFromAgent,
 			LinePercent:    percentage(r.LinesFromAgent, linesTotal),
 		})
 	}

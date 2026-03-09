@@ -154,9 +154,6 @@ func TestListProjectCommits(t *testing.T) {
 	if got := int(agentCommit["linesFromAgent"].(float64)); got != 1 {
 		t.Fatalf("agent change linesFromAgent = %d, want 1", got)
 	}
-	if got := int(agentCommit["charsFromAgent"].(float64)); got != 10 {
-		t.Fatalf("agent change charsFromAgent = %d, want 10", got)
-	}
 
 	manualCommit, ok := bySubject["manual change"]
 	if !ok {
@@ -635,7 +632,7 @@ func TestProjectCommitsPageAutoHealsStaleCoverage(t *testing.T) {
 	// Force stale persisted coverage for the commit and remove per-agent segments.
 	if _, err := s.DB.ExecContext(ctx,
 		`UPDATE commits
-		 SET lines_from_agent = 0, chars_from_agent = 0, coverage_version = 0
+		 SET lines_from_agent = 0, coverage_version = 0
 		 WHERE project_id = ? AND branch_name = ? AND commit_hash = ?`,
 		projectID, "main", agentCommitHash,
 	); err != nil {
@@ -976,7 +973,7 @@ func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *t
 		"c10": 1,
 	}
 
-	files, _, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 2 {
 		t.Fatalf("files len = %d, want 2", len(files))
 	}
@@ -1086,8 +1083,8 @@ func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
 		"",
 	}, "\n")
 
-	_, _, _, fileAgent, normCounts := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files, _, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, normCounts)
+	_, _, fileAgent, normCounts := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	files, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, normCounts)
 
 	byPath := make(map[string]commitFileCoverage, len(files))
 	for _, f := range files {
@@ -1124,12 +1121,9 @@ func TestAttributeCommitToMessages_MatchesFormattingOnlyLineWraps(t *testing.T) 
 		},
 	}
 
-	contrib, lines, chars, fileAgent, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	contrib, lines, fileAgent, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
 	if lines != 3 {
 		t.Fatalf("matched lines = %d, want 3", lines)
-	}
-	if chars != 48 {
-		t.Fatalf("matched chars = %d, want 48", chars)
 	}
 	if len(contrib) != 1 {
 		t.Fatalf("contrib len = %d, want 1", len(contrib))
@@ -1179,8 +1173,8 @@ func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 		"",
 	}, "\n")
 
-	_, _, _, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files, _, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	_, _, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	files, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1227,7 +1221,7 @@ func TestAttributeCommitToMessages_DeletionMatchesDeletingAgent(t *testing.T) {
 		},
 	}
 
-	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	contrib, lines, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
 	if lines != 1 {
 		t.Fatalf("matched lines = %d, want 1", lines)
 	}
@@ -1266,7 +1260,7 @@ func TestAttributeCommitToMessages_PrefersNewerMessage(t *testing.T) {
 		},
 	}
 
-	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
+	contrib, lines, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
 	if lines != 1 {
 		t.Fatalf("matched lines = %d, want 1", lines)
 	}
@@ -1310,7 +1304,7 @@ func TestAttributeCommitToMessages_FormattingPassPrefersNewerMessage(t *testing.
 		},
 	}
 
-	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
+	contrib, lines, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
 	if lines != 1 {
 		t.Fatalf("matched lines = %d, want 1", lines)
 	}
@@ -1564,13 +1558,12 @@ func TestListProjectCommitsForProject_DailyWindowDaysQuery(t *testing.T) {
 	}
 }
 
-func testToken(path string, sign byte, norm string, chars int) diffToken {
+func testToken(path string, sign byte, norm string, _ int) diffToken {
 	return diffToken{
 		Path:         path,
 		Sign:         sign,
 		Norm:         norm,
 		Key:          path + "\x1f" + string(sign) + "\x1f" + norm,
-		Chars:        chars,
 		Attributable: true,
 	}
 }
@@ -1715,7 +1708,7 @@ func TestSummarizeDiffFiles_SmallDiffFullMatchAttributed(t *testing.T) {
 		"epsilon": 1,
 	}
 
-	files, fbLines, fbChars := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, fbLines := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1731,9 +1724,6 @@ func TestSummarizeDiffFiles_SmallDiffFullMatchAttributed(t *testing.T) {
 	}
 	if fbLines != 5 {
 		t.Fatalf("fallback lines = %d, want 5", fbLines)
-	}
-	if fbChars != 26 {
-		t.Fatalf("fallback chars = %d, want 26", fbChars)
 	}
 }
 
@@ -1756,7 +1746,7 @@ func TestSummarizeDiffFiles_SingleLineDiffNotAttributed(t *testing.T) {
 	fileAgent := map[string]commitFileCoverage{}
 	remainingNorms := map[string]int{"onlyone": 1}
 
-	files, fbLines, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, fbLines := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1795,7 +1785,7 @@ func TestSummarizeDiffFiles_FallbackTotalsReturnedForLargeDiff(t *testing.T) {
 	}
 
 	fileAgent := map[string]commitFileCoverage{}
-	files, fbLines, fbChars := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, fbLines := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
 
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
@@ -1806,12 +1796,5 @@ func TestSummarizeDiffFiles_FallbackTotalsReturnedForLargeDiff(t *testing.T) {
 	}
 	if fbLines != 10 {
 		t.Fatalf("fallback lines = %d, want 10", fbLines)
-	}
-	expectedChars := 0
-	for _, n := range norms {
-		expectedChars += len(n)
-	}
-	if fbChars != expectedChars {
-		t.Fatalf("fallback chars = %d, want %d", fbChars, expectedChars)
 	}
 }

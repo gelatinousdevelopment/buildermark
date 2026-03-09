@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
-	"unicode/utf8"
 )
 
 // countDiffAddedRemoved counts the total lines added and removed from a unified diff.
@@ -20,24 +19,22 @@ func countDiffAddedRemoved(diffText string) (added, removed int) {
 	return added, removed
 }
 
-func tokenTotals(tokens []diffToken) (int, int) {
+func tokenTotals(tokens []diffToken) int {
 	lines := 0
-	chars := 0
 	for _, tok := range tokens {
 		if !tok.Attributable {
 			continue
 		}
 		lines++
-		chars += tok.Chars
 	}
-	return lines, chars
+	return lines
 }
 
 func attributeCommitToMessages(
 	commitTokens []diffToken,
 	messages []messageDiff,
 	windowStart, windowEnd int64,
-) ([]commitContributionMessage, int, int, map[string]commitFileCoverage, map[string]int) {
+) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int) {
 	// Sort messages newest-first so that when multiple messages contain the
 	// same token, the most recent message wins attribution.
 	sort.SliceStable(messages, func(i, j int) bool {
@@ -48,7 +45,6 @@ func attributeCommitToMessages(
 	})
 
 	matchedLines := 0
-	matchedChars := 0
 	tokenSources := make(map[string][]tokenSource)
 	messageTokensByBucket := make(map[int]map[string][]int)
 	messageTokenUsed := make(map[int][]bool)
@@ -78,12 +74,9 @@ func attributeCommitToMessages(
 
 	contribByIndex := make(map[int]*commitContributionMessage)
 	fileCoverageByPath := make(map[string]commitFileCoverage)
-	type fileAgentStats struct {
-		lines int
-		chars int
-	}
+	type fileAgentStats struct{ lines int }
 	fileAgentByPath := make(map[string]map[string]*fileAgentStats)
-	recordFileAgentMatch := func(filePath string, msgIdx int, chars int) {
+	recordFileAgentMatch := func(filePath string, msgIdx int) {
 		if filePath == "" {
 			filePath = "(unknown)"
 		}
@@ -102,7 +95,6 @@ func attributeCommitToMessages(
 			byAgent[agent] = stats
 		}
 		stats.lines++
-		stats.chars += chars
 	}
 	for tokIdx, tok := range commitTokens {
 		if !tok.Attributable {
@@ -127,10 +119,9 @@ func attributeCommitToMessages(
 		commitMatched[tokIdx] = true
 
 		matchedLines++
-		matchedChars += tok.Chars
 		fileCov.Removed++
 		fileCoverageByPath[path] = fileCov
-		recordFileAgentMatch(path, source.msgIdx, tok.Chars)
+		recordFileAgentMatch(path, source.msgIdx)
 		contrib := contribByIndex[source.msgIdx]
 		if contrib == nil {
 			msg := messages[source.msgIdx]
@@ -146,7 +137,6 @@ func attributeCommitToMessages(
 			contribByIndex[source.msgIdx] = contrib
 		}
 		contrib.LinesMatched++
-		contrib.CharsMatched += tok.Chars
 	}
 
 	// Second pass: recover attribution for formatting-only changes that alter
@@ -203,12 +193,11 @@ func attributeCommitToMessages(
 							for _, idx := range indices[cursor : cursor+commitWindow] {
 								commitMatched[idx] = true
 								matchedLines++
-								matchedChars += commitTokens[idx].Chars
 								fileCov := fileCoverageByPath[path]
 								fileCov.Path = path
 								fileCov.Removed++
 								fileCoverageByPath[path] = fileCov
-								recordFileAgentMatch(path, msgIdx, commitTokens[idx].Chars)
+								recordFileAgentMatch(path, msgIdx)
 							}
 
 							for _, pos := range windowPositions {
@@ -228,9 +217,8 @@ func attributeCommitToMessages(
 								}
 								contribByIndex[msgIdx] = contrib
 							}
-							for _, idx := range indices[cursor : cursor+commitWindow] {
+							for range indices[cursor : cursor+commitWindow] {
 								contrib.LinesMatched++
-								contrib.CharsMatched += commitTokens[idx].Chars
 							}
 
 							cursor += commitWindow
@@ -274,14 +262,13 @@ func attributeCommitToMessages(
 			segments = append(segments, agentCoverageSegment{
 				Agent:          agent,
 				LinesFromAgent: stats.lines,
-				CharsFromAgent: stats.chars,
 			})
 		}
 		fileCov.AgentSegments = segments
 		fileCoverageByPath[filePath] = fileCov
 	}
 
-	return out, matchedLines, matchedChars, fileCoverageByPath, normSources
+	return out, matchedLines, fileCoverageByPath, normSources
 }
 
 func concatCommitNorms(tokens []diffToken, indices []int) string {
@@ -492,7 +479,7 @@ func summarizeDiffFiles(
 	commitTokens []diffToken,
 	fileAgent map[string]commitFileCoverage,
 	remainingNorms map[string]int,
-) ([]commitFileCoverage, int, int) {
+) ([]commitFileCoverage, int) {
 	diffText = strings.ReplaceAll(diffText, "\r\n", "\n")
 	lines := strings.Split(diffText, "\n")
 
@@ -590,7 +577,7 @@ func summarizeDiffFiles(
 		fileNorms[path] = append(fileNorms[path], tok.Norm)
 	}
 
-	var extraLines, extraChars int
+	var extraLines int
 	out := make([]commitFileCoverage, 0, len(filePaths))
 	for _, filePath := range filePaths {
 		c := coverageByPath[filePath]
@@ -625,26 +612,23 @@ func summarizeDiffFiles(
 				}
 				if len(norms) >= minMatch {
 					fallbackMatched := 0
-					fallbackMatchedChars := 0
 					for _, norm := range norms {
 						if remainingNorms[norm] <= 0 {
 							continue
 						}
 						remainingNorms[norm]--
 						fallbackMatched++
-						fallbackMatchedChars += utf8.RuneCountInString(norm)
 					}
 					if fallbackMatched >= minMatch {
 						c.LinesFromAgent = fallbackMatched
 						c.LinePercent = percentage(c.LinesFromAgent, len(norms))
 						c.CopiedFromAgent = true
 						extraLines += fallbackMatched
-						extraChars += fallbackMatchedChars
 					}
 				}
 			}
 		}
 		out = append(out, c)
 	}
-	return out, extraLines, extraChars
+	return out, extraLines
 }

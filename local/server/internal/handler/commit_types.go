@@ -33,12 +33,9 @@ type commitDetailCacheEntry struct {
 	agentSegments []agentCoverageSegment
 	contribs      []commitContributionMessage
 	matchedLines  int
-	matchedChars  int
 	exactMatched  int
 	fallbackLines int
-	fallbackChars int
 	totalLines    int
-	totalChars    int
 	fetchedAt     time.Time
 }
 
@@ -54,19 +51,15 @@ type projectCommitsResponse struct {
 type agentCoverageSegment struct {
 	Agent          string  `json:"agent"`
 	LinesFromAgent int     `json:"linesFromAgent"`
-	CharsFromAgent int     `json:"charsFromAgent"`
 	LinePercent    float64 `json:"linePercent"`
 }
 
 type projectCommitSummary struct {
-	CommitCount      int                    `json:"commitCount"`
-	LinesTotal       int                    `json:"linesTotal"`
-	LinesFromAgent   int                    `json:"linesFromAgent"`
-	LinePercent      float64                `json:"linePercent"`
-	CharsTotal       int                    `json:"charsTotal"`
-	CharsFromAgent   int                    `json:"charsFromAgent"`
-	CharacterPercent float64                `json:"characterPercent"`
-	AgentSegments    []agentCoverageSegment `json:"agentSegments,omitempty"`
+	CommitCount    int                    `json:"commitCount"`
+	LinesTotal     int                    `json:"linesTotal"`
+	LinesFromAgent int                    `json:"linesFromAgent"`
+	LinePercent    float64                `json:"linePercent"`
+	AgentSegments  []agentCoverageSegment `json:"agentSegments,omitempty"`
 }
 
 type projectCommitCoverage struct {
@@ -83,9 +76,6 @@ type projectCommitCoverage struct {
 	LinesTotal          int                    `json:"linesTotal"`
 	LinesFromAgent      int                    `json:"linesFromAgent"`
 	LinePercent         float64                `json:"linePercent"`
-	CharsTotal          int                    `json:"charsTotal"`
-	CharsFromAgent      int                    `json:"charsFromAgent"`
-	CharacterPercent    float64                `json:"characterPercent"`
 	LinesAdded          int                    `json:"linesAdded"`
 	LinesRemoved        int                    `json:"linesRemoved"`
 	AgentSegments       []agentCoverageSegment `json:"agentSegments,omitempty"`
@@ -169,7 +159,6 @@ type commitContributionMessage struct {
 	Model             string `json:"model"`
 	Content           string `json:"content"`
 	LinesMatched      int    `json:"linesMatched"`
-	CharsMatched      int    `json:"charsMatched"`
 }
 
 type commitFileCoverage struct {
@@ -220,7 +209,6 @@ type diffToken struct {
 	Sign         byte
 	Norm         string
 	Key          string
-	Chars        int
 	Attributable bool
 }
 
@@ -229,8 +217,7 @@ type tokenSource struct {
 	tokenPos int
 }
 
-// agentStats tracks per-agent line and char counts for commit coverage.
+// agentStats tracks per-agent line counts for commit coverage.
 type agentStats struct {
 	lines int
-	chars int
 }

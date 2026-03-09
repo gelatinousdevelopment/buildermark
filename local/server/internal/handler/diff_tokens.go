@@ -4,7 +4,6 @@ import (
 	"path"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // DefaultIgnoreDiffPaths is the hardcoded list of glob patterns ignored when
@@ -213,7 +212,6 @@ func makeDiffToken(path string, sign byte, line string) (diffToken, bool) {
 		Sign:         sign,
 		Norm:         norm,
 		Key:          path + "\x1f" + string(sign) + "\x1f" + norm,
-		Chars:        utf8.RuneCountInString(norm),
 		Attributable: isAttributionCandidate(norm),
 	}, true
 }

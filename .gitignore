@@ -5,3 +5,4 @@
 /*.png
 .zed/debug
 apps/linux-cli/build/
+.tmp

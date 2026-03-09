@@ -340,7 +340,7 @@ func ingestCommits(
 	}
 
 	dbCommits := make([]db.Commit, 0, len(toIngest))
-	// Per-commit, per-agent coverage: map from commit hash to agent->lines/chars.
+	// Per-commit, per-agent coverage: map from commit hash to agent->lines.
 	perCommitAgent := make(map[string]map[string]*agentStats)
 	// Per-commit conversation links: map from commit hash to unique conversation IDs.
 	perCommitConvLinks := make(map[string][]string)
@@ -376,18 +376,16 @@ func ingestCommits(
 			tokenDiff = ""
 		}
 		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
-		totalLines, totalChars := tokenTotals(commitTokens)
+		totalLines := tokenTotals(commitTokens)
 
 		matchedLines := 0
-		matchedChars := 0
 		matchesIdentity := identity == nil || commitMatchesExpandedIdentity(gc.UserEmail, *identity, extraEmails)
 		if matchesIdentity && len(commitTokens) > 0 && len(messages) > 0 {
 			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
 			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
-			contribs, ml, mc, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-			files, fallbackLines, fallbackChars := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+			contribs, ml, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			files, fallbackLines := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 			matchedLines = ml + fallbackLines
-			matchedChars = mc + fallbackChars
 
 			// Aggregate agent attribution from both exact matches and copied-from-agent files.
 			segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
@@ -424,9 +422,7 @@ func ingestCommits(
 			AuthoredAt:      gc.TimestampUnix,
 			DiffContent:     cleanDiff,
 			LinesTotal:      totalLines,
-			CharsTotal:      totalChars,
 			LinesFromAgent:  matchedLines,
-			CharsFromAgent:  matchedChars,
 			LinesAdded:      ingestAdded,
 			LinesRemoved:    ingestRemoved,
 			CoverageVersion: currentCommitCoverageVersion,
@@ -456,7 +452,6 @@ func ingestCommits(
 					CommitID:       dbCommit.ID,
 					Agent:          agent,
 					LinesFromAgent: stats.lines,
-					CharsFromAgent: stats.chars,
 				})
 			}
 		}
@@ -562,15 +557,13 @@ func recomputeSingleCommit(
 		tokenDiff = cleanDiff
 	}
 	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
-	totalLines, totalChars := tokenTotals(commitTokens)
+	totalLines := tokenTotals(commitTokens)
 
 	matchesIdent := identity == nil || commitMatchesExpandedIdentity(c.UserEmail, *identity, extraEmails)
 
 	matchedLines := 0
-	matchedChars := 0
 	var files []commitFileCoverage
 	fallbackLines := 0
-	fallbackChars := 0
 	var contribs []commitContributionMessage
 
 	windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
@@ -578,10 +571,9 @@ func recomputeSingleCommit(
 	if matchesIdent {
 		var fileAgent map[string]commitFileCoverage
 		var remainingNorms map[string]int
-		contribs, matchedLines, matchedChars, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		files, fallbackLines, fallbackChars = summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		contribs, matchedLines, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		files, fallbackLines = summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
-		matchedChars += fallbackChars
 	}
 
 	recompAdded, recompRemoved := countDiffAddedRemoved(cleanDiff)
@@ -596,9 +588,7 @@ func recomputeSingleCommit(
 		AuthoredAt:      c.AuthoredAt,
 		DiffContent:     cleanDiff,
 		LinesTotal:      totalLines,
-		CharsTotal:      totalChars,
 		LinesFromAgent:  matchedLines,
-		CharsFromAgent:  matchedChars,
 		LinesAdded:      recompAdded,
 		LinesRemoved:    recompRemoved,
 		CoverageVersion: currentCommitCoverageVersion,
@@ -653,7 +643,6 @@ func persistRecomputedCommits(
 					CommitID:       c.ID,
 					Agent:          agentName,
 					LinesFromAgent: stats.lines,
-					CharsFromAgent: stats.chars,
 				})
 			}
 			if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {

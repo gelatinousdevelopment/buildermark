@@ -344,7 +344,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	var files []commitFileCoverage
 	var agentSegments []agentCoverageSegment
 	var contribMessages []commitContributionMessage
-	var matchedLines, matchedChars, exactMatchedLines, fallbackLines, fallbackChars, totalLines, totalChars int
+	var matchedLines, exactMatchedLines, fallbackLines, totalLines int
 
 	cached, cacheHit := s.commitDetailCache.get(detailCacheKey)
 
@@ -353,12 +353,9 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		agentSegments = cached.agentSegments
 		contribMessages = cached.contribs
 		matchedLines = cached.matchedLines
-		matchedChars = cached.matchedChars
 		exactMatchedLines = cached.exactMatched
 		fallbackLines = cached.fallbackLines
-		fallbackChars = cached.fallbackChars
 		totalLines = cached.totalLines
-		totalChars = cached.totalChars
 	} else {
 		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
 
@@ -375,12 +372,11 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 
 		var fileAgent map[string]commitFileCoverage
 		var remainingNorms map[string]int
-		contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		contribMessages, matchedLines, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		exactMatchedLines = matchedLines
-		totalLines, totalChars = tokenTotals(commitTokens)
-		files, fallbackLines, fallbackChars = summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		totalLines = tokenTotals(commitTokens)
+		files, fallbackLines = summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
-		matchedChars += fallbackChars
 
 		agentSegments = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
 
@@ -389,12 +385,9 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			agentSegments: agentSegments,
 			contribs:      contribMessages,
 			matchedLines:  matchedLines,
-			matchedChars:  matchedChars,
 			exactMatched:  exactMatchedLines,
 			fallbackLines: fallbackLines,
-			fallbackChars: fallbackChars,
 			totalLines:    totalLines,
-			totalChars:    totalChars,
 			fetchedAt:     time.Now(),
 		})
 	}
@@ -421,9 +414,6 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			LinesTotal:          totalLines,
 			LinesFromAgent:      matchedLines,
 			LinePercent:         detailLinePercent,
-			CharsTotal:          totalChars,
-			CharsFromAgent:      matchedChars,
-			CharacterPercent:    percentage(matchedChars, totalChars),
 			LinesAdded:          detailAdded,
 			LinesRemoved:        detailRemoved,
 			AgentSegments:       agentSegments,
@@ -432,7 +422,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		Attribution: commitAttribution{
 			ExactMatchedLines:    exactMatchedLines,
 			FallbackMatchedLines: fallbackLines,
-			HasFallback:          fallbackLines > 0 || fallbackChars > 0,
+			HasFallback:          fallbackLines > 0,
 			MatchedMessagesCount: len(contribMessages),
 		},
 		Diff:     commitDiff,
@@ -862,7 +852,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		ExtraLocalUserEmails: s.loadExtraLocalUserEmails(),
 		Project:              *project,
 		Refresh:              makeCommitRefreshState(syncState, staleCoverage),
-		Summary:      summarizeCommitCoverage(allCoverage),
+		Summary:              summarizeCommitCoverage(allCoverage),
 		DailySummary: buildDailySummaryWindow(
 			allCoverage,
 			dailyWindowDays,
@@ -1120,11 +1110,10 @@ func computeCoverageForRepo(
 		windowStart := c.TimestampUnix*1000 - defaultMessageWindowMs
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
-		totalLines, totalChars := tokenTotals(commitTokens)
-		_, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		_, fallbackLines, fallbackChars := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		totalLines := tokenTotals(commitTokens)
+		_, matchedLines, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, fallbackLines := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
-		matchedChars += fallbackChars
 
 		cAdded, cRemoved := countDiffAddedRemoved(commitDiff)
 		coverage = append(coverage, projectCommitCoverage{
@@ -1138,9 +1127,6 @@ func computeCoverageForRepo(
 			LinesTotal:       totalLines,
 			LinesFromAgent:   matchedLines,
 			LinePercent:      percentage(matchedLines, totalLines),
-			CharsTotal:       totalChars,
-			CharsFromAgent:   matchedChars,
-			CharacterPercent: percentage(matchedChars, totalChars),
 			LinesAdded:       cAdded,
 			LinesRemoved:     cRemoved,
 		})
@@ -1262,12 +1248,11 @@ func computeWorkingCopyDetail(
 		return projectCommitCoverage{}, commitAttribution{}, nil, "", nil, false
 	}
 
-	totalLines, totalChars := tokenTotals(commitTokens)
-	contribMessages, matchedLines, matchedChars, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	totalLines := tokenTotals(commitTokens)
+	contribMessages, matchedLines, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	exactMatchedLines := matchedLines
-	files, fallbackLines, fallbackChars := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+	files, fallbackLines := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
 	matchedLines += fallbackLines
-	matchedChars += fallbackChars
 	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 
 	agentSegments := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
@@ -1275,7 +1260,7 @@ func computeWorkingCopyDetail(
 	attribution := commitAttribution{
 		ExactMatchedLines:    exactMatchedLines,
 		FallbackMatchedLines: fallbackLines,
-		HasFallback:          fallbackLines > 0 || fallbackChars > 0,
+		HasFallback:          fallbackLines > 0,
 		MatchedMessagesCount: len(contribMessages),
 	}
 
@@ -1291,9 +1276,6 @@ func computeWorkingCopyDetail(
 		LinesTotal:       totalLines,
 		LinesFromAgent:   matchedLines,
 		LinePercent:      percentage(matchedLines, totalLines),
-		CharsTotal:       totalChars,
-		CharsFromAgent:   matchedChars,
-		CharacterPercent: percentage(matchedChars, totalChars),
 		LinesAdded:       wcAdded,
 		LinesRemoved:     wcRemoved,
 		AgentSegments:    agentSegments,

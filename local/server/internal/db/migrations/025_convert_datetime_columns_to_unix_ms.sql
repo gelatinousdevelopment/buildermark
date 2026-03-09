@@ -44,9 +44,7 @@ CREATE TABLE commits (
     authored_at INTEGER NOT NULL DEFAULT 0,
     diff_content TEXT NOT NULL DEFAULT '',
     lines_total INTEGER NOT NULL DEFAULT 0,
-    chars_total INTEGER NOT NULL DEFAULT 0,
     lines_from_agent INTEGER NOT NULL DEFAULT 0,
-    chars_from_agent INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT 0,
     branch_name TEXT NOT NULL DEFAULT '',
     coverage_version INTEGER NOT NULL DEFAULT 0,
@@ -56,12 +54,12 @@ CREATE TABLE commits (
 );
 INSERT INTO commits (
     id, project_id, commit_hash, subject, user_name, user_email,
-    authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent,
+    authored_at, diff_content, lines_total, lines_from_agent,
     created_at, branch_name, coverage_version, lines_added, lines_removed
 )
 SELECT
     id, project_id, commit_hash, subject, user_name, user_email,
-    authored_at, diff_content, lines_total, chars_total, lines_from_agent, chars_from_agent,
+    authored_at, diff_content, lines_total, lines_from_agent,
     CASE
         WHEN created_at IS NULL THEN 0
         WHEN typeof(created_at) IN ('integer', 'real') THEN CAST(created_at AS INTEGER)
