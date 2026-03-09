@@ -151,8 +151,8 @@ func findProjectIDByParentPath(ctx context.Context, db *sql.DB, path string) (st
 // project, the project_id is updated to the current value.
 func EnsureConversation(ctx context.Context, db *sql.DB, conversationID, projectID, agent string) error {
 	_, err := db.ExecContext(ctx,
-		"INSERT INTO conversations (id, project_id, agent) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET project_id = ? WHERE project_id <> ?",
-		conversationID, projectID, agent, projectID, projectID,
+		"INSERT INTO conversations (id, project_id, agent, family_root_id) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET project_id = ? WHERE project_id <> ?",
+		conversationID, projectID, agent, conversationID, projectID, projectID,
 	)
 	if err != nil {
 		return fmt.Errorf("insert conversation: %w", err)

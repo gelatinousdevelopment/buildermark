@@ -214,6 +214,19 @@ func TestMigration44DropsCharColumnsWithOrphanedCommits(t *testing.T) {
 			chars_from_agent INTEGER NOT NULL DEFAULT 0,
 			UNIQUE(commit_id, agent)
 		)`,
+		`CREATE TABLE conversations (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL DEFAULT '',
+			agent TEXT NOT NULL DEFAULT 'claude',
+			title TEXT NOT NULL DEFAULT '',
+			parent_conversation_id TEXT NOT NULL DEFAULT '',
+			hidden INTEGER NOT NULL DEFAULT 0,
+			started_at INTEGER NOT NULL DEFAULT 0,
+			ended_at INTEGER NOT NULL DEFAULT 0,
+			user_prompt_count INTEGER NOT NULL DEFAULT 0,
+			files_edited TEXT NOT NULL DEFAULT '',
+			url TEXT NOT NULL DEFAULT ''
+		)`,
 		`CREATE TABLE commit_conversation_links (
 			commit_id TEXT NOT NULL,
 			conversation_id TEXT NOT NULL,

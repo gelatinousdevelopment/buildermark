@@ -470,6 +470,7 @@ func UpdateConversationTitle(ctx context.Context, db *sql.DB, conversationID, ti
 
 // UpdateConversationParent sets the parent_conversation_id on an existing
 // conversation, but only if it is not already set (idempotent).
+// It also updates family_root_id for this conversation and all its descendants.
 func UpdateConversationParent(ctx context.Context, db *sql.DB, conversationID, parentID string) error {
 	_, err := db.ExecContext(ctx,
 		"UPDATE conversations SET parent_conversation_id = ? WHERE id = ? AND parent_conversation_id = ''",
@@ -477,6 +478,18 @@ func UpdateConversationParent(ctx context.Context, db *sql.DB, conversationID, p
 	)
 	if err != nil {
 		return fmt.Errorf("update conversation parent: %w", err)
+	}
+	// Propagate the parent's family_root_id to this conversation and all
+	// descendants that currently point to this conversation as their root.
+	_, err = db.ExecContext(ctx,
+		`UPDATE conversations SET family_root_id = COALESCE(
+			(SELECT family_root_id FROM conversations WHERE id = ?),
+			family_root_id
+		) WHERE family_root_id = ?`,
+		parentID, conversationID,
+	)
+	if err != nil {
+		return fmt.Errorf("propagate family_root_id: %w", err)
 	}
 	return nil
 }

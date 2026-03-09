@@ -205,40 +205,11 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	}
 
 	var total int
-	countArgs := append([]any{projectID, projectID, projectID, projectID, projectID, hidden}, filterArgs...)
+	countArgs := append([]any{projectID, hidden}, filterArgs...)
 	if err := db.QueryRowContext(
 		ctx,
-		`WITH RECURSIVE ancestry(start_id, current_id, parent_id, depth, path) AS (
-			SELECT c.id, c.id, c.parent_conversation_id, 0, ',' || c.id || ','
-			FROM conversations c
-			WHERE c.project_id = ?
-			UNION ALL
-			SELECT a.start_id, p.id, p.parent_conversation_id, a.depth + 1, a.path || p.id || ','
-			FROM ancestry a
-			JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
-			WHERE a.parent_id <> '' AND a.depth < 32 AND instr(a.path, ',' || p.id || ',') = 0
-		),
-		terminal AS (
-			SELECT
-				a.start_id AS conversation_id,
-				a.current_id AS ultimate_root_id,
-				a.depth,
-				ROW_NUMBER() OVER (PARTITION BY a.start_id ORDER BY a.depth DESC, a.current_id ASC) AS rn
-			FROM ancestry a
-			LEFT JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
-			WHERE a.parent_id = '' OR p.id IS NULL
-		),
-		roots AS (
-			SELECT
-				c.id AS conversation_id,
-				COALESCE(t.ultimate_root_id, c.id) AS ultimate_root_id
-			FROM conversations c
-			LEFT JOIN terminal t ON t.conversation_id = c.id AND t.rn = 1
-			WHERE c.project_id = ?
-		)
-		SELECT COUNT(DISTINCT r.ultimate_root_id)
+		`SELECT COUNT(DISTINCT c.family_root_id)
 		FROM conversations c
-		JOIN roots r ON r.conversation_id = c.id
 		WHERE c.project_id = ? AND c.hidden = ?`+filterWhere,
 		countArgs...,
 	).Scan(&total); err != nil {
@@ -280,48 +251,12 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 	if filters.Order == "asc" {
 		orderDir = "ASC"
 	}
-	selectArgs := append([]any{
-		projectID,
-		projectID,
-		projectID,
-		projectID,
-		projectID,
-		hidden,
-	}, filterArgs...)
+	selectArgs := append([]any{projectID, hidden}, filterArgs...)
 	selectArgs = append(selectArgs, projectID, limit, offset, projectID)
 	convRows, err := db.QueryContext(ctx,
-		`WITH RECURSIVE ancestry(start_id, current_id, parent_id, depth, path) AS (
-			SELECT c.id, c.id, c.parent_conversation_id, 0, ',' || c.id || ','
+		`WITH matched_families AS (
+			SELECT DISTINCT c.family_root_id
 			FROM conversations c
-			WHERE c.project_id = ?
-			UNION ALL
-			SELECT a.start_id, p.id, p.parent_conversation_id, a.depth + 1, a.path || p.id || ','
-			FROM ancestry a
-			JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
-			WHERE a.parent_id <> '' AND a.depth < 32 AND instr(a.path, ',' || p.id || ',') = 0
-		),
-		terminal AS (
-			SELECT
-				a.start_id AS conversation_id,
-				a.current_id AS ultimate_root_id,
-				a.depth,
-				ROW_NUMBER() OVER (PARTITION BY a.start_id ORDER BY a.depth DESC, a.current_id ASC) AS rn
-			FROM ancestry a
-			LEFT JOIN conversations p ON p.project_id = ? AND p.id = a.parent_id
-			WHERE a.parent_id = '' OR p.id IS NULL
-		),
-		roots AS (
-			SELECT
-				c.id AS conversation_id,
-				COALESCE(t.ultimate_root_id, c.id) AS ultimate_root_id
-			FROM conversations c
-			LEFT JOIN terminal t ON t.conversation_id = c.id AND t.rn = 1
-			WHERE c.project_id = ?
-		),
-		matched_families AS (
-			SELECT DISTINCT r.ultimate_root_id AS family_root_id
-			FROM conversations c
-			JOIN roots r ON r.conversation_id = c.id
 			WHERE c.project_id = ? AND c.hidden = ?`+filterWhere+`
 		),
 		family_activity AS (
@@ -331,9 +266,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 			FROM matched_families mf
 			JOIN conversations allc
 				ON allc.project_id = ?
-			JOIN roots allr
-				ON allr.conversation_id = allc.id
-				AND allr.ultimate_root_id = mf.family_root_id
+				AND allc.family_root_id = mf.family_root_id
 			GROUP BY mf.family_root_id
 		),
 		page_families AS (
@@ -354,9 +287,7 @@ func GetProjectDetailPage(ctx context.Context, db *sql.DB, projectID string, pag
 		FROM page_families pf
 		JOIN conversations c
 			ON c.project_id = ?
-		JOIN roots cr
-			ON cr.conversation_id = c.id
-			AND cr.ultimate_root_id = pf.family_root_id
+			AND c.family_root_id = pf.family_root_id
 		ORDER BY
 			pf.group_latest_ts `+orderDir+`,
 			pf.family_root_id `+orderDir+`,
