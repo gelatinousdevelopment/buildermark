@@ -228,7 +228,6 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 
 	var commit gitCommit
 	var commitDiff string
-	var tokenDiff string
 
 	if dbCommit != nil && dbCommit.NeedsParent {
 		// Shallow boundary commit — return stub response with no diff/attribution.
@@ -252,7 +251,6 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if dbCommit != nil {
-		// Use stored diff from database.
 		commit = gitCommit{
 			Hash:          dbCommit.CommitHash,
 			Subject:       dbCommit.Subject,
@@ -261,10 +259,6 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			TimestampUnix: dbCommit.AuthoredAt,
 		}
 		commitDiff = dbCommit.DiffContent
-		// Prefer stored unified diff tokens when commit is already ingested.
-		tokenDiff = commitDiff
-		// If stored diff content is missing, recover from git so detail view
-		// and recomputed attribution remain consistent with list coverage.
 		if strings.TrimSpace(commitDiff) == "" {
 			rawDiff, gitErr := runGit(
 				r.Context(),
@@ -279,23 +273,8 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			if gitErr == nil {
 				commitDiff = stripBinaryDiffs(rawDiff)
 			}
-			tokenDiff, err = runGit(
-				r.Context(),
-				repoProject.Path,
-				"show",
-				"--pretty=format:",
-				"--unified=0",
-				"-M",
-				"-w",
-				"--ignore-blank-lines",
-				commit.Hash,
-			)
-			if err != nil {
-				tokenDiff = commitDiff
-			}
 		}
 	} else {
-		// Fallback: get commit metadata directly from git (no identity filter).
 		gc, gcErr := getCommitMetadata(r.Context(), repoProject.Path, commitHash)
 		if gcErr != nil {
 			writeError(w, http.StatusNotFound, "commit not found")
@@ -319,51 +298,52 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		commitDiff = stripBinaryDiffs(rawDiff)
-
-		// Use unified=0 when available to improve token precision.
-		tokenDiff, err = runGit(
-			r.Context(),
-			repoProject.Path,
-			"show",
-			"--pretty=format:",
-			"--unified=0",
-			"-M",
-			"-w",
-			"--ignore-blank-lines",
-			commit.Hash,
-		)
-		if err != nil {
-			// Fall back to the regular commit diff instead of zeroing coverage.
-			tokenDiff = commitDiff
-		}
 	}
 
 	detailAdded, detailRemoved := countDiffAddedRemoved(commitDiff)
 
-	// Check attribution cache for immutable commits.
-	detailCacheKey := commitDetailCacheKey(project.ID, commit.Hash, ignorePatterns)
 	var files []commitFileCoverage
 	var agentSegments []agentCoverageSegment
 	var contribMessages []commitContributionMessage
 	var matchedLines, exactMatchedLines, fallbackLines, totalLines int
 
-	cached, cacheHit := s.commitDetailCache.get(detailCacheKey)
-
-	if cacheHit {
-		files = cached.files
-		agentSegments = cached.agentSegments
-		contribMessages = cached.contribs
-		matchedLines = cached.matchedLines
-		exactMatchedLines = cached.exactMatched
-		fallbackLines = cached.fallbackLines
-		totalLines = cached.totalLines
+	// Fast path: use pre-computed detail data from the DB.
+	if dbCommit != nil && dbCommit.DetailFiles != "" {
+		if err := json.Unmarshal([]byte(dbCommit.DetailFiles), &files); err != nil {
+			log.Printf("warning: failed to unmarshal detail_files for %s: %v", commitHash, err)
+		}
+		if dbCommit.DetailMessages != "" {
+			if err := json.Unmarshal([]byte(dbCommit.DetailMessages), &contribMessages); err != nil {
+				log.Printf("warning: failed to unmarshal detail_messages for %s: %v", commitHash, err)
+			}
+		}
+		if dbCommit.DetailAgentSegments != "" {
+			if err := json.Unmarshal([]byte(dbCommit.DetailAgentSegments), &agentSegments); err != nil {
+				log.Printf("warning: failed to unmarshal detail_agent_segments for %s: %v", commitHash, err)
+			}
+		}
+		exactMatchedLines = dbCommit.DetailExactMatched
+		fallbackLines = dbCommit.DetailFallbackLines
+		matchedLines = exactMatchedLines + fallbackLines
+		totalLines = dbCommit.LinesTotal
 	} else {
-		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
+		// Fallback: compute on-the-fly, then persist for next time.
+		stub := db.Commit{
+			ProjectID:  repoProject.ID,
+			BranchName: branch,
+			CommitHash: commit.Hash,
+			Subject:    commit.Subject,
+			UserName:   commit.UserName,
+			UserEmail:  commit.UserEmail,
+			AuthoredAt: commit.TimestampUnix,
+		}
+		if dbCommit != nil {
+			stub.ID = dbCommit.ID
+			stub.DiffContent = dbCommit.DiffContent
+		}
 
-		// Determine the time window for message matching.
 		windowStart := commit.TimestampUnix*1000 - defaultMessageWindowMs
 		windowEnd := commit.TimestampUnix*1000 + commitWindowLookaheadMs
-
 		messages, msgErr := listDerivedDiffMessages(r.Context(), s.DB, projectIDs(group), windowStart, windowEnd)
 		if msgErr != nil {
 			log.Printf("error listing derived diff messages: %v", msgErr)
@@ -371,26 +351,29 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		var fileAgent map[string]commitFileCoverage
-		var remainingNorms map[string]int
-		contribMessages, matchedLines, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		exactMatchedLines = matchedLines
-		totalLines = tokenTotals(commitTokens)
-		files, fallbackLines = summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
-		matchedLines += fallbackLines
+		result, recompErr := recomputeSingleCommit(r.Context(), repoProject.Path, stub, ignorePatterns, messages, nil, nil)
+		if recompErr != nil {
+			log.Printf("error recomputing commit %s: %v", commitHash, recompErr)
+			writeError(w, http.StatusInternalServerError, "failed to compute attribution")
+			return
+		}
 
-		agentSegments = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+		files = result.Files
+		agentSegments = result.AgentSegments
+		contribMessages = result.ContribMsgs
+		exactMatchedLines = result.ExactMatched
+		fallbackLines = result.FallbackLines
+		matchedLines = result.Commit.LinesFromAgent
+		totalLines = result.Commit.LinesTotal
+		commitDiff = result.Commit.DiffContent
 
-		s.commitDetailCache.set(detailCacheKey, &commitDetailCacheEntry{
-			files:         files,
-			agentSegments: agentSegments,
-			contribs:      contribMessages,
-			matchedLines:  matchedLines,
-			exactMatched:  exactMatchedLines,
-			fallbackLines: fallbackLines,
-			totalLines:    totalLines,
-			fetchedAt:     time.Now(),
-		})
+		// Persist detail data to DB for next load.
+		if dbCommit != nil {
+			result.Commit.ID = dbCommit.ID
+			if err := db.UpsertCommit(r.Context(), s.DB, result.Commit); err != nil {
+				log.Printf("warning: failed to persist detail cache for %s: %v", commitHash, err)
+			}
+		}
 	}
 
 	detailLinePercent := percentage(matchedLines, totalLines)

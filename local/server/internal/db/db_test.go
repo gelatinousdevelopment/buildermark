@@ -204,6 +204,11 @@ func TestMigration44DropsCharColumnsWithOrphanedCommits(t *testing.T) {
 			lines_removed INTEGER NOT NULL DEFAULT 0,
 			override_line_percent REAL DEFAULT NULL,
 			needs_parent INTEGER NOT NULL DEFAULT 0,
+			detail_files TEXT NOT NULL DEFAULT '',
+			detail_messages TEXT NOT NULL DEFAULT '',
+			detail_agent_segments TEXT NOT NULL DEFAULT '',
+			detail_exact_matched INTEGER NOT NULL DEFAULT 0,
+			detail_fallback_lines INTEGER NOT NULL DEFAULT 0,
 			UNIQUE(project_id, commit_hash)
 		)`,
 		`CREATE TABLE commit_agent_coverage (

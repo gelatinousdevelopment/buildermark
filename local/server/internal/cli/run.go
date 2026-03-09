@@ -34,6 +34,12 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	}
 	defer database.Close()
 
+	if n, err := db.ResetStuckCommitSyncStates(ctx, database); err != nil {
+		log.Printf("warning: failed to reset stuck sync states: %v", err)
+	} else if n > 0 {
+		log.Printf("reset %d stuck commit sync state(s)", n)
+	}
+
 	configDir, err := DefaultConfigDir()
 	if err != nil {
 		return fmt.Errorf("resolve config dir: %w", err)
@@ -143,9 +149,20 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		return added
 	}
 
+	mux := hsrv.Routes()
+
+	go func() {
+		select {
+		case <-time.After(3 * time.Second):
+		case <-ctx.Done():
+			return
+		}
+		hsrv.RefreshStaleProjects(ctx)
+	}()
+
 	srv := &http.Server{
 		Addr:         opts.Addr,
-		Handler:      hsrv.Routes(),
+		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,

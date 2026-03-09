@@ -328,7 +328,6 @@ func ingestCommits(
 		return 0, nil
 	}
 
-	shallowHashes := shallowBoundaryHashes(ctx, repoProject.Path)
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 	pIDs := projectIDs(group)
 
@@ -346,87 +345,32 @@ func ingestCommits(
 	perCommitConvLinks := make(map[string][]string)
 
 	for _, gc := range toIngest {
-		// Skip diff computation for shallow boundary commits.
-		if shallowHashes[gc.Hash] {
-			dbCommits = append(dbCommits, db.Commit{
-				ProjectID:       repoProject.ID,
-				BranchName:      branch,
-				CommitHash:      gc.Hash,
-				Subject:         gc.Subject,
-				UserName:        gc.UserName,
-				UserEmail:       gc.UserEmail,
-				AuthoredAt:      gc.TimestampUnix,
-				CoverageVersion: currentCommitCoverageVersion,
-				NeedsParent:     true,
-			})
+		stub := db.Commit{
+			ProjectID:  repoProject.ID,
+			BranchName: branch,
+			CommitHash: gc.Hash,
+			Subject:    gc.Subject,
+			UserName:   gc.UserName,
+			UserEmail:  gc.UserEmail,
+			AuthoredAt: gc.TimestampUnix,
+		}
+		result, err := recomputeSingleCommit(ctx, repoProject.Path, stub, ignorePatterns, messages, identity, extraEmails)
+		if err != nil {
+			log.Printf("warning: could not compute coverage for commit %s: %v", gc.Hash, err)
 			continue
 		}
-
-		rawDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", gc.Hash)
-		if err != nil {
-			log.Printf("warning: could not get diff for commit %s: %v", gc.Hash, err)
-			continue
-		}
-
-		cleanDiff := stripBinaryDiffs(rawDiff)
-
-		// Compute coverage using the unified=0 diff for token matching.
-		tokenDiff, err := runGit(ctx, repoProject.Path, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", gc.Hash)
-		if err != nil {
-			tokenDiff = ""
-		}
-		commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
-		totalLines := tokenTotals(commitTokens)
-
-		matchedLines := 0
-		matchesIdentity := identity == nil || commitMatchesExpandedIdentity(gc.UserEmail, *identity, extraEmails)
-		if matchesIdentity && len(commitTokens) > 0 && len(messages) > 0 {
-			windowStart := gc.TimestampUnix*1000 - defaultMessageWindowMs
-			windowEnd := gc.TimestampUnix*1000 + commitWindowLookaheadMs
-			contribs, ml, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-			files, fallbackLines := summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
-			matchedLines = ml + fallbackLines
-
-			// Aggregate agent attribution from both exact matches and copied-from-agent files.
-			segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
-			if len(segs) > 0 {
-				byAgent := make(map[string]*agentStats)
-				for _, seg := range segs {
-					byAgent[seg.Agent] = &agentStats{lines: seg.LinesFromAgent}
-				}
-				perCommitAgent[gc.Hash] = byAgent
+		dbCommits = append(dbCommits, result.Commit)
+		if len(result.ByAgent) > 0 {
+			byAgent := make(map[string]*agentStats, len(result.ByAgent))
+			for agent, stats := range result.ByAgent {
+				s := stats // copy
+				byAgent[agent] = &s
 			}
-
-			// Collect unique conversation IDs for commit-conversation links.
-			convSeen := make(map[string]bool)
-			var convIDs []string
-			for _, contrib := range contribs {
-				if !convSeen[contrib.ConversationID] {
-					convSeen[contrib.ConversationID] = true
-					convIDs = append(convIDs, contrib.ConversationID)
-				}
-			}
-			if len(convIDs) > 0 {
-				perCommitConvLinks[gc.Hash] = convIDs
-			}
+			perCommitAgent[gc.Hash] = byAgent
 		}
-
-		ingestAdded, ingestRemoved := countDiffAddedRemoved(cleanDiff)
-		dbCommits = append(dbCommits, db.Commit{
-			ProjectID:       repoProject.ID,
-			BranchName:      branch,
-			CommitHash:      gc.Hash,
-			Subject:         gc.Subject,
-			UserName:        gc.UserName,
-			UserEmail:       gc.UserEmail,
-			AuthoredAt:      gc.TimestampUnix,
-			DiffContent:     cleanDiff,
-			LinesTotal:      totalLines,
-			LinesFromAgent:  matchedLines,
-			LinesAdded:      ingestAdded,
-			LinesRemoved:    ingestRemoved,
-			CoverageVersion: currentCommitCoverageVersion,
-		})
+		if len(result.ConvIDs) > 0 {
+			perCommitConvLinks[gc.Hash] = result.ConvIDs
+		}
 	}
 
 	if err := db.UpsertCommits(ctx, database, dbCommits); err != nil {
@@ -520,7 +464,7 @@ func recomputeCommitCoverageForProject(
 	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, "", nil, identity, extraEmails, nil)
 }
 
-// recomputeSingleCommit recomputes coverage for one commit.
+// recomputeSingleCommit recomputes coverage for one commit and returns all detail data.
 func recomputeSingleCommit(
 	ctx context.Context,
 	repoPath string,
@@ -529,21 +473,23 @@ func recomputeSingleCommit(
 	messages []messageDiff,
 	identity *gitIdentity,
 	extraEmails []string,
-) (db.Commit, map[string]agentStats, []string, error) {
+) (*CommitDetailResult, error) {
 	// If this commit is at a shallow boundary, keep it as a stub.
 	if shallow := shallowBoundaryHashes(ctx, repoPath); shallow[c.CommitHash] {
-		return db.Commit{
-			ID:              c.ID,
-			ProjectID:       c.ProjectID,
-			BranchName:      c.BranchName,
-			CommitHash:      c.CommitHash,
-			Subject:         c.Subject,
-			UserName:        c.UserName,
-			UserEmail:       c.UserEmail,
-			AuthoredAt:      c.AuthoredAt,
-			CoverageVersion: currentCommitCoverageVersion,
-			NeedsParent:     true,
-		}, nil, nil, nil
+		return &CommitDetailResult{
+			Commit: db.Commit{
+				ID:              c.ID,
+				ProjectID:       c.ProjectID,
+				BranchName:      c.BranchName,
+				CommitHash:      c.CommitHash,
+				Subject:         c.Subject,
+				UserName:        c.UserName,
+				UserEmail:       c.UserEmail,
+				AuthoredAt:      c.AuthoredAt,
+				CoverageVersion: currentCommitCoverageVersion,
+				NeedsParent:     true,
+			},
+		}, nil
 	}
 
 	cleanDiff := c.DiffContent
@@ -613,7 +559,19 @@ func recomputeSingleCommit(
 		}
 	}
 
-	return updated, byAgent, convIDs, nil
+	result := &CommitDetailResult{
+		Commit:        updated,
+		Files:         files,
+		AgentSegments: segs,
+		ContribMsgs:   contribs,
+		ExactMatched:  matchedLines - fallbackLines,
+		FallbackLines: fallbackLines,
+		ByAgent:       byAgent,
+		ConvIDs:       convIDs,
+	}
+	serializeDetail(result)
+
+	return result, nil
 }
 
 // persistRecomputedCommits upserts recomputed commits, agent coverage, and conversation links.
@@ -704,16 +662,16 @@ func recomputeCommitCoverageForProjectHashes(
 		if progress != nil {
 			progress(fmt.Sprintf("Recomputing commit %s...", c.CommitHash), len(updatedCommits))
 		}
-		updated, byAgent, convIDs, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
+		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
 		if err != nil {
 			continue
 		}
-		updatedCommits = append(updatedCommits, updated)
-		if len(byAgent) > 0 {
-			perCommitAgent[c.ID] = byAgent
+		updatedCommits = append(updatedCommits, result.Commit)
+		if len(result.ByAgent) > 0 {
+			perCommitAgent[c.ID] = result.ByAgent
 		}
-		if len(convIDs) > 0 {
-			perCommitConvLinks[c.ID] = convIDs
+		if len(result.ConvIDs) > 0 {
+			perCommitConvLinks[c.ID] = result.ConvIDs
 		}
 	}
 
@@ -721,6 +679,20 @@ func recomputeCommitCoverageForProjectHashes(
 		return 0, err
 	}
 	return len(updatedCommits), nil
+}
+
+// isCommitStale mirrors the SQL conditions in HasStaleCommitCoverageByBranch.
+func isCommitStale(c db.Commit, minVersion int) bool {
+	if c.CoverageVersion < minVersion {
+		return true
+	}
+	if c.LinesTotal > 0 && strings.TrimSpace(c.DiffContent) == "" {
+		return true
+	}
+	if c.LinesFromAgent > 0 && strings.TrimSpace(c.DetailFiles) == "" {
+		return true
+	}
+	return false
 }
 
 func recomputeCommitCoverageForProjectWithChangedPatterns(
@@ -763,6 +735,18 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 	}
 	if len(commits) == 0 {
 		return 0, nil
+	}
+	if changedPatterns == nil {
+		filtered := commits[:0]
+		for _, c := range commits {
+			if isCommitStale(c, currentCommitCoverageVersion) {
+				filtered = append(filtered, c)
+			}
+		}
+		commits = filtered
+		if len(commits) == 0 {
+			return 0, nil
+		}
 	}
 	if len(changedPatterns) > 0 {
 		filtered := make([]db.Commit, 0, len(commits))
@@ -838,16 +822,16 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 			}
 			commitProgress(fmt.Sprintf("Recomputing commit %s (%d/%d)...", hashPrefix, i+1, len(commits)), i)
 		}
-		updated, byAgent, convIDs, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
+		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
 		if err != nil {
 			continue
 		}
-		updatedCommits = append(updatedCommits, updated)
-		if len(byAgent) > 0 {
-			perCommitAgent[c.ID] = byAgent
+		updatedCommits = append(updatedCommits, result.Commit)
+		if len(result.ByAgent) > 0 {
+			perCommitAgent[c.ID] = result.ByAgent
 		}
-		if len(convIDs) > 0 {
-			perCommitConvLinks[c.ID] = convIDs
+		if len(result.ConvIDs) > 0 {
+			perCommitConvLinks[c.ID] = result.ConvIDs
 		}
 	}
 

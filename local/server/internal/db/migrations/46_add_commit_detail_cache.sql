@@ -1,0 +1,5 @@
+ALTER TABLE commits ADD COLUMN detail_files TEXT NOT NULL DEFAULT '';
+ALTER TABLE commits ADD COLUMN detail_messages TEXT NOT NULL DEFAULT '';
+ALTER TABLE commits ADD COLUMN detail_agent_segments TEXT NOT NULL DEFAULT '';
+ALTER TABLE commits ADD COLUMN detail_exact_matched INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE commits ADD COLUMN detail_fallback_lines INTEGER NOT NULL DEFAULT 0;

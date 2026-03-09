@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"strconv"
@@ -14,7 +15,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 8
+	currentCommitCoverageVersion = 10
 	maxFormattingWindowLines     = 5
 )
 
@@ -220,4 +221,34 @@ type tokenSource struct {
 // agentStats tracks per-agent line counts for commit coverage.
 type agentStats struct {
 	lines int
+}
+
+// CommitDetailResult holds all computed detail data for a single commit.
+type CommitDetailResult struct {
+	Commit        db.Commit
+	Files         []commitFileCoverage
+	AgentSegments []agentCoverageSegment
+	ContribMsgs   []commitContributionMessage
+	ExactMatched  int
+	FallbackLines int
+	ByAgent       map[string]agentStats
+	ConvIDs       []string
+}
+
+// serializeDetail marshals the detail fields onto result.Commit's detail columns.
+func serializeDetail(result *CommitDetailResult) {
+	if len(result.Files) > 0 {
+		b, _ := json.Marshal(result.Files)
+		result.Commit.DetailFiles = string(b)
+	}
+	if len(result.ContribMsgs) > 0 {
+		b, _ := json.Marshal(result.ContribMsgs)
+		result.Commit.DetailMessages = string(b)
+	}
+	if len(result.AgentSegments) > 0 {
+		b, _ := json.Marshal(result.AgentSegments)
+		result.Commit.DetailAgentSegments = string(b)
+	}
+	result.Commit.DetailExactMatched = result.ExactMatched
+	result.Commit.DetailFallbackLines = result.FallbackLines
 }

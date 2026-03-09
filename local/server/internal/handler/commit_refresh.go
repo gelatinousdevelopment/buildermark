@@ -13,6 +13,44 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
+// RefreshStaleProjects checks all projects for stale commit coverage and
+// enqueues a refresh for each stale project/branch combination.
+func (s *Server) RefreshStaleProjects(ctx context.Context) {
+	groups, err := listAllProjectGroups(ctx, s.DB)
+	if err != nil {
+		log.Printf("startup refresh: failed to list project groups: %v", err)
+		return
+	}
+	for _, group := range groups {
+		repoProject, err := resolveRepoProject(ctx, group)
+		if err != nil {
+			continue
+		}
+		identity, err := resolveGitIdentity(ctx, repoProject.Path)
+		if err != nil {
+			continue
+		}
+		branches, err := db.ListDistinctBranches(ctx, s.DB, repoProject.ID)
+		if err != nil {
+			log.Printf("startup refresh: failed to list branches for project %s: %v", repoProject.ID, err)
+			continue
+		}
+		for _, branch := range branches {
+			stale, err := db.HasStaleCommitCoverageByBranch(ctx, s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
+			if err != nil {
+				log.Printf("startup refresh: stale check failed for project %s branch %s: %v", repoProject.ID, branch, err)
+				continue
+			}
+			if !stale {
+				continue
+			}
+			if queued, _ := s.enqueueCommitRefresh(*repoProject, group, identity, branch); queued {
+				log.Printf("startup refresh: queued stale commit refresh for project %s branch %s", repoProject.ID, branch)
+			}
+		}
+	}
+}
+
 func (s *Server) enqueueCommitRefresh(repoProject db.Project, group projectGroup, identity gitIdentity, branch string) (bool, string) {
 	return s.enqueueCommitRefreshWithDays(repoProject, group, identity, branch, 0)
 }
