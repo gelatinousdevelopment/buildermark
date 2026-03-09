@@ -193,7 +193,11 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 				err = staleErr
 			} else if staleCoverage {
 				s.broadcastRefreshStatus("running", "Recomputing commit coverage...", repoProject.ID, branch)
-				_, err = recomputeCommitCoverageForProject(ctx, s.DB, &repoProject, group, branch, &identity, extraEmails)
+				_, err = recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, &repoProject, group, branch, "", nil, &identity, extraEmails,
+					func(message string, processed int) {
+						s.broadcastRefreshStatus("running", message, repoProject.ID, branch)
+					},
+				)
 			}
 		}
 	}
