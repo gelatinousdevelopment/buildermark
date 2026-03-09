@@ -351,7 +351,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		result, recompErr := recomputeSingleCommit(r.Context(), repoProject.Path, stub, ignorePatterns, messages, nil, nil)
+		result, recompErr := recomputeSingleCommit(r.Context(), repoProject.Path, stub, ignorePatterns, messages, nil, nil, nil, nil)
 		if recompErr != nil {
 			log.Printf("error recomputing commit %s: %v", commitHash, recompErr)
 			writeError(w, http.StatusInternalServerError, "failed to compute attribution")
@@ -1067,7 +1067,8 @@ func computeCoverageForRepo(
 		if err != nil {
 			continue
 		}
-		commitTokens := parseUnifiedDiffTokens(commitDiff, ignorePatterns)
+		parsed := parseUnifiedDiffTokensWithFiles(commitDiff, ignorePatterns)
+		commitTokens := parsed.Tokens
 		if len(commitTokens) == 0 {
 			continue
 		}
@@ -1077,7 +1078,7 @@ func computeCoverageForRepo(
 
 		totalLines := tokenTotals(commitTokens)
 		_, matchedLines, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		_, fallbackLines := summarizeDiffFiles(commitDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		_, fallbackLines := summarizeDiffFiles(parsed.Files, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
 
 		cAdded, cRemoved := countDiffAddedRemoved(commitDiff)
@@ -1193,7 +1194,8 @@ func computeWorkingCopyDetail(
 	if err != nil {
 		return projectCommitCoverage{}, commitAttribution{}, nil, "", nil, false
 	}
-	commitTokens := parseUnifiedDiffTokens(diffText, ignorePatterns)
+	parsed := parseUnifiedDiffTokensWithFiles(diffText, ignorePatterns)
+	commitTokens := parsed.Tokens
 	if len(commitTokens) == 0 {
 		return projectCommitCoverage{}, commitAttribution{}, nil, "", nil, false
 	}
@@ -1216,7 +1218,7 @@ func computeWorkingCopyDetail(
 	totalLines := tokenTotals(commitTokens)
 	contribMessages, matchedLines, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	exactMatchedLines := matchedLines
-	files, fallbackLines := summarizeDiffFiles(diffText, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+	files, fallbackLines := summarizeDiffFiles(parsed.Files, commitTokens, fileAgent, remainingNorms)
 	matchedLines += fallbackLines
 	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 

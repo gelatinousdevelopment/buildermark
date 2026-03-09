@@ -30,46 +30,83 @@ func tokenTotals(tokens []diffToken) int {
 	return lines
 }
 
+// buildMessageIndex builds a messageIndex from messages for reuse across commits.
+// Messages are sorted newest-first internally.
+func buildMessageIndex(messages []messageDiff, windowStart, windowEnd int64) *messageIndex {
+	// Sort messages newest-first so that when multiple messages contain the
+	// same token, the most recent message wins attribution.
+	sorted := make([]messageDiff, len(messages))
+	copy(sorted, messages)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].Timestamp != sorted[j].Timestamp {
+			return sorted[i].Timestamp > sorted[j].Timestamp
+		}
+		return sorted[i].ID > sorted[j].ID
+	})
+
+	idx := &messageIndex{
+		messages:       sorted,
+		tokenSources:   make(map[string][]tokenSource),
+		tokensByBucket: make(map[int]map[string][]int),
+		normSources:    make(map[string]int),
+		normAgents:     make(map[string]map[string]int),
+	}
+
+	for i, msg := range sorted {
+		if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
+			continue
+		}
+		agent := strings.TrimSpace(msg.Agent)
+		if agent == "" {
+			agent = "unknown"
+		}
+		pathTokens := make(map[string][]int)
+		for pos, tok := range msg.Tokens {
+			if !tok.Attributable {
+				continue
+			}
+			idx.tokenSources[tok.Key] = append(idx.tokenSources[tok.Key], tokenSource{msgIdx: i, tokenPos: pos})
+			pathTokens[tokenBucketKey(tok.Path, tok.Sign)] = append(pathTokens[tokenBucketKey(tok.Path, tok.Sign)], pos)
+			if tok.Norm != "" {
+				idx.normSources[tok.Norm]++
+				agents := idx.normAgents[tok.Norm]
+				if agents == nil {
+					agents = make(map[string]int)
+					idx.normAgents[tok.Norm] = agents
+				}
+				agents[agent]++
+			}
+		}
+		idx.tokensByBucket[i] = pathTokens
+	}
+	return idx
+}
+
 func attributeCommitToMessages(
 	commitTokens []diffToken,
 	messages []messageDiff,
 	windowStart, windowEnd int64,
 ) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int) {
-	// Sort messages newest-first so that when multiple messages contain the
-	// same token, the most recent message wins attribution.
-	sort.SliceStable(messages, func(i, j int) bool {
-		if messages[i].Timestamp != messages[j].Timestamp {
-			return messages[i].Timestamp > messages[j].Timestamp
-		}
-		return messages[i].ID > messages[j].ID
-	})
+	idx := buildMessageIndex(messages, windowStart, windowEnd)
+	return attributeCommitToMessagesWithIndex(commitTokens, idx, windowStart, windowEnd)
+}
+
+func attributeCommitToMessagesWithIndex(
+	commitTokens []diffToken,
+	idx *messageIndex,
+	windowStart, windowEnd int64,
+) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int) {
+	messages := idx.messages
 
 	matchedLines := 0
-	tokenSources := make(map[string][]tokenSource)
-	messageTokensByBucket := make(map[int]map[string][]int)
+	// Per-commit offset tracking into the shared tokenSources.
+	tokenSourceOffset := make(map[string]int)
 	messageTokenUsed := make(map[int][]bool)
 	commitMatched := make([]bool, len(commitTokens))
-	// Keep a full multiset of normalized message lines for copied-file detection.
-	// This must not be decremented by exact path matches, otherwise copied files
-	// can be severely under-attributed when the same lines also appear elsewhere.
-	normSources := make(map[string]int)
-	for i, msg := range messages {
-		if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
-			continue
-		}
-		pathTokens := make(map[string][]int)
-		messageTokenUsed[i] = make([]bool, len(msg.Tokens))
-		for pos, tok := range msg.Tokens {
-			if !tok.Attributable {
-				continue
-			}
-			tokenSources[tok.Key] = append(tokenSources[tok.Key], tokenSource{msgIdx: i, tokenPos: pos})
-			pathTokens[tokenBucketKey(tok.Path, tok.Sign)] = append(pathTokens[tokenBucketKey(tok.Path, tok.Sign)], pos)
-			if tok.Norm != "" {
-				normSources[tok.Norm]++
-			}
-		}
-		messageTokensByBucket[i] = pathTokens
+	// Copy normSources so per-commit consumption doesn't affect the shared index.
+	normSources := make(map[string]int, len(idx.normSources))
+	for k, v := range idx.normSources {
+		normSources[k] = v
 	}
 
 	contribByIndex := make(map[int]*commitContributionMessage)
@@ -108,13 +145,30 @@ func attributeCommitToMessages(
 		fileCov.Path = path
 		fileCov.Added++
 
-		sources := tokenSources[tok.Key]
-		if len(sources) == 0 {
+		sources := idx.tokenSources[tok.Key]
+		offset := tokenSourceOffset[tok.Key]
+		if offset >= len(sources) {
 			fileCoverageByPath[path] = fileCov
 			continue
 		}
-		source := sources[0]
-		tokenSources[tok.Key] = sources[1:]
+		source := sources[offset]
+		// Skip sources outside the commit's time window.
+		for source.msgIdx >= 0 && (messages[source.msgIdx].Timestamp <= windowStart || messages[source.msgIdx].Timestamp > windowEnd) {
+			offset++
+			if offset >= len(sources) {
+				break
+			}
+			source = sources[offset]
+		}
+		if offset >= len(sources) {
+			tokenSourceOffset[tok.Key] = offset
+			fileCoverageByPath[path] = fileCov
+			continue
+		}
+		tokenSourceOffset[tok.Key] = offset + 1
+		if messageTokenUsed[source.msgIdx] == nil {
+			messageTokenUsed[source.msgIdx] = make([]bool, len(messages[source.msgIdx].Tokens))
+		}
 		messageTokenUsed[source.msgIdx][source.tokenPos] = true
 		commitMatched[tokIdx] = true
 
@@ -172,7 +226,10 @@ func attributeCommitToMessages(
 				}
 
 				for msgIdx, msg := range messages {
-					positions := messageTokensByBucket[msgIdx][bucketKey]
+					if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
+						continue
+					}
+					positions := idx.tokensByBucket[msgIdx][bucketKey]
 					if len(positions) == 0 {
 						continue
 					}
@@ -183,6 +240,9 @@ func attributeCommitToMessages(
 					for messageWindow := 1; messageWindow <= maxMessageWindow && !matchedWindow; messageWindow++ {
 						for start := 0; start+messageWindow <= len(positions); start++ {
 							windowPositions := positions[start : start+messageWindow]
+							if messageTokenUsed[msgIdx] == nil {
+								messageTokenUsed[msgIdx] = make([]bool, len(msg.Tokens))
+							}
 							if !messageWindowAvailable(messageTokenUsed[msgIdx], windowPositions) {
 								continue
 							}
@@ -190,8 +250,8 @@ func attributeCommitToMessages(
 								continue
 							}
 
-							for _, idx := range indices[cursor : cursor+commitWindow] {
-								commitMatched[idx] = true
+							for _, ci := range indices[cursor : cursor+commitWindow] {
+								commitMatched[ci] = true
 								matchedLines++
 								fileCov := fileCoverageByPath[path]
 								fileCov.Path = path
@@ -363,36 +423,23 @@ func attributeCopiedFromAgentFiles(
 	windowStart, windowEnd int64,
 	linesTotal int,
 ) []agentCoverageSegment {
-	// Build norm→agent map: for each normalized line, track the dominant agent.
-	type agentCount struct{ counts map[string]int }
-	normAgents := make(map[string]*agentCount)
-	for _, msg := range messages {
-		if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
-			continue
-		}
-		agent := strings.TrimSpace(msg.Agent)
-		if agent == "" {
-			agent = "unknown"
-		}
-		for _, tok := range msg.Tokens {
-			if !tok.Attributable || tok.Norm == "" {
-				continue
-			}
-			ac := normAgents[tok.Norm]
-			if ac == nil {
-				ac = &agentCount{counts: make(map[string]int)}
-				normAgents[tok.Norm] = ac
-			}
-			ac.counts[agent]++
-		}
-	}
+	idx := buildMessageIndex(messages, windowStart, windowEnd)
+	return attributeCopiedFromAgentFilesWithIndex(files, commitTokens, idx, linesTotal)
+}
+
+func attributeCopiedFromAgentFilesWithIndex(
+	files []commitFileCoverage,
+	commitTokens []diffToken,
+	idx *messageIndex,
+	linesTotal int,
+) []agentCoverageSegment {
 	dominantAgent := func(norm string) string {
-		ac := normAgents[norm]
-		if ac == nil {
+		agents := idx.normAgents[norm]
+		if len(agents) == 0 {
 			return ""
 		}
 		best, bestN := "", 0
-		for a, n := range ac.counts {
+		for a, n := range agents {
 			if n > bestN {
 				best, bestN = a, n
 			}
@@ -474,91 +521,20 @@ func attributeCopiedFromAgentFiles(
 }
 
 func summarizeDiffFiles(
-	diffText string,
-	ignorePatterns []string,
+	diffFiles []diffFileInfo,
 	commitTokens []diffToken,
 	fileAgent map[string]commitFileCoverage,
 	remainingNorms map[string]int,
 ) ([]commitFileCoverage, int) {
-	diffText = strings.ReplaceAll(diffText, "\r\n", "\n")
-	lines := strings.Split(diffText, "\n")
-
-	oldPath := ""
-	newPath := ""
-	coverageByPath := make(map[string]commitFileCoverage)
-
-	ensure := func(path string) string {
-		if path == "" {
-			return ""
-		}
-		c := coverageByPath[path]
-		c.Path = path
-		c.Ignored = shouldIgnoreDiffPath(path, ignorePatterns)
-		coverageByPath[path] = c
-		return path
-	}
-
-	for _, line := range lines {
-		switch {
-		case strings.HasPrefix(line, "diff --git "):
-			parts := strings.Fields(line)
-			if len(parts) >= 4 {
-				oldPath = parseDiffPath(parts[2])
-				newPath = parseDiffPath(parts[3])
-				if newPath != "" {
-					ensure(newPath)
-				} else if oldPath != "" {
-					ensure(oldPath)
-				}
-			}
-		case strings.HasPrefix(line, "rename from "):
-			oldPath = parseDiffPath(strings.TrimPrefix(line, "rename from "))
-			if oldPath != "" {
-				ensure(oldPath)
-			}
-		case strings.HasPrefix(line, "rename to "):
-			newPath = parseDiffPath(strings.TrimPrefix(line, "rename to "))
-			if newPath != "" {
-				newPath = ensure(newPath)
-				c := coverageByPath[newPath]
-				c.Moved = true
-				c.MovedFrom = oldPath
-				coverageByPath[newPath] = c
-			}
-		case strings.HasPrefix(line, "--- "):
-			oldPath = parseDiffPath(strings.TrimPrefix(line, "--- "))
-			if oldPath != "" {
-				ensure(oldPath)
-			}
-		case strings.HasPrefix(line, "+++ "):
-			newPath = parseDiffPath(strings.TrimPrefix(line, "+++ "))
-			if newPath != "" {
-				ensure(newPath)
-			}
-		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
-			p := newPath
-			if p == "" {
-				p = oldPath
-			}
-			p = ensure(p)
-			if p == "" {
-				continue
-			}
-			c := coverageByPath[p]
-			c.Added++
-			coverageByPath[p] = c
-		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
-			p := oldPath
-			if p == "" {
-				p = newPath
-			}
-			p = ensure(p)
-			if p == "" {
-				continue
-			}
-			c := coverageByPath[p]
-			c.Removed++
-			coverageByPath[p] = c
+	coverageByPath := make(map[string]commitFileCoverage, len(diffFiles))
+	for _, fi := range diffFiles {
+		coverageByPath[fi.Path] = commitFileCoverage{
+			Path:      fi.Path,
+			Added:     fi.Added,
+			Removed:   fi.Removed,
+			Ignored:   fi.Ignored,
+			Moved:     fi.Moved,
+			MovedFrom: fi.OldPath,
 		}
 	}
 

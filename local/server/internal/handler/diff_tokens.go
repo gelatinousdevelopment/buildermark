@@ -35,12 +35,35 @@ var DefaultIgnoreDiffPaths = []string{
 }
 
 func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
+	return parseUnifiedDiffTokensWithFiles(diff, ignorePatterns).Tokens
+}
+
+func parseUnifiedDiffTokensWithFiles(diff string, ignorePatterns []string) diffParseResult {
 	diff = strings.ReplaceAll(diff, "\r\n", "\n")
 	lines := strings.Split(diff, "\n")
 
 	oldPath := ""
 	newPath := ""
 	tokens := make([]diffToken, 0, 64)
+
+	// Track per-file metadata.
+	fileMap := make(map[string]*diffFileInfo)
+	var fileOrder []string
+	ensureFile := func(p string) *diffFileInfo {
+		if p == "" {
+			return nil
+		}
+		if fi, ok := fileMap[p]; ok {
+			return fi
+		}
+		fi := &diffFileInfo{
+			Path:    p,
+			Ignored: shouldIgnoreDiffPath(p, ignorePatterns),
+		}
+		fileMap[p] = fi
+		fileOrder = append(fileOrder, p)
+		return fi
+	}
 
 	for _, line := range lines {
 		switch {
@@ -49,12 +72,44 @@ func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
 			if len(parts) >= 4 {
 				oldPath = parseDiffPath(parts[2])
 				newPath = parseDiffPath(parts[3])
+				if newPath != "" {
+					ensureFile(newPath)
+				} else if oldPath != "" {
+					ensureFile(oldPath)
+				}
+			}
+		case strings.HasPrefix(line, "rename from "):
+			oldPath = parseDiffPath(strings.TrimPrefix(line, "rename from "))
+			if oldPath != "" {
+				ensureFile(oldPath)
+			}
+		case strings.HasPrefix(line, "rename to "):
+			newPath = parseDiffPath(strings.TrimPrefix(line, "rename to "))
+			if newPath != "" {
+				fi := ensureFile(newPath)
+				if fi != nil {
+					fi.Moved = true
+					fi.OldPath = oldPath
+				}
 			}
 		case strings.HasPrefix(line, "--- "):
 			oldPath = parseDiffPath(strings.TrimPrefix(line, "--- "))
+			if oldPath != "" {
+				ensureFile(oldPath)
+			}
 		case strings.HasPrefix(line, "+++ "):
 			newPath = parseDiffPath(strings.TrimPrefix(line, "+++ "))
+			if newPath != "" {
+				ensureFile(newPath)
+			}
 		case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
+			p := newPath
+			if p == "" {
+				p = oldPath
+			}
+			if fi := ensureFile(p); fi != nil {
+				fi.Added++
+			}
 			if shouldIgnoreDiffPath(newPath, ignorePatterns) {
 				continue
 			}
@@ -62,6 +117,13 @@ func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
 				tokens = append(tokens, tok)
 			}
 		case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
+			p := oldPath
+			if p == "" {
+				p = newPath
+			}
+			if fi := ensureFile(p); fi != nil {
+				fi.Removed++
+			}
 			if shouldIgnoreDiffPath(oldPath, ignorePatterns) {
 				continue
 			}
@@ -71,7 +133,12 @@ func parseUnifiedDiffTokens(diff string, ignorePatterns []string) []diffToken {
 		}
 	}
 
-	return tokens
+	files := make([]diffFileInfo, 0, len(fileOrder))
+	for _, p := range fileOrder {
+		files = append(files, *fileMap[p])
+	}
+
+	return diffParseResult{Tokens: tokens, Files: files}
 }
 
 func parseDiffPath(raw string) string {

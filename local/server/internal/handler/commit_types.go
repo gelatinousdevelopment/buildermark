@@ -223,6 +223,32 @@ type agentStats struct {
 	lines int
 }
 
+// diffFileInfo holds per-file metadata extracted during diff parsing.
+type diffFileInfo struct {
+	Path    string
+	OldPath string // for renames
+	Moved   bool
+	Added   int
+	Removed int
+	Ignored bool
+}
+
+// diffParseResult holds the output of parseUnifiedDiffTokensWithFiles.
+type diffParseResult struct {
+	Tokens []diffToken
+	Files  []diffFileInfo
+}
+
+// messageIndex holds pre-built indexes for message token matching.
+// It is built once per batch and reused across commits.
+type messageIndex struct {
+	messages     []messageDiff           // sorted newest-first
+	tokenSources map[string][]tokenSource
+	tokensByBucket map[int]map[string][]int
+	normSources  map[string]int
+	normAgents   map[string]map[string]int // norm → agent → count
+}
+
 // CommitDetailResult holds all computed detail data for a single commit.
 type CommitDetailResult struct {
 	Commit        db.Commit

@@ -973,7 +973,7 @@ func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *t
 		"c10": 1,
 	}
 
-	files, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, _ := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 2 {
 		t.Fatalf("files len = %d, want 2", len(files))
 	}
@@ -1084,7 +1084,7 @@ func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
 	}, "\n")
 
 	_, _, fileAgent, normCounts := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, normCounts)
+	files, _ := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, normCounts)
 
 	byPath := make(map[string]commitFileCoverage, len(files))
 	for _, f := range files {
@@ -1174,7 +1174,7 @@ func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 	}, "\n")
 
 	_, _, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files, _ := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, _ := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1708,7 +1708,7 @@ func TestSummarizeDiffFiles_SmallDiffFullMatchAttributed(t *testing.T) {
 		"epsilon": 1,
 	}
 
-	files, fbLines := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, fbLines := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1746,7 +1746,7 @@ func TestSummarizeDiffFiles_SingleLineDiffNotAttributed(t *testing.T) {
 	fileAgent := map[string]commitFileCoverage{}
 	remainingNorms := map[string]int{"onlyone": 1}
 
-	files, fbLines := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, fbLines := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1785,7 +1785,7 @@ func TestSummarizeDiffFiles_FallbackTotalsReturnedForLargeDiff(t *testing.T) {
 	}
 
 	fileAgent := map[string]commitFileCoverage{}
-	files, fbLines := summarizeDiffFiles(diffText, nil, commitTokens, fileAgent, remainingNorms)
+	files, fbLines := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
 
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))

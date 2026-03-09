@@ -338,6 +338,10 @@ func ingestCommits(
 		return 0, fmt.Errorf("list derived diff messages: %w", err)
 	}
 
+	// Pre-compute batch caches.
+	shallowHashes := shallowBoundaryHashes(ctx, repoProject.Path)
+	msgIdx := buildMessageIndex(messages, firstTs, lastTs)
+
 	dbCommits := make([]db.Commit, 0, len(toIngest))
 	// Per-commit, per-agent coverage: map from commit hash to agent->lines.
 	perCommitAgent := make(map[string]map[string]*agentStats)
@@ -354,7 +358,7 @@ func ingestCommits(
 			UserEmail:  gc.UserEmail,
 			AuthoredAt: gc.TimestampUnix,
 		}
-		result, err := recomputeSingleCommit(ctx, repoProject.Path, stub, ignorePatterns, messages, identity, extraEmails)
+		result, err := recomputeSingleCommit(ctx, repoProject.Path, stub, ignorePatterns, messages, identity, extraEmails, shallowHashes, msgIdx)
 		if err != nil {
 			log.Printf("warning: could not compute coverage for commit %s: %v", gc.Hash, err)
 			continue
@@ -465,6 +469,7 @@ func recomputeCommitCoverageForProject(
 }
 
 // recomputeSingleCommit recomputes coverage for one commit and returns all detail data.
+// shallowHashes and msgIdx are optional batch-level caches; when nil they are computed on-the-fly.
 func recomputeSingleCommit(
 	ctx context.Context,
 	repoPath string,
@@ -473,9 +478,14 @@ func recomputeSingleCommit(
 	messages []messageDiff,
 	identity *gitIdentity,
 	extraEmails []string,
+	shallowHashes map[string]bool,
+	msgIdx *messageIndex,
 ) (*CommitDetailResult, error) {
 	// If this commit is at a shallow boundary, keep it as a stub.
-	if shallow := shallowBoundaryHashes(ctx, repoPath); shallow[c.CommitHash] {
+	if shallowHashes == nil {
+		shallowHashes = shallowBoundaryHashes(ctx, repoPath)
+	}
+	if shallowHashes[c.CommitHash] {
 		return &CommitDetailResult{
 			Commit: db.Commit{
 				ID:              c.ID,
@@ -492,17 +502,19 @@ func recomputeSingleCommit(
 		}, nil
 	}
 
+	// Single git call: --unified=0 output has all +/- lines (just no context),
+	// so countDiffAddedRemoved works identically on it.
 	cleanDiff := c.DiffContent
-	rawDiff, rawErr := runGit(ctx, repoPath, "show", "--pretty=format:", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
-	if rawErr == nil {
-		cleanDiff = stripBinaryDiffs(rawDiff)
-	}
-
 	tokenDiff, err := runGit(ctx, repoPath, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
 	if err != nil {
 		tokenDiff = cleanDiff
 	}
-	commitTokens := parseUnifiedDiffTokens(tokenDiff, ignorePatterns)
+	if cleanDiff == "" && err == nil {
+		cleanDiff = stripBinaryDiffs(tokenDiff)
+	}
+
+	parsed := parseUnifiedDiffTokensWithFiles(tokenDiff, ignorePatterns)
+	commitTokens := parsed.Tokens
 	totalLines := tokenTotals(commitTokens)
 
 	matchesIdent := identity == nil || commitMatchesExpandedIdentity(c.UserEmail, *identity, extraEmails)
@@ -517,8 +529,12 @@ func recomputeSingleCommit(
 	if matchesIdent {
 		var fileAgent map[string]commitFileCoverage
 		var remainingNorms map[string]int
-		contribs, matchedLines, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		files, fallbackLines = summarizeDiffFiles(tokenDiff, ignorePatterns, commitTokens, fileAgent, remainingNorms)
+		if msgIdx != nil {
+			contribs, matchedLines, fileAgent, remainingNorms = attributeCommitToMessagesWithIndex(commitTokens, msgIdx, windowStart, windowEnd)
+		} else {
+			contribs, matchedLines, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		}
+		files, fallbackLines = summarizeDiffFiles(parsed.Files, commitTokens, fileAgent, remainingNorms)
 		matchedLines += fallbackLines
 	}
 
@@ -541,7 +557,12 @@ func recomputeSingleCommit(
 	}
 
 	var byAgent map[string]agentStats
-	segs := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+	var segs []agentCoverageSegment
+	if msgIdx != nil {
+		segs = attributeCopiedFromAgentFilesWithIndex(files, commitTokens, msgIdx, totalLines)
+	} else {
+		segs = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+	}
 	if len(segs) > 0 {
 		byAgent = make(map[string]agentStats, len(segs))
 		for _, seg := range segs {
@@ -648,11 +669,17 @@ func recomputeCommitCoverageForProjectHashes(
 			maxTs = ts
 		}
 	}
-	messages, err := listDerivedDiffMessages(ctx, database, projectIDs(group), minTs-defaultMessageWindowMs, maxTs+commitWindowLookaheadMs)
+	msgWindowStart := minTs - defaultMessageWindowMs
+	msgWindowEnd := maxTs + commitWindowLookaheadMs
+	messages, err := listDerivedDiffMessages(ctx, database, projectIDs(group), msgWindowStart, msgWindowEnd)
 	if err != nil {
 		return 0, fmt.Errorf("list derived diff messages: %w", err)
 	}
 	ignorePatterns := groupIgnoreDiffPatterns(group)
+
+	// Pre-compute batch caches.
+	shallowHashes := shallowBoundaryHashes(ctx, repoProject.Path)
+	msgIdx := buildMessageIndex(messages, msgWindowStart, msgWindowEnd)
 
 	updatedCommits := make([]db.Commit, 0, len(commits))
 	perCommitAgent := make(map[string]map[string]agentStats)
@@ -662,7 +689,7 @@ func recomputeCommitCoverageForProjectHashes(
 		if progress != nil {
 			progress(fmt.Sprintf("Recomputing commit %s...", c.CommitHash), len(updatedCommits))
 		}
-		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
+		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails, shallowHashes, msgIdx)
 		if err != nil {
 			continue
 		}
@@ -804,11 +831,17 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 			maxTs = ts
 		}
 	}
-	messages, err := listDerivedDiffMessages(ctx, database, projectIDs(group), minTs-defaultMessageWindowMs, maxTs+commitWindowLookaheadMs)
+	msgWindowStart := minTs - defaultMessageWindowMs
+	msgWindowEnd := maxTs + commitWindowLookaheadMs
+	messages, err := listDerivedDiffMessages(ctx, database, projectIDs(group), msgWindowStart, msgWindowEnd)
 	if err != nil {
 		return 0, fmt.Errorf("list derived diff messages: %w", err)
 	}
 	ignorePatterns := groupIgnoreDiffPatterns(group)
+
+	// Pre-compute batch caches.
+	shallowHashes := shallowBoundaryHashes(ctx, repoProject.Path)
+	msgIdx := buildMessageIndex(messages, msgWindowStart, msgWindowEnd)
 
 	updatedCommits := make([]db.Commit, 0, len(commits))
 	perCommitAgent := make(map[string]map[string]agentStats)
@@ -822,7 +855,7 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 			}
 			commitProgress(fmt.Sprintf("Recomputing commit %s (%d/%d)...", hashPrefix, i+1, len(commits)), i)
 		}
-		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails)
+		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails, shallowHashes, msgIdx)
 		if err != nil {
 			continue
 		}
