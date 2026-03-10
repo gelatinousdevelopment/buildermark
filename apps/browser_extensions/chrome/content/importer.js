@@ -129,10 +129,8 @@ async function runImport(setBadge) {
     const repoUrl = agent.extractRepoUrl();
 
     if (messages.length === 0) {
-      overlay.show("Buildermark: No messages found to import.", "#ff6b6b");
       _setPageState("error");
       if (setBadge) setBadge("error");
-      setTimeout(() => overlay.hide(), 5000);
       return;
     }
 
@@ -151,20 +149,16 @@ async function runImport(setBadge) {
     const result = await BuildermarkAPI.importConversation(params);
 
     if (result.alreadyExisted) {
-      overlay.show("Buildermark: Already imported.", "#4ecdc4");
       _setPageState("already");
+      if (setBadge) setBadge("already");
     } else {
-      overlay.show(`Buildermark: Imported ${result.messageCount} messages.`, "#4ecdc4");
       _setPageState("done");
+      if (setBadge) setBadge("done");
     }
-    if (setBadge) setBadge("done");
-    setTimeout(() => overlay.hide(), 5000);
   } catch (err) {
     console.error("[Buildermark] Import failed:", err);
-    overlay.show(formatImportErrorMessage(err), "#ff6b6b");
     _setPageState("error");
     if (setBadge) setBadge("error");
-    setTimeout(() => overlay.hide(), 5000);
   }
 }
 

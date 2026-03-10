@@ -165,7 +165,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       clearBadgeState(tabId);
       break;
     case "importing":
-      chrome.action.setBadgeText({ text: "...", tabId });
+      chrome.action.setBadgeText({ text: "↑", tabId });
       chrome.action.setBadgeBackgroundColor({ color: "#4a9eff", tabId });
       chrome.action.setTitle({ title: "Buildermark: Importing...", tabId });
       break;

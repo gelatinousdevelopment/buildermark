@@ -69,7 +69,7 @@ class ClaudeCodeCloudListener {
 
     try {
       _setPageState('importing');
-      this.setBadge("loading");
+      this.setBadge("importing");
       const params = {
         ...payload,
         agent: "claude_cloud",
@@ -87,7 +87,7 @@ class ClaudeCodeCloudListener {
       const result = await BuildermarkAPI.importConversation(params);
       console.log("[Buildermark] Import result:", JSON.stringify(result));
       _setPageState(result.alreadyExisted ? 'already' : 'done');
-      this.setBadge(result.alreadyExisted ? "exists" : "done");
+      this.setBadge(result.alreadyExisted ? "already" : "done");
     } catch (e) {
       console.warn("[Buildermark] Failed to import Claude Code events:", e.message);
       _setPageState('error');
