@@ -179,6 +179,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.action.setBadgeBackgroundColor({ color: "#888", tabId });
       chrome.action.setTitle({ title: "Buildermark: Already imported", tabId });
       break;
+    case "pending":
+      clearBadgeState(tabId);
+      break;
     case "error":
       chrome.action.setBadgeText({ text: "!", tabId });
       chrome.action.setBadgeBackgroundColor({ color: "#ff6b6b", tabId });

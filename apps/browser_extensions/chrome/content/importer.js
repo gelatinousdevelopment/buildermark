@@ -8,6 +8,16 @@ const AGENTS = [];
 
 // Current page import state, queryable by the popup.
 let _buildermarkPageState = "waiting";
+let _autoImport = true;
+let _heldImportData = null;
+let _heldSetBadge = null;
+
+// Initialize auto-import setting from storage.
+if (typeof chrome !== "undefined" && chrome.storage) {
+  chrome.storage.local.get({ autoImport: true }, (result) => {
+    _autoImport = result.autoImport;
+  });
+}
 
 function _setPageState(state) {
   console.log("setPageState", state);
@@ -146,6 +156,15 @@ async function runImport(setBadge) {
       params.repoUrl = repoUrl;
     }
 
+    // If auto-import is off, hold the data and wait for manual trigger.
+    if (!_autoImport) {
+      _heldImportData = params;
+      _heldSetBadge = setBadge;
+      _setPageState("pending");
+      if (setBadge) setBadge("pending");
+      return;
+    }
+
     const result = await BuildermarkAPI.importConversation(params);
 
     if (result.alreadyExisted) {
@@ -162,11 +181,41 @@ async function runImport(setBadge) {
   }
 }
 
-// Listen for state queries from the popup.
+async function _sendHeldImport() {
+  const params = _heldImportData;
+  const setBadge = _heldSetBadge;
+  if (!params) return;
+  _heldImportData = null;
+  _heldSetBadge = null;
+
+  _setPageState("importing");
+  if (setBadge) setBadge("importing");
+
+  try {
+    const result = await BuildermarkAPI.importConversation(params);
+    if (result.alreadyExisted) {
+      _setPageState("already");
+      if (setBadge) setBadge("already");
+    } else {
+      _setPageState("done");
+      if (setBadge) setBadge("done");
+    }
+  } catch (err) {
+    console.error("[Buildermark] Import failed:", err);
+    _setPageState("error");
+    if (setBadge) setBadge("error");
+  }
+}
+
+// Listen for state queries and auto-import messages from the popup.
 if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "getPageState") {
       sendResponse({ state: _buildermarkPageState });
+    } else if (message.type === "autoImportChanged") {
+      _autoImport = message.value;
+    } else if (message.type === "triggerImport") {
+      _sendHeldImport();
     }
   });
 }

@@ -15,6 +15,7 @@ function setBadge(state) {
 
 // Start the listener.
 const listener = new ClaudeCodeCloudListener(setBadge);
+window._buildermarkClaudeCodeListener = listener;
 listener.start();
 
 // Also watch for SPA navigation (URL changes without full page reload).

@@ -111,6 +111,39 @@
             .open-link:hover {
                 background: var(--accent-color-darker);
             }
+            .settings-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+            .settings-row input[type="checkbox"] {
+                margin: 0;
+            }
+            .settings-row label {
+                font-size: 12px;
+                color: var(--color-text-secondary);
+                cursor: pointer;
+                user-select: none;
+            }
+            .import-btn {
+                margin-left: auto;
+                padding: 3px 10px;
+                background: var(--accent-color);
+                color: var(--accent-color-ultralight);
+                border: none;
+                border-radius: 4px;
+                font-weight: 500;
+                font-size: 11px;
+                cursor: pointer;
+                transition: background 0.15s;
+                flex-shrink: 0;
+            }
+            .import-btn:hover {
+                background: var(--accent-color-darker);
+            }
+            .import-btn.hidden {
+                display: none;
+            }
         </style>
     </head>
     <body>
@@ -128,10 +161,18 @@
         </div>
 
         <div class="section">
+            <div class="settings-row">
+                <input type="checkbox" id="auto-import" checked />
+                <label for="auto-import">Auto-import on supported pages</label>
+            </div>
+        </div>
+
+        <div class="section">
             <div class="label">Current Page</div>
             <div class="status-row">
                 <span class="status-dot gray" id="page-dot"></span>
                 <span class="status-text" id="page-status">Checking...</span>
+                <button class="import-btn hidden" id="import-btn">Import</button>
             </div>
         </div>
 

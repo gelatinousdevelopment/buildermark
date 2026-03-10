@@ -4,6 +4,8 @@ const serverDot = document.getElementById("server-dot");
 const pageDot = document.getElementById("page-dot");
 const pageStatus = document.getElementById("page-status");
 const openLink = document.getElementById("open-link");
+const autoImportCheckbox = document.getElementById("auto-import");
+const importBtn = document.getElementById("import-btn");
 
 // Open link in new tab instead of navigating the popup.
 openLink.addEventListener("click", (e) => {
@@ -34,6 +36,7 @@ const PAGE_STATES = {
   already: { text: "Already imported", dot: "green" },
   error: { text: "Import failed", dot: "red" },
   server_unavailable: { text: "Local server not reachable", dot: "red" },
+  pending: { text: "Ready to import", dot: "blue" },
 };
 
 // Query the content script directly for the import state.
@@ -68,6 +71,13 @@ function setPageState(state) {
   const info = PAGE_STATES[state] || PAGE_STATES.ignored;
   pageDot.className = "status-dot " + info.dot;
   pageStatus.textContent = info.text;
+
+  // Show Import button only when state is "pending".
+  if (state === "pending") {
+    importBtn.classList.remove("hidden");
+  } else {
+    importBtn.classList.add("hidden");
+  }
 }
 
 // Listen for live state changes from content scripts while the popup is open.
@@ -92,3 +102,28 @@ chrome.tabs.onActivated.addListener(() => {
 });
 
 checkPageState();
+
+// Auto-import toggle.
+chrome.storage.local.get({ autoImport: true }, (result) => {
+  autoImportCheckbox.checked = result.autoImport;
+});
+
+autoImportCheckbox.addEventListener("change", () => {
+  const value = autoImportCheckbox.checked;
+  chrome.storage.local.set({ autoImport: value });
+  // Broadcast to content scripts in the active tab.
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { type: "autoImportChanged", value }).catch(() => {});
+    }
+  });
+});
+
+// Import button — trigger manual import on active tab.
+importBtn.addEventListener("click", () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { type: "triggerImport" }).catch(() => {});
+    }
+  });
+});

@@ -6,6 +6,14 @@
 
 // Current page import state, queryable by the popup.
 let _buildermarkPageState = 'waiting';
+let _autoImport = true;
+
+// Initialize auto-import setting from storage.
+if (typeof chrome !== 'undefined' && chrome.storage) {
+  chrome.storage.local.get({ autoImport: true }, (result) => {
+    _autoImport = result.autoImport;
+  });
+}
 
 function _setPageState(state) {
   _buildermarkPageState = state;
@@ -16,11 +24,18 @@ function _setPageState(state) {
   }
 }
 
-// Listen for state queries from the popup.
+// Listen for state queries and auto-import messages from the popup.
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'getPageState') {
       sendResponse({ state: _buildermarkPageState });
+    } else if (message.type === 'autoImportChanged') {
+      _autoImport = message.value;
+    } else if (message.type === 'triggerImport') {
+      // Manual import trigger — send any held data.
+      if (window._buildermarkClaudeCodeListener) {
+        window._buildermarkClaudeCodeListener._send();
+      }
     }
   });
 }
@@ -56,6 +71,14 @@ class ClaudeCodeCloudListener {
     if (this._debounceTimer) {
       clearTimeout(this._debounceTimer);
     }
+
+    if (!_autoImport) {
+      // Hold data without sending — user must click Import.
+      _setPageState('pending');
+      this.setBadge('pending');
+      return;
+    }
+
     this._debounceTimer = setTimeout(() => {
       this._debounceTimer = null;
       this._send();
