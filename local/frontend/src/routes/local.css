@@ -11,7 +11,7 @@
 	--color-text-secondary: light-dark(#666, #999);
 	--color-text-tertiary: light-dark(#888, #777);
 	--color-text-strong: light-dark(#333, #e0e0e0);
-	--color-divider: light-dark(#bbb, #3a3a3e);
+	--color-divider: light-dark(#bbb, #555555);
 	--color-border-light: light-dark(#eee, #333);
 	--color-border-medium: light-dark(#ccc, #444);
 	--color-border-input: light-dark(#aaa, #666);
@@ -72,6 +72,7 @@
 	--color-prompt-border: light-dark(#a8ef70, #3a6a24);
 	--color-rating-background: light-dark(#fffbea, #2e2a16);
 	--color-rating-border: light-dark(#f0c040, #8a7028);
+	--color-rating-stars: light-dark(#787878, #777777);
 	--color-tag-border: light-dark(#555, #666);
 	--color-tag-background: light-dark(#eee, #333);
 	--color-tag-text: light-dark(#555, #bbb);

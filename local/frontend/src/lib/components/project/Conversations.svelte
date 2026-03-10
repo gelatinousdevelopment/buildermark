@@ -206,9 +206,6 @@
 			);
 			if (myToken !== requestToken) return;
 			project = detail;
-			if (enableRelationshipHover) {
-				relationshipCache.loadConversationParentLinks(projectId, detail.conversations);
-			}
 			if (onConversationsLoaded) {
 				onConversationsLoaded(detail.conversations.map((c) => c.id));
 			}

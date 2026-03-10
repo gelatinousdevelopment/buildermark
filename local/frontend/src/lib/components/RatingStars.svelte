@@ -46,6 +46,7 @@
 
 <style>
 	.avg-stars {
+		color: var(--color-rating-stars);
 		cursor: default;
 	}
 

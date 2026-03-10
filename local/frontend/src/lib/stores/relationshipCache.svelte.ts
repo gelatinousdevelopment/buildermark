@@ -1,14 +1,10 @@
 import { getCommitConversationLinks } from '$lib/api';
-import type { ConversationWithRatings } from '$lib/types';
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 interface CacheEntry {
 	commitToConversations: Record<string, string[]>;
 	conversationToCommits: Record<string, string[]>;
-	// Parent/child conversation links (keyed by conversation ID).
-	conversationParent: Record<string, string>; // child -> parent
-	conversationChildren: Record<string, string[]>; // parent -> children
 	fetchedAt: number;
 }
 
@@ -37,8 +33,6 @@ function ensureCacheEntry(projectId: string): CacheEntry {
 		entry = {
 			commitToConversations: {},
 			conversationToCommits: {},
-			conversationParent: {},
-			conversationChildren: {},
 			fetchedAt: Date.now()
 		};
 		cache.set(projectId, entry);
@@ -61,21 +55,6 @@ function mergeCacheEntry(projectId: string, data: Partial<CacheEntry>): void {
 	if (data.fetchedAt) {
 		existing.fetchedAt = data.fetchedAt;
 	}
-}
-
-/**
- * Collect related conversation IDs for a given conversation,
- * including parent and children from the cache.
- */
-function getRelatedConversationIds(entry: CacheEntry, conversationId: string): string[] {
-	const related: string[] = [];
-	// Add parent if exists.
-	const parent = entry.conversationParent[conversationId];
-	if (parent) related.push(parent);
-	// Add children if exist.
-	const children = entry.conversationChildren[conversationId];
-	if (children) related.push(...children);
-	return related;
 }
 
 export const relationshipCache = {
@@ -125,27 +104,8 @@ export const relationshipCache = {
 	},
 
 	/**
-	 * Load parent/child conversation relationships from the conversations data.
-	 * This builds the parent/child maps from the parentConversationId field
-	 * available on each conversation.
-	 */
-	loadConversationParentLinks(projectId: string, conversations: ConversationWithRatings[]): void {
-		const entry = ensureCacheEntry(projectId);
-		entry.conversationParent = {};
-		entry.conversationChildren = {};
-		for (const conv of conversations) {
-			if (!conv.parentConversationId) continue;
-			entry.conversationParent[conv.id] = conv.parentConversationId;
-			if (!entry.conversationChildren[conv.parentConversationId]) {
-				entry.conversationChildren[conv.parentConversationId] = [];
-			}
-			entry.conversationChildren[conv.parentConversationId].push(conv.id);
-		}
-	},
-
-	/**
 	 * Called when hovering over a conversation row. Looks up related commit
-	 * hashes and parent/child conversations from the cache.
+	 * hashes from the cache.
 	 */
 	hoverConversation(projectId: string, conversationId: string | null): void {
 		_hoveredConversationId = conversationId;
@@ -158,9 +118,7 @@ export const relationshipCache = {
 		const entry = getCacheEntry(projectId);
 		const hashes = entry?.conversationToCommits[conversationId] ?? [];
 		_highlightedCommitHashes = new Set(hashes);
-		// Highlight parent/child conversations.
-		const relatedConvs = entry ? getRelatedConversationIds(entry, conversationId) : [];
-		_highlightedConversationIds = new Set(relatedConvs);
+		_highlightedConversationIds = new Set();
 	},
 
 	/**
