@@ -9,9 +9,9 @@
                 --accent-color-darkest: light-dark(#003377, #9ecdff);
                 --accent-color-ultralight: light-dark(#eff7ff, #002b5e);
                 --accent-color-divider: light-dark(#9fbbd6, #3a5a7a);
-                --color-text: light-dark(#444, #d4d4d4);
-                --color-text-faded: light-dark(#888, #777);
-                --color-text-secondary: light-dark(#666, #999);
+                --color-text: var(--accent-color-ultralight);
+                --color-text-faded: light-dark(#dfe7ef, #002b5e);
+                --color-text-secondary: light-dark(#cfd7ff, #002b5e);
                 --color-text-tertiary: light-dark(#888, #777);
                 --color-text-strong: light-dark(#333, #e0e0e0);
                 --color-divider: light-dark(#bbb, #3a3a3e);
@@ -22,8 +22,7 @@
                 --color-status-yellow: light-dark(#f8d233, #f8d233);
                 --color-status-red: light-dark(#dd5555, #dd5555);
 
-                --color-background-content: light-dark(#fff, #222226);
-                --color-background-page: light-dark(#fcfcfc, #1a1a1e);
+                --color-background-page: var(--accent-color);
                 --color-background-empty: light-dark(#f0f0f0, #2a2a2e);
                 --color-background-project-header: light-dark(#fff, #222226);
                 --color-background-elevated: light-dark(#fbfbfb, #2a2a2e);
@@ -45,11 +44,11 @@
             }
             .header {
                 padding: 8px 1rem 0px 1rem;
-                border-bottom: 2px solid var(--color-text);
+                border-bottom: 1px solid var(--color-text);
             }
             .header svg {
                 display: block;
-                height: 30px;
+                height: 28px;
                 width: auto;
                 color: var(--color-text);
                 fill: var(--color-text);
@@ -65,7 +64,7 @@
                 font-size: 11px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
-                color: #888;
+                color: var(--color-text-secondary);
                 margin-bottom: 6px;
             }
             .status-row {
@@ -99,9 +98,9 @@
             }
             .open-link {
                 display: block;
-                padding: 8px 12px;
-                background: var(--accent-color);
-                color: var(--accent-color-ultralight);
+                padding: 6px 12px;
+                background: var(--accent-color-ultralight);
+                color: var(--accent-color);
                 text-decoration: none;
                 border-radius: 6px;
                 text-align: center;
@@ -109,7 +108,7 @@
                 transition: background 0.15s;
             }
             .open-link:hover {
-                background: var(--accent-color-darker);
+                filter: brightness(0.9);
             }
             .settings-row {
                 display: flex;
@@ -118,10 +117,11 @@
             }
             .settings-row input[type="checkbox"] {
                 margin: 0;
+                box-shadow: 0 0 0 1px var(--color-text);
             }
             .settings-row label {
                 font-size: 12px;
-                color: var(--color-text-secondary);
+                color: var(--color-text);
                 cursor: pointer;
                 user-select: none;
             }
