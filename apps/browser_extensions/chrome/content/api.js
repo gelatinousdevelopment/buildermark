@@ -3,6 +3,36 @@
  */
 const API_BASE = 'http://localhost:7022/api/v1';
 
+function sendApiRequest(endpoint, options = {}) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      {
+        type: 'buildermarkApiRequest',
+        endpoint,
+        options,
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+
+        if (!response) {
+          reject(new Error('No response from extension background worker'));
+          return;
+        }
+
+        if (!response.ok) {
+          reject(new Error(response.error || 'Extension API request failed'));
+          return;
+        }
+
+        resolve(response.data);
+      },
+    );
+  });
+}
+
 const BuildermarkAPI = {
   /**
    * Check if a conversation URL has already been imported.
@@ -10,12 +40,7 @@ const BuildermarkAPI = {
    * @returns {Promise<{ imported: boolean, conversationId?: string }>}
    */
   async checkUrl(url) {
-    const resp = await fetch(`${API_BASE}/conversations/check-url?url=${encodeURIComponent(url)}`);
-    const json = await resp.json();
-    if (!json.ok) {
-      throw new Error(json.error || 'Failed to check URL');
-    }
-    return json.data;
+    return sendApiRequest(`${API_BASE}/conversations/check-url?url=${encodeURIComponent(url)}`);
   },
 
   /**
@@ -33,16 +58,11 @@ const BuildermarkAPI = {
    * @returns {Promise<{ imported: boolean, conversationId: string, alreadyExisted: boolean, messageCount?: number }>}
    */
   async importConversation(params) {
-    const resp = await fetch(`${API_BASE}/conversations/import-web`, {
+    return sendApiRequest(`${API_BASE}/conversations/import-web`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    const json = await resp.json();
-    if (!json.ok) {
-      throw new Error(json.error || 'Failed to import conversation');
-    }
-    return json.data;
   },
 };
 

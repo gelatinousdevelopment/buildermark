@@ -1,15 +1,15 @@
 const GRAY_ICONS = {
-  16: "icons/icon16.png",
-  32: "icons/icon32.png",
-  48: "icons/icon48.png",
-  128: "icons/icon128.png",
+  16: "../icons/icon16.png",
+  32: "../icons/icon32.png",
+  48: "../icons/icon48.png",
+  128: "../icons/icon128.png",
 };
 
 const BLUE_ICONS = {
-  16: "icons/blue_icon16.png",
-  32: "icons/blue_icon32.png",
-  48: "icons/blue_icon48.png",
-  128: "icons/blue_icon128.png",
+  16: "../icons/blue_icon16.png",
+  32: "../icons/blue_icon32.png",
+  48: "../icons/blue_icon48.png",
+  128: "../icons/blue_icon128.png",
 };
 
 const ACTIVE_URL_PATTERNS = [
@@ -18,9 +18,53 @@ const ACTIVE_URL_PATTERNS = [
   /https?:\/\/codex\.openai\.com\/(?:s\/)?([a-zA-Z0-9_-]+)(?:[/?#]|$)/i,
   /https?:\/\/(?:[^/]+\.)?claude\.ai\/code\/([^/?#]+)(?:[/?#]|$)/i,
 ];
+const API_BASE = "http://localhost:7022/api/v1/";
 
 // Track per-tab import state for the popup.
 const tabStates = new Map();
+
+async function handleApiRequest(endpoint, options = {}) {
+  if (typeof endpoint !== "string" || !endpoint.startsWith(API_BASE)) {
+    return {
+      ok: false,
+      error: "Blocked unexpected API endpoint",
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetch(endpoint, options);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || "Failed to reach Buildermark local server",
+    };
+  }
+
+  let json;
+  try {
+    json = await response.json();
+  } catch {
+    return {
+      ok: false,
+      error: `Buildermark server returned ${response.status} ${response.statusText || "response"}`,
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: json?.error || `Buildermark server returned ${response.status}`,
+    };
+  }
+
+  return {
+    ok: Boolean(json?.ok),
+    data: json?.data,
+    error: json?.ok ? undefined : json?.error || "Buildermark request failed",
+  };
+}
 
 function isActiveUrl(url) {
   if (!url) return false;
@@ -86,6 +130,18 @@ function getTabState(tabId, url) {
 
 // Listen for messages from content scripts and popup.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "buildermarkApiRequest") {
+    handleApiRequest(message.endpoint, message.options)
+      .then((result) => sendResponse(result))
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error?.message || "Unexpected Buildermark API error",
+        });
+      });
+    return true;
+  }
+
   if (message.type === "getTabState") {
     chrome.tabs.get(message.tabId, (tab) => {
       if (chrome.runtime.lastError || !tab) {

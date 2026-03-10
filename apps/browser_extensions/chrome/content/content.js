@@ -1,6 +1,6 @@
 // Inject the fetch interceptor into the page's main world.
 const script = document.createElement("script");
-script.src = chrome.runtime.getURL("fetch_interceptor.js");
+script.src = chrome.runtime.getURL("web_accessible/fetch_interceptor.js");
 (document.head || document.documentElement).appendChild(script);
 script.onload = () => script.remove();
 
@@ -17,9 +17,6 @@ function setBadge(state) {
 const listener = new ClaudeCodeCloudListener(setBadge);
 listener.start();
 
-// Run the import when the page loads.
-runImport(setBadge);
-
 // Also watch for SPA navigation (URL changes without full page reload).
 let lastUrl = window.location.href;
 const observer = new MutationObserver(() => {
@@ -28,7 +25,6 @@ const observer = new MutationObserver(() => {
     // Immediately reset state so the popup updates.
     _setPageState("waiting");
     setBadge("waiting");
-    runImport(setBadge);
   }
 });
-observer.observe(document.body, { childList: true, subtree: true });
+observer.observe(document.documentElement, { childList: true, subtree: true });

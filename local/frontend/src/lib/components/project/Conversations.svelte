@@ -503,7 +503,6 @@
 			{/each}
 		</tbody>
 	</table>
-
 {/if}
 
 <style>

@@ -23,6 +23,18 @@ function registerAgent(agent) {
   AGENTS.push(agent);
 }
 
+function formatImportErrorMessage(err) {
+  const message = typeof err?.message === "string" ? err.message.trim() : "";
+  if (!message) {
+    return "Buildermark: Import failed.";
+  }
+
+  const normalized = message.replace(/\s+/g, " ");
+  const trimmed = normalized.replace(/[.!\s]+$/, "");
+  const displayMessage = trimmed.length > 160 ? `${trimmed.slice(0, 157)}...` : trimmed;
+  return `Buildermark: Import failed: ${displayMessage}.`;
+}
+
 /**
  * Find the matching agent for the current URL.
  * @param {string} url
@@ -149,8 +161,8 @@ async function runImport(setBadge) {
     setTimeout(() => overlay.hide(), 5000);
   } catch (err) {
     console.error("[Buildermark] Import failed:", err);
-    overlay.show("Buildermark: Import failed.", "#ff6b6b");
-    _buildermarkPageState = "error";
+    overlay.show(formatImportErrorMessage(err), "#ff6b6b");
+    _setPageState("error");
     if (setBadge) setBadge("error");
     setTimeout(() => overlay.hide(), 5000);
   }
