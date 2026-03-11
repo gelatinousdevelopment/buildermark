@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -191,4 +195,152 @@ func TestClaudeCloudToEntry_RealUserNoUUID(t *testing.T) {
 	if entry.SourceToolAssistantUUID != "" {
 		t.Errorf("expected empty SourceToolAssistantUUID for real user message, got %q", entry.SourceToolAssistantUUID)
 	}
+}
+
+func TestImportWebConversationLogsRawRequest(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	body := `{"url":"https://example.com/conversations/1","agent":"codex","title":"Test import","messages":[{"role":"user","content":"hello","timestamp":1},{"role":"agent","content":"world","timestamp":2}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+
+	logRow := fetchLatestImportLog(t, s.DB)
+	if !logRow.logType.Valid || logRow.logType.String != "web" {
+		t.Fatalf("type = %#v, want web", logRow.logType)
+	}
+	if logRow.source.Valid {
+		t.Fatalf("source = %#v, want NULL", logRow.source)
+	}
+	if logRow.sourceID != "https://example.com/conversations/1" {
+		t.Fatalf("source_id = %q, want %q", logRow.sourceID, "https://example.com/conversations/1")
+	}
+	if logRow.timestamp <= 0 {
+		t.Fatalf("timestamp = %d, want > 0", logRow.timestamp)
+	}
+	if logRow.content != body {
+		t.Fatalf("content = %q, want %q", logRow.content, body)
+	}
+}
+
+func TestImportWebConversationLogsCloudSource(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	body := `{"url":"https://example.com/conversations/cloud-1","agent":"claude_cloud","events":[{"type":"result","result":"Final answer","created_at":"2025-01-01T00:00:00Z"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+
+	logRow := fetchLatestImportLog(t, s.DB)
+	if !logRow.source.Valid || logRow.source.String != "claude_cloud" {
+		t.Fatalf("source = %#v, want claude_cloud", logRow.source)
+	}
+	if logRow.content != body {
+		t.Fatalf("content = %q, want %q", logRow.content, body)
+	}
+}
+
+func TestImportWebConversationDuplicateStillLogs(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	body := `{"url":"https://example.com/conversations/dup-1","agent":"codex","messages":[{"role":"user","content":"hello","timestamp":1}]}`
+
+	for i, wantStatus := range []int{http.StatusCreated, http.StatusOK} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != wantStatus {
+			t.Fatalf("request %d status = %d, want %d", i+1, rec.Code, wantStatus)
+		}
+	}
+
+	if got := countImportLogs(t, s.DB); got != 2 {
+		t.Fatalf("import log count = %d, want 2", got)
+	}
+}
+
+func TestImportWebConversationInvalidRequestsDoNotLog(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "malformed json",
+			body: `{"url":`,
+		},
+		{
+			name: "missing url",
+			body: `{"agent":"codex","messages":[{"role":"user","content":"hello"}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := setupTestServer(t)
+			handler := s.Routes()
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if got := countImportLogs(t, s.DB); got != 0 {
+				t.Fatalf("import log count = %d, want 0", got)
+			}
+		})
+	}
+}
+
+type importLogRow struct {
+	logType   sql.NullString
+	source    sql.NullString
+	sourceID  string
+	timestamp int64
+	content   string
+}
+
+func fetchLatestImportLog(t *testing.T, database *sql.DB) importLogRow {
+	t.Helper()
+
+	var row importLogRow
+	err := database.QueryRow(`
+		SELECT type, source, source_id, timestamp, content
+		FROM import_logs
+		ORDER BY timestamp DESC, id DESC
+		LIMIT 1
+	`).Scan(&row.logType, &row.source, &row.sourceID, &row.timestamp, &row.content)
+	if err != nil {
+		t.Fatalf("query import log: %v", err)
+	}
+
+	return row
+}
+
+func countImportLogs(t *testing.T, database *sql.DB) int {
+	t.Helper()
+
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM import_logs").Scan(&count); err != nil {
+		t.Fatalf("count import logs: %v", err)
+	}
+	return count
 }

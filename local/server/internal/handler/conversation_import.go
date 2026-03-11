@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -69,8 +70,16 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
 	var body webConversationImportRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(rawBody, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -84,6 +93,22 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 	}
 	if body.Agent == "" {
 		writeError(w, http.StatusBadRequest, "agent is required")
+		return
+	}
+	if len(body.Events) == 0 && len(body.Messages) == 0 {
+		writeError(w, http.StatusBadRequest, "messages are required")
+		return
+	}
+
+	if err := db.InsertImportLog(r.Context(), s.DB, db.ImportLog{
+		Type:      "web",
+		Source:    importLogSourceFromAgent(body.Agent),
+		SourceID:  body.URL,
+		Timestamp: time.Now().UnixMilli(),
+		Content:   string(rawBody),
+	}); err != nil {
+		log.Printf("error inserting import log: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to log import")
 		return
 	}
 
@@ -101,7 +126,7 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 
 	// Check if already imported.
 	var existingID string
-	err := s.DB.QueryRowContext(r.Context(), "SELECT id FROM conversations WHERE url = ?", body.URL).Scan(&existingID)
+	err = s.DB.QueryRowContext(r.Context(), "SELECT id FROM conversations WHERE url = ?", body.URL).Scan(&existingID)
 	if err == nil {
 		writeSuccess(w, http.StatusOK, map[string]any{
 			"imported":       true,
@@ -199,6 +224,15 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		"alreadyExisted": false,
 		"messageCount":   len(messages),
 	})
+}
+
+func importLogSourceFromAgent(agentName string) string {
+	switch strings.TrimSpace(agentName) {
+	case "claude_cloud", "codex_cloud":
+		return agentName
+	default:
+		return ""
+	}
 }
 
 // --- Cloud event processing (consolidated from the old dedicated endpoint) ---

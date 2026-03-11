@@ -73,6 +73,10 @@ func TestMigrationsRunCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("messages table missing or wrong schema: %v", err)
 	}
+	_, err = db.Exec("SELECT id, type, source, source_id, timestamp, content FROM import_logs LIMIT 0")
+	if err != nil {
+		t.Fatalf("import_logs table missing or wrong schema: %v", err)
+	}
 }
 
 func TestMigrationsIdempotent(t *testing.T) {
@@ -135,6 +139,7 @@ func TestTimestampColumnsUseIntegerUnixMs(t *testing.T) {
 	assertColumnType("ratings", "created_at", "INTEGER")
 	assertColumnType("commits", "created_at", "INTEGER")
 	assertColumnType("schema_version", "applied_at", "INTEGER")
+	assertColumnType("import_logs", "timestamp", "INTEGER")
 
 	assertColumnMissing := func(table, column string) {
 		t.Helper()
