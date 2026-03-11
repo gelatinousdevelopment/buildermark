@@ -31,6 +31,39 @@ func TestEnsureProject(t *testing.T) {
 	}
 }
 
+func TestInsertMessagesPreservesDiffMessageTypeForAnyRole(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/home/user/myproject")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-diff-role", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{{
+		Timestamp:      1000,
+		ProjectID:      projectID,
+		ConversationID: "conv-diff-role",
+		Role:           "user",
+		MessageType:    MessageTypeDiff,
+		Content:        "```diff\none\n```",
+		RawJSON:        `{"source":"derived_diff"}`,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var messageType string
+	if err := db.QueryRow("SELECT message_type FROM messages WHERE conversation_id = 'conv-diff-role'").Scan(&messageType); err != nil {
+		t.Fatalf("query message_type: %v", err)
+	}
+	if messageType != MessageTypeDiff {
+		t.Fatalf("message_type = %q, want %q", messageType, MessageTypeDiff)
+	}
+}
+
 func TestEnsureProjectSetsLabelFallback(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

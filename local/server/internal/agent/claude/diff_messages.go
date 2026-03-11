@@ -54,6 +54,7 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 			ProjectID:      m.ProjectID,
 			ConversationID: m.ConversationID,
 			Role:           m.Role,
+			MessageType:    db.MessageTypeDiff,
 			Model:          m.Model,
 			Content:        agent.FormatDiffMessage(diff),
 			RawJSON:        agent.DerivedDiffRawJSON,

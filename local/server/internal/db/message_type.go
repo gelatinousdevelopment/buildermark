@@ -7,6 +7,7 @@ const (
 	MessageTypeQuestion    = "question"
 	MessageTypeAnswer      = "answer"
 	MessageTypeFinalAnswer = "final_answer"
+	MessageTypeDiff        = "diff"
 	MessageTypeLog         = "log"
 )
 
@@ -20,6 +21,8 @@ func normalizeMessageType(messageType string) string {
 		return MessageTypeAnswer
 	case MessageTypeFinalAnswer:
 		return MessageTypeFinalAnswer
+	case MessageTypeDiff:
+		return MessageTypeDiff
 	default:
 		return MessageTypeLog
 	}
@@ -47,6 +50,8 @@ func canonicalMessageType(role, messageType, content string) string {
 			return MessageTypeFinalAnswer
 		}
 		return MessageTypeLog
+	case MessageTypeDiff:
+		return MessageTypeDiff
 	default:
 		return inferMessageType(role, content)
 	}

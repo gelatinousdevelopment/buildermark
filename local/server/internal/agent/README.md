@@ -53,6 +53,7 @@ Watchers now classify imported messages with `messages.message_type`:
 | `prompt`       | Real user prompt text (not slash commands like `/clear` or rating commands like `$bb`) |
 | `question`     | Model-originated structured question shown to the user for input |
 | `answer`       | User response payload for a structured question |
+| `diff`         | Synthetic diff-only message derived from a message or import payload |
 | `log`          | Everything else (events, metadata, tool logs, summaries, etc.) |
 
 Conventions to follow when implementing/updating an agent importer:

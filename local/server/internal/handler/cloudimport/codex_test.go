@@ -99,8 +99,8 @@ func TestProcessCodexTask_SampleData(t *testing.T) {
 	}
 
 	// Third message should be the diff.
-	if result.Messages[2].MessageType != db.MessageTypeLog {
-		t.Errorf("third message type = %q, want %q", result.Messages[2].MessageType, db.MessageTypeLog)
+	if result.Messages[2].MessageType != db.MessageTypeDiff {
+		t.Errorf("third message type = %q, want %q", result.Messages[2].MessageType, db.MessageTypeDiff)
 	}
 
 	if result.Model != "gpt-5.3-codex-1p-codexswic-ev3" {
@@ -289,8 +289,8 @@ func TestProcessCodexTask_PRDiffExtraction(t *testing.T) {
 	if m.Role != "agent" {
 		t.Errorf("role = %q, want agent", m.Role)
 	}
-	if m.MessageType != db.MessageTypeLog {
-		t.Errorf("type = %q, want %q", m.MessageType, db.MessageTypeLog)
+	if m.MessageType != db.MessageTypeDiff {
+		t.Errorf("type = %q, want %q", m.MessageType, db.MessageTypeDiff)
 	}
 	if !strings.Contains(m.Content, "```diff") {
 		t.Errorf("content should contain ```diff fence, got %q", m.Content)
@@ -573,7 +573,7 @@ func TestProcessCodexTask_TurnsFormat(t *testing.T) {
 	if result.Messages[1].Role != "agent" || result.Messages[1].MessageType != db.MessageTypeFinalAnswer {
 		t.Errorf("second message: role=%q type=%q, want agent/final_answer", result.Messages[1].Role, result.Messages[1].MessageType)
 	}
-	if result.Messages[2].MessageType != db.MessageTypeLog || !strings.Contains(result.Messages[2].Content, "```diff") {
+	if result.Messages[2].MessageType != db.MessageTypeDiff || !strings.Contains(result.Messages[2].Content, "```diff") {
 		t.Errorf("third message: type=%q content does not contain diff fence", result.Messages[2].MessageType)
 	}
 	if result.Messages[2].RawJSON != agent.DerivedDiffRawJSON {

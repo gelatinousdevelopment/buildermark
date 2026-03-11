@@ -59,12 +59,13 @@ export function isPlanPromptMessage(message: MessageRead): boolean {
 
 export function messageType(
 	message: MessageRead
-): 'prompt' | 'question' | 'answer' | 'final_answer' | 'log' {
+): 'prompt' | 'question' | 'answer' | 'final_answer' | 'diff' | 'log' {
 	const t = typeof message.messageType === 'string' ? message.messageType.trim().toLowerCase() : '';
 	if (t === 'prompt') return message.role === 'user' ? 'prompt' : 'log';
 	if (t === 'question') return message.role === 'agent' ? 'question' : 'log';
 	if (t === 'answer') return message.role === 'user' ? 'answer' : 'log';
 	if (t === 'final_answer') return message.role === 'agent' ? 'final_answer' : 'log';
+	if (t === 'diff') return 'diff';
 	if (t === 'log') return 'log';
 	if (isUserPromptMessageLegacy(message)) return 'prompt';
 	return 'log';
@@ -95,6 +96,7 @@ export function isStandaloneTimelineMessage(message: MessageRead): boolean {
 }
 
 export function isDiffMessage(message: MessageRead): boolean {
+	if (messageType(message) === 'diff') return true;
 	const trimmed = message.content.trimStart();
 	if (trimmed.startsWith('```diff') || trimmed.startsWith('diff --git ')) return true;
 	try {
@@ -113,6 +115,7 @@ export function messageModel(message: MessageRead): string {
 
 export function messageTypeLabel(message: MessageRead): string {
 	const type = messageType(message);
+	if (type === 'diff') return 'diff';
 	if (type === 'final_answer') return 'final answer';
 	if (type !== 'log') return type;
 	if (isDiffMessage(message)) return 'diff';

@@ -114,6 +114,7 @@ func AppendDiffDBMessagesWithOptions(messages []db.Message, opts DiffAppendOptio
 				ProjectID:      m.ProjectID,
 				ConversationID: m.ConversationID,
 				Role:           m.Role,
+				MessageType:    db.MessageTypeDiff,
 				Model:          m.Model,
 				Content:        FormatDiffMessage(diff),
 				RawJSON:        DerivedDiffRawJSON,

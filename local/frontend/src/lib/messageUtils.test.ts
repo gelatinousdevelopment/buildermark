@@ -43,6 +43,18 @@ describe('messageType', () => {
 		expect(messageType(message)).toBe('answer');
 		expect(isStandaloneTimelineMessage(message)).toBe(true);
 	});
+
+	it('treats explicit diff rows as diff messages', () => {
+		const message = makeMessage({
+			role: 'agent',
+			messageType: 'diff',
+			content: 'not fenced',
+			rawJson: '{}'
+		});
+
+		expect(messageType(message)).toBe('diff');
+		expect(isStandaloneTimelineMessage(message)).toBe(false);
+	});
 });
 
 describe('plan prompt detection', () => {
@@ -59,9 +71,7 @@ describe('plan prompt detection', () => {
 	});
 
 	it('skips blank lines before the first heading', () => {
-		expect(planPromptTitle('Implement the following plan:\n\n\n# Plan: My Title')).toBe(
-			'My Title'
-		);
+		expect(planPromptTitle('Implement the following plan:\n\n\n# Plan: My Title')).toBe('My Title');
 	});
 
 	it('returns empty for non-plan prompts', () => {

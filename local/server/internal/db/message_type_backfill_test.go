@@ -53,3 +53,38 @@ func TestBackfillMessageTypesDowngradesAgentPromptRowsToLog(t *testing.T) {
 		t.Fatalf("user_prompt_count = %d, want 1", promptCount)
 	}
 }
+
+func TestBackfillMessageTypesPromotesLegacyDerivedDiffRows(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, database, "/proj/claude")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, database, "conv-diff", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	if _, err := database.Exec(
+		`INSERT INTO messages (id, timestamp, project_id, conversation_id, role, message_type, model, content, raw_json)
+		 VALUES ('m-diff', 1000, ?, 'conv-diff', 'agent', 'log', '', ?, ?)`,
+		projectID,
+		"```diff\none\n```",
+		`{"source":"derived_diff"}`,
+	); err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+
+	if err := backfillMessageTypes(ctx, database); err != nil {
+		t.Fatalf("backfillMessageTypes: %v", err)
+	}
+
+	var messageType string
+	if err := database.QueryRow("SELECT message_type FROM messages WHERE id = 'm-diff'").Scan(&messageType); err != nil {
+		t.Fatalf("query m-diff: %v", err)
+	}
+	if messageType != MessageTypeDiff {
+		t.Fatalf("m-diff message_type = %q, want %q", messageType, MessageTypeDiff)
+	}
+}

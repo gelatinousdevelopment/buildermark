@@ -237,6 +237,11 @@ func TestMigration44DropsCharColumnsWithOrphanedCommits(t *testing.T) {
 			files_edited TEXT NOT NULL DEFAULT '',
 			url TEXT NOT NULL DEFAULT ''
 		)`,
+		`CREATE TABLE messages (
+			id TEXT PRIMARY KEY,
+			message_type TEXT NOT NULL DEFAULT 'log',
+			raw_json TEXT NOT NULL DEFAULT ''
+		)`,
 		`CREATE TABLE commit_conversation_links (
 			commit_id TEXT NOT NULL,
 			conversation_id TEXT NOT NULL,
@@ -296,6 +301,55 @@ func TestMigration44DropsCharColumnsWithOrphanedCommits(t *testing.T) {
 	}
 	if linkCount != 1 {
 		t.Fatalf("commit_conversation_links count = %d, want 1", linkCount)
+	}
+}
+
+func TestMigration49BackfillsDerivedDiffRowsToDiffType(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	stmts := []string{
+		`CREATE TABLE schema_version (
+			version INTEGER PRIMARY KEY,
+			applied_at INTEGER NOT NULL DEFAULT 0
+		)`,
+		`INSERT INTO schema_version (version, applied_at) VALUES (48, 0)`,
+		`CREATE TABLE messages (
+			id TEXT PRIMARY KEY,
+			message_type TEXT NOT NULL DEFAULT 'log',
+			raw_json TEXT NOT NULL DEFAULT ''
+		)`,
+		`INSERT INTO messages (id, message_type, raw_json) VALUES
+			('m-diff', 'log', '{"source":"derived_diff"}'),
+			('m-log', 'log', '{"source":"other"}')`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("seed statement failed: %v\n%s", err, stmt)
+		}
+	}
+
+	if err := runMigrations(db); err != nil {
+		t.Fatalf("runMigrations: %v", err)
+	}
+
+	var diffType string
+	if err := db.QueryRow(`SELECT message_type FROM messages WHERE id = 'm-diff'`).Scan(&diffType); err != nil {
+		t.Fatalf("query m-diff: %v", err)
+	}
+	if diffType != MessageTypeDiff {
+		t.Fatalf("m-diff message_type = %q, want %q", diffType, MessageTypeDiff)
+	}
+
+	var logType string
+	if err := db.QueryRow(`SELECT message_type FROM messages WHERE id = 'm-log'`).Scan(&logType); err != nil {
+		t.Fatalf("query m-log: %v", err)
+	}
+	if logType != MessageTypeLog {
+		t.Fatalf("m-log message_type = %q, want %q", logType, MessageTypeLog)
 	}
 }
 

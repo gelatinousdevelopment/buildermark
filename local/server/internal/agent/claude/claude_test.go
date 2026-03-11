@@ -222,7 +222,7 @@ func TestScanProjectFilesDerivesDiffFromToolUseResult(t *testing.T) {
 	}
 
 	var derivedCount int
-	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{\"source\":\"derived_diff\"}'", sessionID).Scan(&derivedCount); err != nil {
+	if err := database.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type = 'diff'", sessionID).Scan(&derivedCount); err != nil {
 		t.Fatalf("count derived diff messages: %v", err)
 	}
 	if derivedCount == 0 {
@@ -2419,7 +2419,7 @@ func TestProcessEntriesWorktreeProject(t *testing.T) {
 
 func TestIsAssistantAuthoredHistoryEntrySkillExpansion(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		entry historyEntry
 		want  bool
 	}{

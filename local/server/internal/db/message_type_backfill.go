@@ -73,6 +73,9 @@ func backfillMessageTypes(ctx context.Context, database *sql.DB) error {
 			classifiedRole, classifiedType, classifiedContent := classifyCodexMessage(rawJSON, nextRole, nextContent, codexQuestions)
 			nextRole, nextType, nextContent = classifiedRole, classifiedType, classifiedContent
 		}
+		if rawJSON == derivedDiffRawJSON {
+			nextType = MessageTypeDiff
+		}
 
 		nextType = canonicalMessageType(nextRole, nextType, nextContent)
 		currentType = normalizeMessageType(currentType)

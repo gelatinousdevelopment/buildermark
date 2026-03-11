@@ -6,3 +6,4 @@
 .zed/debug
 apps/linux-cli/build/
 .tmp
+.cache

@@ -34,6 +34,9 @@ func TestAppendDiffDBMessagesWithOptionsUseAllJSONDiffsAndDeduplicate(t *testing
 	if out[1].RawJSON != DerivedDiffRawJSON || out[2].RawJSON != DerivedDiffRawJSON {
 		t.Fatalf("expected derived diff raw json marker, got %q and %q", out[1].RawJSON, out[2].RawJSON)
 	}
+	if out[1].MessageType != db.MessageTypeDiff || out[2].MessageType != db.MessageTypeDiff {
+		t.Fatalf("expected derived diff message_type %q, got %q and %q", db.MessageTypeDiff, out[1].MessageType, out[2].MessageType)
+	}
 	if !strings.Contains(out[1].Content+out[2].Content, "a/a.txt") {
 		t.Fatalf("expected derived diff for a.txt in output: %q", out[1].Content+out[2].Content)
 	}
@@ -62,6 +65,9 @@ func TestAppendDiffDBMessagesLegacyBehaviorUnchanged(t *testing.T) {
 	}
 	if !strings.Contains(out[1].Content, "content.txt") {
 		t.Fatalf("legacy mode should prefer content diff, got: %q", out[1].Content)
+	}
+	if out[1].MessageType != db.MessageTypeDiff {
+		t.Fatalf("legacy derived diff message_type = %q, want %q", out[1].MessageType, db.MessageTypeDiff)
 	}
 	if strings.Contains(out[1].Content, "json.txt") {
 		t.Fatalf("legacy mode unexpectedly used all json diffs: %q", out[1].Content)

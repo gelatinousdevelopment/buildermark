@@ -141,7 +141,7 @@ export interface MessageRead {
 	timestamp: number;
 	conversationId: string;
 	role: string;
-	messageType?: 'prompt' | 'question' | 'answer' | 'final_answer' | 'log';
+	messageType?: 'prompt' | 'question' | 'answer' | 'final_answer' | 'diff' | 'log';
 	model?: string;
 	content: string;
 	rawJson: string;

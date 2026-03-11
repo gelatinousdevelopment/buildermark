@@ -37,8 +37,8 @@ type CodexTurn struct {
 
 // CodexInputItem represents an input item in a user turn.
 type CodexInputItem struct {
-	Type    string             `json:"type"`
-	Role    string             `json:"role"`
+	Type    string              `json:"type"`
+	Role    string              `json:"role"`
 	Content []CodexContentBlock `json:"content"`
 }
 
@@ -50,10 +50,10 @@ type CodexContentBlock struct {
 
 // CodexOutputItem represents an output item (message or PR).
 type CodexOutputItem struct {
-	Type       string             `json:"type"`
-	Role       string             `json:"role"`
+	Type       string              `json:"type"`
+	Role       string              `json:"role"`
 	Content    []CodexContentBlock `json:"content"`
-	OutputDiff *CodexOutputDiff   `json:"output_diff"`
+	OutputDiff *CodexOutputDiff    `json:"output_diff"`
 }
 
 // CodexOutputDiff holds diff data from a PR output item.
@@ -174,7 +174,7 @@ func ProcessCodexTask(cloudData json.RawMessage) (CloudProcessResult, error) {
 						messages = append(messages, db.Message{
 							Timestamp:   itemTS,
 							Role:        "agent",
-							MessageType: db.MessageTypeLog,
+							MessageType: db.MessageTypeDiff,
 							Content:     diffContent,
 							Model:       turn.ModelVersion,
 							RawJSON:     agent.DerivedDiffRawJSON,

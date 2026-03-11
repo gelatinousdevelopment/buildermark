@@ -303,12 +303,12 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 func DeleteDerivedDiffMessages(ctx context.Context, db *sql.DB, projectID, agent string) (int64, error) {
 	res, err := db.ExecContext(ctx,
 		`DELETE FROM messages
-		 WHERE raw_json = ?
+		 WHERE message_type = ?
 		   AND conversation_id IN (
 		     SELECT id FROM conversations
 		     WHERE project_id = ? AND agent = ?
 		   )`,
-		derivedDiffRawJSON, projectID, agent,
+		MessageTypeDiff, projectID, agent,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("delete derived diff messages: %w", err)

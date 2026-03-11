@@ -24,9 +24,9 @@ type mockWatcher struct {
 	lastPaths      []string
 }
 
-func (m *mockWatcher) Name() string              { return m.name }
-func (m *mockWatcher) Run(ctx context.Context)   {}
-func (m *mockWatcher) LastPollTime() time.Time   { return time.Time{} }
+func (m *mockWatcher) Name() string            { return m.name }
+func (m *mockWatcher) Run(ctx context.Context) {}
+func (m *mockWatcher) LastPollTime() time.Time { return time.Time{} }
 func (m *mockWatcher) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -390,10 +390,10 @@ func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing
 		t.Fatalf("EnsureConversation other: %v", err)
 	}
 	if err := db.InsertMessages(ctx, s.DB, []db.Message{
-		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-codex", Role: "agent", Content: "```diff\none\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-codex", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\none\n```", RawJSON: `{"source":"derived_diff"}`},
 		{Timestamp: 1001, ProjectID: projectID, ConversationID: "conv-codex", Role: "user", Content: "keep", RawJSON: `{"type":"user"}`},
-		{Timestamp: 1002, ProjectID: projectID, ConversationID: "conv-claude", Role: "agent", Content: "```diff\ntwo\n```", RawJSON: `{"source":"derived_diff"}`},
-		{Timestamp: 1003, ProjectID: otherProjectID, ConversationID: "conv-other", Role: "agent", Content: "```diff\nthree\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1002, ProjectID: projectID, ConversationID: "conv-claude", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\ntwo\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1003, ProjectID: otherProjectID, ConversationID: "conv-other", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\nthree\n```", RawJSON: `{"source":"derived_diff"}`},
 	}); err != nil {
 		t.Fatalf("InsertMessages: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing
 	}
 
 	var scopedDerived int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{"source":"derived_diff"}'`, "conv-codex").Scan(&scopedDerived); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type = 'diff'`, "conv-codex").Scan(&scopedDerived); err != nil {
 		t.Fatalf("count scoped derived: %v", err)
 	}
 	if scopedDerived != 0 {
@@ -422,7 +422,7 @@ func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing
 	}
 
 	var keptSource int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json <> '{"source":"derived_diff"}'`, "conv-codex").Scan(&keptSource); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type <> 'diff'`, "conv-codex").Scan(&keptSource); err != nil {
 		t.Fatalf("count kept source: %v", err)
 	}
 	if keptSource != 1 {
@@ -430,14 +430,14 @@ func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing
 	}
 
 	var otherDerived int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{"source":"derived_diff"}'`, "conv-claude").Scan(&otherDerived); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type = 'diff'`, "conv-claude").Scan(&otherDerived); err != nil {
 		t.Fatalf("count claude derived: %v", err)
 	}
 	if otherDerived != 1 {
 		t.Fatalf("claude derived = %d, want 1", otherDerived)
 	}
 
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = '{"source":"derived_diff"}'`, "conv-other").Scan(&otherDerived); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type = 'diff'`, "conv-other").Scan(&otherDerived); err != nil {
 		t.Fatalf("count other project derived: %v", err)
 	}
 	if otherDerived != 1 {
