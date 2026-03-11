@@ -30,12 +30,12 @@ function isActiveUrl(url) {
 const PAGE_STATES = {
   ignored: { text: "Not a supported page", dot: "gray" },
   waiting: { text: "Waiting for conversation data...", dot: "yellow" },
-  importing: { text: "Sending conversation data...", dot: "blue" },
+  importing: { text: "Sending conversation data...", dot: "orange" },
   done: { text: "Finished importing", dot: "green" },
   already: { text: "Already imported", dot: "green" },
   error: { text: "Import failed", dot: "red" },
   server_unavailable: { text: "Local server not reachable", dot: "red" },
-  pending: { text: "Ready to import", dot: "blue" },
+  pending: { text: "Ready to import", dot: "orange" },
 };
 
 // Query the content script directly for the import state.

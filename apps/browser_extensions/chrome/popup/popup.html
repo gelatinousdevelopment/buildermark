@@ -20,6 +20,7 @@
                 --color-border-input: light-dark(#aaa, #666);
                 --color-status-green: light-dark(#55bb33, #55bb33);
                 --color-status-yellow: light-dark(#f8d233, #f8d233);
+                --color-status-orange: light-dark(#ee9316, #ee9316);
                 --color-status-red: light-dark(#dd5555, #dd5555);
 
                 --color-background-page: var(--accent-color);
@@ -87,6 +88,9 @@
             .status-dot.yellow {
                 background: var(--color-status-yellow);
             }
+            .status-dot.orange {
+                background: var(--color-status-orange);
+            }
             .status-dot.blue {
                 background: var(--accent-color);
             }
@@ -107,9 +111,6 @@
                 font-weight: 500;
                 transition: background 0.15s;
             }
-            .open-link:hover {
-                filter: brightness(0.9);
-            }
             .settings-row {
                 display: flex;
                 align-items: center;
@@ -128,8 +129,8 @@
             .import-btn {
                 margin-left: auto;
                 padding: 3px 10px;
-                background: var(--accent-color);
-                color: var(--accent-color-ultralight);
+                background: var(--accent-color-ultralight);
+                color: var(--accent-color);
                 border: none;
                 border-radius: 4px;
                 font-weight: 500;
@@ -138,8 +139,9 @@
                 transition: background 0.15s;
                 flex-shrink: 0;
             }
+            .open-link:hover,
             .import-btn:hover {
-                background: var(--accent-color-darker);
+                filter: brightness(0.9);
             }
             .import-btn.hidden {
                 display: none;
