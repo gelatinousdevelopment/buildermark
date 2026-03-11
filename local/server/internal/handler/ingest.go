@@ -465,7 +465,7 @@ func recomputeCommitCoverageForProject(
 	identity *gitIdentity,
 	extraEmails []string,
 ) (int, error) {
-	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, "", nil, identity, extraEmails, nil)
+	return recomputeCommitCoverageForProjectWithChangedPatterns(ctx, database, repoProject, group, branch, "", nil, identity, extraEmails, nil, 0)
 }
 
 // recomputeSingleCommit recomputes coverage for one commit and returns all detail data.
@@ -733,6 +733,7 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 	identity *gitIdentity,
 	extraEmails []string,
 	commitProgress func(message string, processed int),
+	afterMs int64,
 ) (int, error) {
 	// Get branch hashes and query DB by hash list so recompute works across branches.
 	// For non-default branches, only load commits unique to the branch (not on defaultBranch).
@@ -767,6 +768,19 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 		filtered := commits[:0]
 		for _, c := range commits {
 			if isCommitStale(c, currentCommitCoverageVersion) {
+				filtered = append(filtered, c)
+			}
+		}
+		commits = filtered
+		if len(commits) == 0 {
+			return 0, nil
+		}
+	}
+	if afterMs > 0 {
+		cutoff := afterMs - defaultMessageWindowMs
+		filtered := commits[:0]
+		for _, c := range commits {
+			if c.AuthoredAt*1000 >= cutoff {
 				filtered = append(filtered, c)
 			}
 		}

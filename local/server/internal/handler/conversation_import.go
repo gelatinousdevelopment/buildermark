@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
-	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/claude"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/handler/cloudimport"
 )
 
 func (s *Server) handleCheckConversationURL(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +56,10 @@ type webConversationImportRequest struct {
 	// Cloud event fields (used when agent is "claude_cloud").
 	SessionID string            `json:"sessionId"`
 	Events    []json.RawMessage `json:"events"`
+
+	// CloudData holds the full JSON response from the cloud API (used by
+	// the generic browser extension interceptor for both Claude and Codex).
+	CloudData json.RawMessage `json:"cloudData"`
 }
 
 type webImportMessage struct {
@@ -70,7 +74,7 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -95,7 +99,7 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "agent is required")
 		return
 	}
-	if len(body.Events) == 0 && len(body.Messages) == 0 {
+	if len(body.Events) == 0 && len(body.Messages) == 0 && len(body.CloudData) == 0 {
 		writeError(w, http.StatusBadRequest, "messages are required")
 		return
 	}
@@ -112,7 +116,22 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Cloud event path: process raw events into messages.
+	// Cloud data path: the generic browser extension sends cloudData.
+	if len(body.CloudData) > 0 {
+		switch body.Agent {
+		case "codex_cloud":
+			log.Printf("[import-web] codex cloud path: agent=%q url=%q", body.Agent, body.URL)
+			s.handleImportCodexCloudTask(w, r, body)
+			return
+		default:
+			// Claude cloud (and any future agents): unwrap events from cloudData.
+			log.Printf("[import-web] cloud data path: agent=%q url=%q", body.Agent, body.URL)
+			s.handleImportCloudEvents(w, r, body)
+			return
+		}
+	}
+
+	// Legacy cloud event path: old extension sends events directly.
 	if len(body.Events) > 0 {
 		log.Printf("[import-web] cloud event path: agent=%q url=%q sessionId=%q events=%d", body.Agent, body.URL, body.SessionID, len(body.Events))
 		s.handleImportCloudEvents(w, r, body)
@@ -141,22 +160,13 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Try to match to an existing project by repo URL, fall back to web-imports.
-	var projectID string
+	// Match to a project by repo URL, fall back to web-imports.
 	body.RepoURL = strings.TrimSpace(body.RepoURL)
-	if body.RepoURL != "" {
-		projectID, err = findProjectByRepoURL(r.Context(), s.DB, body.RepoURL)
-		if err != nil {
-			log.Printf("error matching project by repo URL: %v", err)
-		}
-	}
-	if projectID == "" {
-		projectID, err = ensureWebImportsProject(r.Context(), s.DB)
-		if err != nil {
-			log.Printf("error ensuring web imports project: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to ensure project")
-			return
-		}
+	projectID, _, err := resolveProjectForImport(r.Context(), s.DB, body.RepoURL, "")
+	if err != nil {
+		log.Printf("error resolving project for web import: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to ensure project")
+		return
 	}
 
 	conversationID := db.NewID()
@@ -180,8 +190,8 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 
 	// Insert conversation.
 	_, err = s.DB.ExecContext(r.Context(),
-		"INSERT INTO conversations (id, project_id, agent, title, started_at, ended_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		conversationID, projectID, body.Agent, body.Title, startedAt, endedAt, body.URL,
+		"INSERT INTO conversations (id, project_id, agent, title, started_at, ended_at, url, family_root_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		conversationID, projectID, body.Agent, body.Title, startedAt, endedAt, body.URL, conversationID,
 	)
 	if err != nil {
 		log.Printf("error inserting conversation: %v", err)
@@ -235,252 +245,60 @@ func importLogSourceFromAgent(agentName string) string {
 	}
 }
 
-// --- Cloud event processing (consolidated from the old dedicated endpoint) ---
-
-type cloudEvent struct {
-	Type      string `json:"type"`
-	Subtype   string `json:"subtype"`
-	CreatedAt string `json:"created_at"`
-	Model     string `json:"model"`
-	Cwd       string `json:"cwd"`
-	Result    string `json:"result"`
-	Message   *struct {
-		Role       string          `json:"role"`
-		Model      string          `json:"model"`
-		Content    json.RawMessage `json:"content"`
-		StopReason string          `json:"stop_reason"`
-	} `json:"message,omitempty"`
-}
+// --- Cloud event processing ---
 
 func (s *Server) handleImportCloudEvents(w http.ResponseWriter, r *http.Request, body webConversationImportRequest) {
-	// Parse events.
-	events := make([]cloudEvent, 0, len(body.Events))
-	parseErrors := 0
-	for _, raw := range body.Events {
-		var ev cloudEvent
-		if err := json.Unmarshal(raw, &ev); err != nil {
-			parseErrors++
-			continue
+	// If cloudData is present, unwrap events from it.
+	if len(body.CloudData) > 0 && len(body.Events) == 0 {
+		var envelope struct {
+			Data []json.RawMessage `json:"data"`
 		}
-		events = append(events, ev)
+		if err := json.Unmarshal(body.CloudData, &envelope); err == nil && len(envelope.Data) > 0 {
+			body.Events = envelope.Data
+		} else {
+			// Try as direct array.
+			var arr []json.RawMessage
+			if err := json.Unmarshal(body.CloudData, &arr); err == nil && len(arr) > 0 {
+				body.Events = arr
+			}
+		}
+		if len(body.Events) == 0 {
+			writeError(w, http.StatusBadRequest, "no events found in cloudData")
+			return
+		}
 	}
 
-	log.Printf("[import-cloud] parsed %d/%d events (%d parse errors)", len(events), len(body.Events), parseErrors)
-
-	if len(events) == 0 {
-		writeError(w, http.StatusBadRequest, "no valid events found")
+	result, err := cloudimport.ProcessClaudeCloudEvents(body.Events)
+	if err != nil {
+		log.Printf("[import-cloud] processing error: %v", err)
+		writeError(w, http.StatusBadRequest, "processing error: "+err.Error())
 		return
 	}
 
-	// Log event type breakdown.
-	typeCounts := map[string]int{}
-	for _, ev := range events {
-		key := ev.Type
-		if ev.Subtype != "" {
-			key += ":" + ev.Subtype
-		}
-		typeCounts[key]++
-	}
-	log.Printf("[import-cloud] event types: %v", typeCounts)
-
-	// Extract metadata from init event.
-	var model, cwd, repoURL string
-	for _, ev := range events {
-		if ev.Type == "system" && ev.Subtype == "init" {
-			if ev.Model != "" {
-				model = ev.Model
-			}
-			if ev.Cwd != "" {
-				cwd = ev.Cwd
-			}
-			break
-		}
-	}
-	log.Printf("[import-cloud] init metadata: model=%q cwd=%q", model, cwd)
-
-	// Look for repo clone info in env_manager_log entries.
-	for _, rawEv := range body.Events {
-		var logEv struct {
-			Type    string `json:"type"`
-			Subtype string `json:"subtype"`
-			Content string `json:"content"`
-		}
-		if err := json.Unmarshal(rawEv, &logEv); err != nil {
-			continue
-		}
-		if logEv.Type != "system" || logEv.Subtype != "env_manager_log" {
-			continue
-		}
-		if strings.Contains(logEv.Content, "Cloning repository") {
-			parts := strings.SplitN(logEv.Content, "Cloning repository ", 2)
-			if len(parts) == 2 {
-				candidate := strings.TrimSpace(strings.Fields(parts[1])[0])
-				if normalized := normalizeRemoteToRepoKey(candidate); normalized != "" {
-					repoURL = normalized
-				}
-			}
-		}
-	}
-
-	// Convert events to messages.
-	messages := make([]db.Message, 0, len(events))
-	now := time.Now().UnixMilli()
-
-	skippedSystem, skippedNoMsg, skippedEmpty, skippedSysMsg := 0, 0, 0, 0
-	roleCounts := map[string]int{}
-
-	for i, ev := range events {
-		if ev.Type == "system" {
-			skippedSystem++
-			continue
-		}
-
-		// "result" events are the final answer displayed to the user.
-		// They have no message field — the content is in ev.Result.
-		if ev.Type == "result" && strings.TrimSpace(ev.Result) != "" {
-			ts := int64(0)
-			if parsed, err := time.Parse(time.RFC3339Nano, ev.CreatedAt); err == nil {
-				ts = parsed.UnixMilli()
-			}
-			if ts == 0 {
-				ts = now
-			}
-			roleCounts["agent"]++
-			messages = append(messages, db.Message{
-				Timestamp:   ts,
-				Role:        "agent",
-				MessageType: db.MessageTypeFinalAnswer,
-				Content:     strings.TrimSpace(ev.Result),
-				Model:       model,
-				RawJSON:     string(body.Events[i]),
-			})
-			continue
-		}
-
-		if ev.Message == nil {
-			skippedNoMsg++
-			continue
-		}
-
-		var entry claude.ConversationEntry
-		var rawJSON string
-
-		switch body.Agent {
-		case "claude_cloud":
-			entry, rawJSON = claudeCloudToEntry(ev, body.Events[i])
-		default:
-			// Default: treat as Claude-like events.
-			entry, rawJSON = claudeCloudToEntry(ev, body.Events[i])
-		}
-
-		content := claude.ContentFromConversationEntry(entry)
-
-		// If content is empty but the event has tool_use blocks, generate a
-		// summary so the message isn't skipped. The RawJSON still carries the
-		// full payload for diff extraction.
-		if content == "" {
-			summary := toolUseSummary(ev.Message.Content)
-			if summary != "" {
-				content = summary
-			}
-		}
-
-		if content == "" {
-			skippedEmpty++
-			continue
-		}
-		if claude.IsSystemMessage(content) {
-			skippedSysMsg++
-			continue
-		}
-
-		role := "agent"
-		if entry.Type == "user" {
-			role = "user"
-			if strings.TrimSpace(entry.SourceToolAssistantUUID) != "" || claude.IsAssistantAuthoredConversationEntry(entry) || claude.IsSkillExpansion(content) {
-				role = "agent"
-			}
-		}
-
-		stopReason := strings.TrimSpace(ev.Message.StopReason)
-		var messageType string
-		role, messageType, content = claude.ClassifyClaudeMessage(role, content, rawJSON, stopReason)
-		roleCounts[role]++
-
-		ts := int64(0)
-		if parsed, err := time.Parse(time.RFC3339Nano, ev.CreatedAt); err == nil {
-			ts = parsed.UnixMilli()
-		}
-		if ts == 0 {
-			ts = now
-		}
-
-		msgModel := strings.TrimSpace(ev.Message.Model)
-		if msgModel == "" {
-			msgModel = model
-		}
-
-		messages = append(messages, db.Message{
-			Timestamp:   ts,
-			Role:        role,
-			MessageType: messageType,
-			Content:     content,
-			Model:       msgModel,
-			RawJSON:     rawJSON,
-		})
-	}
-
-	log.Printf("[import-cloud] message conversion: %d messages from %d events (skipped: system=%d noMsg=%d empty=%d sysMsg=%d) roles: %v",
-		len(messages), len(events), skippedSystem, skippedNoMsg, skippedEmpty, skippedSysMsg, roleCounts)
-
+	messages := result.Messages
 	if len(messages) == 0 {
 		writeError(w, http.StatusBadRequest, "no conversational messages found in events")
 		return
 	}
 
-	// Extract title from summary events or first user prompt.
-	// Skip body.Title (from browser extension) as it can be from a different conversation.
-	title := extractCloudTitle(events, messages)
+	title := result.Title
+	repoURL := result.RepoURL
+	cwd := result.Cwd
 
-	// Find project: try repo URL, then cwd (with old_paths / basename fallback), then web-imports.
-	var projectID string
-	var err error
-	var projectMatchMethod string
-	if repoURL != "" {
-		projectID, err = findProjectByRepoURL(r.Context(), s.DB, repoURL)
-		if err != nil {
-			log.Printf("error matching project by repo URL: %v", err)
-		}
-		if projectID != "" {
-			projectMatchMethod = "repoURL"
-		}
-	}
-	if projectID == "" && cwd != "" {
-		projectID, err = findProjectByCwd(r.Context(), s.DB, cwd)
-		if err != nil {
-			log.Printf("error matching project by cwd: %v", err)
-		}
-		if projectID != "" {
-			projectMatchMethod = "cwd"
-		}
-	}
-	if projectID == "" {
-		projectID, err = ensureWebImportsProject(r.Context(), s.DB)
-		if err != nil {
-			log.Printf("error ensuring web imports project: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to ensure project")
-			return
-		}
-		projectMatchMethod = "web-imports-fallback"
+	projectID, projectMatchMethod, resolveErr := resolveProjectForImport(r.Context(), s.DB, repoURL, cwd)
+	if resolveErr != nil {
+		log.Printf("error resolving project for cloud import: %v", resolveErr)
+		writeError(w, http.StatusInternalServerError, "failed to ensure project")
+		return
 	}
 	log.Printf("[import-cloud] project match: id=%q method=%s repoURL=%q cwd=%q", projectID, projectMatchMethod, repoURL, cwd)
 
 	log.Printf("[import-cloud] title=%q", title)
 
 	// Upsert conversation (update title on re-import, insert on first import).
-	conversationID, alreadyExisted, err := s.upsertCloudConversation(r.Context(), body.URL, projectID, title, body.Agent, messages)
-	if err != nil {
-		log.Printf("error upserting conversation: %v", err)
+	conversationID, alreadyExisted, upsertErr := s.upsertCloudConversation(r.Context(), body.URL, projectID, title, body.Agent, messages)
+	if upsertErr != nil {
+		log.Printf("error upserting conversation: %v", upsertErr)
 		writeError(w, http.StatusInternalServerError, "failed to upsert conversation")
 		return
 	}
@@ -509,7 +327,69 @@ func (s *Server) handleImportCloudEvents(w http.ResponseWriter, r *http.Request,
 	// Trigger async recomputation of commit coverage so the commit list view
 	// reflects attribution from the newly imported conversation.
 	if projectMatchMethod != "web-imports-fallback" {
-		go s.recomputeCoverageAfterImport(projectID)
+		go s.recomputeCoverageAfterImport(projectID, messages[0].Timestamp)
+	}
+
+	status := http.StatusCreated
+	if alreadyExisted {
+		status = http.StatusOK
+	}
+
+	writeSuccess(w, status, map[string]any{
+		"imported":       true,
+		"conversationId": conversationID,
+		"alreadyExisted": alreadyExisted,
+		"messageCount":   len(messages),
+	})
+}
+
+func (s *Server) handleImportCodexCloudTask(w http.ResponseWriter, r *http.Request, body webConversationImportRequest) {
+	log.Printf("[import-codex] cloudData size: %d bytes", len(body.CloudData))
+	result, err := cloudimport.ProcessCodexTask(body.CloudData)
+	if err != nil {
+		log.Printf("[import-codex] processing error: %v", err)
+		writeError(w, http.StatusBadRequest, "processing error: "+err.Error())
+		return
+	}
+
+	messages := result.Messages
+	if len(messages) == 0 {
+		writeError(w, http.StatusBadRequest, "no messages found in codex task")
+		return
+	}
+
+	title := result.Title
+
+	projectID, projectMatchMethod, resolveErr := resolveProjectForImport(r.Context(), s.DB, result.RepoURL, "")
+	if resolveErr != nil {
+		log.Printf("error resolving project for codex import: %v", resolveErr)
+		writeError(w, http.StatusInternalServerError, "failed to ensure project")
+		return
+	}
+	log.Printf("[import-codex] project match: id=%q method=%s repoURL=%q", projectID, projectMatchMethod, result.RepoURL)
+
+	// Upsert conversation.
+	conversationID, alreadyExisted, upsertErr := s.upsertCloudConversation(r.Context(), body.URL, projectID, title, body.Agent, messages)
+	if upsertErr != nil {
+		log.Printf("error upserting conversation: %v", upsertErr)
+		writeError(w, http.StatusInternalServerError, "failed to upsert conversation")
+		return
+	}
+
+	for i := range messages {
+		messages[i].ProjectID = projectID
+		messages[i].ConversationID = conversationID
+	}
+
+	if err := db.InsertMessages(r.Context(), s.DB, messages); err != nil {
+		log.Printf("error inserting messages: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to insert messages")
+		return
+	}
+	log.Printf("[import-codex] done: conversationId=%q projectId=%q messageCount=%d alreadyExisted=%v", conversationID, projectID, len(messages), alreadyExisted)
+
+	if projectMatchMethod != "web-imports-fallback" {
+		go s.recomputeCoverageAfterImport(projectID, messages[0].Timestamp)
 	}
 
 	status := http.StatusCreated
@@ -558,8 +438,8 @@ func (s *Server) upsertCloudConversation(ctx context.Context, url, projectID, ti
 	}
 
 	_, err = s.DB.ExecContext(ctx,
-		"INSERT INTO conversations (id, project_id, agent, title, started_at, ended_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		conversationID, projectID, agentName, title, startedAt, endedAt, url,
+		"INSERT INTO conversations (id, project_id, agent, title, started_at, ended_at, url, family_root_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		conversationID, projectID, agentName, title, startedAt, endedAt, url, conversationID,
 	)
 	if err != nil {
 		return "", false, fmt.Errorf("insert conversation: %w", err)
@@ -568,67 +448,31 @@ func (s *Server) upsertCloudConversation(ctx context.Context, url, projectID, ti
 	return conversationID, false, nil
 }
 
-// toolUseSummary generates a short placeholder for assistant messages that
-// contain only tool_use blocks (Edit, Write, Bash, etc.) whose inputs don't
-// have any of the preferred text keys, so ContentFromConversationEntry returns "".
-func toolUseSummary(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var blocks []map[string]any
-	if err := json.Unmarshal(raw, &blocks); err != nil {
-		return ""
-	}
-
-	var names []string
-	for _, b := range blocks {
-		typ, _ := b["type"].(string)
-		if typ != "tool_use" {
-			continue
-		}
-		name, _ := b["name"].(string)
-		if name == "" {
-			name = "tool"
-		}
-		names = append(names, name)
-	}
-	if len(names) == 0 {
-		return ""
-	}
-
-	// Deduplicate while preserving order.
-	seen := make(map[string]struct{}, len(names))
-	unique := make([]string, 0, len(names))
-	for _, n := range names {
-		if _, ok := seen[n]; ok {
-			continue
-		}
-		seen[n] = struct{}{}
-		unique = append(unique, n)
-	}
-
-	return "[" + strings.Join(unique, ", ") + "]"
-}
-
-func extractCloudTitle(events []cloudEvent, messages []db.Message) string {
-	for _, ev := range events {
-		if ev.Type == "summary" || (ev.Type == "system" && ev.Subtype == "summary") {
-			if ev.Message != nil {
-				text := claude.ExtractUserText(ev.Message.Content)
-				if text != "" {
-					return text
-				}
-			}
+// resolveProjectForImport finds the best project match for an import by trying
+// repo URL, then cwd, then falling back to the web-imports project.
+func resolveProjectForImport(ctx context.Context, database *sql.DB, repoURL, cwd string) (projectID, matchMethod string, err error) {
+	if repoURL != "" {
+		repoURL = normalizeRemoteToRepoKey(repoURL)
+		pid, findErr := findProjectByRepoURL(ctx, database, repoURL)
+		if findErr != nil {
+			log.Printf("error matching project by repo URL: %v", findErr)
+		} else if pid != "" {
+			return pid, "repoURL", nil
 		}
 	}
-
-	for _, m := range messages {
-		if m.Role == "user" && strings.TrimSpace(m.Content) != "" {
-			return agent.TitleFromPrompt(m.Content)
+	if cwd != "" {
+		pid, findErr := findProjectByCwd(ctx, database, cwd)
+		if findErr != nil {
+			log.Printf("error matching project by cwd: %v", findErr)
+		} else if pid != "" {
+			return pid, "cwd", nil
 		}
 	}
-
-	return ""
+	pid, ensureErr := ensureWebImportsProject(ctx, database)
+	if ensureErr != nil {
+		return "", "", fmt.Errorf("ensure web imports project: %w", ensureErr)
+	}
+	return pid, "web-imports-fallback", nil
 }
 
 // findProjectByCwd matches a working directory to a project by exact path,
@@ -714,7 +558,8 @@ func normalizeRemoteToRepoKey(remote string) string {
 		}
 	}
 
-	// HTTPS or plain format.
+	// HTTPS, HTTP, or git:// format.
+	remote = strings.TrimPrefix(remote, "git://")
 	remote = strings.TrimPrefix(remote, "https://")
 	remote = strings.TrimPrefix(remote, "http://")
 	remote = strings.TrimSuffix(remote, ".git")
@@ -754,53 +599,7 @@ func findProjectByRepoURL(ctx context.Context, database *sql.DB, repoURL string)
 	return "", rows.Err()
 }
 
-// claudeCloudToEntry translates a cloud event into a local ConversationEntry
-// so the existing Claude classification pipeline works correctly.
-func claudeCloudToEntry(ev cloudEvent, raw json.RawMessage) (claude.ConversationEntry, string) {
-	entry := claude.ConversationEntry{}
-	entry.Type = ev.Type
-	if entry.Type == "" {
-		entry.Type = ev.Message.Role
-	}
-	entry.Timestamp = ev.CreatedAt
-	entry.Message.Role = ev.Message.Role
-	entry.Message.Model = ev.Message.Model
-	entry.Message.Content = ev.Message.Content
-	entry.Message.StopReason = ev.Message.StopReason
-
-	// Cloud events with type "user" whose content is a JSON array are
-	// agent-authored (subagent prompts, tool results, etc). Real user messages
-	// have string content. Set SourceToolAssistantUUID so the existing pipeline
-	// classifies them as role "agent" instead of "user".
-	if entry.Type == "user" && isContentArray(ev.Message.Content) {
-		entry.SourceToolAssistantUUID = "cloud"
-	}
-
-	return entry, string(raw)
-}
-
-// codexCloudToEntry is a stub for future Codex cloud event translation.
-func codexCloudToEntry(ev cloudEvent, raw json.RawMessage) (role string, content string, model string, rawJSON string) {
-	role = "agent"
-	if ev.Message != nil && ev.Message.Role == "user" {
-		role = "user"
-	}
-	content = claude.ExtractUserText(ev.Message.Content)
-	if ev.Message != nil {
-		model = ev.Message.Model
-	}
-	rawJSON = string(raw)
-	return
-}
-
-// isContentArray returns true if content is a JSON array (starts with '[').
-// In Claude cloud events, real user messages have string content while
-// agent-authored messages (tool results, subagent prompts, etc.) have array content.
-func isContentArray(content json.RawMessage) bool {
-	return len(content) > 0 && content[0] == '['
-}
-
-func (s *Server) recomputeCoverageAfterImport(projectID string) {
+func (s *Server) recomputeCoverageAfterImport(projectID string, startedAtMs int64) {
 	ctx := context.Background()
 
 	groups, err := listAllProjectGroups(ctx, s.DB)
@@ -825,7 +624,7 @@ func (s *Server) recomputeCoverageAfterImport(projectID string) {
 	}
 
 	identity, _ := resolveGitIdentity(ctx, repoProject.Path)
-	n, err := recomputeCommitCoverageForProject(ctx, s.DB, repoProject, group, branch, &identity, s.loadExtraLocalUserEmails())
+	n, err := recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, repoProject, group, branch, "", nil, &identity, s.loadExtraLocalUserEmails(), nil, startedAtMs)
 	if err != nil {
 		log.Printf("[import-cloud] recompute: error for project %s: %v", projectID, err)
 		return

@@ -1,6 +1,6 @@
 /**
- * Content script listener for Claude Code Cloud fetch interception.
- * Receives events from the page-world fetch interceptor via postMessage,
+ * Generic cloud listener for coding agent fetch interception.
+ * Receives intercepted data from the page-world fetch interceptor via postMessage,
  * debounces, and sends to the Buildermark server.
  */
 
@@ -33,14 +33,14 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
       _autoImport = message.value;
     } else if (message.type === 'triggerImport') {
       // Manual import trigger — send any held data.
-      if (window._buildermarkClaudeCodeListener) {
-        window._buildermarkClaudeCodeListener._send();
+      if (window._buildermarkCloudListener) {
+        window._buildermarkCloudListener._send();
       }
     }
   });
 }
 
-class ClaudeCodeCloudListener {
+class CloudListener {
   constructor(setBadge) {
     this.setBadge = setBadge;
     this._pending = null;
@@ -54,15 +54,25 @@ class ClaudeCodeCloudListener {
 
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
-      if (!event.data || event.data.type !== "buildermark-claude-code-events") return;
+      if (!event.data || event.data.type !== "buildermark-cloud-intercept") return;
 
-      const { sessionId, url, data } = event.data;
-      if (!sessionId || !data) return;
+      const { agent, matchId, url, data } = event.data;
+      if (!matchId || !data) return;
 
-      console.log("[Buildermark] Received postMessage — sessionId:", sessionId, "url:", url, "events:", data?.length);
+      console.log("[Buildermark] Received cloud intercept — agent:", agent, "matchId:", matchId, "url:", url);
 
-      // Each fetch response is a complete snapshot — replace previous.
-      this._pending = { sessionId, url, events: data };
+      // For codex, prefer the most complete response (one with PR data).
+      if (agent === 'codex_cloud' && this._pending && this._pending.agent === 'codex_cloud') {
+        const prevHasPr = this._codexHasPr(this._pending.data);
+        const newHasPr = this._codexHasPr(data);
+        if (prevHasPr && !newHasPr) {
+          console.log("[Buildermark] Keeping previous codex data — has PR diff, new one does not");
+          this._scheduleSend();
+          return;
+        }
+      }
+
+      this._pending = { agent, matchId, url, data };
       this._scheduleSend();
     });
   }
@@ -85,6 +95,13 @@ class ClaudeCodeCloudListener {
     }, 3000);
   }
 
+  _codexHasPr(data) {
+    if (!data?.turn_mapping) return false;
+    return Object.values(data.turn_mapping).some(wrapper =>
+      wrapper.turn?.output_items?.some(item => item.type === 'pr')
+    );
+  }
+
   async _send() {
     const payload = this._pending;
     if (!payload) return;
@@ -94,25 +111,22 @@ class ClaudeCodeCloudListener {
       _setPageState('importing');
       this.setBadge("importing");
       const params = {
-        ...payload,
-        agent: "claude_cloud",
+        url: payload.url,
+        agent: payload.agent,
+        cloudData: payload.data,
       };
       console.log(
         "[Buildermark] Sending import-web request — url:",
         params.url,
         "agent:",
         params.agent,
-        "events:",
-        params.events?.length,
-        "sessionId:",
-        params.sessionId,
       );
       const result = await BuildermarkAPI.importConversation(params);
       console.log("[Buildermark] Import result:", JSON.stringify(result));
       _setPageState(result.alreadyExisted ? 'already' : 'done');
       this.setBadge(result.alreadyExisted ? "already" : "done");
     } catch (e) {
-      console.warn("[Buildermark] Failed to import Claude Code events:", e.message);
+      console.warn("[Buildermark] Failed to import cloud data:", e.message);
       _setPageState('error');
       this.setBadge("error");
     }

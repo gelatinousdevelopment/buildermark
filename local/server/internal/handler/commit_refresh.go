@@ -197,6 +197,7 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 					func(message string, processed int) {
 						s.broadcastRefreshStatus("running", message, repoProject.ID, branch)
 					},
+					0,
 				)
 			}
 		}

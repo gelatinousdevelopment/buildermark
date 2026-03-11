@@ -282,7 +282,7 @@ func (s *Server) recomputeProjectCoverageAllBranchesWithChangedPatterns(
 				progress(message)
 			}
 		}
-		n, err := recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, repoProject, group, branch, defaultBranch, changedPatterns, &identity, extraEmails, commitProgressFn)
+		n, err := recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, repoProject, group, branch, defaultBranch, changedPatterns, &identity, extraEmails, commitProgressFn, 0)
 		if err != nil {
 			log.Printf("warning: recompute commit coverage failed for project=%s branch=%s: %v", projectID, branch, err)
 			continue

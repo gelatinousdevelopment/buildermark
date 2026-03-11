@@ -10,112 +10,6 @@ import (
 	"testing"
 )
 
-func TestIsContentArray(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-		want    bool
-	}{
-		{
-			name:    "tool_result array",
-			content: `[{"type":"tool_result","tool_use_id":"abc","content":"ok"}]`,
-			want:    true,
-		},
-		{
-			name:    "text block array",
-			content: `[{"type":"text","text":"hello"}]`,
-			want:    true,
-		},
-		{
-			name:    "tool_use array",
-			content: `[{"type":"tool_use","name":"Bash","id":"abc"}]`,
-			want:    true,
-		},
-		{
-			name:    "plain string (real user message)",
-			content: `"hello world"`,
-			want:    false,
-		},
-		{
-			name:    "empty",
-			content: ``,
-			want:    false,
-		},
-		{
-			name:    "object not array",
-			content: `{"type":"tool_result"}`,
-			want:    false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isContentArray(json.RawMessage(tt.content))
-			if got != tt.want {
-				t.Errorf("isContentArray(%s) = %v, want %v", tt.content, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestClaudeCloudToEntry_ArrayContentSetsUUID(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-	}{
-		{
-			name:    "tool_result array",
-			content: `[{"type":"tool_result","tool_use_id":"abc","content":"file written"}]`,
-		},
-		{
-			name:    "text block array (subagent prompt)",
-			content: `[{"type":"text","text":"You are a helpful assistant"}]`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ev := cloudEvent{
-				Type:      "user",
-				CreatedAt: "2025-01-01T00:00:00Z",
-				Message: &struct {
-					Role       string          `json:"role"`
-					Model      string          `json:"model"`
-					Content    json.RawMessage `json:"content"`
-					StopReason string          `json:"stop_reason"`
-				}{
-					Role:    "user",
-					Content: json.RawMessage(tt.content),
-				},
-			}
-			raw := json.RawMessage(`{}`)
-
-			entry, _ := claudeCloudToEntry(ev, raw)
-
-			if entry.SourceToolAssistantUUID != "cloud" {
-				t.Errorf("expected SourceToolAssistantUUID = %q, got %q", "cloud", entry.SourceToolAssistantUUID)
-			}
-		})
-	}
-}
-
-func TestCloudEventResultParsing(t *testing.T) {
-	raw := `{"type":"result","result":"Here is the summary.","created_at":"2025-01-01T00:00:00Z","subtype":"success"}`
-	var ev cloudEvent
-	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-		t.Fatalf("failed to unmarshal result event: %v", err)
-	}
-	if ev.Type != "result" {
-		t.Errorf("expected type %q, got %q", "result", ev.Type)
-	}
-	if ev.Result != "Here is the summary." {
-		t.Errorf("expected result %q, got %q", "Here is the summary.", ev.Result)
-	}
-	if ev.Message != nil {
-		t.Error("expected nil message for result event")
-	}
-}
-
 func TestFindProjectByCwd_OldPathBasename(t *testing.T) {
 	s := setupTestServer(t)
 	ctx := context.Background()
@@ -171,29 +65,6 @@ func TestFindProjectByCwd_OldPathBasename(t *testing.T) {
 				t.Errorf("findProjectByCwd(%q) = %q, want %q", tt.cwd, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestClaudeCloudToEntry_RealUserNoUUID(t *testing.T) {
-	ev := cloudEvent{
-		Type:      "user",
-		CreatedAt: "2025-01-01T00:00:00Z",
-		Message: &struct {
-			Role       string          `json:"role"`
-			Model      string          `json:"model"`
-			Content    json.RawMessage `json:"content"`
-			StopReason string          `json:"stop_reason"`
-		}{
-			Role:    "user",
-			Content: json.RawMessage(`"Fix the bug in main.go"`),
-		},
-	}
-	raw := json.RawMessage(`{"type":"user","message":{"role":"user","content":"Fix the bug in main.go"}}`)
-
-	entry, _ := claudeCloudToEntry(ev, raw)
-
-	if entry.SourceToolAssistantUUID != "" {
-		t.Errorf("expected empty SourceToolAssistantUUID for real user message, got %q", entry.SourceToolAssistantUUID)
 	}
 }
 
@@ -307,6 +178,364 @@ func TestImportWebConversationInvalidRequestsDoNotLog(t *testing.T) {
 				t.Fatalf("import log count = %d, want 0", got)
 			}
 		})
+	}
+}
+
+func TestNormalizeRemoteToRepoKey_GitProtocol(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "git://github.com/owner/repo.git",
+			want:  "github.com/owner/repo",
+		},
+		{
+			input: "git://github.com/owner/repo",
+			want:  "github.com/owner/repo",
+		},
+		{
+			input: "https://github.com/owner/repo.git",
+			want:  "github.com/owner/repo",
+		},
+		{
+			input: "git@github.com:owner/repo.git",
+			want:  "github.com/owner/repo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := normalizeRemoteToRepoKey(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizeRemoteToRepoKey(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestImportCodexCloudTask_EndToEnd(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	cloudData := `{
+		"current_turn_id": "task_e_abc~assttrn_e_def",
+		"turn_mapping": {
+			"task_e_abc~assttrn_e_def": {
+				"id": "task_e_abc~assttrn_e_def",
+				"parent": "task_e_abc~usertrn_e_ghi",
+				"turn": {
+					"created_at": 1700000001.0,
+					"role": "assistant",
+					"type": "assistant",
+					"model_version": "gpt-5",
+					"output_items": [
+						{
+							"content": [{"content_type": "text", "text": "Done!"}],
+							"role": "assistant",
+							"type": "message"
+						},
+						{
+							"type": "pr",
+							"output_diff": {
+								"type": "output_diff",
+								"diff": "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1,2 @@\n old\n+new"
+							}
+						}
+					]
+				}
+			},
+			"task_e_abc~usertrn_e_ghi": {
+				"id": "task_e_abc~usertrn_e_ghi",
+				"parent": null,
+				"turn": {
+					"created_at": 1700000000.0,
+					"role": "user",
+					"type": "user",
+					"input_items": [
+						{
+							"content": [{"content_type": "text", "text": "Fix the bug"}],
+							"role": "user",
+							"type": "message"
+						}
+					]
+				}
+			}
+		}
+	}`
+
+	body, _ := json.Marshal(map[string]any{
+		"url":       "https://chatgpt.com/codex/s/task_e_abc",
+		"agent":     "codex_cloud",
+		"cloudData": json.RawMessage(cloudData),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var resp struct {
+		Ok   bool `json:"ok"`
+		Data struct {
+			Imported       bool   `json:"imported"`
+			ConversationID string `json:"conversationId"`
+			MessageCount   int    `json:"messageCount"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if !resp.Ok || !resp.Data.Imported {
+		t.Fatalf("expected ok=true imported=true, got ok=%v imported=%v", resp.Ok, resp.Data.Imported)
+	}
+	if resp.Data.MessageCount != 3 {
+		t.Errorf("messageCount = %d, want 3 (user + assistant + diff)", resp.Data.MessageCount)
+	}
+}
+
+func TestImportCodexCloudTask_ProjectMatching(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	// Insert a project with a matching remote.
+	_, err := s.DB.ExecContext(ctx,
+		"INSERT INTO projects (id, path, label, remote) VALUES (?, ?, ?, ?)",
+		"proj-codex", "/tmp/myrepo", "myrepo", "https://github.com/owner/myrepo.git",
+	)
+	if err != nil {
+		t.Fatalf("insert project: %v", err)
+	}
+
+	cloudData := `{
+		"current_turn_id": "t~a1",
+		"turn_mapping": {
+			"t~a1": {
+				"id": "t~a1",
+				"parent": "t~u1",
+				"turn": {
+					"created_at": 1700000001.0,
+					"role": "assistant",
+					"type": "assistant",
+					"output_items": [
+						{
+							"content": [{"content_type": "text", "text": "Done"}],
+							"role": "assistant",
+							"type": "message"
+						}
+					],
+					"environment": {
+						"repo_map": {
+							"repo-1": {
+								"git_url": "git://github.com/owner/myrepo.git",
+								"name": "myrepo"
+							}
+						}
+					}
+				}
+			},
+			"t~u1": {
+				"id": "t~u1",
+				"parent": null,
+				"turn": {
+					"created_at": 1700000000.0,
+					"role": "user",
+					"type": "user",
+					"input_items": [
+						{
+							"content": [{"content_type": "text", "text": "Hello"}],
+							"role": "user",
+							"type": "message"
+						}
+					]
+				}
+			}
+		}
+	}`
+
+	body, _ := json.Marshal(map[string]any{
+		"url":       "https://chatgpt.com/codex/s/task_e_proj",
+		"agent":     "codex_cloud",
+		"cloudData": json.RawMessage(cloudData),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	// Verify conversation was placed in the correct project.
+	var resp struct {
+		Data struct {
+			ConversationID string `json:"conversationId"`
+		} `json:"data"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+
+	var projectID string
+	s.DB.QueryRowContext(ctx, "SELECT project_id FROM conversations WHERE id = ?", resp.Data.ConversationID).Scan(&projectID)
+	if projectID != "proj-codex" {
+		t.Errorf("project_id = %q, want proj-codex", projectID)
+	}
+}
+
+func TestImportCodexCloudTask_Deduplication(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	cloudData := `{
+		"current_turn_id": "t~u1",
+		"turn_mapping": {
+			"t~u1": {
+				"id": "t~u1",
+				"parent": null,
+				"turn": {
+					"created_at": 1700000000.0,
+					"role": "user",
+					"type": "user",
+					"input_items": [
+						{
+							"content": [{"content_type": "text", "text": "Hello"}],
+							"role": "user",
+							"type": "message"
+						}
+					]
+				}
+			}
+		}
+	}`
+
+	body, _ := json.Marshal(map[string]any{
+		"url":       "https://chatgpt.com/codex/s/task_e_dup",
+		"agent":     "codex_cloud",
+		"cloudData": json.RawMessage(cloudData),
+	})
+
+	// First request.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("first request status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+
+	// Second request — same URL.
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second request status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var resp struct {
+		Data struct {
+			AlreadyExisted bool `json:"alreadyExisted"`
+		} `json:"data"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if !resp.Data.AlreadyExisted {
+		t.Error("expected alreadyExisted=true on second import")
+	}
+}
+
+func TestImportCodexCloudTask_LogsSource(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	cloudData := `{
+		"current_turn_id": "t~u1",
+		"turn_mapping": {
+			"t~u1": {
+				"id": "t~u1",
+				"parent": null,
+				"turn": {
+					"created_at": 1700000000.0,
+					"role": "user",
+					"type": "user",
+					"input_items": [
+						{
+							"content": [{"content_type": "text", "text": "Hello"}],
+							"role": "user",
+							"type": "message"
+						}
+					]
+				}
+			}
+		}
+	}`
+
+	body, _ := json.Marshal(map[string]any{
+		"url":       "https://chatgpt.com/codex/s/task_e_log",
+		"agent":     "codex_cloud",
+		"cloudData": json.RawMessage(cloudData),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	logRow := fetchLatestImportLog(t, s.DB)
+	if !logRow.source.Valid || logRow.source.String != "codex_cloud" {
+		t.Fatalf("source = %#v, want codex_cloud", logRow.source)
+	}
+}
+
+func TestImportClaudeCloudViaCloudData(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	// cloudData is a {data: [...]} envelope with one result event.
+	cloudData := `{"data":[{"type":"result","result":"Final answer from cloud.","created_at":"2025-01-01T00:00:00Z"}]}`
+
+	body, _ := json.Marshal(map[string]any{
+		"url":       "https://claude.ai/code/session_abc123",
+		"agent":     "claude_cloud",
+		"cloudData": json.RawMessage(cloudData),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var resp struct {
+		Ok   bool `json:"ok"`
+		Data struct {
+			Imported     bool `json:"imported"`
+			MessageCount int  `json:"messageCount"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.Ok || !resp.Data.Imported {
+		t.Fatalf("expected ok and imported")
+	}
+	if resp.Data.MessageCount < 1 {
+		t.Errorf("messageCount = %d, want >= 1", resp.Data.MessageCount)
 	}
 }
 

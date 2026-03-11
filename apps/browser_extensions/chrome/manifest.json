@@ -9,23 +9,21 @@
     {
       "matches": [
         "*://*.claude.ai/chat/*",
-        "*://*.claude.ai/project/*/chat/*",
-        "*://chatgpt.com/codex/*",
-        "*://codex.openai.com/*"
+        "*://*.claude.ai/project/*/chat/*"
       ],
       "js": ["content/api.js", "content/importer.js"],
       "run_at": "document_idle"
     },
     {
-      "matches": ["*://*.claude.ai/code/*"],
-      "js": ["content/api.js", "content/claude_code_cloud.js", "content/content.js"],
+      "matches": ["*://*.claude.ai/code/*", "*://chatgpt.com/codex/*"],
+      "js": ["content/api.js", "content/cloud_listener.js", "content/content.js"],
       "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["web_accessible/fetch_interceptor.js"],
-      "matches": ["*://*.claude.ai/*"]
+      "matches": ["*://*.claude.ai/*", "*://chatgpt.com/*"]
     }
   ],
   "background": {
