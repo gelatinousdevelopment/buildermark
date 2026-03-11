@@ -37,23 +37,21 @@ generate_set() {
     # The source icon uses currentColor, so set a concrete fill color for rasterization.
     sed "s/currentcolor/$color/g; s/currentColor/$color/g" "$ICON_SVG_SRC" > "$TMP_ICON_SVG"
 
-    for browser in chrome firefox safari; do
-        out_dir="$SCRIPT_DIR/$browser/icons"
-        mkdir -p "$out_dir"
+    out_dir="$SCRIPT_DIR/src/icons"
+    mkdir -p "$out_dir"
 
-        for size in 16 32 48 128; do
-            inner_size=$(( (size * INNER_SCALE_PERCENT + 50) / 100 ))
-            magick \
-                -background none \
-                "$TMP_ICON_SVG" \
-                -resize "${inner_size}x${inner_size}" \
-                -gravity center \
-                -extent "${size}x${size}" \
-                "$out_dir/${filename_prefix}icon${size}.png"
-        done
-
-        echo "Generated ${filename_prefix}icons for $browser"
+    for size in 16 32 48 128; do
+        inner_size=$(( (size * INNER_SCALE_PERCENT + 50) / 100 ))
+        magick \
+            -background none \
+            "$TMP_ICON_SVG" \
+            -resize "${inner_size}x${inner_size}" \
+            -gravity center \
+            -extent "${size}x${size}" \
+            "$out_dir/${filename_prefix}icon${size}.png"
     done
+
+    echo "Generated ${filename_prefix}icons"
 }
 
 generate_set "$DEFAULT_ICON_COLOR" ""
