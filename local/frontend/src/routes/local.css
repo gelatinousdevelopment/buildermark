@@ -61,6 +61,11 @@
 	--agent-background-color-codex: light-dark(#f0f0ff, #1a1a2e);
 	--agent-border-color-codex: light-dark(#9090ee, #3a3088);
 
+	--agent-color-codex-cloud: light-dark(#4540df, #3140d8);
+	--agent-foreground-color-codex-cloud: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0));
+	--agent-background-color-codex-cloud: light-dark(#f0f0ff, #1a1a2e);
+	--agent-border-color-codex-cloud: light-dark(#9090ee, #3a3088);
+
 	--agent-color-gemini: light-dark(#3180f7, #007bf9);
 	--agent-foreground-color-gemini: light-dark(rgb(255, 255, 255, 0.9), rgb(0, 0, 0, 0.9));
 	--agent-background-color-gemini: light-dark(#eef4ff, #101a2e);
