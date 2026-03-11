@@ -8,6 +8,7 @@
 		setProjectLabel,
 		setProjectPath,
 		setProjectOldPaths,
+		setProjectAltRemotes,
 		setProjectIgnoreDiffPaths,
 		setProjectIgnoreDefaultDiffPaths,
 		setProjectTeamServer
@@ -60,6 +61,8 @@
 	let path = $state(project.path ?? '');
 	// svelte-ignore state_referenced_locally
 	let oldPaths = $state(project.oldPaths ?? '');
+	// svelte-ignore state_referenced_locally
+	let altRemotes = $state(project.altRemotes ?? '');
 	// svelte-ignore state_referenced_locally
 	let ignoreDiffPaths = $state(project.ignoreDiffPaths ?? '');
 	// svelte-ignore state_referenced_locally
@@ -118,6 +121,7 @@
 			await setProjectPath(project.id, path);
 			await setProjectTeamServer(project.id, teamServerId);
 			await setProjectOldPaths(project.id, oldPaths);
+			await setProjectAltRemotes(project.id, altRemotes);
 			await setProjectIgnoreDiffPaths(project.id, ignoreDiffPaths);
 			await setProjectIgnoreDefaultDiffPaths(project.id, ignoreDefaultDiffPaths);
 			notice = 'Saved.';
@@ -256,6 +260,23 @@
 						</ul>
 					</div>
 				{/if}
+
+				<div class="section">
+					<h2>Alternate Git Remote URLs</h2>
+					<p class="hint">
+						Current remote: <code>{project.remote || 'none'}</code>
+					</p>
+					<p class="hint">
+						Match conversations from other remote URLs for this repository. One URL per line.
+					</p>
+					<textarea
+						id="alt-remotes"
+						bind:value={altRemotes}
+						rows="4"
+						spellcheck="false"
+						placeholder="git@github.com:other-org/repo.git"
+					></textarea>
+				</div>
 
 				<div class="section">
 					<h2>Alternate Coding Agent Paths</h2>

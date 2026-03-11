@@ -449,7 +449,7 @@ func (s *Server) upsertCloudConversation(ctx context.Context, url, projectID, ti
 }
 
 // resolveProjectForImport finds the best project match for an import by trying
-// repo URL, then cwd, then falling back to the web-imports project.
+// repo URL, then cwd. Returns an error if no matching project is found.
 func resolveProjectForImport(ctx context.Context, database *sql.DB, repoURL, cwd string) (projectID, matchMethod string, err error) {
 	if repoURL != "" {
 		repoURL = normalizeRemoteToRepoKey(repoURL)
@@ -468,11 +468,7 @@ func resolveProjectForImport(ctx context.Context, database *sql.DB, repoURL, cwd
 			return pid, "cwd", nil
 		}
 	}
-	pid, ensureErr := ensureWebImportsProject(ctx, database)
-	if ensureErr != nil {
-		return "", "", fmt.Errorf("ensure web imports project: %w", ensureErr)
-	}
-	return pid, "web-imports-fallback", nil
+	return "", "", fmt.Errorf("no matching project found for repoURL=%q cwd=%q", repoURL, cwd)
 }
 
 // findProjectByCwd matches a working directory to a project by exact path,
@@ -580,20 +576,25 @@ func findProjectByRepoURL(ctx context.Context, database *sql.DB, repoURL string)
 		return "", nil
 	}
 
-	rows, err := database.QueryContext(ctx, "SELECT id, remote FROM projects WHERE remote <> ''")
+	rows, err := database.QueryContext(ctx, "SELECT id, remote, alt_remotes FROM projects WHERE remote <> '' OR alt_remotes <> ''")
 	if err != nil {
 		return "", fmt.Errorf("query projects for remote match: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var id, remote string
-		if err := rows.Scan(&id, &remote); err != nil {
+		var id, remote, altRemotes string
+		if err := rows.Scan(&id, &remote, &altRemotes); err != nil {
 			return "", fmt.Errorf("scan project remote: %w", err)
 		}
 		normalized := normalizeRemoteToRepoKey(remote)
 		if normalized != "" && normalized == needle {
 			return id, nil
+		}
+		for _, alt := range splitLines(altRemotes) {
+			if n := normalizeRemoteToRepoKey(alt); n != "" && n == needle {
+				return id, nil
+			}
 		}
 	}
 	return "", rows.Err()
@@ -632,29 +633,3 @@ func (s *Server) recomputeCoverageAfterImport(projectID string, startedAtMs int6
 	log.Printf("[import-cloud] recompute: updated %d commits for project %s", n, projectID)
 }
 
-func ensureWebImportsProject(ctx context.Context, database *sql.DB) (string, error) {
-	const webImportsPath = "__web-imports__"
-	var id string
-	err := database.QueryRowContext(ctx, "SELECT id FROM projects WHERE path = ?", webImportsPath).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-	if err != sql.ErrNoRows {
-		return "", fmt.Errorf("query web imports project: %w", err)
-	}
-
-	id = db.NewID()
-	_, err = database.ExecContext(ctx,
-		"INSERT OR IGNORE INTO projects (id, path, label) VALUES (?, ?, ?)",
-		id, webImportsPath, "Web Imports",
-	)
-	if err != nil {
-		return "", fmt.Errorf("insert web imports project: %w", err)
-	}
-
-	err = database.QueryRowContext(ctx, "SELECT id FROM projects WHERE path = ?", webImportsPath).Scan(&id)
-	if err != nil {
-		return "", fmt.Errorf("re-query web imports project: %w", err)
-	}
-	return id, nil
-}

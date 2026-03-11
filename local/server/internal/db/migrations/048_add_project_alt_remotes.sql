@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN alt_remotes TEXT NOT NULL DEFAULT '';

@@ -302,6 +302,20 @@ func (s *Server) recomputeProjectCoverageAllBranchesWithChangedPatterns(
 	return recomputedBranches, recomputedCommits, nil
 }
 
+func (s *Server) handleSetProjectAltRemotes(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AltRemotes string `json:"altRemotes"`
+	}
+	id := decodeProjectSetterBody(w, r, &body)
+	if id == "" {
+		return
+	}
+	if handleProjectSetterError(w, db.SetProjectAltRemotes(r.Context(), s.DB, id, body.AltRemotes), "alt_remotes") {
+		return
+	}
+	writeSuccess(w, http.StatusOK, nil)
+}
+
 func splitLines(s string) []string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
