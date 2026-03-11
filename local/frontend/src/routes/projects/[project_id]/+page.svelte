@@ -10,6 +10,8 @@
 	import { dateStringToUnixMsRange } from '$lib/utils';
 	import type { Project, ProjectDetail, DailyCommitSummary } from '$lib/types';
 
+	const PAGE_SIZE = 100;
+
 	const projectId = $derived(page.params.project_id ?? '');
 	const projects = $derived((page.data.projects ?? []) as Project[]);
 	const projectFromList = $derived(projects.find((p) => p.id === projectId));
@@ -23,6 +25,22 @@
 
 	let loadedCommitHashes: string[] = $state([]);
 	let loadedConversationIds: string[] = $state([]);
+	let loadedPages = $state(1);
+	let currentPageSize = $state(PAGE_SIZE);
+	let conversationPagination: ProjectDetail['conversationPagination'] | null = $state(null);
+	let commitPagination: import('$lib/types').ProjectCommitPagination | null = $state(null);
+	let lastPagingContext = '';
+
+	const currentProjectUrl = $derived(`${page.url.pathname}${page.url.search}`);
+	const hasMoreConversations = $derived.by(() => {
+		if (!conversationPagination) return false;
+		return currentPageSize < conversationPagination.total;
+	});
+	const hasMoreCommits = $derived.by(() => {
+		if (!commitPagination) return false;
+		return currentPageSize < commitPagination.total;
+	});
+	const canLoadMore = $derived(hasMoreConversations || hasMoreCommits);
 
 	function handleCommitsLoaded(hashes: string[]) {
 		loadedCommitHashes = hashes;
@@ -43,6 +61,7 @@
 	});
 
 	function handleProjectLoaded(project: ProjectDetail) {
+		conversationPagination = project.conversationPagination;
 		projectLayoutData.setProject(projectId, project);
 	}
 
@@ -51,8 +70,26 @@
 		branch: string;
 		pagination: import('$lib/types').ProjectCommitPagination;
 	}) {
+		commitPagination = data.pagination;
 		projectLayoutData.setCommitsData(projectId, data.dailySummary, data.branch);
 	}
+
+	function handleLoadMore(event: MouseEvent) {
+		event.preventDefault();
+		loadedPages += 1;
+		currentPageSize = loadedPages * PAGE_SIZE;
+	}
+
+	$effect(() => {
+		const pagingContext = `${projectId}:${order}:${dateRange?.from ?? ''}:${dateRange?.to ?? ''}`;
+		if (lastPagingContext && pagingContext !== lastPagingContext) {
+			loadedPages = 1;
+			currentPageSize = PAGE_SIZE;
+			conversationPagination = null;
+			commitPagination = null;
+		}
+		lastPagingContext = pagingContext;
+	});
 </script>
 
 <div class="project-content">
@@ -65,8 +102,8 @@
 		<Conversations
 			{projectId}
 			page={1}
-			pageSize={100}
-			limit={100}
+			pageSize={currentPageSize}
+			limit={currentPageSize}
 			compact={true}
 			showAgentColumn={true}
 			showRatingsColumn={true}
@@ -81,7 +118,7 @@
 			<a
 				class="bordered small"
 				href={resolve('/projects/[project_id]/conversations', { project_id: projectId })}
-				>More Conversations...</a
+				>Go to Conversations</a
 			>
 		</div>
 	</div>
@@ -91,8 +128,8 @@
 			{projectId}
 			branch={defaultBranch}
 			page={1}
-			pageSize={100}
-			limit={100}
+			pageSize={currentPageSize}
+			limit={currentPageSize}
 			compact={true}
 			showHeader={true}
 			headerLink={resolve('/projects/[project_id]/commits', { project_id: projectId })}
@@ -108,11 +145,16 @@
 		<div class="more">
 			<a
 				class="bordered small"
-				href={resolve('/projects/[project_id]/commits', { project_id: projectId })}
-				>More Commits...</a
+				href={resolve('/projects/[project_id]/commits', { project_id: projectId })}>Go to Commits</a
 			>
 		</div>
 	</div>
+
+	{#if canLoadMore}
+		<div class="load-more-row">
+			<a class="bordered" href={currentProjectUrl} onclick={handleLoadMore}>Load More...</a>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -124,6 +166,7 @@
 		/*box-sizing: border-box;*/
 		display: flex;
 		flex-direction: row;
+		flex-wrap: wrap;
 		justify-content: space-between;
 		/*margin: 2rem auto;*/
 		/*transition: all 200ms;*/
@@ -169,6 +212,15 @@
 		margin-top: 0.75rem;
 		margin-left: 1rem;
 		width: fit-content;
+	}
+
+	.load-more-row {
+		border-top: 0.5px solid var(--color-divider);
+		box-sizing: border-box;
+		display: flex;
+		flex: 0 0 100%;
+		justify-content: center;
+		padding: 1rem 0;
 	}
 
 	@media (max-width: 1023px) {
