@@ -178,11 +178,11 @@
 	});
 
 	$effect(() => {
-		if (start !== undefined) internalStart = start;
+		internalStart = start;
 	});
 
 	$effect(() => {
-		if (end !== undefined) internalEnd = end;
+		internalEnd = end;
 	});
 
 	// Reset to page 1 when date filter changes.

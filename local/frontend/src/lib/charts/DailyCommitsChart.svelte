@@ -134,13 +134,18 @@
 		return col.total / maxDayLines;
 	}
 
+	const activeSummary = $derived.by(() => {
+		if (!selectedDate) return dailySummary;
+		return dailySummary.filter((day) => day.date === selectedDate);
+	});
+
 	const historyTotalLines = $derived.by(() =>
-		dailySummary.reduce((sum, day) => sum + Math.max(0, day.linesTotal), 0)
+		activeSummary.reduce((sum, day) => sum + Math.max(0, day.linesTotal), 0)
 	);
 
 	const historyLinesByAgent = $derived.by(() => {
 		const byAgent = new SvelteMap<string, number>();
-		for (const day of dailySummary) {
+		for (const day of activeSummary) {
 			for (const seg of day.agentSegments ?? []) {
 				byAgent.set(seg.agent, (byAgent.get(seg.agent) ?? 0) + seg.linesFromAgent);
 			}
@@ -405,7 +410,11 @@
 		<div class="dc-history-agent info-box">
 			<div class="title">{Math.round(historyAgentPercent)}% by agents</div>
 			<div class="title" style:font-size="0.9rem">
-				last {columns.length} day{columns.length === 1 ? '' : 's'}
+				{#if selectedDate}
+					{formatDateLong(selectedDate)}
+				{:else}
+					last {columns.length} day{columns.length === 1 ? '' : 's'}
+				{/if}
 			</div>
 			{#if projectId}
 				<div class="subtitle">
