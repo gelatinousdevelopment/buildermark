@@ -657,7 +657,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 	}
 	// Fast ingestion check: only look at HEAD hash (~1ms git rev-parse)
 	// instead of listing all branch hashes (~12ms git log).
-	s.maybeIngestBranchHead(r.Context(), repoProject, group, branch)
+	s.maybeIngestBranchHead(r.Context(), repoProject, group, branch, "")
 
 	s.writeCommitResponse(w, r, dbCommits, repoProject, project, group, branch, branches, users, identity,
 		userEmails, agentFilter, total, filteredTotal, totalPages, page, pageSize,
@@ -668,17 +668,23 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 // maybeIngestBranchHead checks if the HEAD commit of a branch is ingested.
 // If not, it fetches the recent hashes and enqueues ingestion for missing ones.
 // This is much faster than listing all branch hashes (~1ms vs ~12ms).
-func (s *Server) maybeIngestBranchHead(ctx context.Context, repoProject *db.Project, group projectGroup, branch string) {
-	headHash, err := runGit(ctx, repoProject.Path, "rev-parse", branch)
-	if err != nil {
-		return
+func (s *Server) maybeIngestBranchHead(ctx context.Context, repoProject *db.Project, group projectGroup, branch, headHash string) {
+	if strings.TrimSpace(headHash) == "" {
+		var err error
+		headHash, err = runGit(ctx, repoProject.Path, "rev-parse", branch)
+		if err != nil {
+			return
+		}
 	}
 	headHash = strings.TrimSpace(headHash)
 	if headHash == "" {
 		return
 	}
 	existing, err := db.ExistingCommitHashes(ctx, s.DB, repoProject.ID, []string{headHash})
-	if err != nil || existing[headHash] {
+	if err != nil {
+		return
+	}
+	if existing[headHash] {
 		return // HEAD is already ingested
 	}
 	// HEAD is missing — fetch recent hashes (uncached) for ingestion.
@@ -868,25 +874,132 @@ func (s *Server) writeCommitResponse(
 
 }
 
-func (s *Server) enqueueCommitIngestion(projectID, branch string, missingHashes []string) bool {
-	key := projectID + ":" + branch
+func normalizeCommitIngestKey(projectID, branch string) string {
+	return projectID + ":" + branch
+}
+
+func uniqueHashes(hashes []string) []string {
+	seen := make(map[string]struct{}, len(hashes))
+	out := make([]string, 0, len(hashes))
+	for _, hash := range hashes {
+		hash = strings.TrimSpace(hash)
+		if hash == "" {
+			continue
+		}
+		if _, ok := seen[hash]; ok {
+			continue
+		}
+		seen[hash] = struct{}{}
+		out = append(out, hash)
+	}
+	return out
+}
+
+func mergeUniqueHashes(existing, incoming []string) []string {
+	merged := append([]string{}, existing...)
+	seen := make(map[string]struct{}, len(existing))
+	for _, hash := range existing {
+		hash = strings.TrimSpace(hash)
+		if hash == "" {
+			continue
+		}
+		seen[hash] = struct{}{}
+	}
+	for _, hash := range incoming {
+		hash = strings.TrimSpace(hash)
+		if hash == "" {
+			continue
+		}
+		if _, ok := seen[hash]; ok {
+			continue
+		}
+		seen[hash] = struct{}{}
+		merged = append(merged, hash)
+	}
+	return merged
+}
+
+func (s *Server) reserveCommitIngestion(projectID, branch string, missingHashes []string) (string, []string, bool, int) {
+	if s.commitIngestJobs == nil {
+		s.commitIngestJobs = newJobTracker()
+	}
+	if s.pendingCommitIngest == nil {
+		s.pendingCommitIngest = make(map[string][]string)
+	}
+	missingHashes = uniqueHashes(missingHashes)
+	if len(missingHashes) == 0 {
+		return normalizeCommitIngestKey(projectID, branch), nil, false, 0
+	}
+	key := normalizeCommitIngestKey(projectID, branch)
+
+	s.commitIngestMu.Lock()
+	defer s.commitIngestMu.Unlock()
+
 	if !s.commitIngestJobs.tryStart(key) {
-		return false
+		s.pendingCommitIngest[key] = mergeUniqueHashes(s.pendingCommitIngest[key], missingHashes)
+		return key, nil, false, len(s.pendingCommitIngest[key])
+	}
+	return key, missingHashes, true, 0
+}
+
+func (s *Server) releaseCommitIngestion(key string) ([]string, bool) {
+	if s.commitIngestJobs == nil {
+		return nil, false
+	}
+
+	s.commitIngestMu.Lock()
+	defer s.commitIngestMu.Unlock()
+
+	s.commitIngestJobs.finish(key)
+	pending := uniqueHashes(s.pendingCommitIngest[key])
+	delete(s.pendingCommitIngest, key)
+	if len(pending) == 0 {
+		return nil, false
+	}
+	if !s.commitIngestJobs.tryStart(key) {
+		s.pendingCommitIngest[key] = mergeUniqueHashes(s.pendingCommitIngest[key], pending)
+		return nil, false
+	}
+	return pending, true
+}
+
+func (s *Server) enqueueCommitIngestion(projectID, branch string, missingHashes []string) (bool, bool, int) {
+	key, missingHashes, started, pendingCount := s.reserveCommitIngestion(projectID, branch, missingHashes)
+	if !started {
+		if pendingCount > 0 {
+			return true, false, pendingCount
+		}
+		return false, false, 0
 	}
 
 	go s.runCommitIngestion(projectID, branch, missingHashes, key)
-	return true
+	return true, true, 0
 }
 
 func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []string, key string) {
-	defer s.commitIngestJobs.finish(key)
+	defer func() {
+		nextHashes, restart := s.releaseCommitIngestion(key)
+		if restart {
+			go s.runCommitIngestion(projectID, branch, nextHashes, key)
+		}
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	startedAt := time.Now().UnixMilli()
 
 	covCtx, err := s.loadProjectCoverageContext(ctx, projectID)
 	if err != nil {
 		log.Printf("async commit ingestion context load failed for %s: %v", projectID, err)
+		_ = db.UpsertCommitSyncState(context.Background(), s.DB, db.CommitSyncState{
+			ProjectID:        projectID,
+			BranchName:       branch,
+			State:            "failed",
+			LastStartedAtMs:  startedAt,
+			LastFinishedAtMs: time.Now().UnixMilli(),
+			LastDurationMs:   time.Now().UnixMilli() - startedAt,
+			LastError:        err.Error(),
+		})
 		if s.ws != nil {
 			s.ws.broadcastEvent("job_status", jobStatusEvent{
 				JobType:   "commit_ingest",
@@ -898,6 +1011,18 @@ func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []st
 		}
 		return
 	}
+
+	headHash := ""
+	if out, headErr := runGit(ctx, covCtx.repoProject.Path, "rev-parse", branch); headErr == nil {
+		headHash = strings.TrimSpace(out)
+	}
+	_ = db.UpsertCommitSyncState(ctx, s.DB, db.CommitSyncState{
+		ProjectID:           projectID,
+		BranchName:          branch,
+		State:               "running",
+		LatestKnownHeadHash: headHash,
+		LastStartedAtMs:     startedAt,
+	})
 
 	if s.ws != nil {
 		s.ws.broadcastEvent("job_status", jobStatusEvent{
@@ -943,8 +1068,20 @@ func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []st
 	if err == nil && len(ingestedCommits) > 0 {
 		s.notifyIngestedCommits(ingestedCommits, db.RepoLabel(covCtx.repoProject.Path))
 	}
+	finishedAt := time.Now().UnixMilli()
+	duration := finishedAt - startedAt
 	if err != nil {
 		log.Printf("async commit ingestion failed for %s: %v", projectID, err)
+		_ = db.UpsertCommitSyncState(context.Background(), s.DB, db.CommitSyncState{
+			ProjectID:           projectID,
+			BranchName:          branch,
+			State:               "failed",
+			LatestKnownHeadHash: headHash,
+			LastStartedAtMs:     startedAt,
+			LastFinishedAtMs:    finishedAt,
+			LastDurationMs:      duration,
+			LastError:           err.Error(),
+		})
 		if s.ws != nil {
 			s.ws.broadcastEvent("job_status", jobStatusEvent{
 				JobType:   "commit_ingest",
@@ -956,6 +1093,17 @@ func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []st
 		}
 		return
 	}
+
+	_ = db.UpsertCommitSyncState(context.Background(), s.DB, db.CommitSyncState{
+		ProjectID:             projectID,
+		BranchName:            branch,
+		State:                 "idle",
+		LatestKnownHeadHash:   headHash,
+		LastProcessedHeadHash: headHash,
+		LastStartedAtMs:       startedAt,
+		LastFinishedAtMs:      finishedAt,
+		LastDurationMs:        duration,
+	})
 
 	if s.ws != nil {
 		s.ws.broadcastEvent("job_status", jobStatusEvent{

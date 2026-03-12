@@ -36,6 +36,9 @@ func setupTestServer(t *testing.T) *Server {
 			}
 			time.Sleep(25 * time.Millisecond)
 		}
+		if srv.RepoMonitor != nil {
+			srv.RepoMonitor.Close()
+		}
 		database.Close()
 	})
 	return srv

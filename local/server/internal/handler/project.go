@@ -73,6 +73,7 @@ func (s *Server) handleSetProjectIgnored(w http.ResponseWriter, r *http.Request)
 	if handleProjectSetterError(w, db.SetProjectIgnored(r.Context(), s.DB, id, body.Ignored), "ignored") {
 		return
 	}
+	s.reconcileGitRepoMonitorAsync()
 	writeSuccess(w, http.StatusOK, nil)
 }
 
@@ -119,6 +120,7 @@ func (s *Server) handleSetProjectPath(w http.ResponseWriter, r *http.Request) {
 		log.Printf("warning: failed to update remote for project %s: %v", id, err)
 	}
 
+	s.reconcileGitRepoMonitorAsync()
 	writeSuccess(w, http.StatusOK, nil)
 }
 
@@ -485,6 +487,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.reconcileGitRepoMonitorAsync()
 	writeSuccess(w, http.StatusOK, nil)
 }
 

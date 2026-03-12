@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/gitmonitor"
 )
 
 // Server holds dependencies shared across HTTP handlers.
@@ -30,6 +31,7 @@ type Server struct {
 	// that were added (empty if none). The caller can use these to trigger
 	// an immediate scan.
 	ReloadWatchers func() []string
+	RepoMonitor    *gitmonitor.Manager
 
 	refreshJobs      *jobTracker
 	coverageJobs     *jobTracker
@@ -40,11 +42,14 @@ type Server struct {
 	branchCache       *branchCacheStore
 
 	ws       *wsHub
-	notifyWS *wsHub // dedicated hub for native notification clients
+	notifyWS *wsHub     // dedicated hub for native notification clients
 	importMu sync.Mutex // guards against concurrent imports
 
 	staleScanMu       sync.Mutex
 	staleScanInFlight map[string]struct{} // project IDs with pending stale scans
+
+	commitIngestMu      sync.Mutex
+	pendingCommitIngest map[string][]string
 
 	// afterCoverageStage is a test hook invoked after an async coverage stage
 	// finishes computing and writing, before the worker decides whether it must

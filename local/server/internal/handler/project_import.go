@@ -189,6 +189,7 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 		_ = ensureProjectDefaultBranch(ctx, s.DB, project)
 		projectIDs = append(projectIDs, projectID)
 	}
+	s.reconcileGitRepoMonitorAsync()
 
 	entriesProcessed := 0
 	if s.Agents != nil && len(s.Agents.Watchers()) > 0 {

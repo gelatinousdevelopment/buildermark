@@ -42,6 +42,54 @@ func waitForCommitRefresh(t *testing.T, s *Server) {
 	t.Fatal("timed out waiting for commit refresh to complete")
 }
 
+func TestCommitIngestionQueueDefersAndRestarts(t *testing.T) {
+	s := setupTestServer(t)
+
+	key, hashes, started, pendingCount := s.reserveCommitIngestion("project-1", "main", []string{"a", "b", "a"})
+	if key != "project-1:main" {
+		t.Fatalf("key = %q, want %q", key, "project-1:main")
+	}
+	if !started {
+		t.Fatal("started = false, want true")
+	}
+	if pendingCount != 0 {
+		t.Fatalf("pendingCount = %d, want 0", pendingCount)
+	}
+	if got, want := strings.Join(hashes, ","), "a,b"; got != want {
+		t.Fatalf("hashes = %q, want %q", got, want)
+	}
+
+	key, hashes, started, pendingCount = s.reserveCommitIngestion("project-1", "main", []string{"b", "c", "d"})
+	if key != "project-1:main" {
+		t.Fatalf("key = %q, want %q", key, "project-1:main")
+	}
+	if started {
+		t.Fatal("started = true, want false for deferred enqueue")
+	}
+	if hashes != nil {
+		t.Fatalf("hashes = %v, want nil for deferred enqueue", hashes)
+	}
+	if pendingCount != 3 {
+		t.Fatalf("pendingCount = %d, want 3", pendingCount)
+	}
+
+	next, restart := s.releaseCommitIngestion("project-1:main")
+	if !restart {
+		t.Fatal("restart = false, want true")
+	}
+	if got, want := strings.Join(next, ","), "b,c,d"; got != want {
+		t.Fatalf("next = %q, want %q", got, want)
+	}
+
+	next, restart = s.releaseCommitIngestion("project-1:main")
+	if restart {
+		t.Fatal("restart = true, want false with no pending hashes")
+	}
+	if len(next) != 0 {
+		t.Fatalf("next = %v, want empty", next)
+	}
+}
+
 func TestListProjectCommits(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
