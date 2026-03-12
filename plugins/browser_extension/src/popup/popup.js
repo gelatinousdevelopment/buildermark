@@ -14,18 +14,6 @@ openLink.addEventListener("click", (e) => {
   window.close();
 });
 
-// URL patterns that indicate a supported page (must match background.js).
-const ACTIVE_URL_PATTERNS = [
-  /https?:\/\/(?:[^/]+\.)?claude\.ai\/(?:project\/[^/]+\/)?chat\/([a-f0-9-]+)(?:[/?#]|$)/i,
-  /https?:\/\/chatgpt\.com\/codex\/(?:s\/)?([a-zA-Z0-9_-]+)(?:[/?#]|$)/i,
-  /https?:\/\/(?:[^/]+\.)?claude\.ai\/code\/([^/?#]+)(?:[/?#]|$)/i,
-];
-
-function isActiveUrl(url) {
-  if (!url) return false;
-  return ACTIVE_URL_PATTERNS.some((p) => p.test(url));
-}
-
 // Page status labels and colors.
 const PAGE_STATES = {
   ignored: { text: "Not a supported page", dot: "gray" },
@@ -38,29 +26,12 @@ const PAGE_STATES = {
   pending: { text: "Ready to import", dot: "orange" },
 };
 
-// Query the content script directly for the import state.
+// Read the active page state from the background so opening the popup does not
+// require touching the current tab directly.
 async function checkPageState() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) {
-      setPageState("ignored");
-      return;
-    }
-
-    // Not a supported URL — no content script will be running.
-    if (!isActiveUrl(tab.url)) {
-      setPageState("ignored");
-      return;
-    }
-
-    // Ask the content script for its state.
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: "getPageState" });
-      setPageState(response?.state || "waiting");
-    } catch {
-      // Content script not loaded yet or not responding.
-      setPageState("waiting");
-    }
+    const response = await chrome.runtime.sendMessage({ type: "getActiveTabState" });
+    setPageState(response?.state || "ignored");
   } catch {
     setPageState("ignored");
   }
@@ -81,23 +52,9 @@ function setPageState(state) {
 
 // Listen for live state changes from content scripts while the popup is open.
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === "pageStateChanged") {
+  if (message.type === "activeTabStateChanged") {
     setPageState(message.state);
   }
-});
-
-// Re-check page state on navigation or tab switch.
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url) {
-    // Immediately reset on URL change before querying the content script.
-    setPageState(isActiveUrl(changeInfo.url) ? "waiting" : "ignored");
-    checkPageState();
-  } else if (changeInfo.status === "complete") {
-    checkPageState();
-  }
-});
-chrome.tabs.onActivated.addListener(() => {
-  checkPageState();
 });
 
 checkPageState();
@@ -110,19 +67,10 @@ chrome.storage.local.get({ autoImport: true }, (result) => {
 autoImportCheckbox.addEventListener("change", () => {
   const value = autoImportCheckbox.checked;
   chrome.storage.local.set({ autoImport: value });
-  // Broadcast to content scripts in the active tab.
-  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    if (tab) {
-      chrome.tabs.sendMessage(tab.id, { type: "autoImportChanged", value }).catch(() => {});
-    }
-  });
+  chrome.runtime.sendMessage({ type: "autoImportChanged", value }).catch(() => {});
 });
 
 // Import button — trigger manual import on active tab.
 importBtn.addEventListener("click", () => {
-  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    if (tab) {
-      chrome.tabs.sendMessage(tab.id, { type: "triggerImport" }).catch(() => {});
-    }
-  });
+  chrome.runtime.sendMessage({ type: "triggerImport" }).catch(() => {});
 });

@@ -1,0 +1,11 @@
+{
+  "background": {
+    "scripts": ["shared/chrome_compat.js", "background/background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "buildermark-local@buildermark.dev",
+      "strict_min_version": "121.0"
+    }
+  }
+}

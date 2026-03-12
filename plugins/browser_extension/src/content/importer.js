@@ -23,7 +23,10 @@ function _setPageState(state) {
   console.log("setPageState", state);
   _buildermarkPageState = state;
   try {
-    chrome.runtime.sendMessage({ type: "pageStateChanged", state });
+    const result = chrome.runtime.sendMessage({ type: "pageStateChanged", state });
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
   } catch {
     // Popup may not be open — ignore.
   }

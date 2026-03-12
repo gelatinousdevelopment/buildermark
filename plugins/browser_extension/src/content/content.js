@@ -7,7 +7,10 @@ script.onload = () => script.remove();
 // Badge communication with background script.
 function setBadge(state) {
   try {
-    chrome.runtime.sendMessage({ type: "setBadge", state });
+    const result = chrome.runtime.sendMessage({ type: "setBadge", state });
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
   } catch (e) {
     // Extension context may be invalidated — ignore.
   }
@@ -16,6 +19,7 @@ function setBadge(state) {
 // Start the listener.
 const listener = new CloudListener(setBadge);
 window._buildermarkCloudListener = listener;
+setBadge("waiting");
 listener.start();
 
 // Also watch for SPA navigation (URL changes without full page reload).

@@ -3,7 +3,7 @@
   "name": "Buildermark Conversation Importer",
   "version": "0.1.0",
   "description": "Import coding agent conversations from Claude Cloud and Codex Cloud into Buildermark.",
-  "permissions": ["tabs", "storage"],
+  "permissions": ["storage"],
   "host_permissions": ["http://localhost:7022/*"],
   "content_scripts": [
     {
@@ -11,12 +11,21 @@
         "*://*.claude.ai/chat/*",
         "*://*.claude.ai/project/*/chat/*"
       ],
-      "js": ["content/api.js", "content/importer.js"],
+      "js": [
+        "shared/chrome_compat.js",
+        "content/api.js",
+        "content/importer.js"
+      ],
       "run_at": "document_idle"
     },
     {
       "matches": ["*://*.claude.ai/code/*", "*://chatgpt.com/codex/*"],
-      "js": ["content/api.js", "content/cloud_listener.js", "content/content.js"],
+      "js": [
+        "shared/chrome_compat.js",
+        "content/api.js",
+        "content/cloud_listener.js",
+        "content/content.js"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -26,9 +35,6 @@
       "matches": ["*://*.claude.ai/*", "*://chatgpt.com/*"]
     }
   ],
-  "background": {
-    "service_worker": "background/background.js"
-  },
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",

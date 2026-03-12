@@ -17,19 +17,19 @@
 			name: 'Chrome',
 			storeLabel: 'Chrome Web Store',
 			storeUrl: 'https://chromewebstore.google.com/search/buildermark',
-			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser/chrome'
+			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser_extension'
 		},
 		{
 			name: 'Safari',
 			storeLabel: 'Mac App Store',
 			storeUrl: 'https://apps.apple.com/us/search?term=buildermark',
-			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser/safari'
+			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser_extension/safari'
 		},
 		{
 			name: 'Firefox',
 			storeLabel: 'Firefox Add-ons',
 			storeUrl: 'https://addons.mozilla.org/en-US/firefox/search/?q=buildermark',
-			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser/firefox'
+			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser_extension'
 		}
 	] as const;
 

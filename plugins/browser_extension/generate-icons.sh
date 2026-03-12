@@ -6,7 +6,7 @@
 # - Margin controlled by INNER_SCALE_PERCENT (currently 100)
 #
 # Usage:
-#   ./apps/browser_extensions/generate-icons.sh
+#   ./plugins/browser_extension/generate-icons.sh
 
 set -euo pipefail
 

@@ -12,15 +12,11 @@ const BLUE_ICONS = {
   128: "../icons/blue_icon128.png",
 };
 
-const ACTIVE_URL_PATTERNS = [
-  /https?:\/\/(?:[^/]+\.)?claude\.ai\/(?:project\/[^/]+\/)?chat\/([a-f0-9-]+)(?:[/?#]|$)/i,
-  /https?:\/\/chatgpt\.com\/codex\/(?:s\/)?([a-zA-Z0-9_-]+)(?:[/?#]|$)/i,
-  /https?:\/\/(?:[^/]+\.)?claude\.ai\/code\/([^/?#]+)(?:[/?#]|$)/i,
-];
 const API_BASE = "http://localhost:7022/api/v1/";
 
 // Track per-tab import state for the popup.
 const tabStates = new Map();
+let activeTabId = null;
 
 async function handleApiRequest(endpoint, options = {}) {
   if (typeof endpoint !== "string" || !endpoint.startsWith(API_BASE)) {
@@ -65,13 +61,8 @@ async function handleApiRequest(endpoint, options = {}) {
   };
 }
 
-function isActiveUrl(url) {
-  if (!url) return false;
-  return ACTIVE_URL_PATTERNS.some((pattern) => pattern.test(url));
-}
-
-function setTabIcon(tabId, url) {
-  const path = isActiveUrl(url) ? BLUE_ICONS : GRAY_ICONS;
+function setTabIcon(tabId, isSupported) {
+  const path = isSupported ? BLUE_ICONS : GRAY_ICONS;
   chrome.action.setIcon({ tabId, path });
 }
 
@@ -80,51 +71,102 @@ function clearBadgeState(tabId) {
   chrome.action.setTitle({ title: "Buildermark", tabId });
 }
 
-function refreshTabIcon(tabId) {
-  chrome.tabs.get(tabId, (tab) => {
-    if (chrome.runtime.lastError || !tab) return;
-    setTabIcon(tabId, tab.url || "");
-  });
+function notifyActiveTabState(state) {
+  try {
+    const result = chrome.runtime.sendMessage({ type: "activeTabStateChanged", state });
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  } catch {
+    // Popup may not be open.
+  }
 }
 
-function refreshActiveTabIcon() {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (chrome.runtime.lastError || !tabs || tabs.length === 0) return;
-    const tab = tabs[0];
-    if (typeof tab.id !== "number") return;
-    setTabIcon(tab.id, tab.url || "");
-  });
-}
+function applyTabState(tabId, state) {
+  const isSupported = state !== "ignored";
+  setTabIcon(tabId, isSupported);
 
-chrome.tabs.onActivated.addListener(({ tabId }) => {
-  refreshTabIcon(tabId);
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (typeof changeInfo.url === "string" || changeInfo.status === "loading") {
+  if (!isSupported || state === "waiting" || state === "pending") {
     clearBadgeState(tabId);
+  }
+
+  switch (state) {
+    case "ignored":
+    case "waiting":
+      break;
+    case "importing":
+      chrome.action.setBadgeText({ text: "↑", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#4a9eff", tabId });
+      chrome.action.setTitle({ title: "Buildermark: Importing...", tabId });
+      break;
+    case "done":
+      chrome.action.setBadgeText({ text: "\u2713", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#4ecdc4", tabId });
+      chrome.action.setTitle({ title: "Buildermark: Imported", tabId });
+      break;
+    case "already":
+      chrome.action.setBadgeText({ text: "\u2713", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#888", tabId });
+      chrome.action.setTitle({ title: "Buildermark: Already imported", tabId });
+      break;
+    case "error":
+      chrome.action.setBadgeText({ text: "!", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#ff6b6b", tabId });
+      chrome.action.setTitle({ title: "Buildermark: Import failed", tabId });
+      break;
+    case "server_unavailable":
+      chrome.action.setBadgeText({ text: "!", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#ffb347", tabId });
+      chrome.action.setTitle({ title: "Buildermark: Local server unavailable", tabId });
+      break;
+  }
+
+  if (tabId === activeTabId) {
+    notifyActiveTabState(state);
+  }
+}
+
+if (chrome.tabs?.onActivated && typeof chrome.tabs.onActivated.addListener === "function") {
+  chrome.tabs.onActivated.addListener(({ tabId }) => {
+    activeTabId = tabId;
+    applyTabState(tabId, getTabState(tabId));
+  });
+}
+
+if (chrome.tabs?.onUpdated && typeof chrome.tabs.onUpdated.addListener === "function") {
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status === "loading") {
+      tabStates.delete(tabId);
+      applyTabState(tabId, "ignored");
+    }
+  });
+}
+
+if (chrome.tabs?.onRemoved && typeof chrome.tabs.onRemoved.addListener === "function") {
+  chrome.tabs.onRemoved.addListener((tabId) => {
     tabStates.delete(tabId);
-  }
+    if (activeTabId === tabId) {
+      activeTabId = null;
+    }
+  });
+}
 
-  if (typeof changeInfo.url === "string" || changeInfo.status === "complete") {
-    setTabIcon(tabId, (tab && tab.url) || changeInfo.url || "");
-  }
-});
-
-chrome.runtime.onInstalled.addListener(() => {
-  refreshActiveTabIcon();
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  refreshActiveTabIcon();
-});
-
-refreshActiveTabIcon();
-
-function getTabState(tabId, url) {
+function getTabState(tabId) {
   if (tabStates.has(tabId)) return tabStates.get(tabId);
-  if (isActiveUrl(url)) return "waiting";
   return "ignored";
+}
+
+function getActiveTabState() {
+  if (typeof activeTabId !== "number") return "ignored";
+  return getTabState(activeTabId);
+}
+
+function forwardMessageToActiveTab(message) {
+  if (typeof activeTabId !== "number" || getActiveTabState() === "ignored") {
+    return;
+  }
+
+  chrome.tabs.sendMessage(activeTabId, message).catch(() => {});
 }
 
 // Listen for messages from content scripts and popup.
@@ -142,49 +184,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "getTabState") {
-    chrome.tabs.get(message.tabId, (tab) => {
-      if (chrome.runtime.lastError || !tab) {
-        sendResponse({ state: "ignored" });
-        return;
-      }
-      sendResponse({ state: getTabState(message.tabId, tab.url || "") });
-    });
-    return true; // async response
+    sendResponse({ state: getTabState(message.tabId) });
+    return;
   }
 
-  if (message.type !== "setBadge" || !sender.tab) return;
+  if (message.type === "getActiveTabState") {
+    sendResponse({ state: getActiveTabState() });
+    return;
+  }
 
-  const tabId = sender.tab.id;
-  tabStates.set(tabId, message.state);
+  if (message.type === "autoImportChanged") {
+    forwardMessageToActiveTab({ type: "autoImportChanged", value: message.value });
+    return;
+  }
 
-  console.log("message.state", message.state);
-  switch (message.state) {
-    case "ignored":
-    case "waiting":
-      clearBadgeState(tabId);
-      break;
-    case "importing":
-      chrome.action.setBadgeText({ text: "↑", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#4a9eff", tabId });
-      chrome.action.setTitle({ title: "Buildermark: Importing...", tabId });
-      break;
-    case "done":
-      chrome.action.setBadgeText({ text: "\u2713", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#4ecdc4", tabId });
-      chrome.action.setTitle({ title: "Buildermark: Imported", tabId });
-      break;
-    case "already":
-      chrome.action.setBadgeText({ text: "\u2713", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#888", tabId });
-      chrome.action.setTitle({ title: "Buildermark: Already imported", tabId });
-      break;
-    case "pending":
-      clearBadgeState(tabId);
-      break;
-    case "error":
-      chrome.action.setBadgeText({ text: "!", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#ff6b6b", tabId });
-      chrome.action.setTitle({ title: "Buildermark: Import failed", tabId });
-      break;
+  if (message.type === "triggerImport") {
+    forwardMessageToActiveTab({ type: "triggerImport" });
+    return;
+  }
+
+  if ((message.type === "setBadge" || message.type === "pageStateChanged") && sender.tab) {
+    const tabId = sender.tab.id;
+    const state = message.state || "ignored";
+
+    if (state === "ignored") {
+      tabStates.delete(tabId);
+    } else {
+      tabStates.set(tabId, state);
+    }
+
+    if (sender.tab.active) {
+      activeTabId = tabId;
+    }
+
+    applyTabState(tabId, state);
   }
 });
