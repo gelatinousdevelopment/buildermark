@@ -316,7 +316,7 @@
 		border: 0.5px solid var(--color-popover-border);
 		border-radius: 8px;
 		box-shadow: 0 2px 8px var(--color-popover-shadow);
-		z-index: 10;
+		z-index: 999;
 		white-space: nowrap;
 		overflow-y: auto;
 	}

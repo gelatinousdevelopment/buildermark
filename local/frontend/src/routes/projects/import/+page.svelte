@@ -11,7 +11,7 @@
 	let detectedLoading = $state(false);
 	let detectedError: string | null = $state(null);
 	let selectedProjectPaths: string[] = $state([]);
-	let historyImportDays = $state('90');
+	let historyImportDays = $state('30');
 	let savingSelection = $state(false);
 	let saveSelectionError: string | null = $state(null);
 	const historyDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
