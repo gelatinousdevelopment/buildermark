@@ -555,7 +555,7 @@
 						</td>
 					{/if}
 					<td class="date" title={formatFullDateTitle(c.authoredAtUnixMs)}
-						>{c.workingCopy ? '' : formatRelativeOrShortDate(c.authoredAtUnixMs, compact)}</td
+						>{c.workingCopy ? '–' : formatRelativeOrShortDate(c.authoredAtUnixMs, compact)}</td
 					>
 					<td class="title">
 						<div class="title-content">
@@ -629,24 +629,24 @@
 					{/if}
 					{#if showCoverageBar}
 						<td class="bar"
-							>{#if !c.workingCopy}<AgentPercentageBar
-									agentPercent={c.linePercent}
-									segments={c.overrideAgentPercents != null &&
-									Object.keys(c.overrideAgentPercents).length > 0
-										? Object.entries(c.overrideAgentPercents).map(([name, pct]) => ({
-												name,
-												percent: pct
-											}))
-										: toBarSegments(c.agentSegments)}
-									totalLines={c.linesTotal}
-									showKey={false}
-									needsParent={c.needsParent}
-									commitHref={selectedBranch || data?.branch
-										? resolve(
-												`/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
-											)
-										: undefined}
-								/>{/if}</td
+							><AgentPercentageBar
+								agentPercent={c.linePercent}
+								segments={c.overrideAgentPercents != null &&
+								Object.keys(c.overrideAgentPercents).length > 0
+									? Object.entries(c.overrideAgentPercents).map(([name, pct]) => ({
+											name,
+											percent: pct
+										}))
+									: toBarSegments(c.agentSegments)}
+								totalLines={c.linesTotal}
+								showKey={false}
+								needsParent={c.needsParent}
+								commitHref={selectedBranch || data?.branch
+									? resolve(
+											`/projects/${encodeURIComponent(c.projectId)}/commits/${encodeURIComponent(selectedBranch || data?.branch || '')}/${encodeURIComponent(c.commitHash)}`
+										)
+									: undefined}
+							/></td
 						>
 					{/if}
 				</tr>

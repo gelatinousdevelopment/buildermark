@@ -71,11 +71,17 @@ export function formatRelativeOrShortDate(unixMs: number, compact = false): stri
 		const rtf = new Intl.RelativeTimeFormat(undefined, { style: 'short', numeric: 'auto' });
 		const absSeconds = Math.floor(absDeltaMs / 1000);
 		if (absSeconds < 60)
-			return rtf.format(Math.round(-deltaMs / 1000), 'second').replace(/\./g, '');
+			return rtf
+				.format(Math.round(-deltaMs / 1000), 'second')
+				.replace(/\./g, '')
+				.replace(/sec/g, 's');
 
 		const absMinutes = Math.floor(absDeltaMs / 60000);
 		if (absMinutes < 60)
-			return rtf.format(Math.round(-deltaMs / 60000), 'minute').replace(/\./g, '');
+			return rtf
+				.format(Math.round(-deltaMs / 60000), 'minute')
+				.replace(/\./g, '')
+				.replace(/min/g, 'm');
 
 		return rtf.format(Math.round(-deltaMs / 3600000), 'hour').replace(/\./g, '');
 	}
