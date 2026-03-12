@@ -83,6 +83,7 @@ func (s *Server) Routes() http.Handler {
 		s.branchCache = newBranchCacheStore()
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/ws", s.handleWS)
 	mux.HandleFunc("GET /api/v1/notifications/ws", s.handleNotificationsWS)
 	mux.HandleFunc("POST /api/v1/rating", s.handleCreateRating)
@@ -199,7 +200,7 @@ func requestLogMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		// Skip noisy endpoints (WebSocket upgrades, static assets).
-		if r.URL.Path != "/api/v1/ws" && r.URL.Path != "/api/v1/notifications/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
+		if r.URL.Path != "/api/v1/health" && r.URL.Path != "/api/v1/ws" && r.URL.Path != "/api/v1/notifications/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
 			log.Printf("%s %dms %s", r.Method, time.Since(start).Milliseconds(), r.URL.Path)
 		}
 	})

@@ -26,7 +26,7 @@ func CheckStatus(serverURL string, configDir string, dbPath string) StatusResult
 	}
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(serverURL + "/api/v1/settings")
+	resp, err := client.Get(serverURL + "/api/v1/health")
 	if err != nil {
 		return result
 	}

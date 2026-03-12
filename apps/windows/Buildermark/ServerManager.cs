@@ -235,7 +235,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
 
         try
         {
-            var response = await _httpClient.GetAsync($"http://localhost:{Port}/api/v1/settings");
+            var response = await _httpClient.GetAsync($"http://localhost:{Port}/api/v1/health");
             if (response.IsSuccessStatusCode)
             {
                 if (Status != ServerStatus.Running)
@@ -276,6 +276,9 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
                 var uri = new Uri($"ws://localhost:{Port}/api/v1/notifications/ws");
                 await ws.ConnectAsync(uri, ct);
                 _notifyReconnectDelayMs = 1000;
+                // WS connected — stop polling and mark server as running.
+                StopHealthCheck();
+                Status = ServerStatus.Running;
 
                 var buffer = new byte[4096];
                 while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
@@ -296,7 +299,8 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             }
             catch
             {
-                // Connection failed or dropped — reconnect with backoff
+                // Connection failed or dropped — update status and reconnect with backoff
+                Status = _process is { HasExited: false } ? ServerStatus.Starting : ServerStatus.Stopped;
             }
 
             if (ct.IsCancellationRequested) break;

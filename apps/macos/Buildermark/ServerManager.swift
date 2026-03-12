@@ -218,7 +218,7 @@ final class ServerManager: ObservableObject {
     }
 
     private func checkHealth() async {
-        guard let url = URL(string: "http://localhost:\(Self.port)/api/v1/settings") else { return }
+        guard let url = URL(string: "http://localhost:\(Self.port)/api/v1/health") else { return }
         do {
             let (_, response) = try await URLSession.shared.data(from: url)
             if let http = response as? HTTPURLResponse, http.statusCode == 200 {
@@ -248,6 +248,10 @@ final class ServerManager: ObservableObject {
         notifyWSTask = task
         task.resume()
         notifyReconnectDelay = 1
+        // WS is connected — stop polling and mark server as running.
+        healthCheckTimer?.invalidate()
+        healthCheckTimer = nil
+        status = .running
         receiveNotification()
     }
 
@@ -300,14 +304,13 @@ final class ServerManager: ObservableObject {
 
     private func scheduleNotifyReconnect() {
         notifyWSTask = nil
+        // WS disconnected — reflect that the server may be down.
+        status = process != nil ? .starting : .stopped
         let delay = notifyReconnectDelay
         notifyReconnectDelay = min(notifyReconnectDelay * 2, 30)
         Task {
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            // Only reconnect if the health check shows the server is reachable.
-            if self.status == .running {
-                self.connectNotificationWS()
-            }
+            self.connectNotificationWS()
         }
     }
 
