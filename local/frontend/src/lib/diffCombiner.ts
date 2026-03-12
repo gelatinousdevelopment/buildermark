@@ -50,7 +50,12 @@ export function combineDiffs(diffMessages: MessageRead[], merge = true): string 
 	const parts: { text: string; filePath: string }[] = [];
 	for (const msg of diffMessages) {
 		const text = extractDiffText(msg.content);
-		if (text) parts.push({ text, filePath: extractFilePath(text) });
+		if (text) {
+			parts.push({ text, filePath: extractFilePath(text) });
+		} else {
+			// extractDiffText couldn't parse it — include raw content
+			parts.push({ text: msg.content.trim(), filePath: '' });
+		}
 	}
 
 	// Group by file path, maintaining order of first appearance
@@ -77,6 +82,9 @@ export function combineDiffs(diffMessages: MessageRead[], merge = true): string 
 				// DiffMessageCard relies on diff --git headers to count files and
 				// extract per-file stats, so prepend one.
 				results.push(`diff --git a/${key} b/${key}\n${merged}`);
+			} else {
+				// Merge failed — fall back to individual diffs
+				results.push(...diffs);
 			}
 		} else {
 			results.push(...diffs);
