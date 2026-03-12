@@ -141,7 +141,7 @@ func (s *Server) handleDeepenCommit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := ingestCommits(ctx, s.DB, repoProject, group, branch, []gitCommit{*gc}, &identity, extraEmails); err != nil {
+	if _, err := ingestCommits(ctx, s.DB, repoProject, group, branch, []gitCommit{*gc}, &identity, extraEmails, nil); err != nil {
 		log.Printf("error re-ingesting commit after deepen: %v", err)
 	}
 

@@ -216,6 +216,7 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 	}
 
 	commitsIngested := 0
+	var allIngested []db.Commit
 	for i, projectID := range projectIDs {
 		group, ok := findProjectGroupByProjectID(groups, projectID)
 		if !ok {
@@ -235,7 +236,9 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 
 		identity, _ := resolveGitIdentity(ctx, repoProject.Path)
 		extraEmails := s.loadExtraLocalUserEmails()
-		ingested, err := IngestCommitsForWindow(ctx, s.DB, repoProject, group, branch, since, includeAll, &identity, extraEmails)
+		ingested, err := IngestCommitsForWindow(ctx, s.DB, repoProject, group, branch, since, includeAll, &identity, extraEmails,
+			func(c []db.Commit) { allIngested = append(allIngested, c...) },
+		)
 		if err != nil {
 			log.Printf("error ingesting commits for %s: %v", repoProject.Path, err)
 			broadcast("error", fmt.Sprintf("Failed to ingest commits for %s", label))
@@ -244,7 +247,16 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 		commitsIngested += ingested
 	}
 
-	broadcast("complete", fmt.Sprintf("Imported %d project(s), %d entries, %d commits", len(projectIDs), entriesProcessed, commitsIngested))
+	if len(allIngested) > 0 {
+		importLabel := "imported projects"
+		if len(roots) == 1 {
+			importLabel = db.RepoLabel(roots[0])
+		}
+		s.notifyIngestedCommits(allIngested, importLabel)
+	}
+
+	msg := fmt.Sprintf("Imported %d project(s), %d entries, %d commits", len(projectIDs), entriesProcessed, commitsIngested)
+	broadcast("complete", msg)
 }
 
 func normalizeImportPaths(paths []string) ([]string, error) {

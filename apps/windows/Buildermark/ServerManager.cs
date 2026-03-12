@@ -3,8 +3,11 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,6 +32,11 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
     private ServerStatus _status = ServerStatus.Stopped;
     private string _errorMessage = "";
     private string _lastStderr = "";
+    private CancellationTokenSource? _notifyWsCts;
+    private int _notifyReconnectDelayMs = 1000;
+
+    /// <summary>Raised when a notification arrives from the server.</summary>
+    public event Action<string, string, string?>? NotificationReceived;
 
     public ServerManager()
     {
@@ -171,6 +179,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
     public void Stop()
     {
         StopHealthCheck();
+        DisconnectNotificationWS();
 
         if (_process is { HasExited: false })
         {
@@ -229,6 +238,8 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             var response = await _httpClient.GetAsync($"http://localhost:{Port}/api/v1/settings");
             if (response.IsSuccessStatusCode)
             {
+                if (Status != ServerStatus.Running)
+                    ConnectNotificationWS();
                 Status = ServerStatus.Running;
             }
         }
@@ -238,6 +249,79 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             if (Status == ServerStatus.Running)
                 Status = ServerStatus.Starting;
         }
+    }
+
+    private void ConnectNotificationWS()
+    {
+        _notifyWsCts?.Cancel();
+        _notifyWsCts = new CancellationTokenSource();
+        var ct = _notifyWsCts.Token;
+        _notifyReconnectDelayMs = 1000;
+        _ = RunNotificationWSLoop(ct);
+    }
+
+    private void DisconnectNotificationWS()
+    {
+        _notifyWsCts?.Cancel();
+        _notifyWsCts = null;
+    }
+
+    private async Task RunNotificationWSLoop(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var ws = new ClientWebSocket();
+                var uri = new Uri($"ws://localhost:{Port}/api/v1/notifications/ws");
+                await ws.ConnectAsync(uri, ct);
+                _notifyReconnectDelayMs = 1000;
+
+                var buffer = new byte[4096];
+                while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
+                {
+                    var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                        break;
+                    if (result.MessageType == WebSocketMessageType.Text)
+                    {
+                        var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                        HandleNotificationMessage(text);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch
+            {
+                // Connection failed or dropped — reconnect with backoff
+            }
+
+            if (ct.IsCancellationRequested) break;
+            try { await Task.Delay(_notifyReconnectDelayMs, ct); }
+            catch (OperationCanceledException) { break; }
+            _notifyReconnectDelayMs = Math.Min(_notifyReconnectDelayMs * 2, 30_000);
+        }
+    }
+
+    private void HandleNotificationMessage(string text)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            if (root.GetProperty("type").GetString() != "notification") return;
+            var data = root.GetProperty("data");
+            var title = data.GetProperty("title").GetString() ?? "Buildermark";
+            var body = data.GetProperty("body").GetString() ?? "";
+            string? url = null;
+            if (data.TryGetProperty("url", out var urlProp))
+                url = urlProp.GetString();
+            NotificationReceived?.Invoke(title, body, url);
+        }
+        catch { }
     }
 
     private static string? ResolveServerBinary()

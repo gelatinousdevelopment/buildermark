@@ -44,6 +44,17 @@
             </StackPanel>
         </TabItem>
 
+        <!-- Notifications Tab -->
+        <TabItem Header="Notifications">
+            <StackPanel Margin="20">
+                <CheckBox x:Name="NotificationsCheckBox" Content="Enable notifications"
+                          Checked="Notifications_Changed" Unchecked="Notifications_Changed"
+                          Margin="0,0,0,8" />
+                <TextBlock Text="Receive native notifications when imports and scans complete."
+                           FontSize="11" Foreground="Gray" Margin="20,0,0,0" />
+            </StackPanel>
+        </TabItem>
+
         <!-- Updates Tab -->
         <TabItem Header="Updates">
             <StackPanel Margin="20">

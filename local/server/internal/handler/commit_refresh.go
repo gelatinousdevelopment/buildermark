@@ -163,6 +163,7 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 			dayLabel = "day"
 		}
 		s.broadcastRefreshStatus("running", fmt.Sprintf("Ingesting commits for last %d %s...", days, dayLabel), projectID, branch)
+		var ingestedCommits []db.Commit
 		_, err = s.runStableCoverageStage(
 			ctx,
 			projectID,
@@ -181,6 +182,7 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 					includeAll,
 					&stageCtx.identity,
 					stageCtx.extraEmails,
+					func(c []db.Commit) { ingestedCommits = append(ingestedCommits, c...) },
 				)
 				if ingestErr != nil {
 					return ingestErr
@@ -190,7 +192,11 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 				return nil
 			},
 		)
+		if err == nil && len(ingestedCommits) > 0 {
+			s.notifyIngestedCommits(ingestedCommits, db.RepoLabel(covCtx.repoProject.Path))
+		}
 	} else {
+		var ingestedCommits []db.Commit
 		_, err = s.runStableCoverageStage(
 			ctx,
 			projectID,
@@ -199,9 +205,14 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 				s.broadcastRefreshStatus("running", "Project diff settings changed during refresh; re-running with latest settings...", projectID, branch)
 			},
 			func(stageCtx *projectCoverageContext) error {
-				return IngestDefaultCommits(ctx, s.DB, stageCtx.repoProject, stageCtx.group, stageCtx.identity, stageCtx.extraEmails, branch)
+				return IngestDefaultCommits(ctx, s.DB, stageCtx.repoProject, stageCtx.group, stageCtx.identity, stageCtx.extraEmails, branch,
+					func(c []db.Commit) { ingestedCommits = append(ingestedCommits, c...) },
+				)
 			},
 		)
+		if err == nil && len(ingestedCommits) > 0 {
+			s.notifyIngestedCommits(ingestedCommits, db.RepoLabel(covCtx.repoProject.Path))
+		}
 	}
 
 	if err == nil {

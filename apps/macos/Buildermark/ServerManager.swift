@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 import os
 
 private let logger = Logger(subsystem: "dev.buildermark.local", category: "ServerManager")
@@ -44,13 +45,21 @@ final class ServerManager: ObservableObject {
         }
     }
 
+    @Published var notificationsEnabled: Bool {
+        didSet { UserDefaults.standard.set(notificationsEnabled, forKey: "notificationsEnabled") }
+    }
+
     private var process: Process?
     private var stdoutPipe: Pipe?
     private var stderrPipe: Pipe?
     private var healthCheckTimer: Timer?
     private var terminateObserver: Any?
+    private var notifyWSTask: URLSessionWebSocketTask?
+    private var notifyReconnectDelay: TimeInterval = 1
 
     init() {
+        self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
+
         // Ensure the server is killed no matter how the app exits.
         terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
@@ -60,6 +69,9 @@ final class ServerManager: ObservableObject {
             // Cannot use async MainActor here — just kill the process directly.
             self?.killProcess()
         }
+        // Always poll for a server on the port — even if launching the bundled
+        // binary fails, a dev server may already be running.
+        startHealthCheck()
         start()
     }
 
@@ -127,14 +139,14 @@ final class ServerManager: ObservableObject {
 
             Task { @MainActor in
                 self?.cleanupPipes()
-                self?.healthCheckTimer?.invalidate()
-                self?.healthCheckTimer = nil
                 self?.process = nil
                 if code != 0 {
                     self?.status = .error("Exited (\(code))")
                 } else {
                     self?.status = .stopped
                 }
+                // Health check timer keeps running so we detect a dev server
+                // or a restarted process on the same port.
             }
         }
 
@@ -148,7 +160,6 @@ final class ServerManager: ObservableObject {
             process = proc
             stdoutPipe = stdout
             stderrPipe = stderr
-            startHealthCheck()
         } catch {
             logger.error("Failed to launch server: \(error.localizedDescription, privacy: .public)")
             status = .error(error.localizedDescription)
@@ -158,6 +169,7 @@ final class ServerManager: ObservableObject {
     func stop() {
         healthCheckTimer?.invalidate()
         healthCheckTimer = nil
+        disconnectNotificationWS()
         guard let proc = process else { return }
         proc.terminationHandler = nil  // Prevent stale handler from overwriting status
         cleanupPipes()
@@ -183,6 +195,7 @@ final class ServerManager: ObservableObject {
                     }
                 }
             }
+            startHealthCheck()
             start()
         }
     }
@@ -205,20 +218,102 @@ final class ServerManager: ObservableObject {
     }
 
     private func checkHealth() async {
-        guard process != nil else { return }
-
         guard let url = URL(string: "http://localhost:\(Self.port)/api/v1/settings") else { return }
         do {
             let (_, response) = try await URLSession.shared.data(from: url)
             if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+                if status != .running {
+                    connectNotificationWS()
+                }
                 status = .running
             }
         } catch {
-            // Server might still be booting; only update if not already running.
+            // Server might still be booting; only update if it was previously reachable.
             if status == .running {
-                status = .starting
+                disconnectNotificationWS()
+                status = process != nil ? .starting : .stopped
             }
         }
+    }
+
+    // MARK: - Notification WebSocket
+
+    private func connectNotificationWS() {
+        // Don't open a second connection if one is already active.
+        if notifyWSTask != nil { return }
+        guard let url = URL(string: "ws://localhost:\(Self.port)/api/v1/notifications/ws") else {
+            return
+        }
+        let task = URLSession.shared.webSocketTask(with: url)
+        notifyWSTask = task
+        task.resume()
+        notifyReconnectDelay = 1
+        receiveNotification()
+    }
+
+    private func receiveNotification() {
+        guard let task = notifyWSTask else { return }
+        task.receive { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(let message):
+                    if case .string(let text) = message {
+                        self.handleNotificationMessage(text)
+                    }
+                    self.receiveNotification()
+                case .failure:
+                    self.scheduleNotifyReconnect()
+                }
+            }
+        }
+    }
+
+    private func handleNotificationMessage(_ text: String) {
+        guard notificationsEnabled,
+              let data = text.data(using: .utf8),
+              let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              envelope["type"] as? String == "notification",
+              let payload = envelope["data"] as? [String: Any],
+              let title = payload["title"] as? String,
+              let body = payload["body"] as? String
+        else { return }
+
+        let id = payload["id"] as? String ?? UUID().uuidString
+        let urlPath = payload["url"] as? String
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        if let urlPath {
+            content.userInfo["url"] = urlPath
+        }
+
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error {
+                logger.error("Failed to deliver notification: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func scheduleNotifyReconnect() {
+        notifyWSTask = nil
+        let delay = notifyReconnectDelay
+        notifyReconnectDelay = min(notifyReconnectDelay * 2, 30)
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            // Only reconnect if the health check shows the server is reachable.
+            if self.status == .running {
+                self.connectNotificationWS()
+            }
+        }
+    }
+
+    private func disconnectNotificationWS() {
+        notifyWSTask?.cancel(with: .goingAway, reason: nil)
+        notifyWSTask = nil
     }
 
     // MARK: - Helpers

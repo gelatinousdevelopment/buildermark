@@ -40,6 +40,7 @@ type Server struct {
 	branchCache       *branchCacheStore
 
 	ws       *wsHub
+	notifyWS *wsHub // dedicated hub for native notification clients
 	importMu sync.Mutex // guards against concurrent imports
 
 	staleScanMu       sync.Mutex
@@ -56,6 +57,13 @@ func (s *Server) Routes() http.Handler {
 	if s.ws == nil {
 		s.ws = newWSHub()
 	}
+	if s.notifyWS == nil {
+		s.notifyWS = newWSHub()
+	}
+	// Broadcast client count changes over the main WS.
+	broadcastClients := func() { s.broadcastWSClients() }
+	s.ws.onClientChange = broadcastClients
+	s.notifyWS.onClientChange = broadcastClients
 	if s.refreshJobs == nil {
 		s.refreshJobs = newJobTracker()
 	}
@@ -76,6 +84,7 @@ func (s *Server) Routes() http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/ws", s.handleWS)
+	mux.HandleFunc("GET /api/v1/notifications/ws", s.handleNotificationsWS)
 	mux.HandleFunc("POST /api/v1/rating", s.handleCreateRating)
 	mux.HandleFunc("GET /api/v1/ratings", s.handleListRatings)
 	mux.HandleFunc("GET /api/v1/projects", s.handleListProjects)
@@ -119,6 +128,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PUT /api/v1/settings", s.handlePutLocalSettings)
 	mux.HandleFunc("GET /api/v1/plugins", s.handleGetPlugins)
 	mux.HandleFunc("POST /api/v1/plugins", s.handlePostPlugins)
+	mux.HandleFunc("POST /api/v1/debug/send-notification", s.handleDebugSendNotification)
+	mux.HandleFunc("GET /api/v1/debug/ws-clients", s.handleDebugWSClients)
 	mux.Handle("GET /_app/", staticFrontendHandler())
 	mux.HandleFunc("GET /", s.handleDashboard)
 	return corsMiddleware(requestLogMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux))))
@@ -188,7 +199,7 @@ func requestLogMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		// Skip noisy endpoints (WebSocket upgrades, static assets).
-		if r.URL.Path != "/api/v1/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
+		if r.URL.Path != "/api/v1/ws" && r.URL.Path != "/api/v1/notifications/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
 			log.Printf("%s %dms %s", r.Method, time.Since(start).Milliseconds(), r.URL.Path)
 		}
 	})

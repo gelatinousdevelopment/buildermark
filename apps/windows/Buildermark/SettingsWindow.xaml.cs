@@ -28,6 +28,7 @@ public partial class SettingsWindow : Window
         StartAtLoginCheckBox.IsChecked = PreferencesManager.GetBool("startAtLogin", true);
         HideIconCheckBox.IsChecked = PreferencesManager.GetBool("hideMenuBarIcon", false);
         AutoUpdateCheckBox.IsChecked = _updaterManager.AutomaticallyChecksForUpdates;
+        NotificationsCheckBox.IsChecked = PreferencesManager.GetBool("notificationsEnabled", true);
 
         // Sync start-at-login on first appearance
         PreferencesManager.SyncDefaults();
@@ -95,6 +96,11 @@ public partial class SettingsWindow : Window
     {
         var hidden = HideIconCheckBox.IsChecked == true;
         PreferencesManager.SetBool("hideMenuBarIcon", hidden);
+    }
+
+    private void Notifications_Changed(object sender, RoutedEventArgs e)
+    {
+        PreferencesManager.SetBool("notificationsEnabled", NotificationsCheckBox.IsChecked == true);
     }
 
     private void AutoUpdate_Changed(object sender, RoutedEventArgs e)

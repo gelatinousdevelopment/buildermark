@@ -236,7 +236,7 @@ func ingestMoreCommitsForProject(
 		return 0, true, nil
 	}
 
-	ingested, err := ingestCommits(ctx, database, repoProject, group, branch, toIngest, &identity, extraEmails)
+	ingested, err := ingestCommits(ctx, database, repoProject, group, branch, toIngest, &identity, extraEmails, nil)
 	if err != nil {
 		return 0, false, err
 	}
@@ -261,6 +261,7 @@ func IngestDefaultCommits(
 	identity gitIdentity,
 	extraEmails []string,
 	branch string,
+	onIngested func([]db.Commit),
 ) error {
 	commits, err := listBranchCommits(ctx, repoProject.Path, branch, maxCommitsPerProject)
 	if err != nil {
@@ -274,7 +275,7 @@ func IngestDefaultCommits(
 	if start < 0 {
 		start = 0
 	}
-	_, err = ingestCommits(ctx, database, repoProject, group, branch, commits[start:], &identity, extraEmails)
+	_, err = ingestCommits(ctx, database, repoProject, group, branch, commits[start:], &identity, extraEmails, onIngested)
 	return err
 }
 
@@ -290,6 +291,7 @@ func IngestCommitsForWindow(
 	includeAll bool,
 	identity *gitIdentity,
 	extraEmails []string,
+	onIngested func([]db.Commit),
 ) (int, error) {
 	commits, err := listBranchCommits(ctx, repoProject.Path, branch, 0)
 	if err != nil {
@@ -311,7 +313,7 @@ func IngestCommitsForWindow(
 		}
 	}
 
-	return ingestCommits(ctx, database, repoProject, group, branch, toIngest, identity, extraEmails)
+	return ingestCommits(ctx, database, repoProject, group, branch, toIngest, identity, extraEmails, onIngested)
 }
 
 func ingestCommits(
@@ -323,6 +325,7 @@ func ingestCommits(
 	toIngest []gitCommit,
 	identity *gitIdentity,
 	extraEmails []string,
+	onIngested func([]db.Commit),
 ) (int, error) {
 	if len(toIngest) == 0 {
 		return 0, nil
@@ -425,6 +428,10 @@ func ingestCommits(
 		}
 	}
 
+	if onIngested != nil {
+		onIngested(dbCommits)
+	}
+
 	return len(dbCommits), nil
 }
 
@@ -453,7 +460,7 @@ func ingestMissingCommits(
 	if len(commits) == 0 {
 		return 0, nil
 	}
-	return ingestCommits(ctx, database, repoProject, group, branch, commits, identity, extraEmails)
+	return ingestCommits(ctx, database, repoProject, group, branch, commits, identity, extraEmails, nil)
 }
 
 func recomputeCommitCoverageForProject(

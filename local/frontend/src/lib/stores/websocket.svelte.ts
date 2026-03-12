@@ -13,6 +13,11 @@ export type JobStatus = {
 	branch?: string;
 };
 
+export type WSClients = {
+	frontend: number;
+	notification: number;
+};
+
 type WSMessage = {
 	type: string;
 	data: unknown;
@@ -20,6 +25,7 @@ type WSMessage = {
 
 let _connectionState = $state<ConnectionState>('disconnected');
 let _activeJobs = $state<Record<string, JobStatus>>({});
+let _wsClients = $state<WSClients>({ frontend: 0, notification: 0 });
 
 let _ws: WebSocket | null = null;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -101,6 +107,8 @@ function handleMessage(msg: WSMessage) {
 				_jobWaiters.delete(status.jobType);
 			}
 		}
+	} else if (msg.type === 'ws_clients') {
+		_wsClients = msg.data as WSClients;
 	}
 }
 
@@ -159,6 +167,9 @@ export const websocketStore = {
 	getJob,
 	get hasActiveJob() {
 		return Object.values(_activeJobs).some((j) => j.state === 'running');
+	},
+	get wsClients() {
+		return _wsClients;
 	},
 	connect,
 	disconnect,

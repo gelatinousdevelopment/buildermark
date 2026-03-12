@@ -1,8 +1,29 @@
 import SwiftUI
+import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if let urlPath = response.notification.request.content.userInfo["url"] as? String {
+            let base = "http://localhost:\(ServerManager.port)"
+            if let url = URL(string: base + urlPath) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        completionHandler()
     }
 }
 

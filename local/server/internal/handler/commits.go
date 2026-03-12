@@ -59,7 +59,7 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 		}
 
 		// Trigger default ingestion if needed.
-		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, s.loadExtraLocalUserEmails(), branch); err != nil {
+		if err := IngestDefaultCommits(r.Context(), s.DB, repoProject, group, identity, s.loadExtraLocalUserEmails(), branch, nil); err != nil {
 			log.Printf("warning: default commit ingestion failed for %s: %v", repoProject.Path, err)
 		}
 

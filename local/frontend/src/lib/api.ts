@@ -405,6 +405,23 @@ export function setProjectTeamServer(id: string, teamServerId: string): Promise<
 	});
 }
 
+export function debugSendNotification(
+	kind: string,
+	title: string,
+	body: string,
+	url: string
+): Promise<{ sent: boolean }> {
+	return api('/api/v1/debug/send-notification', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ kind, title, body, url })
+	});
+}
+
+export function debugGetWSClients(): Promise<{ frontend: number; notification: number }> {
+	return api('/api/v1/debug/ws-clients');
+}
+
 export function getCommitConversationLinks(
 	projectId: string,
 	commitHashes: string[],

@@ -77,6 +77,7 @@ public partial class App : Application
             _trayIcon.Visibility = Visibility.Collapsed;
         }
 
+        _serverManager.NotificationReceived += OnServerNotification;
         _serverManager.Start();
         ShowSettingsWindow();
     }
@@ -116,6 +117,17 @@ public partial class App : Application
         _settingsWindow = new SettingsWindow();
         _settingsWindow.Show();
         _settingsWindow.Activate();
+    }
+
+    private void OnServerNotification(string title, string body, string? url)
+    {
+        if (!PreferencesManager.GetBool("notificationsEnabled", true))
+            return;
+
+        Dispatcher.Invoke(() =>
+        {
+            _trayIcon?.ShowBalloonTip(title, body, Hardcodet.Wpf.TaskbarNotification.BalloonIcon.Info);
+        });
     }
 
     public void QuitApplication()

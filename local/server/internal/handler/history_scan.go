@@ -160,7 +160,8 @@ func (s *Server) runHistoryScanJob(since time.Time, req historyScanRequest, path
 	}
 
 	if _, err := s.prepareHistoryScan(ctx, req); err != nil {
-		broadcast("error", fmt.Sprintf("History scan preparation failed: %v", err))
+		errMsg := fmt.Sprintf("History scan preparation failed: %v", err)
+		broadcast("error", errMsg)
 		return
 	}
 
@@ -168,7 +169,8 @@ func (s *Server) runHistoryScanJob(since time.Time, req historyScanRequest, path
 	// discover all conversations, not just those matching existing projects.
 	count := s.scanWatchersSincePaths(ctx, since, req.Agent, paths, progress)
 
-	broadcast("complete", fmt.Sprintf("Imported %d conversation entries", count))
+	msg := fmt.Sprintf("Imported %d conversation entries", count)
+	broadcast("complete", msg)
 }
 
 func (s *Server) historyScanPaths(ctx context.Context, projectID string) ([]string, error) {
