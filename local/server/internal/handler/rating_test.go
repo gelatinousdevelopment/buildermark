@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
@@ -18,8 +19,7 @@ func setupTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("init test db: %v", err)
 	}
-	t.Cleanup(func() { database.Close() })
-	return &Server{
+	srv := &Server{
 		DB:                database,
 		refreshJobs:       newJobTracker(),
 		coverageJobs:      newJobTracker(),
@@ -28,6 +28,17 @@ func setupTestServer(t *testing.T) *Server {
 		commitDetailCache: newCommitDetailCacheStore(),
 		branchCache:       newBranchCacheStore(),
 	}
+	t.Cleanup(func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if srv.refreshJobs.isIdle() && srv.coverageJobs.isIdle() && srv.visibilityJobs.isIdle() && srv.commitIngestJobs.isIdle() {
+				break
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+		database.Close()
+	})
+	return srv
 }
 
 func TestCreateRating(t *testing.T) {

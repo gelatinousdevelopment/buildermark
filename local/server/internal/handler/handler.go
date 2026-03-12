@@ -44,6 +44,11 @@ type Server struct {
 
 	staleScanMu       sync.Mutex
 	staleScanInFlight map[string]struct{} // project IDs with pending stale scans
+
+	// afterCoverageStage is a test hook invoked after an async coverage stage
+	// finishes computing and writing, before the worker decides whether it must
+	// rerun with newer project diff settings.
+	afterCoverageStage func(projectID, stage string)
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.

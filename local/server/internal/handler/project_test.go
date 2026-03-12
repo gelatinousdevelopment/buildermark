@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
 
@@ -800,6 +802,143 @@ func TestSetProjectIgnoreDefaultDiffPathsTriggersCoverageRecomputeWhenChanged(t 
 	waitForCommitCoverageVersion(t, ctx, s, projectID, commitHash, currentCommitCoverageVersion, 3*time.Second)
 }
 
+func TestProjectGroupFingerprintChangesWhenIgnoreSettingsChange(t *testing.T) {
+	base := projectGroup{
+		GitID: "git-1",
+		Projects: []db.Project{
+			{ID: "b", IgnoreDiffPaths: "docs/**"},
+			{ID: "a", IgnoreDefaultDiffPaths: true},
+		},
+	}
+	reordered := projectGroup{
+		GitID: "git-1",
+		Projects: []db.Project{
+			{ID: "a", IgnoreDefaultDiffPaths: true},
+			{ID: "b", IgnoreDiffPaths: "docs/**"},
+		},
+	}
+	changed := projectGroup{
+		GitID: "git-1",
+		Projects: []db.Project{
+			{ID: "a", IgnoreDefaultDiffPaths: true},
+			{ID: "b", IgnoreDiffPaths: "README.md"},
+		},
+	}
+
+	if got, want := projectGroupFingerprint(base), projectGroupFingerprint(reordered); got != want {
+		t.Fatalf("fingerprint should be stable across project order: %q != %q", got, want)
+	}
+	if projectGroupFingerprint(base) == projectGroupFingerprint(changed) {
+		t.Fatal("fingerprint did not change after ignore settings changed")
+	}
+}
+
+func TestCommitRefreshRerunsWithLatestIgnoreDiffPaths(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	readmePath := filepath.Join(repo, "README.md")
+	mustWriteFile(t, readmePath, "start\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "add", "README.md")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}, "commit", "-m", "initial")
+	root := strings.TrimSpace(gitRun(t, repo, nil, "rev-list", "--max-parents=0", "HEAD"))
+
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, root); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-readme", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	agentTs := mustUnixMilli(t, "2026-01-01T00:59:00Z")
+	agentDiff := "```diff\n" +
+		"diff --git a/README.md b/README.md\n" +
+		"--- a/README.md\n" +
+		"+++ b/README.md\n" +
+		"@@ -1 +1,2 @@\n" +
+		" start\n" +
+		"+from agent\n" +
+		"```"
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{{
+		Timestamp:      agentTs,
+		ProjectID:      projectID,
+		ConversationID: "conv-readme",
+		Role:           "agent",
+		Content:        agentDiff,
+		RawJSON:        agent.DerivedDiffRawJSON,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	mustWriteFile(t, readmePath, "start\nfrom agent\n")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "add", "README.md")
+	gitRun(t, repo, []string{"GIT_AUTHOR_DATE=2026-01-01T01:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T01:00:00Z"}, "commit", "-m", "agent readme change")
+	commitHash := strings.TrimSpace(gitRun(t, repo, nil, "rev-parse", "HEAD"))
+
+	body, _ := json.Marshal(map[string]any{"count": 1})
+	req := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ingest-commits", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ingest status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	if got := getCommitLinesFromAgent(t, ctx, s, projectID, commitHash); got <= 0 {
+		t.Fatalf("initial lines_from_agent = %d, want > 0", got)
+	}
+
+	stageReached := make(chan struct{})
+	releaseStage := make(chan struct{})
+	var once sync.Once
+	s.afterCoverageStage = func(pid, stage string) {
+		if pid != projectID || stage != "refresh_ingest" {
+			return
+		}
+		once.Do(func() {
+			close(stageReached)
+			<-releaseStage
+		})
+	}
+
+	refreshReq := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/refresh-commits?branch=main", nil)
+	refreshRec := httptest.NewRecorder()
+	handler.ServeHTTP(refreshRec, refreshReq)
+	if refreshRec.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d, want %d", refreshRec.Code, http.StatusOK)
+	}
+
+	select {
+	case <-stageReached:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for refresh ingest stage")
+	}
+
+	ignoreBody, _ := json.Marshal(map[string]string{"ignoreDiffPaths": "README.md"})
+	ignoreReq := httptest.NewRequest("POST", "/api/v1/projects/"+projectID+"/ignore-diff-paths", bytes.NewReader(ignoreBody))
+	ignoreReq.Header.Set("Content-Type", "application/json")
+	ignoreRec := httptest.NewRecorder()
+	handler.ServeHTTP(ignoreRec, ignoreReq)
+	if ignoreRec.Code != http.StatusOK {
+		t.Fatalf("ignore-diff-paths status = %d, want %d", ignoreRec.Code, http.StatusOK)
+	}
+
+	waitForCommitLinesFromAgent(t, ctx, s, projectID, commitHash, 0, 3*time.Second)
+	close(releaseStage)
+	waitForCommitRefresh(t, s)
+	waitForCommitLinesFromAgent(t, ctx, s, projectID, commitHash, 0, 3*time.Second)
+}
+
 func TestProjectCoverageRecomputeCoalescesPerProject(t *testing.T) {
 	s := setupTestServer(t)
 
@@ -1134,6 +1273,39 @@ func setCommitCoverageVersion(t *testing.T, s *Server, projectID, commitHash str
 	); err != nil {
 		t.Fatalf("set commit coverage version: %v", err)
 	}
+}
+
+func getCommitLinesFromAgent(t *testing.T, ctx context.Context, s *Server, projectID, commitHash string) int {
+	t.Helper()
+	var got int
+	if err := s.DB.QueryRowContext(
+		ctx,
+		`SELECT lines_from_agent FROM commits WHERE project_id = ? AND commit_hash = ?`,
+		projectID,
+		commitHash,
+	).Scan(&got); err != nil {
+		t.Fatalf("query lines_from_agent: %v", err)
+	}
+	return got
+}
+
+func waitForCommitLinesFromAgent(
+	t *testing.T,
+	ctx context.Context,
+	s *Server,
+	projectID, commitHash string,
+	want int,
+	timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if got := getCommitLinesFromAgent(t, ctx, s, projectID, commitHash); got == want {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for lines_from_agent=%d", want)
 }
 
 func getCommitCoverageVersion(t *testing.T, ctx context.Context, s *Server, projectID, commitHash string) int {

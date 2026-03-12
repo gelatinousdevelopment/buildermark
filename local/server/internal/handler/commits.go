@@ -706,7 +706,7 @@ func (s *Server) maybeIngestBranchHead(ctx context.Context, repoProject *db.Proj
 		}
 	}
 	if len(missingHashes) > 0 {
-		s.enqueueCommitIngestion(repoProject, group, branch, missingHashes)
+		s.enqueueCommitIngestion(repoProject.ID, branch, missingHashes)
 	}
 }
 
@@ -828,7 +828,7 @@ func (s *Server) writeCommitResponse(
 	syncState, _ := db.GetCommitSyncState(r.Context(), s.DB, repoProject.ID, branch)
 
 	if shouldQueueCommitRefresh(r.Context(), s.DB, repoProject, identity, branch, total, syncState) {
-		if refreshQueued, _ := s.enqueueCommitRefresh(*repoProject, group, identity, branch); refreshQueued {
+		if refreshQueued, _ := s.enqueueCommitRefresh(repoProject.ID, branch); refreshQueued {
 			syncState = &db.CommitSyncState{
 				ProjectID:  repoProject.ID,
 				BranchName: branch,
@@ -868,42 +868,84 @@ func (s *Server) writeCommitResponse(
 
 }
 
-func (s *Server) enqueueCommitIngestion(repoProject *db.Project, group projectGroup, branch string, missingHashes []string) bool {
-	key := repoProject.ID + ":" + branch
+func (s *Server) enqueueCommitIngestion(projectID, branch string, missingHashes []string) bool {
+	key := projectID + ":" + branch
 	if !s.commitIngestJobs.tryStart(key) {
 		return false
 	}
 
-	go s.runCommitIngestion(*repoProject, group, branch, missingHashes, key)
+	go s.runCommitIngestion(projectID, branch, missingHashes, key)
 	return true
 }
 
-func (s *Server) runCommitIngestion(repoProject db.Project, group projectGroup, branch string, missingHashes []string, key string) {
+func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []string, key string) {
 	defer s.commitIngestJobs.finish(key)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	if s.ws != nil {
-		s.ws.broadcastEvent("job_status", jobStatusEvent{
-			JobType:   "commit_ingest",
-			State:     "running",
-			Message:   fmt.Sprintf("Ingesting %d commit(s) for %s...", len(missingHashes), db.RepoLabel(repoProject.Path)),
-			ProjectID: repoProject.ID,
-			Branch:    branch,
-		})
-	}
-
-	identity, _ := resolveGitIdentity(ctx, repoProject.Path)
-	extraEmails := s.loadExtraLocalUserEmails()
-	if _, err := ingestMissingCommits(ctx, s.DB, &repoProject, group, branch, missingHashes, &identity, extraEmails); err != nil {
-		log.Printf("async commit ingestion failed for %s: %v", repoProject.Path, err)
+	covCtx, err := s.loadProjectCoverageContext(ctx, projectID)
+	if err != nil {
+		log.Printf("async commit ingestion context load failed for %s: %v", projectID, err)
 		if s.ws != nil {
 			s.ws.broadcastEvent("job_status", jobStatusEvent{
 				JobType:   "commit_ingest",
 				State:     "error",
-				Message:   fmt.Sprintf("Commit ingestion failed for %s", db.RepoLabel(repoProject.Path)),
-				ProjectID: repoProject.ID,
+				Message:   "Commit ingestion failed to load project context",
+				ProjectID: projectID,
+				Branch:    branch,
+			})
+		}
+		return
+	}
+
+	if s.ws != nil {
+		s.ws.broadcastEvent("job_status", jobStatusEvent{
+			JobType:   "commit_ingest",
+			State:     "running",
+			Message:   fmt.Sprintf("Ingesting %d commit(s) for %s...", len(missingHashes), db.RepoLabel(covCtx.repoProject.Path)),
+			ProjectID: projectID,
+			Branch:    branch,
+		})
+	}
+
+	_, err = s.runStableCoverageStage(
+		ctx,
+		projectID,
+		"commit_ingest",
+		func() {
+			if s.ws != nil {
+				s.ws.broadcastEvent("job_status", jobStatusEvent{
+					JobType:   "commit_ingest",
+					State:     "running",
+					Message:   "Project diff settings changed during commit ingestion; re-running with latest settings...",
+					ProjectID: projectID,
+					Branch:    branch,
+				})
+			}
+		},
+		func(stageCtx *projectCoverageContext) error {
+			_, ingestErr := ingestMissingCommits(
+				ctx,
+				s.DB,
+				stageCtx.repoProject,
+				stageCtx.group,
+				branch,
+				missingHashes,
+				&stageCtx.identity,
+				stageCtx.extraEmails,
+			)
+			return ingestErr
+		},
+	)
+	if err != nil {
+		log.Printf("async commit ingestion failed for %s: %v", projectID, err)
+		if s.ws != nil {
+			s.ws.broadcastEvent("job_status", jobStatusEvent{
+				JobType:   "commit_ingest",
+				State:     "error",
+				Message:   fmt.Sprintf("Commit ingestion failed for %s", db.RepoLabel(covCtx.repoProject.Path)),
+				ProjectID: projectID,
 				Branch:    branch,
 			})
 		}
@@ -914,8 +956,8 @@ func (s *Server) runCommitIngestion(repoProject db.Project, group projectGroup, 
 		s.ws.broadcastEvent("job_status", jobStatusEvent{
 			JobType:   "commit_ingest",
 			State:     "complete",
-			Message:   fmt.Sprintf("Ingested %d commit(s) for %s", len(missingHashes), db.RepoLabel(repoProject.Path)),
-			ProjectID: repoProject.ID,
+			Message:   fmt.Sprintf("Ingested %d commit(s) for %s", len(missingHashes), db.RepoLabel(covCtx.repoProject.Path)),
+			ProjectID: projectID,
 			Branch:    branch,
 		})
 	}

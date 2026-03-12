@@ -26,10 +26,6 @@ func (s *Server) RefreshStaleProjects(ctx context.Context) {
 		if err != nil {
 			continue
 		}
-		identity, err := resolveGitIdentity(ctx, repoProject.Path)
-		if err != nil {
-			continue
-		}
 		branches, err := db.ListDistinctBranches(ctx, s.DB, repoProject.ID)
 		if err != nil {
 			log.Printf("startup refresh: failed to list branches for project %s: %v", repoProject.ID, err)
@@ -44,33 +40,40 @@ func (s *Server) RefreshStaleProjects(ctx context.Context) {
 			if !stale {
 				continue
 			}
-			if queued, _ := s.enqueueCommitRefresh(*repoProject, group, identity, branch); queued {
+			if queued, _ := s.enqueueCommitRefresh(repoProject.ID, branch); queued {
 				log.Printf("startup refresh: queued stale commit refresh for project %s branch %s", repoProject.ID, branch)
 			}
 		}
 	}
 }
 
-func (s *Server) enqueueCommitRefresh(repoProject db.Project, group projectGroup, identity gitIdentity, branch string) (bool, string) {
-	return s.enqueueCommitRefreshWithDays(repoProject, group, identity, branch, 0)
+func (s *Server) enqueueCommitRefresh(projectID, branch string) (bool, string) {
+	return s.enqueueCommitRefreshWithDays(projectID, branch, 0)
 }
 
-func (s *Server) enqueueCommitRefreshWithDays(repoProject db.Project, group projectGroup, identity gitIdentity, branch string, days int) (bool, string) {
+func (s *Server) enqueueCommitRefreshWithDays(projectID, branch string, days int) (bool, string) {
 	branch = strings.TrimSpace(branch)
 	if branch == "" {
 		branch = "main"
 	}
-	key := repoProject.ID + ":" + branch
+	key := projectID + ":" + branch
 	if !s.refreshJobs.tryStart(key) {
 		return false, key
 	}
 
+	covCtx, err := s.loadProjectCoverageContext(context.Background(), projectID)
+	if err != nil {
+		s.refreshJobs.finish(key)
+		log.Printf("warning: commit refresh enqueue context load failed for %s: %v", projectID, err)
+		return false, key
+	}
+
 	head := ""
-	if c, err := latestCommitByIdentity(context.Background(), repoProject.Path, branch, identity); err == nil && c != nil {
+	if c, err := latestCommitByIdentity(context.Background(), covCtx.repoProject.Path, branch, covCtx.identity); err == nil && c != nil {
 		head = c.Hash
 	}
 	if err := db.UpsertCommitSyncState(context.Background(), s.DB, db.CommitSyncState{
-		ProjectID:             repoProject.ID,
+		ProjectID:             projectID,
 		BranchName:            branch,
 		State:                 "queued",
 		LatestKnownHeadHash:   head,
@@ -82,7 +85,7 @@ func (s *Server) enqueueCommitRefreshWithDays(repoProject db.Project, group proj
 
 	go func() {
 		defer s.refreshJobs.finish(key)
-		s.runCommitRefresh(repoProject, group, identity, branch, days)
+		s.runCommitRefresh(projectID, branch, days)
 	}()
 
 	return true, key
@@ -100,7 +103,7 @@ func (s *Server) broadcastRefreshStatus(state, message, projectID, branch string
 	}
 }
 
-func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, identity gitIdentity, branch string, days int) {
+func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 	startedAt := time.Now().UnixMilli()
 	timeout := 2 * time.Minute
 	if days > 0 {
@@ -109,14 +112,21 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	s.broadcastRefreshStatus("running", "Refreshing commits...", repoProject.ID, branch)
+	s.broadcastRefreshStatus("running", "Refreshing commits...", projectID, branch)
+
+	covCtx, err := s.loadProjectCoverageContext(ctx, projectID)
+	if err != nil {
+		log.Printf("commit refresh context load failed for project=%s branch=%s: %v", projectID, branch, err)
+		s.broadcastRefreshStatus("error", fmt.Sprintf("Refresh failed: %v", err), projectID, branch)
+		return
+	}
 
 	head := ""
-	if c, err := latestCommitByIdentity(ctx, repoProject.Path, branch, identity); err == nil && c != nil {
+	if c, err := latestCommitByIdentity(ctx, covCtx.repoProject.Path, branch, covCtx.identity); err == nil && c != nil {
 		head = c.Hash
 	}
 	if err := db.UpsertCommitSyncState(ctx, s.DB, db.CommitSyncState{
-		ProjectID:             repoProject.ID,
+		ProjectID:             projectID,
 		BranchName:            branch,
 		State:                 "running",
 		LatestKnownHeadHash:   head,
@@ -126,28 +136,25 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 		log.Printf("warning: commit sync state upsert (running) failed: %v", err)
 	}
 
-	extraEmails := s.loadExtraLocalUserEmails()
-	var err error
-
 	if days > 0 {
 		// Extended refresh: ingest all commits within the day window.
 		since := time.Now().AddDate(0, 0, -days)
 		includeAll := days >= 36500 // "all" sentinel
 
 		// If the repo is a shallow clone, fetch more history so git log can see it.
-		if shallow := shallowBoundaryHashes(ctx, repoProject.Path); shallow != nil {
+		if shallow := shallowBoundaryHashes(ctx, covCtx.repoProject.Path); shallow != nil {
 			var fetchArgs []string
 			if includeAll {
-				s.broadcastRefreshStatus("running", "Fetching full history...", repoProject.ID, branch)
-				fetchArgs = []string{"-C", repoProject.Path, "fetch", "--unshallow", "origin", branch}
+				s.broadcastRefreshStatus("running", "Fetching full history...", projectID, branch)
+				fetchArgs = []string{"-C", covCtx.repoProject.Path, "fetch", "--unshallow", "origin", branch}
 			} else {
 				sinceStr := since.Format("2006-01-02")
-				s.broadcastRefreshStatus("running", fmt.Sprintf("Fetching history since %s...", sinceStr), repoProject.ID, branch)
-				fetchArgs = []string{"-C", repoProject.Path, "fetch", fmt.Sprintf("--shallow-since=%s", sinceStr), "origin", branch}
+				s.broadcastRefreshStatus("running", fmt.Sprintf("Fetching history since %s...", sinceStr), projectID, branch)
+				fetchArgs = []string{"-C", covCtx.repoProject.Path, "fetch", fmt.Sprintf("--shallow-since=%s", sinceStr), "origin", branch}
 			}
 			cmd := exec.CommandContext(ctx, "git", fetchArgs...)
 			if output, fetchErr := cmd.CombinedOutput(); fetchErr != nil {
-				log.Printf("warning: shallow fetch failed for %s (continuing with local history): %v (output: %s)", repoProject.Path, fetchErr, string(output))
+				log.Printf("warning: shallow fetch failed for %s (continuing with local history): %v (output: %s)", covCtx.repoProject.Path, fetchErr, string(output))
 			}
 		}
 
@@ -155,19 +162,46 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 		if days == 1 {
 			dayLabel = "day"
 		}
-		s.broadcastRefreshStatus("running", fmt.Sprintf("Ingesting commits for last %d %s...", days, dayLabel), repoProject.ID, branch)
-		n, ingestErr := IngestCommitsForWindow(ctx, s.DB, &repoProject, group, branch, since, includeAll, &identity, extraEmails)
-		err = ingestErr
-		if err == nil {
-			s.broadcastRefreshStatus("running", fmt.Sprintf("Ingested %d commit(s). Checking for shallow commits...", n), repoProject.ID, branch)
-		}
-
-		// After ingestion, try to deepen any needs_parent commits.
-		if err == nil {
-			s.deepenNeedsParentCommits(ctx, &repoProject, group, branch, &identity, extraEmails)
-		}
+		s.broadcastRefreshStatus("running", fmt.Sprintf("Ingesting commits for last %d %s...", days, dayLabel), projectID, branch)
+		_, err = s.runStableCoverageStage(
+			ctx,
+			projectID,
+			"refresh_ingest",
+			func() {
+				s.broadcastRefreshStatus("running", "Project diff settings changed during refresh; re-running with latest settings...", projectID, branch)
+			},
+			func(stageCtx *projectCoverageContext) error {
+				n, ingestErr := IngestCommitsForWindow(
+					ctx,
+					s.DB,
+					stageCtx.repoProject,
+					stageCtx.group,
+					branch,
+					since,
+					includeAll,
+					&stageCtx.identity,
+					stageCtx.extraEmails,
+				)
+				if ingestErr != nil {
+					return ingestErr
+				}
+				s.broadcastRefreshStatus("running", fmt.Sprintf("Ingested %d commit(s). Checking for shallow commits...", n), projectID, branch)
+				s.deepenNeedsParentCommits(ctx, stageCtx.repoProject, stageCtx.group, branch, &stageCtx.identity, stageCtx.extraEmails)
+				return nil
+			},
+		)
 	} else {
-		err = IngestDefaultCommits(ctx, s.DB, &repoProject, group, identity, extraEmails, branch)
+		_, err = s.runStableCoverageStage(
+			ctx,
+			projectID,
+			"refresh_ingest",
+			func() {
+				s.broadcastRefreshStatus("running", "Project diff settings changed during refresh; re-running with latest settings...", projectID, branch)
+			},
+			func(stageCtx *projectCoverageContext) error {
+				return IngestDefaultCommits(ctx, s.DB, stageCtx.repoProject, stageCtx.group, stageCtx.identity, stageCtx.extraEmails, branch)
+			},
+		)
 	}
 
 	if err == nil {
@@ -176,45 +210,67 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 		// not force-reset all commits on the branch.
 		if days > 0 {
 			sinceSec := time.Now().AddDate(0, 0, -days).Unix()
-			if reset, resetErr := db.ResetCoverageVersionByDateRange(ctx, s.DB, repoProject.ID, branch, sinceSec); resetErr != nil {
+			if reset, resetErr := db.ResetCoverageVersionByDateRange(ctx, s.DB, projectID, branch, sinceSec); resetErr != nil {
 				log.Printf("warning: failed to reset coverage version: %v", resetErr)
 			} else if reset > 0 {
 				log.Printf("reset coverage_version for %d commits in refresh window", reset)
 			}
 		}
 
-		s.broadcastRefreshStatus("running", "Checking commit coverage...", repoProject.ID, branch)
-		branchHashes, hashErr := listBranchCommitHashes(ctx, repoProject.Path, branch)
-		if hashErr != nil {
-			err = hashErr
-		} else {
-			staleCoverage, staleErr := db.HasStaleCommitCoverageByHashes(ctx, s.DB, repoProject.ID, branchHashes, currentCommitCoverageVersion)
-			if staleErr != nil {
-				err = staleErr
-			} else if staleCoverage {
-				s.broadcastRefreshStatus("running", "Recomputing commit coverage...", repoProject.ID, branch)
-				_, err = recomputeCommitCoverageForProjectWithChangedPatterns(ctx, s.DB, &repoProject, group, branch, "", nil, &identity, extraEmails,
+		s.broadcastRefreshStatus("running", "Checking commit coverage...", projectID, branch)
+		_, err = s.runStableCoverageStage(
+			ctx,
+			projectID,
+			"refresh_recompute",
+			func() {
+				s.broadcastRefreshStatus("running", "Project diff settings changed during coverage recompute; re-running with latest settings...", projectID, branch)
+			},
+			func(stageCtx *projectCoverageContext) error {
+				branchHashes, hashErr := listBranchCommitHashes(ctx, stageCtx.repoProject.Path, branch)
+				if hashErr != nil {
+					return hashErr
+				}
+				staleCoverage, staleErr := db.HasStaleCommitCoverageByHashes(ctx, s.DB, stageCtx.repoProject.ID, branchHashes, currentCommitCoverageVersion)
+				if staleErr != nil || !staleCoverage {
+					return staleErr
+				}
+				s.broadcastRefreshStatus("running", "Recomputing commit coverage...", projectID, branch)
+				_, recomputeErr := recomputeCommitCoverageForProjectWithChangedPatterns(
+					ctx,
+					s.DB,
+					stageCtx.repoProject,
+					stageCtx.group,
+					branch,
+					"",
+					nil,
+					&stageCtx.identity,
+					stageCtx.extraEmails,
 					func(message string, processed int) {
-						s.broadcastRefreshStatus("running", message, repoProject.ID, branch)
+						s.broadcastRefreshStatus("running", message, projectID, branch)
 					},
 					0,
 				)
-			}
-		}
+				return recomputeErr
+			},
+		)
 	}
 
 	finishedAt := time.Now().UnixMilli()
 	duration := finishedAt - startedAt
 	estimatedTotal := 0
-	if count, countErr := countBranchCommits(ctx, repoProject.Path, branch); countErr == nil {
+	finalCtx, loadErr := s.loadProjectCoverageContext(ctx, projectID)
+	if loadErr == nil {
+		covCtx = finalCtx
+	}
+	if count, countErr := countBranchCommits(ctx, covCtx.repoProject.Path, branch); countErr == nil {
 		estimatedTotal = count
 	}
-	if c, latestErr := latestCommitByIdentity(ctx, repoProject.Path, branch, identity); latestErr == nil && c != nil {
+	if c, latestErr := latestCommitByIdentity(ctx, covCtx.repoProject.Path, branch, covCtx.identity); latestErr == nil && c != nil {
 		head = c.Hash
 	}
 
 	state := db.CommitSyncState{
-		ProjectID:             repoProject.ID,
+		ProjectID:             projectID,
 		BranchName:            branch,
 		State:                 "idle",
 		LatestKnownHeadHash:   head,
@@ -225,13 +281,13 @@ func (s *Server) runCommitRefresh(repoProject db.Project, group projectGroup, id
 		LastDurationMs:        duration,
 	}
 	if err != nil {
-		log.Printf("commit refresh failed for project=%s branch=%s: %v", repoProject.ID, branch, err)
+		log.Printf("commit refresh failed for project=%s branch=%s: %v", projectID, branch, err)
 		state.State = "failed"
 		state.LastError = err.Error()
-		s.broadcastRefreshStatus("error", fmt.Sprintf("Refresh failed: %v", err), repoProject.ID, branch)
+		s.broadcastRefreshStatus("error", fmt.Sprintf("Refresh failed: %v", err), projectID, branch)
 	} else {
 		state.LastError = ""
-		s.broadcastRefreshStatus("complete", fmt.Sprintf("Refresh complete (%.1fs).", float64(duration)/1000), repoProject.ID, branch)
+		s.broadcastRefreshStatus("complete", fmt.Sprintf("Refresh complete (%.1fs).", float64(duration)/1000), projectID, branch)
 	}
 	if upsertErr := db.UpsertCommitSyncState(context.Background(), s.DB, state); upsertErr != nil {
 		log.Printf("commit sync state upsert failed: %v", upsertErr)
@@ -390,8 +446,7 @@ func (s *Server) handleRefreshProjectCommits(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusNotFound, "repository for project not found")
 		return
 	}
-	identity, err := resolveGitIdentity(r.Context(), repoProject.Path)
-	if err != nil {
+	if _, err := resolveGitIdentity(r.Context(), repoProject.Path); err != nil {
 		writeError(w, http.StatusNotFound, "git identity not configured for project")
 		return
 	}
@@ -403,7 +458,7 @@ func (s *Server) handleRefreshProjectCommits(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	queued, jobID := s.enqueueCommitRefreshWithDays(*repoProject, group, identity, branch, days)
+	queued, jobID := s.enqueueCommitRefreshWithDays(project.ID, branch, days)
 	writeSuccess(w, http.StatusOK, refreshCommitsResponse{
 		Queued: queued,
 		JobID:  jobID,
