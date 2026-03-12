@@ -201,17 +201,17 @@ export function setConversationHidden(
 	});
 }
 
-export function setCommitOverrideLinePercent(
+export function setCommitOverrideAgentPercents(
 	projectId: string,
 	commitHash: string,
-	value: number | null
+	value: Record<string, number> | null
 ): Promise<void> {
 	return api(
-		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/override-line-percent`,
+		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/override-agent-percents`,
 		{
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ overrideLinePercent: value })
+			body: JSON.stringify({ overrideAgentPercents: value })
 		}
 	);
 }

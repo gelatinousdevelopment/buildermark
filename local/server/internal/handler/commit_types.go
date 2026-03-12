@@ -80,7 +80,7 @@ type projectCommitCoverage struct {
 	LinesAdded          int                    `json:"linesAdded"`
 	LinesRemoved        int                    `json:"linesRemoved"`
 	AgentSegments       []agentCoverageSegment `json:"agentSegments,omitempty"`
-	OverrideLinePercent *float64               `json:"overrideLinePercent,omitempty"`
+	OverrideAgentPercents map[string]int        `json:"overrideAgentPercents,omitempty"`
 	NeedsParent         bool                   `json:"needsParent,omitempty"`
 }
 
@@ -93,6 +93,7 @@ type projectCommitDetailResponse struct {
 	Diff        string                      `json:"diff"`
 	Files       []commitFileCoverage        `json:"files"`
 	Messages    []commitContributionMessage `json:"messages"`
+	Agents      []string                    `json:"agents"`
 }
 
 type commitAttribution struct {

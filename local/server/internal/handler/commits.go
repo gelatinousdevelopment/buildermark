@@ -377,31 +377,63 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 	}
 
 	detailLinePercent := percentage(matchedLines, totalLines)
-	var detailOverride *float64
-	if dbCommit != nil && dbCommit.OverrideLinePercent != nil {
-		detailLinePercent = *dbCommit.OverrideLinePercent
-		detailOverride = dbCommit.OverrideLinePercent
+	var detailOverrideMap map[string]int
+	if dbCommit != nil && dbCommit.OverrideAgentPercents != nil && *dbCommit.OverrideAgentPercents != "" {
+		if err := json.Unmarshal([]byte(*dbCommit.OverrideAgentPercents), &detailOverrideMap); err != nil {
+			log.Printf("warning: failed to unmarshal override_agent_percents for %s: %v", commitHash, err)
+		} else {
+			total := 0
+			for _, v := range detailOverrideMap {
+				total += v
+			}
+			detailLinePercent = float64(total)
+			// Build agent segments from override map.
+			overrideSegments := make([]agentCoverageSegment, 0, len(detailOverrideMap))
+			overrideAgentNames := make([]string, 0, len(detailOverrideMap))
+			for a := range detailOverrideMap {
+				overrideAgentNames = append(overrideAgentNames, a)
+			}
+			sort.Strings(overrideAgentNames)
+			for _, a := range overrideAgentNames {
+				overrideSegments = append(overrideSegments, agentCoverageSegment{
+					Agent:       a,
+					LinePercent: float64(detailOverrideMap[a]),
+				})
+			}
+			agentSegments = overrideSegments
+		}
 	}
+
+	// Collect sorted agent names from segments.
+	agentNameSet := make(map[string]struct{})
+	for _, seg := range agentSegments {
+		agentNameSet[seg.Agent] = struct{}{}
+	}
+	detailAgents := make([]string, 0, len(agentNameSet))
+	for a := range agentNameSet {
+		detailAgents = append(detailAgents, a)
+	}
+	sort.Strings(detailAgents)
 
 	writeSuccess(w, http.StatusOK, projectCommitDetailResponse{
 		Branch:    branch,
 		Branches:  branches,
 		CommitURL: commitURL(remote, commit.Hash),
 		Commit: projectCommitCoverage{
-			ProjectID:           project.ID,
-			ProjectLabel:        project.Label,
-			ProjectPath:         project.Path,
-			ProjectGitID:        project.GitID,
-			CommitHash:          commit.Hash,
-			Subject:             commit.Subject,
-			AuthoredAtUnixMs:    commit.TimestampUnix * 1000,
-			LinesTotal:          totalLines,
-			LinesFromAgent:      matchedLines,
-			LinePercent:         detailLinePercent,
-			LinesAdded:          detailAdded,
-			LinesRemoved:        detailRemoved,
-			AgentSegments:       agentSegments,
-			OverrideLinePercent: detailOverride,
+			ProjectID:             project.ID,
+			ProjectLabel:          project.Label,
+			ProjectPath:           project.Path,
+			ProjectGitID:          project.GitID,
+			CommitHash:            commit.Hash,
+			Subject:               commit.Subject,
+			AuthoredAtUnixMs:      commit.TimestampUnix * 1000,
+			LinesTotal:            totalLines,
+			LinesFromAgent:        matchedLines,
+			LinePercent:           detailLinePercent,
+			LinesAdded:            detailAdded,
+			LinesRemoved:          detailRemoved,
+			AgentSegments:         agentSegments,
+			OverrideAgentPercents: detailOverrideMap,
 		},
 		Attribution: commitAttribution{
 			ExactMatchedLines:    exactMatchedLines,
@@ -412,6 +444,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 		Diff:     commitDiff,
 		Files:    files,
 		Messages: contribMessages,
+		Agents:   detailAgents,
 	})
 }
 
@@ -888,7 +921,7 @@ func (s *Server) runCommitIngestion(repoProject db.Project, group projectGroup, 
 	}
 }
 
-func (s *Server) handleSetCommitOverrideLinePercent(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSetCommitOverrideAgentPercents(w http.ResponseWriter, r *http.Request) {
 	if !requireJSON(w, r) {
 		return
 	}
@@ -903,35 +936,40 @@ func (s *Server) handleSetCommitOverrideLinePercent(w http.ResponseWriter, r *ht
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	var body struct {
-		OverrideLinePercent *float64 `json:"overrideLinePercent"`
+		OverrideAgentPercents map[string]int `json:"overrideAgentPercents"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
-	if body.OverrideLinePercent != nil {
-		v := *body.OverrideLinePercent
-		if v < 0 || v > 100 {
-			writeError(w, http.StatusBadRequest, "overrideLinePercent must be between 0 and 100")
+	sum := 0
+	for agent, pct := range body.OverrideAgentPercents {
+		if pct < 0 {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("agent %q percentage must be >= 0", agent))
 			return
 		}
+		sum += pct
+	}
+	if sum > 100 {
+		writeError(w, http.StatusBadRequest, "sum of agent percentages must be <= 100")
+		return
 	}
 
-	if err := db.SetCommitOverrideLinePercent(r.Context(), s.DB, projectID, commitHash, body.OverrideLinePercent); err != nil {
+	if err := db.SetCommitOverrideAgentPercents(r.Context(), s.DB, projectID, commitHash, body.OverrideAgentPercents); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "commit not found")
 			return
 		}
-		log.Printf("error setting commit override: %v", err)
+		log.Printf("error setting commit override agent percents: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to set override")
 		return
 	}
 
 	writeSuccess(w, http.StatusOK, map[string]any{
-		"projectId":           projectID,
-		"commitHash":          commitHash,
-		"overrideLinePercent": body.OverrideLinePercent,
+		"projectId":             projectID,
+		"commitHash":            commitHash,
+		"overrideAgentPercents": body.OverrideAgentPercents,
 	})
 }
 

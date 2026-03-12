@@ -631,7 +631,13 @@
 						<td class="bar"
 							>{#if !c.workingCopy}<AgentPercentageBar
 									agentPercent={c.linePercent}
-									segments={c.overrideLinePercent != null ? [] : toBarSegments(c.agentSegments)}
+									segments={c.overrideAgentPercents != null &&
+									Object.keys(c.overrideAgentPercents).length > 0
+										? Object.entries(c.overrideAgentPercents).map(([name, pct]) => ({
+												name,
+												percent: pct
+											}))
+										: toBarSegments(c.agentSegments)}
 									totalLines={c.linesTotal}
 									showKey={false}
 									needsParent={c.needsParent}

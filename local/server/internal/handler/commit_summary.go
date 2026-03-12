@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
+	"log"
 	"sort"
 	"time"
 
@@ -9,26 +11,35 @@ import (
 
 func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCoverage {
 	lp := percentage(c.LinesFromAgent, c.LinesTotal)
-	if c.OverrideLinePercent != nil {
-		lp = *c.OverrideLinePercent
+	var overrideMap map[string]int
+	if c.OverrideAgentPercents != nil && *c.OverrideAgentPercents != "" {
+		if err := json.Unmarshal([]byte(*c.OverrideAgentPercents), &overrideMap); err != nil {
+			log.Printf("warning: failed to unmarshal override_agent_percents for %s: %v", c.CommitHash, err)
+		} else {
+			total := 0
+			for _, v := range overrideMap {
+				total += v
+			}
+			lp = float64(total)
+		}
 	}
 	return projectCommitCoverage{
-		ProjectID:           repoProject.ID,
-		ProjectLabel:        repoProject.Label,
-		ProjectPath:         repoProject.Path,
-		ProjectGitID:        repoProject.GitID,
-		CommitHash:          c.CommitHash,
-		Subject:             c.Subject,
-		UserName:            c.UserName,
-		UserEmail:           c.UserEmail,
-		AuthoredAtUnixMs:    c.AuthoredAt * 1000,
-		LinesTotal:          c.LinesTotal,
-		LinesFromAgent:      c.LinesFromAgent,
-		LinePercent:         lp,
-		LinesAdded:          c.LinesAdded,
-		LinesRemoved:        c.LinesRemoved,
-		OverrideLinePercent: c.OverrideLinePercent,
-		NeedsParent:         c.NeedsParent,
+		ProjectID:             repoProject.ID,
+		ProjectLabel:          repoProject.Label,
+		ProjectPath:           repoProject.Path,
+		ProjectGitID:          repoProject.GitID,
+		CommitHash:            c.CommitHash,
+		Subject:               c.Subject,
+		UserName:              c.UserName,
+		UserEmail:             c.UserEmail,
+		AuthoredAtUnixMs:      c.AuthoredAt * 1000,
+		LinesTotal:            c.LinesTotal,
+		LinesFromAgent:        c.LinesFromAgent,
+		LinePercent:           lp,
+		LinesAdded:            c.LinesAdded,
+		LinesRemoved:          c.LinesRemoved,
+		OverrideAgentPercents: overrideMap,
+		NeedsParent:           c.NeedsParent,
 	}
 }
 

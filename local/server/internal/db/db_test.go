@@ -317,6 +317,34 @@ func TestMigration49BackfillsDerivedDiffRowsToDiffType(t *testing.T) {
 			applied_at INTEGER NOT NULL DEFAULT 0
 		)`,
 		`INSERT INTO schema_version (version, applied_at) VALUES (48, 0)`,
+		`CREATE TABLE projects (
+			id TEXT PRIMARY KEY
+		)`,
+		`CREATE TABLE commits (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL REFERENCES projects(id),
+			commit_hash TEXT NOT NULL,
+			subject TEXT NOT NULL DEFAULT '',
+			user_name TEXT NOT NULL DEFAULT '',
+			user_email TEXT NOT NULL DEFAULT '',
+			authored_at INTEGER NOT NULL DEFAULT 0,
+			diff_content TEXT NOT NULL DEFAULT '',
+			lines_total INTEGER NOT NULL DEFAULT 0,
+			lines_from_agent INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL DEFAULT 0,
+			branch_name TEXT NOT NULL DEFAULT '',
+			coverage_version INTEGER NOT NULL DEFAULT 0,
+			lines_added INTEGER NOT NULL DEFAULT 0,
+			lines_removed INTEGER NOT NULL DEFAULT 0,
+			override_line_percent REAL DEFAULT NULL,
+			needs_parent INTEGER NOT NULL DEFAULT 0,
+			detail_files TEXT NOT NULL DEFAULT '',
+			detail_messages TEXT NOT NULL DEFAULT '',
+			detail_agent_segments TEXT NOT NULL DEFAULT '',
+			detail_exact_matched INTEGER NOT NULL DEFAULT 0,
+			detail_fallback_lines INTEGER NOT NULL DEFAULT 0,
+			UNIQUE(project_id, commit_hash)
+		)`,
 		`CREATE TABLE messages (
 			id TEXT PRIMARY KEY,
 			message_type TEXT NOT NULL DEFAULT 'log',

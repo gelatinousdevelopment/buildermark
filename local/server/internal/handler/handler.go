@@ -81,7 +81,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/commits", s.handleListProjectCommits)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commits", s.handleListProjectCommitsForProject)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/commits/{commitHash}", s.handleGetProjectCommit)
-	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/override-line-percent", s.handleSetCommitOverrideLinePercent)
+	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/override-agent-percents", s.handleSetCommitOverrideAgentPercents)
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/deepen", s.handleDeepenCommit)
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/recalculate", s.handleRecalculateCommitDiffMatch)
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)

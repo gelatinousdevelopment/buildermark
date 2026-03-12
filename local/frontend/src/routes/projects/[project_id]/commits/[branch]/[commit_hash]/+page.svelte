@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import {
 		getProjectCommitDetail,
-		setCommitOverrideLinePercent,
+		setCommitOverrideAgentPercents,
 		deepenCommit,
 		recalculateCommitDiffMatch
 	} from '$lib/api';
@@ -13,7 +13,9 @@
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import DiffMessageCard from '$lib/components/DiffMessageCard.svelte';
 	import DiffCount from '$lib/components/DiffCount.svelte';
+	import { KNOWN_AGENTS } from '$lib/agents';
 	import AgentPercentageBar from '$lib/components/AgentPercentageBar.svelte';
+	import AgentOverrideEditor from '$lib/components/AgentOverrideEditor.svelte';
 
 	function toBarSegments(segs?: AgentCoverageSegment[]): { name: string; percent: number }[] {
 		if (!segs || segs.length === 0) return [];
@@ -45,12 +47,15 @@
 	let collapsedDiffPaths: string[] = $state([]);
 
 	let editingOverride = $state(false);
-	let overrideInput = $state('');
 	let savingOverride = $state(false);
 	let actionsOpen = $state(false);
 	let recalculating = $state(false);
 
-	let hasOverride = $derived.by(() => detail?.commit?.overrideLinePercent != null);
+	let hasOverride = $derived.by(
+		() =>
+			detail?.commit?.overrideAgentPercents != null &&
+			Object.keys(detail.commit.overrideAgentPercents).length > 0
+	);
 	let isWorkingCopyUnknown = $derived.by(
 		() =>
 			!!detail?.commit.workingCopy &&
@@ -59,20 +64,54 @@
 			agentLinesFromAgent === 0
 	);
 	let effectivePercent = $derived.by(() => {
-		if (detail?.commit.overrideLinePercent != null) {
-			return detail.commit.overrideLinePercent;
+		if (
+			detail?.commit.overrideAgentPercents != null &&
+			Object.keys(detail.commit.overrideAgentPercents).length > 0
+		) {
+			let sum = 0;
+			for (const v of Object.values(detail.commit.overrideAgentPercents)) {
+				sum += v;
+			}
+			return sum;
 		}
 		return percent(agentLinesFromAgent, agentLinesTotal);
 	});
 
-	async function saveOverride() {
+	let overrideInitialValues = $derived.by(() => {
+		if (
+			detail?.commit.overrideAgentPercents != null &&
+			Object.keys(detail.commit.overrideAgentPercents).length > 0
+		) {
+			return detail.commit.overrideAgentPercents;
+		}
+		const result: Record<string, number> = {};
+		if (detail?.commit.agentSegments) {
+			for (const seg of detail.commit.agentSegments) {
+				result[seg.agent] = Math.round(seg.linePercent);
+			}
+		}
+		return result;
+	});
+
+	let overrideAgents = KNOWN_AGENTS;
+
+	async function saveOverride(values: Record<string, number>) {
 		if (!detail || savingOverride) return;
-		const val = parseFloat(overrideInput);
-		if (isNaN(val) || val < 0 || val > 100) return;
 		savingOverride = true;
 		try {
-			await setCommitOverrideLinePercent(detail.commit.projectId, detail.commit.commitHash, val);
-			detail.commit.overrideLinePercent = val;
+			await setCommitOverrideAgentPercents(
+				detail.commit.projectId,
+				detail.commit.commitHash,
+				values
+			);
+			detail.commit.overrideAgentPercents = values;
+			// Update agentSegments to reflect the override
+			detail.commit.agentSegments = Object.entries(values).map(([agent, pct]) => ({
+				agent,
+				linesFromAgent: 0,
+				charsFromAgent: 0,
+				linePercent: pct
+			}));
 			editingOverride = false;
 		} finally {
 			savingOverride = false;
@@ -83,18 +122,18 @@
 		if (!detail || savingOverride) return;
 		savingOverride = true;
 		try {
-			await setCommitOverrideLinePercent(detail.commit.projectId, detail.commit.commitHash, null);
-			detail.commit.overrideLinePercent = undefined;
+			await setCommitOverrideAgentPercents(detail.commit.projectId, detail.commit.commitHash, null);
 			editingOverride = false;
+			// Reload detail to get the original segments back
+			const projectId = page.params.project_id!;
+			const branch = page.params.branch!;
+			detail = await getProjectCommitDetail(projectId, detail.commit.commitHash, branch);
 		} finally {
 			savingOverride = false;
 		}
 	}
 
 	function startEditOverride() {
-		overrideInput = hasOverride
-			? String(detail!.commit.overrideLinePercent)
-			: String(Math.round(percent(agentLinesFromAgent, agentLinesTotal)));
 		editingOverride = true;
 		actionsOpen = false;
 	}
@@ -300,140 +339,140 @@
 	{:else if error}
 		<p class="error">{error}</p>
 	{:else if detail}
-		<div class="right">
-			{#if !detail?.commit.workingCopy}
-				<div class="override-controls">
-					{#if editingOverride}
-						<input
-							type="number"
-							min="0"
-							max="100"
-							step="any"
-							bind:value={overrideInput}
-							class="override-input"
-							disabled={savingOverride}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') saveOverride();
-								if (e.key === 'Escape') editingOverride = false;
-							}}
-						/>
-						<button class="btn-override-action" onclick={saveOverride} disabled={savingOverride}
-							>Save</button
+		<div class="header-row">
+			<div class="header-col">
+				<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
+				<p>
+					{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}
+					{#if detail.commitUrl}
+						|
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external URL -->
+						<a href={detail.commitUrl} target="_blank" rel="noopener noreferrer"
+							>{new URL(detail.commitUrl).hostname}</a
 						>
-						<button
-							class="btn-override-action"
-							onclick={() => (editingOverride = false)}
-							disabled={savingOverride}>Cancel</button
+					{/if}
+				</p>
+				{#if hasOverride}
+					<p class="override-display">
+						Agent Attribution Override:
+						{#each Object.entries(detail.commit.overrideAgentPercents ?? {}) as entry (entry[0])}
+							{entry[0]} {entry[1]}%
+						{/each}
+						<button class="btn-override-action" onclick={clearOverride} disabled={savingOverride}
+							>Remove</button
 						>
-					{:else}
-						<div class="actions-dropdown">
+					</p>
+				{/if}
+				{#if isNeedsParent}
+					<div class="shallow-banner">
+						<p class="shallow-info">
+							This commit's parent doesn't exist locally (shallow clone). The diff and attribution
+							cannot be computed.
+						</p>
+						<div class="shallow-command">
+							<code>git fetch --deepen=2 origin {page.params.branch}</code>
+						</div>
+						<div class="shallow-actions">
+							<button class="btn-override-action" onclick={handleDeepen} disabled={deepening}>
+								{deepening ? 'Fetching...' : 'Fetch Parent'}
+							</button>
 							<button
 								class="btn-override-action"
-								onclick={() => (actionsOpen = !actionsOpen)}
-								disabled={recalculating}
+								onclick={handleCheckAgain}
+								disabled={checkingAgain}
 							>
-								{recalculating ? 'Recalculating...' : 'Commit Actions'}
-								<svg
-									class="chevron"
-									class:chevron-open={actionsOpen}
-									width="10"
-									height="6"
-									viewBox="0 0 10 6"
-									fill="none"
-								>
-									<path
-										d="M1 1L5 5L9 1"
-										stroke="currentColor"
-										stroke-width="1.5"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-									/>
-								</svg>
+								{checkingAgain ? 'Checking...' : 'Check Again'}
 							</button>
-							{#if actionsOpen}
-								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div
-									class="actions-backdrop"
-									onclick={() => (actionsOpen = false)}
-									onkeydown={() => {}}
-								></div>
-								<div class="actions-menu">
-									<button class="actions-menu-item" onclick={startEditOverride}>
-										{hasOverride ? 'Edit Override' : 'Override Agent Attribution'}
-									</button>
-									<button
-										class="actions-menu-item"
-										onclick={handleRecalculate}
-										disabled={recalculating}
-									>
-										Recalculate Diff Match
-									</button>
-								</div>
-							{/if}
 						</div>
-					{/if}
-				</div>
-			{/if}
-		</div>
-		<h2>{detail.commit.subject || detail.commit.commitHash.slice(0, 8)}</h2>
-		<p>
-			{fmtTime(detail.commit.authoredAtUnixMs)} | {detail.commit.commitHash.slice(0, 12)}
-			{#if detail.commitUrl}
-				|
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external URL -->
-				<a href={detail.commitUrl} target="_blank" rel="noopener noreferrer"
-					>{new URL(detail.commitUrl).hostname}</a
-				>
-			{/if}
-		</p>
-		{#if hasOverride}
-			<p class="override-display">
-				Agent Attribution Override: {detail.commit.overrideLinePercent}%
-				<button class="btn-override-action" onclick={clearOverride} disabled={savingOverride}
-					>Remove</button
-				>
-			</p>
-		{/if}
-		{#if isNeedsParent}
-			<div class="shallow-banner">
-				<p class="shallow-info">
-					This commit's parent doesn't exist locally (shallow clone). The diff and attribution
-					cannot be computed.
-				</p>
-				<div class="shallow-command">
-					<code>git fetch --deepen=2 origin {page.params.branch}</code>
-				</div>
-				<div class="shallow-actions">
-					<button class="btn-override-action" onclick={handleDeepen} disabled={deepening}>
-						{deepening ? 'Fetching...' : 'Fetch Parent'}
-					</button>
-					<button class="btn-override-action" onclick={handleCheckAgain} disabled={checkingAgain}>
-						{checkingAgain ? 'Checking...' : 'Check Again'}
-					</button>
-				</div>
-				{#if deepenOutput.length > 0}
-					<pre class="shallow-output">{deepenOutput.join('\n')}</pre>
+						{#if deepenOutput.length > 0}
+							<pre class="shallow-output">{deepenOutput.join('\n')}</pre>
+						{/if}
+						{#if deepenError}
+							<p class="shallow-error">{deepenError}</p>
+						{/if}
+					</div>
+				{:else if isWorkingCopyUnknown}
+					<p class="unknown-attribution">Agent attribution: Unknown</p>
+				{:else}
+					<div class="detail-bar">
+						<AgentPercentageBar
+							agentPercent={effectivePercent}
+							segments={toBarSegments(detail.commit.agentSegments)}
+							totalLines={agentLinesTotal}
+							showManual={true}
+							height="18px"
+						/>
+					</div>
 				{/if}
-				{#if deepenError}
-					<p class="shallow-error">{deepenError}</p>
+				{#if !isNeedsParent}
+					<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 				{/if}
 			</div>
-		{:else if isWorkingCopyUnknown}
-			<p class="unknown-attribution">Agent attribution: Unknown</p>
-		{:else}
-			<div class="detail-bar">
-				<AgentPercentageBar
-					agentPercent={effectivePercent}
-					segments={hasOverride ? [] : toBarSegments(detail.commit.agentSegments)}
-					totalLines={agentLinesTotal}
-					showManual={true}
-					height="18px"
-				/>
-			</div>
-		{/if}
-		{#if !isNeedsParent}
-			<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 
+			<div class="right">
+				{#if !detail?.commit.workingCopy}
+					<div class="override-controls">
+						{#if editingOverride}
+							<AgentOverrideEditor
+								agents={overrideAgents}
+								initialValues={overrideInitialValues}
+								onsave={saveOverride}
+								oncancel={() => (editingOverride = false)}
+								onclear={clearOverride}
+							/>
+						{:else}
+							<div class="actions-dropdown">
+								<button
+									class="btn-override-action"
+									onclick={() => (actionsOpen = !actionsOpen)}
+									disabled={recalculating}
+								>
+									{recalculating ? 'Recalculating...' : 'Commit Actions'}
+									<svg
+										class="chevron"
+										class:chevron-open={actionsOpen}
+										width="10"
+										height="6"
+										viewBox="0 0 10 6"
+										fill="none"
+									>
+										<path
+											d="M1 1L5 5L9 1"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										/>
+									</svg>
+								</button>
+								{#if actionsOpen}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="actions-backdrop"
+										onclick={() => (actionsOpen = false)}
+										onkeydown={() => {}}
+									></div>
+									<div class="actions-menu">
+										<button class="actions-menu-item" onclick={startEditOverride}>
+											{hasOverride ? 'Edit Override' : 'Override Agent Attribution'}
+										</button>
+										<button
+											class="actions-menu-item"
+											onclick={handleRecalculate}
+											disabled={recalculating}
+										>
+											Recalculate Diff Match
+										</button>
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		{#if !isNeedsParent}
 			<h3>{detail.commit.workingCopy ? 'Working Copy Diff' : 'Commit Diff'}</h3>
 			{#if visibleFiles.length === 0}
 				<p>No changed files in this diff.</p>
@@ -581,6 +620,14 @@
 		padding: 0 1rem;
 	}
 
+	.header-row {
+		display: flex;
+	}
+
+	.header-col {
+		flex: 1;
+	}
+
 	h2 {
 		font-size: 1.3rem;
 		margin: 1rem 0;
@@ -588,6 +635,7 @@
 
 	.right {
 		float: right;
+		padding: 1rem 0;
 	}
 
 	.fallback-note {
@@ -707,16 +755,6 @@
 		align-items: center;
 		gap: 0.5rem;
 		margin-bottom: 0.5rem;
-	}
-
-	.override-input {
-		width: 3rem;
-		padding: 0.2rem 0.4rem;
-		border: 1px solid var(--color-border-input);
-		background: var(--color-background-surface);
-		color: var(--color-text);
-		border-radius: 4px;
-		font-size: 0.85rem;
 	}
 
 	.btn-override-action {

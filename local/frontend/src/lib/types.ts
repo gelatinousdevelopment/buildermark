@@ -230,6 +230,7 @@ export interface ProjectCommitDetailResponse {
 	diff: string;
 	files: ProjectCommitFileCoverage[];
 	messages: ProjectCommitContributionMessage[];
+	agents: string[];
 }
 
 export interface ProjectCommitAttribution {
@@ -345,7 +346,7 @@ export interface ProjectCommitCoverage {
 	linesAdded: number;
 	linesRemoved: number;
 	agentSegments?: AgentCoverageSegment[];
-	overrideLinePercent?: number | null;
+	overrideAgentPercents?: Record<string, number> | null;
 	needsParent?: boolean;
 }
 
