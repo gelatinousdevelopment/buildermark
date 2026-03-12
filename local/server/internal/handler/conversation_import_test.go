@@ -524,8 +524,9 @@ func TestImportClaudeCloudViaCloudData(t *testing.T) {
 	var resp struct {
 		Ok   bool `json:"ok"`
 		Data struct {
-			Imported     bool `json:"imported"`
-			MessageCount int  `json:"messageCount"`
+			Status       string `json:"status"`
+			Imported     bool   `json:"imported"`
+			MessageCount int    `json:"messageCount"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -534,8 +535,151 @@ func TestImportClaudeCloudViaCloudData(t *testing.T) {
 	if !resp.Ok || !resp.Data.Imported {
 		t.Fatalf("expected ok and imported")
 	}
+	if resp.Data.Status != "imported" {
+		t.Fatalf("status = %q, want imported", resp.Data.Status)
+	}
 	if resp.Data.MessageCount < 1 {
 		t.Errorf("messageCount = %d, want >= 1", resp.Data.MessageCount)
+	}
+}
+
+func TestImportClaudeCloudViaCloudData_NoMessagesReturnsNoOp(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	cloudData := `{"data":[{"type":"system","subtype":"init","created_at":"2025-01-01T00:00:00Z"}]}`
+
+	body, _ := json.Marshal(map[string]any{
+		"url":       "https://claude.ai/code/session_no_messages",
+		"agent":     "claude_cloud",
+		"cloudData": json.RawMessage(cloudData),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp struct {
+		Ok   bool `json:"ok"`
+		Data struct {
+			Status         string `json:"status"`
+			Imported       bool   `json:"imported"`
+			AlreadyExisted bool   `json:"alreadyExisted"`
+			MessageCount   int    `json:"messageCount"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.Ok {
+		t.Fatalf("expected ok=true")
+	}
+	if resp.Data.Status != "no_messages" {
+		t.Fatalf("status = %q, want no_messages", resp.Data.Status)
+	}
+	if resp.Data.Imported {
+		t.Fatalf("imported = true, want false")
+	}
+	if resp.Data.AlreadyExisted {
+		t.Fatalf("alreadyExisted = true, want false")
+	}
+	if resp.Data.MessageCount != 0 {
+		t.Fatalf("messageCount = %d, want 0", resp.Data.MessageCount)
+	}
+
+	var conversationCount int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations").Scan(&conversationCount); err != nil {
+		t.Fatalf("count conversations: %v", err)
+	}
+	if conversationCount != 0 {
+		t.Fatalf("conversation count = %d, want 0", conversationCount)
+	}
+}
+
+func TestImportCodexCloudTask_NoMessagesReturnsNoOp(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	cloudData := `{
+		"current_turn_id": "t~a1",
+		"turn_mapping": {
+			"t~a1": {
+				"id": "t~a1",
+				"parent": null,
+				"turn": {
+					"created_at": 1700000001.0,
+					"role": "assistant",
+					"type": "assistant",
+					"output_items": [
+						{
+							"content": [
+								{"content_type": "repo_file_citation", "path": "file.go"}
+							],
+							"role": "assistant",
+							"type": "message"
+						}
+					]
+				}
+			}
+		}
+	}`
+
+	body, _ := json.Marshal(map[string]any{
+		"url":       "https://chatgpt.com/codex/s/task_no_messages",
+		"agent":     "codex_cloud",
+		"cloudData": json.RawMessage(cloudData),
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations/import-web", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	var resp struct {
+		Ok   bool `json:"ok"`
+		Data struct {
+			Status         string `json:"status"`
+			Imported       bool   `json:"imported"`
+			AlreadyExisted bool   `json:"alreadyExisted"`
+			MessageCount   int    `json:"messageCount"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.Ok {
+		t.Fatalf("expected ok=true")
+	}
+	if resp.Data.Status != "no_messages" {
+		t.Fatalf("status = %q, want no_messages", resp.Data.Status)
+	}
+	if resp.Data.Imported {
+		t.Fatalf("imported = true, want false")
+	}
+	if resp.Data.AlreadyExisted {
+		t.Fatalf("alreadyExisted = true, want false")
+	}
+	if resp.Data.MessageCount != 0 {
+		t.Fatalf("messageCount = %d, want 0", resp.Data.MessageCount)
+	}
+
+	var conversationCount int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM conversations").Scan(&conversationCount); err != nil {
+		t.Fatalf("count conversations: %v", err)
+	}
+	if conversationCount != 0 {
+		t.Fatalf("conversation count = %d, want 0", conversationCount)
 	}
 }
 

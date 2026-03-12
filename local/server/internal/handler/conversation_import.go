@@ -69,6 +69,23 @@ type webImportMessage struct {
 	Model     string `json:"model"`
 }
 
+func writeImportResult(w http.ResponseWriter, statusCode int, imported bool, conversationID string, alreadyExisted bool, messageCount int, status string) {
+	data := map[string]any{
+		"status":         status,
+		"imported":       imported,
+		"alreadyExisted": alreadyExisted,
+		"messageCount":   messageCount,
+	}
+	if conversationID != "" {
+		data["conversationId"] = conversationID
+	}
+	writeSuccess(w, statusCode, data)
+}
+
+func writeNoMessageImportResult(w http.ResponseWriter) {
+	writeImportResult(w, http.StatusOK, false, "", false, 0, "no_messages")
+}
+
 func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Request) {
 	if !requireJSON(w, r) {
 		return
@@ -147,11 +164,7 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 	var existingID string
 	err = s.DB.QueryRowContext(r.Context(), "SELECT id FROM conversations WHERE url = ?", body.URL).Scan(&existingID)
 	if err == nil {
-		writeSuccess(w, http.StatusOK, map[string]any{
-			"imported":       true,
-			"conversationId": existingID,
-			"alreadyExisted": true,
-		})
+		writeImportResult(w, http.StatusOK, true, existingID, true, 0, "already_exists")
 		return
 	}
 	if err != sql.ErrNoRows {
@@ -228,12 +241,7 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	writeSuccess(w, http.StatusCreated, map[string]any{
-		"imported":       true,
-		"conversationId": conversationID,
-		"alreadyExisted": false,
-		"messageCount":   len(messages),
-	})
+	writeImportResult(w, http.StatusCreated, true, conversationID, false, len(messages), "imported")
 }
 
 func importLogSourceFromAgent(agentName string) string {
@@ -277,7 +285,7 @@ func (s *Server) handleImportCloudEvents(w http.ResponseWriter, r *http.Request,
 
 	messages := result.Messages
 	if len(messages) == 0 {
-		writeError(w, http.StatusBadRequest, "no conversational messages found in events")
+		writeNoMessageImportResult(w)
 		return
 	}
 
@@ -335,12 +343,11 @@ func (s *Server) handleImportCloudEvents(w http.ResponseWriter, r *http.Request,
 		status = http.StatusOK
 	}
 
-	writeSuccess(w, status, map[string]any{
-		"imported":       true,
-		"conversationId": conversationID,
-		"alreadyExisted": alreadyExisted,
-		"messageCount":   len(messages),
-	})
+	resultStatus := "imported"
+	if alreadyExisted {
+		resultStatus = "already_exists"
+	}
+	writeImportResult(w, status, true, conversationID, alreadyExisted, len(messages), resultStatus)
 }
 
 func (s *Server) handleImportCodexCloudTask(w http.ResponseWriter, r *http.Request, body webConversationImportRequest) {
@@ -354,7 +361,7 @@ func (s *Server) handleImportCodexCloudTask(w http.ResponseWriter, r *http.Reque
 
 	messages := result.Messages
 	if len(messages) == 0 {
-		writeError(w, http.StatusBadRequest, "no messages found in codex task")
+		writeNoMessageImportResult(w)
 		return
 	}
 
@@ -397,12 +404,11 @@ func (s *Server) handleImportCodexCloudTask(w http.ResponseWriter, r *http.Reque
 		status = http.StatusOK
 	}
 
-	writeSuccess(w, status, map[string]any{
-		"imported":       true,
-		"conversationId": conversationID,
-		"alreadyExisted": alreadyExisted,
-		"messageCount":   len(messages),
-	})
+	resultStatus := "imported"
+	if alreadyExisted {
+		resultStatus = "already_exists"
+	}
+	writeImportResult(w, status, true, conversationID, alreadyExisted, len(messages), resultStatus)
 }
 
 func (s *Server) upsertCloudConversation(ctx context.Context, url, projectID, title, agentName string, messages []db.Message) (string, bool, error) {
@@ -632,4 +638,3 @@ func (s *Server) recomputeCoverageAfterImport(projectID string, startedAtMs int6
 	}
 	log.Printf("[import-cloud] recompute: updated %d commits for project %s", n, projectID)
 }
-

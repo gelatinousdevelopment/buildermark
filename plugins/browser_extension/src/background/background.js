@@ -106,7 +106,7 @@ function applyTabState(tabId, state) {
       break;
     case "already":
       chrome.action.setBadgeText({ text: "\u2713", tabId });
-      chrome.action.setBadgeBackgroundColor({ color: "#888", tabId });
+      chrome.action.setBadgeBackgroundColor({ color: "#aaa", tabId });
       chrome.action.setTitle({ title: "Buildermark: Already imported", tabId });
       break;
     case "error":

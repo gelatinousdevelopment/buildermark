@@ -34,10 +34,13 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
       sendResponse({ state: _buildermarkPageState });
     } else if (message.type === 'autoImportChanged') {
       _autoImport = message.value;
+      if (window._buildermarkCloudListener) {
+        window._buildermarkCloudListener._scheduleSend();
+      }
     } else if (message.type === 'triggerImport') {
       // Manual import trigger — send any held data.
       if (window._buildermarkCloudListener) {
-        window._buildermarkCloudListener._send();
+        window._buildermarkCloudListener._send(true);
       }
     }
   });
@@ -46,9 +49,10 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
 class CloudListener {
   constructor(setBadge) {
     this.setBadge = setBadge;
-    this._pending = null;
+    this._queue = [];
     this._debounceTimer = null;
     this._listening = false;
+    this._sending = false;
   }
 
   start() {
@@ -64,18 +68,7 @@ class CloudListener {
 
       console.log("[Buildermark] Received cloud intercept — agent:", agent, "matchId:", matchId, "url:", url);
 
-      // For codex, prefer the most complete response (one with PR data).
-      if (agent === 'codex_cloud' && this._pending && this._pending.agent === 'codex_cloud') {
-        const prevHasPr = this._codexHasPr(this._pending.data);
-        const newHasPr = this._codexHasPr(data);
-        if (prevHasPr && !newHasPr) {
-          console.log("[Buildermark] Keeping previous codex data — has PR diff, new one does not");
-          this._scheduleSend();
-          return;
-        }
-      }
-
-      this._pending = { agent, matchId, url, data };
+      this._queue.push({ agent, matchId, url, data });
       this._scheduleSend();
     });
   }
@@ -83,55 +76,109 @@ class CloudListener {
   _scheduleSend() {
     if (this._debounceTimer) {
       clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
+    }
+
+    if (this._queue.length === 0) {
+      return;
     }
 
     if (!_autoImport) {
-      // Hold data without sending — user must click Import.
-      _setPageState('pending');
-      this.setBadge('pending');
+      if (!this._sending) {
+        _setPageState('pending');
+        this.setBadge('pending');
+      }
+      return;
+    }
+
+    if (this._sending) {
       return;
     }
 
     this._debounceTimer = setTimeout(() => {
       this._debounceTimer = null;
-      this._send();
+      this._drainQueue();
     }, 3000);
   }
 
-  _codexHasPr(data) {
-    if (!data?.turn_mapping) return false;
-    return Object.values(data.turn_mapping).some(wrapper =>
-      wrapper.turn?.output_items?.some(item => item.type === 'pr')
-    );
+  async _send(force = false) {
+    await this._drainQueue({ force });
   }
 
-  async _send() {
-    const payload = this._pending;
-    if (!payload) return;
-    this._pending = null;
+  async _drainQueue({ force = false } = {}) {
+    if (this._sending || this._queue.length === 0) {
+      return;
+    }
+
+    if (!_autoImport && !force) {
+      _setPageState('pending');
+      this.setBadge('pending');
+      return;
+    }
+
+    this._sending = true;
+    let finalState = null;
 
     try {
-      _setPageState('importing');
-      this.setBadge("importing");
-      const params = {
-        url: payload.url,
-        agent: payload.agent,
-        cloudData: payload.data,
-      };
-      console.log(
-        "[Buildermark] Sending import-web request — url:",
-        params.url,
-        "agent:",
-        params.agent,
-      );
-      const result = await BuildermarkAPI.importConversation(params);
-      console.log("[Buildermark] Import result:", JSON.stringify(result));
-      _setPageState(result.alreadyExisted ? 'already' : 'done');
-      this.setBadge(result.alreadyExisted ? "already" : "done");
-    } catch (e) {
-      console.warn("[Buildermark] Failed to import cloud data:", e.message);
-      _setPageState('error');
-      this.setBadge("error");
+      while (this._queue.length > 0) {
+        const payload = this._queue[0];
+
+        _setPageState('importing');
+        this.setBadge("importing");
+
+        const params = {
+          url: payload.url,
+          agent: payload.agent,
+          cloudData: payload.data,
+        };
+        console.log(
+          "[Buildermark] Sending import-web request — url:",
+          params.url,
+          "agent:",
+          params.agent,
+        );
+
+        let result;
+        try {
+          result = await BuildermarkAPI.importConversation(params);
+        } catch (e) {
+          console.warn("[Buildermark] Failed to import cloud data:", e.message);
+          _setPageState('error');
+          this.setBadge("error");
+          return;
+        }
+
+        this._queue.shift();
+        console.log("[Buildermark] Import result:", JSON.stringify(result));
+
+        if (result?.status === 'no_messages') {
+          console.log("[Buildermark] Cloud import returned no messages; skipping state change");
+          continue;
+        }
+
+        finalState = result.alreadyExisted ? 'already' : 'done';
+      }
+    } finally {
+      this._sending = false;
     }
+
+    if (this._queue.length > 0) {
+      if (_autoImport) {
+        this._scheduleSend();
+      } else {
+        _setPageState('pending');
+        this.setBadge('pending');
+      }
+      return;
+    }
+
+    if (finalState) {
+      _setPageState(finalState);
+      this.setBadge(finalState);
+      return;
+    }
+
+    _setPageState('waiting');
+    this.setBadge('waiting');
   }
 }

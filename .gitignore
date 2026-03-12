@@ -7,4 +7,5 @@
 apps/linux-cli/build/
 .tmp
 .cache
-dist/
+dist
+.gocache

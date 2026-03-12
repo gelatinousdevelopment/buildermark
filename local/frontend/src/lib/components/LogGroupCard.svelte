@@ -116,6 +116,7 @@
 					onkeydown={logInteractive
 						? (e: KeyboardEvent) => handleKeydown(e, logMessage, logExpanded)
 						: undefined}
+					data-message-id={logMessage.id}
 				>
 					<DiffMessageCard
 						timestamp={logMessage.timestamp}
@@ -139,6 +140,7 @@
 					onkeydown={logInteractive
 						? (e: KeyboardEvent) => handleKeydown(e, logMessage, logExpanded)
 						: undefined}
+					data-message-id={logMessage.id}
 				>
 					<LogMessageCard
 						message={logMessage}
