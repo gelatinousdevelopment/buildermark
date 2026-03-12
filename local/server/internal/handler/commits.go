@@ -909,6 +909,7 @@ func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []st
 		})
 	}
 
+	var ingestedCommits []db.Commit
 	_, err = s.runStableCoverageStage(
 		ctx,
 		projectID,
@@ -934,10 +935,14 @@ func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []st
 				missingHashes,
 				&stageCtx.identity,
 				stageCtx.extraEmails,
+				func(c []db.Commit) { ingestedCommits = append(ingestedCommits, c...) },
 			)
 			return ingestErr
 		},
 	)
+	if err == nil && len(ingestedCommits) > 0 {
+		s.notifyIngestedCommits(ingestedCommits, db.RepoLabel(covCtx.repoProject.Path))
+	}
 	if err != nil {
 		log.Printf("async commit ingestion failed for %s: %v", projectID, err)
 		if s.ws != nil {

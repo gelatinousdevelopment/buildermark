@@ -395,7 +395,7 @@ func (s *Server) deepenNeedsParentCommits(
 				Branch:    branch,
 			})
 		}
-		if _, err := ingestMissingCommits(ctx, s.DB, repoProject, group, branch, resolved, identity, extraEmails); err != nil {
+		if _, err := ingestMissingCommits(ctx, s.DB, repoProject, group, branch, resolved, identity, extraEmails, nil); err != nil {
 			log.Printf("warning: re-ingesting resolved shallow commits: %v", err)
 		}
 	}

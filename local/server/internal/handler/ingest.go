@@ -380,6 +380,16 @@ func ingestCommits(
 		}
 	}
 
+	// Snapshot existing hashes before upsert so we can identify truly new commits.
+	var existingHashes map[string]bool
+	if onIngested != nil && len(dbCommits) > 0 {
+		hashes := make([]string, len(dbCommits))
+		for i, c := range dbCommits {
+			hashes[i] = c.CommitHash
+		}
+		existingHashes, _ = db.ExistingCommitHashes(ctx, database, repoProject.ID, hashes)
+	}
+
 	if err := db.UpsertCommits(ctx, database, dbCommits); err != nil {
 		return 0, fmt.Errorf("upsert commits: %w", err)
 	}
@@ -429,7 +439,15 @@ func ingestCommits(
 	}
 
 	if onIngested != nil {
-		onIngested(dbCommits)
+		var newCommits []db.Commit
+		for _, c := range dbCommits {
+			if !existingHashes[c.CommitHash] {
+				newCommits = append(newCommits, c)
+			}
+		}
+		if len(newCommits) > 0 {
+			onIngested(newCommits)
+		}
 	}
 
 	return len(dbCommits), nil
@@ -445,6 +463,7 @@ func ingestMissingCommits(
 	missingHashes []string,
 	identity *gitIdentity,
 	extraEmails []string,
+	onIngested func([]db.Commit),
 ) (int, error) {
 	if len(missingHashes) == 0 {
 		return 0, nil
@@ -460,7 +479,7 @@ func ingestMissingCommits(
 	if len(commits) == 0 {
 		return 0, nil
 	}
-	return ingestCommits(ctx, database, repoProject, group, branch, commits, identity, extraEmails, nil)
+	return ingestCommits(ctx, database, repoProject, group, branch, commits, identity, extraEmails, onIngested)
 }
 
 func recomputeCommitCoverageForProject(

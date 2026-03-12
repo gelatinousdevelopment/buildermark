@@ -217,7 +217,8 @@
 	let allMessagesExpanded = $derived.by(() => {
 		if (!detail) return false;
 		return (
-			detail.messages.length > 0 && detail.messages.every((m) => expandedMessageIds.includes(m.id))
+			detail?.messages?.length > 0 &&
+			detail?.messages?.every((m) => expandedMessageIds.includes(m.id))
 		);
 	});
 
@@ -572,9 +573,9 @@
 					lines). Exact matched-message lines: {detail.attribution.exactMatchedLines}.
 				</p>
 			{/if}
-			{#if detail.messages.length === 0}
+			{#if detail?.messages?.length === 0}
 				<p>No tracked diff messages matched this commit.</p>
-			{:else}
+			{:else if detail?.messages}
 				{#each detail.messages as message (message.id)}
 					{@const msgExpanded = isExpanded(message.id)}
 					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -617,7 +618,7 @@
 
 <style>
 	.content {
-		padding: 0 1rem;
+		padding: 0 1rem 1rem 1rem;
 	}
 
 	.header-row {
