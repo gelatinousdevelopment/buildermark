@@ -96,6 +96,7 @@ Preferences are stored in the Windows Registry under `HKCU\Software\Buildermark`
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hideMenuBarIcon` | DWORD | `0` | Hide the system tray icon |
+| `notificationsEnabled` | DWORD | `1` | Show notifications for new commits and completed tasks |
 | `startAtLogin` | DWORD | `1` | Launch at Windows startup |
 
 Start-at-login is implemented via the standard `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` registry key.

@@ -10,9 +10,6 @@ struct SettingsView: View {
             GeneralTab(serverManager: serverManager)
                 .tabItem { Label("General", systemImage: "gear") }
 
-            NotificationsTab(serverManager: serverManager)
-                .tabItem { Label("Notifications", systemImage: "bell") }
-
             UpdatesTab(updaterViewModel: updaterViewModel)
                 .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
 
@@ -54,9 +51,17 @@ private struct GeneralTab: View {
                 .frame(height: 20)
 
             LabeledContent("Options:") {
-                Toggle("Start at login", isOn: $startAtLogin)
-                    .onAppear { syncLoginItem(startAtLogin) }
-                    .onChange(of: startAtLogin) { _, enabled in syncLoginItem(enabled) }
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Start at login", isOn: $startAtLogin)
+                        .onAppear { syncLoginItem(startAtLogin) }
+                        .onChange(of: startAtLogin) { _, enabled in syncLoginItem(enabled) }
+
+                    Toggle("Enable notifications", isOn: $serverManager.notificationsEnabled)
+
+                    Text("Show notifications for new commits and completed tasks.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Toggle("Hide menu bar icon", isOn: $hideMenuBarIcon)
@@ -82,25 +87,6 @@ private struct GeneralTab: View {
         } catch {
             // Silently handle — the toggle still reflects the user's intent
         }
-    }
-}
-
-// MARK: - Notifications Tab
-
-private struct NotificationsTab: View {
-    @ObservedObject var serverManager: ServerManager
-
-    var body: some View {
-        Form {
-            Toggle("Enable notifications", isOn: $serverManager.notificationsEnabled)
-
-            Text("Show notifications for new commits and completed tasks.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .formStyle(.columns)
-        .padding(.horizontal)
-        .padding(.vertical, 24)
     }
 }
 

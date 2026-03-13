@@ -69,6 +69,7 @@ A tabbed settings window with three tabs. The window should resize its height to
 | Restart Server | Button | Restarts the server process |
 | _spacer_ | | Visual separation before options |
 | Options: Start at login | Toggle | Persisted, default `true`. Registers/unregisters with the OS login items system. Must be synced on first launch (not just on change) so the default `true` takes effect immediately. |
+| Options: Enable notifications | Toggle | Persisted, default `true`. Shows notifications for new commits and completed tasks. |
 | Hide menu bar icon | Toggle | Persisted, default `false`. Help text: "Relaunch the app for this to take effect" |
 | _helper text_ | Caption | "When hidden, launch app to show settings." |
 
@@ -90,6 +91,7 @@ Centered vertically:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hideMenuBarIcon` | bool | `false` | Whether the tray icon is hidden |
+| `notificationsEnabled` | bool | `true` | Whether desktop notifications are shown |
 | `startAtLogin` | bool | `true` | Whether the app launches at login. Must be synced to the OS on first appearance, not just on toggle change. |
 
 ## Auto-Updates
