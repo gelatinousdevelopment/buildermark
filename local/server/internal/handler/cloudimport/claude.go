@@ -289,7 +289,7 @@ func ExtractCloudTitle(events []CloudEvent, messages []db.Message) string {
 	for _, ev := range events {
 		if ev.Type == "summary" || (ev.Type == "system" && ev.Subtype == "summary") {
 			if ev.Message != nil {
-				text := claude.ExtractUserText(ev.Message.Content)
+				text := agent.NormalizeTitleCandidate(claude.ExtractUserText(ev.Message.Content))
 				if text != "" {
 					return text
 				}
@@ -298,8 +298,11 @@ func ExtractCloudTitle(events []CloudEvent, messages []db.Message) string {
 	}
 
 	for _, m := range messages {
-		if m.Role == "user" && strings.TrimSpace(m.Content) != "" {
-			return agent.TitleFromPrompt(m.Content)
+		if m.Role != "user" {
+			continue
+		}
+		if text := agent.NormalizeTitleCandidate(m.Content); text != "" {
+			return agent.TitleFromPrompt(text)
 		}
 	}
 

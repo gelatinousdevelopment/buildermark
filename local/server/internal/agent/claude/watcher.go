@@ -981,7 +981,7 @@ func firstPromptFromConversationLogs(entries []conversationLogEntry) (string, in
 		if e.Role != "user" {
 			continue
 		}
-		text := strings.TrimSpace(e.Content)
+		text := agent.NormalizeTitleCandidate(e.Content)
 		if text == "" || IsSystemMessage(text) {
 			continue
 		}
@@ -996,7 +996,7 @@ func titleFromConversationLogs(entries []conversationLogEntry) string {
 		if e.Role != "user" {
 			continue
 		}
-		text := strings.TrimSpace(e.Content)
+		text := agent.NormalizeTitleCandidate(e.Content)
 		if text == "" || IsSystemMessage(text) {
 			continue
 		}

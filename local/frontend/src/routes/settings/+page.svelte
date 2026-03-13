@@ -40,7 +40,7 @@
 	let historyImportError: string | null = $state(null);
 	let historyImportResult: string | null = $state(null);
 
-	const historyImportDayOptions = ['7', '14', '30', '60', '90', '180', '365', 'all'];
+	const historyImportDayOptions = ['1', '3', '5', '7', '14', '30', '60', '90', '180', '365', 'all'];
 
 	let importStatusMessage = $derived(
 		websocketStore.getJob('history_scan')?.state === 'running'
@@ -63,7 +63,7 @@
 		if (days === 'all') {
 			return 'All';
 		}
-		return `${days} days`;
+		return `${days} ${days === '1' ? 'day' : 'days'}`;
 	}
 
 	const missingSearchPaths = $derived(

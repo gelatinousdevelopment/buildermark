@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -8,10 +9,25 @@ import (
 // MaxTitleLen is the maximum character length for a title derived from the first prompt.
 const MaxTitleLen = 1000
 
+var leadingHTMLTagRe = regexp.MustCompile(`^\s*<[A-Za-z][A-Za-z0-9-]*(?:\s[^>]*)?>`)
+
 // TitleFromPrompt extracts a title from a user prompt by taking the first
 // MaxTitleLen characters, appending an ellipsis when truncated.
 func TitleFromPrompt(text string) string {
 	return truncateTitle(strings.TrimSpace(text))
+}
+
+// NormalizeTitleCandidate returns trimmed text unless it should be skipped when
+// choosing a conversation title source.
+func NormalizeTitleCandidate(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if leadingHTMLTagRe.MatchString(text) {
+		return ""
+	}
+	return text
 }
 
 // truncateTitle truncates a string to MaxTitleLen runes, appending "..." if truncated.

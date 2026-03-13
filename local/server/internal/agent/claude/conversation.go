@@ -170,7 +170,7 @@ func readFirstPrompt(home, projectPath, sessionID string) (string, int64) {
 			return
 		}
 
-		text := ExtractUserText(entry.Message.Content)
+		text := agent.NormalizeTitleCandidate(ExtractUserText(entry.Message.Content))
 		if text == "" || IsSystemMessage(text) || IsSkillExpansion(text) {
 			return
 		}

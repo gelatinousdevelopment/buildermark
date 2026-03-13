@@ -995,6 +995,44 @@ func TestReadSessionTitlePrefersEventMsgUser(t *testing.T) {
 	}
 }
 
+func TestReadSessionTitleSkipsHTMLTagWrapperMessages(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+
+	rolloutPath := filepath.Join(sessionsDir, "2026", "02", "13", "rollout-2026-02-13T04-02-54-thread-title-html-wrapper.jsonl")
+	writeJSONLObjects(t, rolloutPath, []any{
+		map[string]any{
+			"timestamp": "2026-02-13T04:02:54.264Z",
+			"type":      "session_meta",
+			"payload": map[string]any{
+				"id":  "thread-title-html-wrapper",
+				"cwd": "/proj/title-new",
+			},
+		},
+		map[string]any{
+			"timestamp": "2026-02-13T04:02:55.000Z",
+			"type":      "event_msg",
+			"payload": map[string]any{
+				"type":    "user_message",
+				"message": "<bash-input>git status</bash-input>",
+			},
+		},
+		map[string]any{
+			"timestamp": "2026-02-13T04:02:55.100Z",
+			"type":      "event_msg",
+			"payload": map[string]any{
+				"type":    "user_message",
+				"message": "Fix the auth session title logic.",
+			},
+		},
+	})
+
+	title := readSessionTitle(sessionsDir, "thread-title-html-wrapper")
+	if title != "Fix the auth session title logic." {
+		t.Errorf("title = %q, want %q", title, "Fix the auth session title logic.")
+	}
+}
+
 func TestReadSessionTitleMissingFile(t *testing.T) {
 	title := readSessionTitle("/nonexistent", "thread-none")
 	if title != "" {

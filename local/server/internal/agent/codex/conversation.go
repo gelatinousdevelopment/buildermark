@@ -46,7 +46,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 			if err := json.Unmarshal(event.Payload, &msg); err != nil || msg.Type != "user_message" {
 				continue
 			}
-			if text := strings.TrimSpace(msg.Message); text != "" {
+			if text := agent.NormalizeTitleCandidate(msg.Message); text != "" {
 				return agent.TitleFromPrompt(text)
 			}
 
@@ -55,7 +55,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 			if err := json.Unmarshal(event.Payload, &item); err != nil || item.Type != "message" || item.Role != "user" {
 				continue
 			}
-			if text := extractResponseItemText(item.Content); text != "" {
+			if text := agent.NormalizeTitleCandidate(extractResponseItemText(item.Content)); text != "" {
 				if firstResponseItemUser == "" {
 					firstResponseItemUser = text
 				}
@@ -64,7 +64,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 		case "input":
 			// Legacy schema.
 			if event.Role == "user" {
-				text := strings.TrimSpace(event.Content)
+				text := agent.NormalizeTitleCandidate(event.Content)
 				if text != "" {
 					return agent.TitleFromPrompt(text)
 				}
@@ -75,7 +75,7 @@ func readSessionTitle(sessionsDir, threadID string) string {
 			if event.Item.Role == "user" {
 				for _, c := range event.Item.Content {
 					if c.Type == "text" || c.Type == "input_text" {
-						text := strings.TrimSpace(c.Text)
+						text := agent.NormalizeTitleCandidate(c.Text)
 						if text != "" {
 							return agent.TitleFromPrompt(text)
 						}

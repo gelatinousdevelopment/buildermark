@@ -48,3 +48,40 @@ func TestTitleFromPlanPrompt(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeTitleCandidate(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "keeps plain text",
+			input: "  Fix the auth flow  ",
+			want:  "Fix the auth flow",
+		},
+		{
+			name:  "skips empty text",
+			input: "   ",
+			want:  "",
+		},
+		{
+			name:  "skips html style wrapper tag",
+			input: "<bash-input>git status</bash-input>",
+			want:  "",
+		},
+		{
+			name:  "keeps less-than comparisons",
+			input: "x < y",
+			want:  "x < y",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeTitleCandidate(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeTitleCandidate() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -1290,6 +1290,29 @@ func TestReadSessionTitleFallbackSkipsCommandWrapperMessages(t *testing.T) {
 	}
 }
 
+func TestReadSessionTitleFallbackSkipsHTMLTagWrapperMessages(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectPath := "/proj/a"
+	dirName := "-proj-a"
+	projDir := filepath.Join(tmpDir, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	convLines := []string{
+		`{"type":"user","timestamp":"2026-03-05T14:08:12.597Z","message":{"content":"<bash-input>git status</bash-input>"}}`,
+		`{"type":"user","timestamp":"2026-03-05T14:08:12.598Z","message":{"content":[{"type":"text","text":"Review the auth middleware changes."}]}}`,
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "sess-html-wrapper.jsonl"), []byte(strings.Join(convLines, "\n")+"\n"), 0644); err != nil {
+		t.Fatalf("write conv file: %v", err)
+	}
+
+	title := readSessionTitle(tmpDir, projectPath, "sess-html-wrapper")
+	if title != "Review the auth middleware changes." {
+		t.Errorf("title = %q, want %q", title, "Review the auth middleware changes.")
+	}
+}
+
 func TestReadSessionTitleFallbackTruncatesLongPrompt(t *testing.T) {
 	tmpDir := t.TempDir()
 	projectPath := "/proj/a"

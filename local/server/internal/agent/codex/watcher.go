@@ -500,8 +500,10 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			})
 			if isResponseItemUser {
 				responseItemUserIdx = append(responseItemUserIdx, len(messages)-1)
-				if firstResponseItemUser == "" && strings.TrimSpace(content) != "" {
-					firstResponseItemUser = strings.TrimSpace(content)
+				if firstResponseItemUser == "" {
+					if text := agent.NormalizeTitleCandidate(content); text != "" {
+						firstResponseItemUser = text
+					}
 				}
 			}
 
@@ -525,8 +527,10 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 			if msg.Type == "user_message" {
 				role = "user"
 				hasEventMsgUser = true
-				if firstEventMsgUser == "" && strings.TrimSpace(msg.Message) != "" {
-					firstEventMsgUser = strings.TrimSpace(msg.Message)
+				if firstEventMsgUser == "" {
+					if text := agent.NormalizeTitleCandidate(msg.Message); text != "" {
+						firstEventMsgUser = text
+					}
 				}
 			}
 			if strings.TrimSpace(msg.Phase) == "final_answer" {
@@ -587,8 +591,10 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 					}{rating, note, ts})
 				}
 			}
-			if firstLegacyUser == "" && strings.TrimSpace(content) != "" {
-				firstLegacyUser = strings.TrimSpace(content)
+			if firstLegacyUser == "" {
+				if text := agent.NormalizeTitleCandidate(content); text != "" {
+					firstLegacyUser = text
+				}
 			}
 
 		case "item.completed":
@@ -638,8 +644,10 @@ func (a *Agent) processSessionFileSince(ctx context.Context, path string, projec
 					}{rating, note, ts})
 				}
 			}
-			if role == "user" && firstLegacyUser == "" && strings.TrimSpace(content) != "" {
-				firstLegacyUser = strings.TrimSpace(content)
+			if role == "user" && firstLegacyUser == "" {
+				if text := agent.NormalizeTitleCandidate(content); text != "" {
+					firstLegacyUser = text
+				}
 			}
 
 		default:

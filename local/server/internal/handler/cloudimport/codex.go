@@ -192,8 +192,11 @@ func ProcessCodexTask(cloudData json.RawMessage) (CloudProcessResult, error) {
 	// Derive title from first user message.
 	var title string
 	for _, m := range messages {
-		if m.Role == "user" && strings.TrimSpace(m.Content) != "" {
-			title = agent.TitleFromPrompt(m.Content)
+		if m.Role != "user" {
+			continue
+		}
+		if text := agent.NormalizeTitleCandidate(m.Content); text != "" {
+			title = agent.TitleFromPrompt(text)
 			break
 		}
 	}

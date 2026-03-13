@@ -22,7 +22,7 @@ func readSessionTitle(path string) string {
 		if m.Type != "user" {
 			continue
 		}
-		if text := extractMessageText(m); text != "" {
+		if text := agent.NormalizeTitleCandidate(extractMessageText(m)); text != "" {
 			return agent.TitleFromPrompt(text)
 		}
 	}
