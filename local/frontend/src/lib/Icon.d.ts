@@ -21,5 +21,6 @@ declare global {
 		| 'buildermarkWordmark'
 		| 'buildermarkTall'
 		| 'buildermarkTallAnimated'
-		| 'cloud';
+		| 'cloud'
+		| 'commit';
 }

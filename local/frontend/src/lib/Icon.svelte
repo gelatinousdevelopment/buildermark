@@ -19,6 +19,7 @@
 	import buildermarkTallSvg from '$lib/icons/buildermarkTall.svg?raw';
 	import buildermarkTallAnimatedSvg from '$lib/icons/buildermarkTallAnimated.svg?raw';
 	import cloudSvg from '$lib/icons/cloud.svg?raw';
+	import commitSvg from '$lib/icons/commit.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -46,7 +47,8 @@
 		buildermarkWordmark: buildermarkWordmarkSvg,
 		buildermarkTall: buildermarkTallSvg,
 		buildermarkTallAnimated: buildermarkTallAnimatedSvg,
-		cloud: cloudSvg
+		cloud: cloudSvg,
+		commit: commitSvg
 	};
 </script>
 

@@ -439,10 +439,15 @@ export function getProjectDailyActivity(
 export function getCommitConversationLinks(
 	projectId: string,
 	commitHashes: string[],
-	conversationIds: string[]
+	conversationIds: string[],
+	fetchFn?: APIFetch
 ): Promise<CommitConversationLinks> {
 	// Use POST for large payloads to avoid URL length limits.
-	if (commitHashes.length > 50 || conversationIds.length > 50) {
+	if (
+		commitHashes.length === 0 ||
+		commitHashes.length > 50 ||
+		conversationIds.length > 50
+	) {
 		return api(`/api/v1/projects/${projectId}/commit-conversation-links`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -450,12 +455,12 @@ export function getCommitConversationLinks(
 				commitHashes,
 				conversationIds: conversationIds.length > 0 ? conversationIds : undefined
 			})
-		});
+		}, fetchFn);
 	}
 	const params = new URLSearchParams();
 	params.set('commitHashes', commitHashes.join(','));
 	if (conversationIds.length > 0) {
 		params.set('conversationIds', conversationIds.join(','));
 	}
-	return api(`/api/v1/projects/${projectId}/commit-conversation-links?${params.toString()}`);
+	return api(`/api/v1/projects/${projectId}/commit-conversation-links?${params.toString()}`, undefined, fetchFn);
 }

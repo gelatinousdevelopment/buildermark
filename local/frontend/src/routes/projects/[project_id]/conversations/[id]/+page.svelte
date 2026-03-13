@@ -26,6 +26,7 @@
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import { singleLineTitle, shortId } from '$lib/utils';
 	import { resolve } from '$app/paths';
+	import Icon from '$lib/Icon.svelte';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -45,6 +46,9 @@
 	let { data } = $props();
 
 	let conversation: ConversationDetail = $derived(data.conversation);
+	let matchedCommitHashes: string[] = $derived(data.matchedCommitHashes ?? []);
+	let matchedCommitBranches: Record<string, string> = $derived(data.commitBranches ?? {});
+	let matchedCommitSubjects: Record<string, string> = $derived(data.commitSubjects ?? {});
 
 	let bottomRatingValue: number = $state(0);
 	let bottomNote: string = $state('');
@@ -147,6 +151,17 @@
 			return;
 		}
 		expandedLogGroups.add(groupId);
+	}
+
+	function matchedCommitHref(commitHash: string): string {
+		const branch = matchedCommitBranches[commitHash] || 'main';
+		return resolve(
+			`/projects/${encodeURIComponent(conversation.projectId)}/commits/${encodeURIComponent(branch)}/${encodeURIComponent(commitHash)}`
+		);
+	}
+
+	function matchedCommitSubject(commitHash: string): string {
+		return matchedCommitSubjects[commitHash] || commitHash;
 	}
 
 	async function submitBottomRating() {
@@ -528,7 +543,37 @@
 				/>
 			{/if}
 		{:else}
-			<div class="empty">No message selected</div>
+			<div class="empty-state">
+				<div class="empty">No message selected</div>
+				<br />
+				<br />
+				<hr class="divider" style:max-width="60%" />
+				<br />
+				<br />
+				{#if matchedCommitHashes.length > 0}
+					<section class="matched-commits matched-commits-side">
+						<h3>Matched commits</h3>
+						<div class="matched-commits-container">
+							<div class="matched-commit-list">
+								{#each matchedCommitHashes as commitHash (commitHash)}
+									<a class="matched-commit-link" href={matchedCommitHref(commitHash)}>
+										<div class="matched-commit-icon"><Icon name="commit" width="18px" /></div>
+										<span class="matched-commit-text">
+											<span class="matched-commit-subject">{matchedCommitSubject(commitHash)}</span>
+											<span class="matched-commit-meta">
+												<span class="matched-commit-hash">{shortId(commitHash, 8)}</span>
+												<span class="matched-commit-branch"
+													>{matchedCommitBranches[commitHash] || 'main'}</span
+												>
+											</span>
+										</span>
+									</a>
+								{/each}
+							</div>
+						</div>
+					</section>
+				{/if}
+			</div>
 		{/if}
 	</div>
 </div>
@@ -570,9 +615,17 @@
 	.column.right .empty {
 		font-size: 1.3rem;
 		justify-self: center;
-		margin-top: 40vh;
 		opacity: 0.4;
 		text-align: center;
+	}
+
+	.empty-state {
+		align-items: center;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		min-height: 100%;
+		width: 100%;
 	}
 
 	.column.left .inline-diff-message :global(.message-content),
@@ -591,6 +644,16 @@
 		.column.left :global(.log-item .message-content) {
 			display: block;
 		}
+	}
+
+	.column .divider {
+		display: block;
+		background: var(--color-divider);
+		height: 0.5px;
+		width: 100%;
+		margin: 0;
+		padding: 0;
+		border: 0;
 	}
 
 	.message {
@@ -826,5 +889,97 @@
 		height: 14px;
 		flex-shrink: 0;
 		color: var(--color-relationship-foreground);
+	}
+
+	.matched-commits {
+		margin: 0;
+	}
+
+	.matched-commits-side {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+	}
+
+	.matched-commits h3 {
+		font-size: 0.9rem;
+		font-weight: normal;
+		margin: 0 0 0.75rem 0;
+		text-transform: uppercase;
+		color: var(--color-text-tertiary);
+	}
+
+	.matched-commits-container {
+		width: min(60%, 100%);
+	}
+
+	.matched-commit-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+	}
+
+	.matched-commit-link {
+		align-items: center;
+		background: var(--color-background-subtle);
+		border: 1px solid var(--color-border-medium);
+		border-radius: 6px;
+		color: var(--color-link-body);
+		display: flex;
+		gap: 0.75rem;
+		padding: 0.55rem 0.75rem;
+		text-decoration: none;
+	}
+
+	.matched-commit-icon {
+		color: var(--color-text);
+	}
+
+	.matched-commit-link:hover {
+		border-color: var(--accent-color);
+		background: var(--accent-color-ultralight);
+	}
+
+	.matched-commit-text {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+
+	.matched-commit-subject {
+		color: var(--color-text);
+		display: block;
+		font-size: 0.9rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.matched-commit-meta {
+		align-items: center;
+		color: var(--color-text-secondary);
+		display: flex;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.matched-commit-hash {
+		font-family:
+			ui-monospace,
+			SFMono-Regular,
+			SF Mono,
+			Menlo,
+			monospace;
+		font-size: 0.8rem;
+	}
+
+	.matched-commit-branch {
+		font-size: 0.8rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

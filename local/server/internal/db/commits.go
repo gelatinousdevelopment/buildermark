@@ -16,27 +16,27 @@ type UserInfo struct {
 
 // Commit represents a row in the commits table.
 type Commit struct {
-	ID                  string   `json:"id"`
-	ProjectID           string   `json:"projectId"`
-	BranchName          string   `json:"branchName"`
-	CommitHash          string   `json:"commitHash"`
-	Subject             string   `json:"subject"`
-	UserName            string   `json:"userName"`
-	UserEmail           string   `json:"userEmail"`
-	AuthoredAt          int64    `json:"authoredAt"` // unix seconds
-	DiffContent         string   `json:"diffContent"`
-	LinesTotal          int      `json:"linesTotal"`
-	LinesFromAgent      int      `json:"linesFromAgent"`
-	LinesAdded          int      `json:"linesAdded"`
-	LinesRemoved        int      `json:"linesRemoved"`
-	CoverageVersion     int      `json:"coverageVersion"`
+	ID                    string  `json:"id"`
+	ProjectID             string  `json:"projectId"`
+	BranchName            string  `json:"branchName"`
+	CommitHash            string  `json:"commitHash"`
+	Subject               string  `json:"subject"`
+	UserName              string  `json:"userName"`
+	UserEmail             string  `json:"userEmail"`
+	AuthoredAt            int64   `json:"authoredAt"` // unix seconds
+	DiffContent           string  `json:"diffContent"`
+	LinesTotal            int     `json:"linesTotal"`
+	LinesFromAgent        int     `json:"linesFromAgent"`
+	LinesAdded            int     `json:"linesAdded"`
+	LinesRemoved          int     `json:"linesRemoved"`
+	CoverageVersion       int     `json:"coverageVersion"`
 	OverrideAgentPercents *string `json:"overrideAgentPercents,omitempty"`
-	NeedsParent          bool     `json:"needsParent,omitempty"`
-	DetailFiles          string   `json:"detailFiles,omitempty"`
-	DetailMessages       string   `json:"detailMessages,omitempty"`
-	DetailAgentSegments  string   `json:"detailAgentSegments,omitempty"`
-	DetailExactMatched   int      `json:"detailExactMatched,omitempty"`
-	DetailFallbackLines  int      `json:"detailFallbackLines,omitempty"`
+	NeedsParent           bool    `json:"needsParent,omitempty"`
+	DetailFiles           string  `json:"detailFiles,omitempty"`
+	DetailMessages        string  `json:"detailMessages,omitempty"`
+	DetailAgentSegments   string  `json:"detailAgentSegments,omitempty"`
+	DetailExactMatched    int     `json:"detailExactMatched,omitempty"`
+	DetailFallbackLines   int     `json:"detailFallbackLines,omitempty"`
 }
 
 // UpsertCommit inserts or updates a commit row. On conflict (same project_id + commit_hash),
@@ -1428,6 +1428,64 @@ func GetCachedCommitConversationLinks(ctx context.Context, database *sql.DB, pro
 	}
 
 	return result, nil
+}
+
+// GetCachedConversationCommitLinks returns cached conversation-to-commit
+// mappings for conversations matching the given project IDs.
+func GetCachedConversationCommitLinks(ctx context.Context, database *sql.DB, projectIDs []string, conversationIDs []string) (map[string][]string, map[string]string, map[string]string, error) {
+	if len(projectIDs) == 0 || len(conversationIDs) == 0 {
+		return map[string][]string{}, map[string]string{}, map[string]string{}, nil
+	}
+
+	pidPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(projectIDs)), ",")
+	conversationToCommits := make(map[string][]string)
+	commitBranches := make(map[string]string)
+	commitSubjects := make(map[string]string)
+
+	for i := 0; i < len(conversationIDs); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(conversationIDs) {
+			end = len(conversationIDs)
+		}
+		batch := conversationIDs[i:end]
+		conversationPlaceholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf(
+			`SELECT ccl.conversation_id, c.commit_hash, c.branch_name, c.subject
+			 FROM commit_conversation_links ccl
+			 JOIN commits c ON c.id = ccl.commit_id
+			 WHERE c.project_id IN (%s) AND ccl.conversation_id IN (%s)
+			 ORDER BY c.authored_at DESC, c.commit_hash DESC`,
+			pidPlaceholders, conversationPlaceholders,
+		)
+		args := make([]any, 0, len(projectIDs)+len(batch))
+		for _, pid := range projectIDs {
+			args = append(args, pid)
+		}
+		for _, id := range batch {
+			args = append(args, id)
+		}
+
+		rows, err := database.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("query cached conversation commit links: %w", err)
+		}
+		for rows.Next() {
+			var conversationID, commitHash, branchName, subject string
+			if err := rows.Scan(&conversationID, &commitHash, &branchName, &subject); err != nil {
+				rows.Close()
+				return nil, nil, nil, fmt.Errorf("scan conversation commit link: %w", err)
+			}
+			conversationToCommits[conversationID] = append(conversationToCommits[conversationID], commitHash)
+			commitBranches[commitHash] = branchName
+			commitSubjects[commitHash] = subject
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	return conversationToCommits, commitBranches, commitSubjects, nil
 }
 
 // ListAllCommitsByProject returns ALL commits for a project (no branch filter),

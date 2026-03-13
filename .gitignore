@@ -10,3 +10,4 @@ apps/linux-cli/build/
 dist
 .gocache
 .claude
+.gomodcache

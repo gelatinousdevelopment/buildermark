@@ -205,3 +205,70 @@ func TestHasStaleCommitCoverage(t *testing.T) {
 		t.Fatalf("stale = false, want true")
 	}
 }
+
+func TestGetCachedConversationCommitLinks(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, database, "/tmp/buildermark-test-conv-links")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	if err := EnsureConversation(ctx, database, "conv-1", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation conv-1: %v", err)
+	}
+	if err := EnsureConversation(ctx, database, "conv-2", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation conv-2: %v", err)
+	}
+
+	for _, c := range []Commit{
+		{ProjectID: projectID, BranchName: "main", CommitHash: "hash-a", Subject: "a", UserName: "Alice", UserEmail: "alice@example.com", AuthoredAt: 1700000000},
+		{ProjectID: projectID, BranchName: "feature/demo", CommitHash: "hash-b", Subject: "b", UserName: "Alice", UserEmail: "alice@example.com", AuthoredAt: 1700000001},
+	} {
+		if err := UpsertCommit(ctx, database, c); err != nil {
+			t.Fatalf("UpsertCommit %s: %v", c.CommitHash, err)
+		}
+	}
+
+	var commitAID, commitBID string
+	if err := database.QueryRowContext(ctx, "SELECT id FROM commits WHERE project_id = ? AND commit_hash = ?", projectID, "hash-a").Scan(&commitAID); err != nil {
+		t.Fatalf("query commitA ID: %v", err)
+	}
+	if err := database.QueryRowContext(ctx, "SELECT id FROM commits WHERE project_id = ? AND commit_hash = ?", projectID, "hash-b").Scan(&commitBID); err != nil {
+		t.Fatalf("query commitB ID: %v", err)
+	}
+
+	if err := UpsertCommitConversationLinks(ctx, database, commitAID, []string{"conv-1"}); err != nil {
+		t.Fatalf("UpsertCommitConversationLinks commitA: %v", err)
+	}
+	if err := UpsertCommitConversationLinks(ctx, database, commitBID, []string{"conv-1", "conv-2"}); err != nil {
+		t.Fatalf("UpsertCommitConversationLinks commitB: %v", err)
+	}
+
+	conversationToCommits, commitBranches, commitSubjects, err := GetCachedConversationCommitLinks(ctx, database, []string{projectID}, []string{"conv-1", "conv-2"})
+	if err != nil {
+		t.Fatalf("GetCachedConversationCommitLinks: %v", err)
+	}
+
+	conv1 := conversationToCommits["conv-1"]
+	if len(conv1) != 2 || conv1[0] != "hash-b" || conv1[1] != "hash-a" {
+		t.Fatalf("conversationToCommits[conv-1] = %#v, want [hash-b hash-a]", conv1)
+	}
+	conv2 := conversationToCommits["conv-2"]
+	if len(conv2) != 1 || conv2[0] != "hash-b" {
+		t.Fatalf("conversationToCommits[conv-2] = %#v, want [hash-b]", conv2)
+	}
+	if got := commitBranches["hash-a"]; got != "main" {
+		t.Fatalf("commitBranches[hash-a] = %q, want %q", got, "main")
+	}
+	if got := commitBranches["hash-b"]; got != "feature/demo" {
+		t.Fatalf("commitBranches[hash-b] = %q, want %q", got, "feature/demo")
+	}
+	if got := commitSubjects["hash-a"]; got != "a" {
+		t.Fatalf("commitSubjects[hash-a] = %q, want %q", got, "a")
+	}
+	if got := commitSubjects["hash-b"]; got != "b" {
+		t.Fatalf("commitSubjects[hash-b] = %q, want %q", got, "b")
+	}
+}

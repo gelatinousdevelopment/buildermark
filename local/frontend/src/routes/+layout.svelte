@@ -302,8 +302,6 @@
 			<a href="https://geldev.com" target="_blank">Gelatinous Development Studio</a>
 			&bull; Buildermark Local is
 			<a href="https://github.com/gelatinousdevelopment/buildermark" target="_blank">open source</a>
-			&bull; Support with a
-			<a href="https://buildermark.dev" target="_blank">team server license</a>
 		</div>
 	</footer>
 </div>

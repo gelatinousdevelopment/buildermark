@@ -14,6 +14,8 @@ import (
 type CommitConversationLinks struct {
 	CommitToConversations map[string][]string `json:"commitToConversations"`
 	ConversationToCommits map[string][]string `json:"conversationToCommits"`
+	CommitBranches        map[string]string   `json:"commitBranches"`
+	CommitSubjects        map[string]string   `json:"commitSubjects"`
 }
 
 type commitConversationLinksRequest struct {
@@ -63,9 +65,45 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 	}
 
 	if len(commitHashes) == 0 {
+		conversationToCommits := map[string][]string{}
+		commitBranches := map[string]string{}
+		commitSubjects := map[string]string{}
+
+		if len(conversationIDFilter) > 0 {
+			conversationIDs := make([]string, 0, len(conversationIDFilter))
+			for id := range conversationIDFilter {
+				conversationIDs = append(conversationIDs, id)
+			}
+
+			// Resolve the project group to get all related project IDs.
+			groups, err := listAllProjectGroups(r.Context(), s.DB)
+			if err != nil {
+				log.Printf("error listing project groups: %v", err)
+				writeError(w, http.StatusInternalServerError, "failed to list projects")
+				return
+			}
+
+			group, ok := findProjectGroupByProjectID(groups, projectID)
+			if !ok {
+				writeError(w, http.StatusNotFound, "project not found")
+				return
+			}
+
+			pIDs := projectIDs(group)
+
+			conversationToCommits, commitBranches, commitSubjects, err = db.GetCachedConversationCommitLinks(r.Context(), s.DB, pIDs, conversationIDs)
+			if err != nil {
+				log.Printf("error loading cached conversation commit links: %v", err)
+				writeError(w, http.StatusInternalServerError, "failed to load commit conversation links")
+				return
+			}
+		}
+
 		writeSuccess(w, http.StatusOK, &CommitConversationLinks{
 			CommitToConversations: map[string][]string{},
-			ConversationToCommits: map[string][]string{},
+			ConversationToCommits: conversationToCommits,
+			CommitBranches:        commitBranches,
+			CommitSubjects:        commitSubjects,
 		})
 		return
 	}
@@ -111,6 +149,8 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 	writeSuccess(w, http.StatusOK, &CommitConversationLinks{
 		CommitToConversations: c2c,
 		ConversationToCommits: c2commit,
+		CommitBranches:        map[string]string{},
+		CommitSubjects:        map[string]string{},
 	})
 }
 

@@ -365,4 +365,6 @@ export interface DailyActivityRow {
 export interface CommitConversationLinks {
 	commitToConversations: Record<string, string[]>;
 	conversationToCommits: Record<string, string[]>;
+	commitBranches: Record<string, string>;
+	commitSubjects: Record<string, string>;
 }
