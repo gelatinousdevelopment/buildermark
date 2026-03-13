@@ -305,11 +305,11 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 		idArgs[i] = id
 	}
 
-	// Fetch all user-role messages for these conversations.
+	// Fetch prompt, final_answer, answer, question, and diff messages for these conversations.
 	msgRows, err := db.QueryContext(ctx,
 		fmt.Sprintf(`SELECT id, timestamp, conversation_id, role, message_type, model, content, raw_json
 			FROM messages
-			WHERE conversation_id IN (%s) AND message_type = 'prompt'
+			WHERE conversation_id IN (%s) AND message_type IN ('prompt', 'final_answer', 'answer', 'question', 'diff')
 			ORDER BY timestamp ASC`, placeholders),
 		idArgs...,
 	)
@@ -395,9 +395,18 @@ func GetConversationsBatchDetail(ctx context.Context, db *sql.DB, conversationID
 			}
 		}
 
-		// Filter user messages using the same rules as GetConversationDetail.
+		// Filter messages: apply command-stripping rules to user prompts, pass through other types.
 		for _, um := range msgs {
 			m := um.msg
+			if m.MessageType != "prompt" {
+				// Non-prompt messages (final_answer, answer, question, diff) pass through with minimal filtering.
+				trimmed := strings.TrimSpace(m.Content)
+				if trimmed == "" {
+					continue
+				}
+				detail.UserMessages = append(detail.UserMessages, m)
+				continue
+			}
 			if matchedMessageIDs[m.ID] {
 				continue
 			}

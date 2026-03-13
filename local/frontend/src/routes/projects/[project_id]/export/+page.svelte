@@ -286,11 +286,9 @@
 
 		try {
 			const range = getDateRange();
-			const needCommits = mode !== 'just-prompts';
-
 			const [allConversations, allCommits] = await Promise.all([
 				fetchAllConversations(range),
-				needCommits ? fetchAllCommits(range) : Promise.resolve([] as ProjectCommitCoverage[])
+				fetchAllCommits(range)
 			]);
 
 			const convIds = allConversations.map((c) => c.id);
@@ -306,7 +304,7 @@
 			})();
 
 			const linksPromise =
-				needCommits && (allCommits.length > 0 || convIds.length > 0)
+				allCommits.length > 0 || convIds.length > 0
 					? getCommitConversationLinks(
 							projectId,
 							allCommits.map((c) => c.commitHash),
@@ -397,17 +395,13 @@
 			<div class="control-group">
 				<span class="control-label">Organization</span>
 				<div class="radio-list">
-					<label class:selected={mode === 'commits-with-prompts'}>
-						<input type="radio" name="mode" value="commits-with-prompts" bind:group={mode} />
-						Commits > Conversations
-					</label>
 					<label class:selected={mode === 'prompts-with-commits'}>
 						<input type="radio" name="mode" value="prompts-with-commits" bind:group={mode} />
-						Conversations > Commits
-					</label>
-					<label class:selected={mode === 'just-prompts'}>
-						<input type="radio" name="mode" value="just-prompts" bind:group={mode} />
 						Conversations
+					</label>
+					<label class:selected={mode === 'commits-with-prompts'}>
+						<input type="radio" name="mode" value="commits-with-prompts" bind:group={mode} />
+						Commits ❯ Conversations
 					</label>
 				</div>
 			</div>
