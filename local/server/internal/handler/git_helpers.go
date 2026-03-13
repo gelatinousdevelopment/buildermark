@@ -243,6 +243,33 @@ func listBranchCommitHashesSince(ctx context.Context, repoPath, base, branch str
 	return hashes, nil
 }
 
+// listCommitRangeHashes returns the commits reachable from head that are not
+// reachable from base, ordered oldest-first so ingestion processes them in
+// chronological order.
+func listCommitRangeHashes(ctx context.Context, repoPath, base, head string) ([]string, error) {
+	base = strings.TrimSpace(base)
+	head = strings.TrimSpace(head)
+	if base == "" || head == "" || base == head {
+		return nil, nil
+	}
+
+	out, err := runGit(ctx, repoPath, "rev-list", "--reverse", base+".."+head)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	hashes := make([]string, 0, len(lines))
+	for _, line := range lines {
+		hash := strings.TrimSpace(line)
+		if hash == "" {
+			continue
+		}
+		hashes = append(hashes, hash)
+	}
+	return hashes, nil
+}
+
 // countBranchCommits returns the total number of commits on a branch.
 func countBranchCommits(ctx context.Context, repoPath, branch string) (int, error) {
 	out, err := runGit(ctx, repoPath, "rev-list", "--count", branch)

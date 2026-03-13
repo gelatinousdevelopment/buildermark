@@ -27,11 +27,12 @@ type RepoConfig struct {
 }
 
 type BranchChange struct {
-	RepoID   string
-	RepoPath string
-	Branch   string
-	HeadHash string
-	Reason   string
+	RepoID           string
+	RepoPath         string
+	Branch           string
+	PreviousHeadHash string
+	HeadHash         string
+	Reason           string
 }
 
 type Options struct {
@@ -262,18 +263,20 @@ func (r *repoMonitor) refresh(watcher *fsnotify.Watcher, reason string) {
 		if head == "" {
 			continue
 		}
-		if prev[branch] == head {
+		prevHead := strings.TrimSpace(prev[branch])
+		if prevHead == head {
 			continue
 		}
 		if r.onChange == nil {
 			continue
 		}
 		change := BranchChange{
-			RepoID:   r.config.RepoID,
-			RepoPath: r.config.RepoPath,
-			Branch:   branch,
-			HeadHash: head,
-			Reason:   reason,
+			RepoID:           r.config.RepoID,
+			RepoPath:         r.config.RepoPath,
+			Branch:           branch,
+			PreviousHeadHash: prevHead,
+			HeadHash:         head,
+			Reason:           reason,
 		}
 		go r.onChange(r.ctx, change)
 	}

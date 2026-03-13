@@ -82,5 +82,24 @@ func (s *Server) HandleGitBranchChange(ctx context.Context, change gitmonitor.Br
 		return
 	}
 
+	baseHash := strings.TrimSpace(change.PreviousHeadHash)
+	if baseHash == "" {
+		syncState, syncErr := db.GetCommitSyncState(ctx, s.DB, repoProject.ID, branch)
+		if syncErr == nil && syncState != nil {
+			processedHead := strings.TrimSpace(syncState.LastProcessedHeadHash)
+			if processedHead != "" && processedHead != headHash {
+				baseHash = processedHead
+			}
+		}
+	}
+
+	if baseHash != "" && baseHash != headHash {
+		hashes, hashErr := listCommitRangeHashes(ctx, repoProject.Path, baseHash, headHash)
+		if hashErr == nil && len(hashes) > 0 {
+			s.enqueueCommitIngestion(repoProject.ID, branch, hashes)
+			return
+		}
+	}
+
 	s.maybeIngestBranchHead(ctx, repoProject, group, branch, headHash)
 }
