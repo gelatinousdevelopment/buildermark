@@ -6,9 +6,15 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_DIR="$ROOT_DIR/src"
 MANIFEST_DIR="$ROOT_DIR/manifests"
 DIST_DIR="$ROOT_DIR/dist"
+APP_ICON_SOURCE="$ROOT_DIR/safari/buildermark-app-icon-256.png"
 SAFARI_PROJECT_ROOT="$ROOT_DIR/safari"
-SAFARI_VERSION_FILE="$SAFARI_PROJECT_ROOT/.bundle-version"
-SAFARI_PBXPROJ="$SAFARI_PROJECT_ROOT/BuildermarkSafari/BuildermarkSafari.xcodeproj/project.pbxproj"
+SAFARI_XCODE_PROJECT_DIR="$SAFARI_PROJECT_ROOT/BuildermarkSafari"
+SAFARI_XCODE_PROJECT="$SAFARI_XCODE_PROJECT_DIR/BuildermarkSafari.xcodeproj"
+SAFARI_XCODE_SCHEME="BuildermarkSafari"
+SAFARI_XCODE_CONFIGURATION="Debug"
+SAFARI_DERIVED_DATA_PATH="$SAFARI_PROJECT_ROOT/.derived-data"
+SAFARI_APP_BUNDLE_NAME="BuildermarkSafari.app"
+SAFARI_APP_BUNDLE_PATH="$SAFARI_DERIVED_DATA_PATH/Build/Products/$SAFARI_XCODE_CONFIGURATION/$SAFARI_APP_BUNDLE_NAME"
 
 TARGET="${1:-all}"
 
@@ -19,6 +25,33 @@ Usage:
 EOF
 }
 
+require_magick() {
+    if command -v magick >/dev/null 2>&1; then
+        return
+    fi
+
+    printf "ImageMagick 'magick' command not found\n" >&2
+    exit 1
+}
+
+generate_app_icons() {
+    local output_dir="$1"
+    local icon_output_dir="$output_dir/icons"
+
+    if [[ ! -f "$APP_ICON_SOURCE" ]]; then
+        printf 'Expected app icon source at %s\n' "$APP_ICON_SOURCE" >&2
+        exit 1
+    fi
+
+    require_magick
+
+    for size in 16 32 48 128; do
+        magick "$APP_ICON_SOURCE" \
+            -resize "${size}x${size}" \
+            "$icon_output_dir/app_icon${size}.png"
+    done
+}
+
 build_target() {
     local target="$1"
     local output_dir="$DIST_DIR/$target"
@@ -26,6 +59,7 @@ build_target() {
     rm -rf "$output_dir"
     mkdir -p "$output_dir"
     rsync -a --delete --exclude '.DS_Store' "$SOURCE_DIR/" "$output_dir/"
+    generate_app_icons "$output_dir"
 
     node - "$MANIFEST_DIR/base.json" "$MANIFEST_DIR/$target.json" "$output_dir/manifest.json" <<'EOF'
 const fs = require("fs");
@@ -59,70 +93,37 @@ fs.writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
 EOF
 }
 
-ensure_safari_project() {
-    mkdir -p "$SAFARI_PROJECT_ROOT"
-
-    (
-        cd "$ROOT_DIR"
-        xcrun safari-web-extension-converter \
-            "dist/safari" \
-            --project-location "$SAFARI_PROJECT_ROOT" \
-            --app-name BuildermarkSafari \
-            --bundle-identifier dev.buildermark.BuildermarkSafari \
-            --swift \
-            --macos-only \
-            --force \
-            --no-open \
-            --no-prompt
-    )
-
-    bump_safari_bundle_version
-}
-
-bump_safari_bundle_version() {
-    local current_version=0
-    local version=1
-
-    if [[ -f "$SAFARI_PBXPROJ" ]]; then
-        current_version="$(sed -n 's/.*CURRENT_PROJECT_VERSION = \([0-9][0-9]*\);/\1/p' "$SAFARI_PBXPROJ" | head -n1)"
-        if [[ ! "$current_version" =~ ^[0-9]+$ ]]; then
-            current_version=0
-        fi
+require_safari_project() {
+    if [[ -d "$SAFARI_XCODE_PROJECT" ]]; then
+        return
     fi
 
-    if [[ -f "$SAFARI_VERSION_FILE" ]]; then
-        version="$(<"$SAFARI_VERSION_FILE")"
-        if [[ ! "$version" =~ ^[0-9]+$ ]]; then
-            version="$current_version"
-        fi
-    else
-        version="$current_version"
-    fi
-
-    version=$((version + 1))
-
-    printf '%s\n' "$version" > "$SAFARI_VERSION_FILE"
-
-    node - "$SAFARI_PBXPROJ" "$version" <<'EOF'
-const fs = require("fs");
-
-const [projectPath, version] = process.argv.slice(2);
-const project = fs.readFileSync(projectPath, "utf8");
-const updated = project.replace(/CURRENT_PROJECT_VERSION = \d+;/g, `CURRENT_PROJECT_VERSION = ${version};`);
-
-if (project === updated) {
-  throw new Error(`Failed to stamp CURRENT_PROJECT_VERSION in ${projectPath}`);
+    printf 'Expected committed Safari Xcode project at %s\n' "$SAFARI_XCODE_PROJECT" >&2
+    exit 1
 }
 
-fs.writeFileSync(projectPath, updated);
-EOF
+build_safari_app() {
+    xcodebuild \
+        -project "$SAFARI_XCODE_PROJECT" \
+        -scheme "$SAFARI_XCODE_SCHEME" \
+        -configuration "$SAFARI_XCODE_CONFIGURATION" \
+        -derivedDataPath "$SAFARI_DERIVED_DATA_PATH" \
+        build
+
+    if [[ ! -d "$SAFARI_APP_BUNDLE_PATH" ]]; then
+        printf 'Expected Safari app bundle was not found at %s\n' "$SAFARI_APP_BUNDLE_PATH" >&2
+        exit 1
+    fi
+
+    printf 'Safari app bundle: %s\n' "$SAFARI_APP_BUNDLE_PATH"
 }
 
 build_all() {
     build_target chromium
     build_target firefox
     build_target safari
-    ensure_safari_project
+    require_safari_project
+    build_safari_app
 }
 
 case "$TARGET" in
@@ -131,7 +132,8 @@ case "$TARGET" in
         ;;
     safari)
         build_target safari
-        ensure_safari_project
+        require_safari_project
+        build_safari_app
         ;;
     all)
         build_all

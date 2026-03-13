@@ -7,43 +7,44 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		02F66C9B2F62C05F007588CC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F66C9A2F62C05F007588CC /* AppDelegate.swift */; };
-		02F66C9F2F62C05F007588CC /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 02F66C9D2F62C05F007588CC /* Main.html */; };
-		02F66CA12F62C05F007588CC /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CA02F62C05F007588CC /* Icon.png */; };
-		02F66CA32F62C05F007588CC /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CA22F62C05F007588CC /* Style.css */; };
-		02F66CA52F62C05F007588CC /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CA42F62C05F007588CC /* Script.js */; };
-		02F66CA72F62C05F007588CC /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F66CA62F62C05F007588CC /* ViewController.swift */; };
-		02F66CAA2F62C05F007588CC /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CA82F62C05F007588CC /* Main.storyboard */; };
-		02F66CAC2F62C060007588CC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CAB2F62C060007588CC /* Assets.xcassets */; };
-		02F66CB32F62C060007588CC /* BuildermarkSafari Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 02F66CB22F62C060007588CC /* BuildermarkSafari Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		02F66CB82F62C060007588CC /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F66CB72F62C060007588CC /* SafariWebExtensionHandler.swift */; };
-		02F66CCB2F62C060007588CC /* background in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CC42F62C060007588CC /* background */; };
-		02F66CCC2F62C060007588CC /* popup in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CC52F62C060007588CC /* popup */; };
-		02F66CCD2F62C060007588CC /* content in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CC62F62C060007588CC /* content */; };
-		02F66CCE2F62C060007588CC /* shared in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CC72F62C060007588CC /* shared */; };
-		02F66CCF2F62C060007588CC /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CC82F62C060007588CC /* icons */; };
-		02F66CD02F62C060007588CC /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CC92F62C060007588CC /* manifest.json */; };
-		02F66CD12F62C060007588CC /* web_accessible in Resources */ = {isa = PBXBuildFile; fileRef = 02F66CCA2F62C060007588CC /* web_accessible */; };
+		0231A04A2F64698400B580E9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0231A0492F64698400B580E9 /* AppDelegate.swift */; };
+		0231A04E2F64698400B580E9 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 0231A04C2F64698400B580E9 /* Main.html */; };
+		0231A0502F64698400B580E9 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 0231A04F2F64698400B580E9 /* Icon.png */; };
+		0231A0522F64698400B580E9 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0512F64698400B580E9 /* Style.css */; };
+		0231A0542F64698400B580E9 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0532F64698400B580E9 /* Script.js */; };
+		0231A0562F64698400B580E9 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0231A0552F64698400B580E9 /* ViewController.swift */; };
+		0231A0592F64698400B580E9 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0572F64698400B580E9 /* Main.storyboard */; };
+		0231A05B2F64698500B580E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0231A05A2F64698500B580E9 /* Assets.xcassets */; };
+		0231A0622F64698500B580E9 /* BuildermarkSafari Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0231A0612F64698500B580E9 /* BuildermarkSafari Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		0231A0672F64698500B580E9 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0231A0662F64698500B580E9 /* SafariWebExtensionHandler.swift */; };
+		0231A07A2F64698500B580E9 /* background in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0732F64698500B580E9 /* background */; };
+		0231A07B2F64698500B580E9 /* popup in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0742F64698500B580E9 /* popup */; };
+		0231A07C2F64698500B580E9 /* content in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0752F64698500B580E9 /* content */; };
+		0231A07D2F64698500B580E9 /* shared in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0762F64698500B580E9 /* shared */; };
+		0231A07E2F64698500B580E9 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0772F64698500B580E9 /* icons */; };
+		0231A07F2F64698500B580E9 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0782F64698500B580E9 /* manifest.json */; };
+		0231A0802F64698500B580E9 /* web_accessible in Resources */ = {isa = PBXBuildFile; fileRef = 0231A0792F64698500B580E9 /* web_accessible */; };
+		02418A372F646AA4004ABBA4 /* buildermark-macos-icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 02418A362F646AA4004ABBA4 /* buildermark-macos-icon.icon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		02F66CB42F62C060007588CC /* PBXContainerItemProxy */ = {
+		0231A0632F64698500B580E9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 02F66C8F2F62C05F007588CC /* Project object */;
+			containerPortal = 0231A03E2F64698400B580E9 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 02F66CB12F62C060007588CC;
+			remoteGlobalIDString = 0231A0602F64698500B580E9;
 			remoteInfo = "BuildermarkSafari Extension";
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		02F66CBF2F62C060007588CC /* Embed Foundation Extensions */ = {
+		0231A06E2F64698500B580E9 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				02F66CB32F62C060007588CC /* BuildermarkSafari Extension.appex in Embed Foundation Extensions */,
+				0231A0622F64698500B580E9 /* BuildermarkSafari Extension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -51,37 +52,38 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		02F66C972F62C05F007588CC /* BuildermarkSafari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BuildermarkSafari.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		02F66C9A2F62C05F007588CC /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		02F66C9E2F62C05F007588CC /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
-		02F66CA02F62C05F007588CC /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
-		02F66CA22F62C05F007588CC /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
-		02F66CA42F62C05F007588CC /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
-		02F66CA62F62C05F007588CC /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
-		02F66CA92F62C05F007588CC /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
-		02F66CAB2F62C060007588CC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		02F66CAD2F62C060007588CC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		02F66CB22F62C060007588CC /* BuildermarkSafari Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "BuildermarkSafari Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		02F66CB72F62C060007588CC /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
-		02F66CB92F62C060007588CC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		02F66CC42F62C060007588CC /* background */ = {isa = PBXFileReference; lastKnownFileType = folder; name = background; path = ../../../dist/safari/background; sourceTree = "<group>"; };
-		02F66CC52F62C060007588CC /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; name = popup; path = ../../../dist/safari/popup; sourceTree = "<group>"; };
-		02F66CC62F62C060007588CC /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; name = content; path = ../../../dist/safari/content; sourceTree = "<group>"; };
-		02F66CC72F62C060007588CC /* shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shared; path = ../../../dist/safari/shared; sourceTree = "<group>"; };
-		02F66CC82F62C060007588CC /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = ../../../dist/safari/icons; sourceTree = "<group>"; };
-		02F66CC92F62C060007588CC /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../../dist/safari/manifest.json; sourceTree = "<group>"; };
-		02F66CCA2F62C060007588CC /* web_accessible */ = {isa = PBXFileReference; lastKnownFileType = folder; name = web_accessible; path = ../../../dist/safari/web_accessible; sourceTree = "<group>"; };
+		0231A0462F64698400B580E9 /* BuildermarkSafari.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BuildermarkSafari.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0231A0492F64698400B580E9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		0231A04D2F64698400B580E9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		0231A04F2F64698400B580E9 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		0231A0512F64698400B580E9 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		0231A0532F64698400B580E9 /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		0231A0552F64698400B580E9 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		0231A0582F64698400B580E9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		0231A05A2F64698500B580E9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		0231A05C2F64698500B580E9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0231A0612F64698500B580E9 /* BuildermarkSafari Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "BuildermarkSafari Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		0231A0662F64698500B580E9 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		0231A0682F64698500B580E9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0231A0732F64698500B580E9 /* background */ = {isa = PBXFileReference; lastKnownFileType = folder; name = background; path = ../../../dist/safari/background; sourceTree = "<group>"; };
+		0231A0742F64698500B580E9 /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; name = popup; path = ../../../dist/safari/popup; sourceTree = "<group>"; };
+		0231A0752F64698500B580E9 /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; name = content; path = ../../../dist/safari/content; sourceTree = "<group>"; };
+		0231A0762F64698500B580E9 /* shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shared; path = ../../../dist/safari/shared; sourceTree = "<group>"; };
+		0231A0772F64698500B580E9 /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = ../../../dist/safari/icons; sourceTree = "<group>"; };
+		0231A0782F64698500B580E9 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = ../../../dist/safari/manifest.json; sourceTree = "<group>"; };
+		0231A0792F64698500B580E9 /* web_accessible */ = {isa = PBXFileReference; lastKnownFileType = folder; name = web_accessible; path = ../../../dist/safari/web_accessible; sourceTree = "<group>"; };
+		02418A362F646AA4004ABBA4 /* buildermark-macos-icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = "buildermark-macos-icon.icon"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		02F66C942F62C05F007588CC /* Frameworks */ = {
+		0231A0432F64698400B580E9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		02F66CAF2F62C060007588CC /* Frameworks */ = {
+		0231A05E2F64698500B580E9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -91,68 +93,69 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		02F66C8E2F62C05F007588CC = {
+		0231A03D2F64698400B580E9 = {
 			isa = PBXGroup;
 			children = (
-				02F66C992F62C05F007588CC /* BuildermarkSafari */,
-				02F66CB62F62C060007588CC /* BuildermarkSafari Extension */,
-				02F66C982F62C05F007588CC /* Products */,
+				0231A0482F64698400B580E9 /* BuildermarkSafari */,
+				0231A0652F64698500B580E9 /* BuildermarkSafari Extension */,
+				0231A0472F64698400B580E9 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		02F66C982F62C05F007588CC /* Products */ = {
+		0231A0472F64698400B580E9 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				02F66C972F62C05F007588CC /* BuildermarkSafari.app */,
-				02F66CB22F62C060007588CC /* BuildermarkSafari Extension.appex */,
+				0231A0462F64698400B580E9 /* BuildermarkSafari.app */,
+				0231A0612F64698500B580E9 /* BuildermarkSafari Extension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		02F66C992F62C05F007588CC /* BuildermarkSafari */ = {
+		0231A0482F64698400B580E9 /* BuildermarkSafari */ = {
 			isa = PBXGroup;
 			children = (
-				02F66C9A2F62C05F007588CC /* AppDelegate.swift */,
-				02F66CA62F62C05F007588CC /* ViewController.swift */,
-				02F66CA82F62C05F007588CC /* Main.storyboard */,
-				02F66CAB2F62C060007588CC /* Assets.xcassets */,
-				02F66CAD2F62C060007588CC /* Info.plist */,
-				02F66C9C2F62C05F007588CC /* Resources */,
+				0231A0492F64698400B580E9 /* AppDelegate.swift */,
+				0231A0552F64698400B580E9 /* ViewController.swift */,
+				0231A0572F64698400B580E9 /* Main.storyboard */,
+				0231A05A2F64698500B580E9 /* Assets.xcassets */,
+				02418A362F646AA4004ABBA4 /* buildermark-macos-icon.icon */,
+				0231A05C2F64698500B580E9 /* Info.plist */,
+				0231A04B2F64698400B580E9 /* Resources */,
 			);
 			path = BuildermarkSafari;
 			sourceTree = "<group>";
 		};
-		02F66C9C2F62C05F007588CC /* Resources */ = {
+		0231A04B2F64698400B580E9 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				02F66C9D2F62C05F007588CC /* Main.html */,
-				02F66CA02F62C05F007588CC /* Icon.png */,
-				02F66CA22F62C05F007588CC /* Style.css */,
-				02F66CA42F62C05F007588CC /* Script.js */,
+				0231A04C2F64698400B580E9 /* Main.html */,
+				0231A04F2F64698400B580E9 /* Icon.png */,
+				0231A0512F64698400B580E9 /* Style.css */,
+				0231A0532F64698400B580E9 /* Script.js */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		02F66CB62F62C060007588CC /* BuildermarkSafari Extension */ = {
+		0231A0652F64698500B580E9 /* BuildermarkSafari Extension */ = {
 			isa = PBXGroup;
 			children = (
-				02F66CC32F62C060007588CC /* Resources */,
-				02F66CB72F62C060007588CC /* SafariWebExtensionHandler.swift */,
-				02F66CB92F62C060007588CC /* Info.plist */,
+				0231A0722F64698500B580E9 /* Resources */,
+				0231A0662F64698500B580E9 /* SafariWebExtensionHandler.swift */,
+				0231A0682F64698500B580E9 /* Info.plist */,
 			);
 			path = "BuildermarkSafari Extension";
 			sourceTree = "<group>";
 		};
-		02F66CC32F62C060007588CC /* Resources */ = {
+		0231A0722F64698500B580E9 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				02F66CC42F62C060007588CC /* background */,
-				02F66CC52F62C060007588CC /* popup */,
-				02F66CC62F62C060007588CC /* content */,
-				02F66CC72F62C060007588CC /* shared */,
-				02F66CC82F62C060007588CC /* icons */,
-				02F66CC92F62C060007588CC /* manifest.json */,
-				02F66CCA2F62C060007588CC /* web_accessible */,
+				0231A0732F64698500B580E9 /* background */,
+				0231A0742F64698500B580E9 /* popup */,
+				0231A0752F64698500B580E9 /* content */,
+				0231A0762F64698500B580E9 /* shared */,
+				0231A0772F64698500B580E9 /* icons */,
+				0231A0782F64698500B580E9 /* manifest.json */,
+				0231A0792F64698500B580E9 /* web_accessible */,
 			);
 			name = Resources;
 			path = "BuildermarkSafari Extension";
@@ -161,34 +164,34 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		02F66C962F62C05F007588CC /* BuildermarkSafari */ = {
+		0231A0452F64698400B580E9 /* BuildermarkSafari */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 02F66CC02F62C060007588CC /* Build configuration list for PBXNativeTarget "BuildermarkSafari" */;
+			buildConfigurationList = 0231A06F2F64698500B580E9 /* Build configuration list for PBXNativeTarget "BuildermarkSafari" */;
 			buildPhases = (
-				02F66C932F62C05F007588CC /* Sources */,
-				02F66C942F62C05F007588CC /* Frameworks */,
-				02F66C952F62C05F007588CC /* Resources */,
-				02F66CBF2F62C060007588CC /* Embed Foundation Extensions */,
+				0231A0422F64698400B580E9 /* Sources */,
+				0231A0432F64698400B580E9 /* Frameworks */,
+				0231A0442F64698400B580E9 /* Resources */,
+				0231A06E2F64698500B580E9 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				02F66CB52F62C060007588CC /* PBXTargetDependency */,
+				0231A0642F64698500B580E9 /* PBXTargetDependency */,
 			);
 			name = BuildermarkSafari;
 			packageProductDependencies = (
 			);
 			productName = BuildermarkSafari;
-			productReference = 02F66C972F62C05F007588CC /* BuildermarkSafari.app */;
+			productReference = 0231A0462F64698400B580E9 /* BuildermarkSafari.app */;
 			productType = "com.apple.product-type.application";
 		};
-		02F66CB12F62C060007588CC /* BuildermarkSafari Extension */ = {
+		0231A0602F64698500B580E9 /* BuildermarkSafari Extension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 02F66CBC2F62C060007588CC /* Build configuration list for PBXNativeTarget "BuildermarkSafari Extension" */;
+			buildConfigurationList = 0231A06B2F64698500B580E9 /* Build configuration list for PBXNativeTarget "BuildermarkSafari Extension" */;
 			buildPhases = (
-				02F66CAE2F62C060007588CC /* Sources */,
-				02F66CAF2F62C060007588CC /* Frameworks */,
-				02F66CB02F62C060007588CC /* Resources */,
+				0231A05D2F64698500B580E9 /* Sources */,
+				0231A05E2F64698500B580E9 /* Frameworks */,
+				0231A05F2F64698500B580E9 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -198,118 +201,119 @@
 			packageProductDependencies = (
 			);
 			productName = "BuildermarkSafari Extension";
-			productReference = 02F66CB22F62C060007588CC /* BuildermarkSafari Extension.appex */;
+			productReference = 0231A0612F64698500B580E9 /* BuildermarkSafari Extension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		02F66C8F2F62C05F007588CC /* Project object */ = {
+		0231A03E2F64698400B580E9 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
-					02F66C962F62C05F007588CC = {
+					0231A0452F64698400B580E9 = {
 						CreatedOnToolsVersion = 26.3;
 					};
-					02F66CB12F62C060007588CC = {
+					0231A0602F64698500B580E9 = {
 						CreatedOnToolsVersion = 26.3;
 					};
 				};
 			};
-			buildConfigurationList = 02F66C922F62C05F007588CC /* Build configuration list for PBXProject "BuildermarkSafari" */;
+			buildConfigurationList = 0231A0412F64698400B580E9 /* Build configuration list for PBXProject "BuildermarkSafari" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 02F66C8E2F62C05F007588CC;
+			mainGroup = 0231A03D2F64698400B580E9;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 02F66C982F62C05F007588CC /* Products */;
+			productRefGroup = 0231A0472F64698400B580E9 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				02F66C962F62C05F007588CC /* BuildermarkSafari */,
-				02F66CB12F62C060007588CC /* BuildermarkSafari Extension */,
+				0231A0452F64698400B580E9 /* BuildermarkSafari */,
+				0231A0602F64698500B580E9 /* BuildermarkSafari Extension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		02F66C952F62C05F007588CC /* Resources */ = {
+		0231A0442F64698400B580E9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				02F66CA12F62C05F007588CC /* Icon.png in Resources */,
-				02F66CAA2F62C05F007588CC /* Main.storyboard in Resources */,
-				02F66CA52F62C05F007588CC /* Script.js in Resources */,
-				02F66C9F2F62C05F007588CC /* Main.html in Resources */,
-				02F66CAC2F62C060007588CC /* Assets.xcassets in Resources */,
-				02F66CA32F62C05F007588CC /* Style.css in Resources */,
+				0231A0502F64698400B580E9 /* Icon.png in Resources */,
+				0231A0592F64698400B580E9 /* Main.storyboard in Resources */,
+				0231A0542F64698400B580E9 /* Script.js in Resources */,
+				02418A372F646AA4004ABBA4 /* buildermark-macos-icon.icon in Resources */,
+				0231A04E2F64698400B580E9 /* Main.html in Resources */,
+				0231A05B2F64698500B580E9 /* Assets.xcassets in Resources */,
+				0231A0522F64698400B580E9 /* Style.css in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		02F66CB02F62C060007588CC /* Resources */ = {
+		0231A05F2F64698500B580E9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				02F66CCD2F62C060007588CC /* content in Resources */,
-				02F66CCE2F62C060007588CC /* shared in Resources */,
-				02F66CCB2F62C060007588CC /* background in Resources */,
-				02F66CCF2F62C060007588CC /* icons in Resources */,
-				02F66CD12F62C060007588CC /* web_accessible in Resources */,
-				02F66CD02F62C060007588CC /* manifest.json in Resources */,
-				02F66CCC2F62C060007588CC /* popup in Resources */,
+				0231A07C2F64698500B580E9 /* content in Resources */,
+				0231A07D2F64698500B580E9 /* shared in Resources */,
+				0231A07A2F64698500B580E9 /* background in Resources */,
+				0231A07E2F64698500B580E9 /* icons in Resources */,
+				0231A0802F64698500B580E9 /* web_accessible in Resources */,
+				0231A07F2F64698500B580E9 /* manifest.json in Resources */,
+				0231A07B2F64698500B580E9 /* popup in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		02F66C932F62C05F007588CC /* Sources */ = {
+		0231A0422F64698400B580E9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				02F66CA72F62C05F007588CC /* ViewController.swift in Sources */,
-				02F66C9B2F62C05F007588CC /* AppDelegate.swift in Sources */,
+				0231A0562F64698400B580E9 /* ViewController.swift in Sources */,
+				0231A04A2F64698400B580E9 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		02F66CAE2F62C060007588CC /* Sources */ = {
+		0231A05D2F64698500B580E9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				02F66CB82F62C060007588CC /* SafariWebExtensionHandler.swift in Sources */,
+				0231A0672F64698500B580E9 /* SafariWebExtensionHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		02F66CB52F62C060007588CC /* PBXTargetDependency */ = {
+		0231A0642F64698500B580E9 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 02F66CB12F62C060007588CC /* BuildermarkSafari Extension */;
-			targetProxy = 02F66CB42F62C060007588CC /* PBXContainerItemProxy */;
+			target = 0231A0602F64698500B580E9 /* BuildermarkSafari Extension */;
+			targetProxy = 0231A0632F64698500B580E9 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		02F66C9D2F62C05F007588CC /* Main.html */ = {
+		0231A04C2F64698400B580E9 /* Main.html */ = {
 			isa = PBXVariantGroup;
 			children = (
-				02F66C9E2F62C05F007588CC /* Base */,
+				0231A04D2F64698400B580E9 /* Base */,
 			);
 			name = Main.html;
 			sourceTree = "<group>";
 		};
-		02F66CA82F62C05F007588CC /* Main.storyboard */ = {
+		0231A0572F64698400B580E9 /* Main.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (
-				02F66CA92F62C05F007588CC /* Base */,
+				0231A0582F64698400B580E9 /* Base */,
 			);
 			name = Main.storyboard;
 			sourceTree = "<group>";
@@ -317,7 +321,7 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
-		02F66CBA2F62C060007588CC /* Debug */ = {
+		0231A0692F64698500B580E9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -380,7 +384,7 @@
 			};
 			name = Debug;
 		};
-		02F66CBB2F62C060007588CC /* Release */ = {
+		0231A06A2F64698500B580E9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -435,11 +439,11 @@
 			};
 			name = Release;
 		};
-		02F66CBD2F62C060007588CC /* Debug */ = {
+		0231A06C2F64698500B580E9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -469,11 +473,11 @@
 			};
 			name = Debug;
 		};
-		02F66CBE2F62C060007588CC /* Release */ = {
+		0231A06D2F64698500B580E9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -503,14 +507,14 @@
 			};
 			name = Release;
 		};
-		02F66CC12F62C060007588CC /* Debug */ = {
+		0231A0702F64698500B580E9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "buildermark-macos-icon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -544,14 +548,14 @@
 			};
 			name = Debug;
 		};
-		02F66CC22F62C060007588CC /* Release */ = {
+		0231A0712F64698500B580E9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "buildermark-macos-icon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -588,34 +592,34 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		02F66C922F62C05F007588CC /* Build configuration list for PBXProject "BuildermarkSafari" */ = {
+		0231A0412F64698400B580E9 /* Build configuration list for PBXProject "BuildermarkSafari" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				02F66CBA2F62C060007588CC /* Debug */,
-				02F66CBB2F62C060007588CC /* Release */,
+				0231A0692F64698500B580E9 /* Debug */,
+				0231A06A2F64698500B580E9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		02F66CBC2F62C060007588CC /* Build configuration list for PBXNativeTarget "BuildermarkSafari Extension" */ = {
+		0231A06B2F64698500B580E9 /* Build configuration list for PBXNativeTarget "BuildermarkSafari Extension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				02F66CBD2F62C060007588CC /* Debug */,
-				02F66CBE2F62C060007588CC /* Release */,
+				0231A06C2F64698500B580E9 /* Debug */,
+				0231A06D2F64698500B580E9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		02F66CC02F62C060007588CC /* Build configuration list for PBXNativeTarget "BuildermarkSafari" */ = {
+		0231A06F2F64698500B580E9 /* Build configuration list for PBXNativeTarget "BuildermarkSafari" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				02F66CC12F62C060007588CC /* Debug */,
-				02F66CC22F62C060007588CC /* Release */,
+				0231A0702F64698500B580E9 /* Debug */,
+				0231A0712F64698500B580E9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 02F66C8F2F62C05F007588CC /* Project object */;
+	rootObject = 0231A03E2F64698400B580E9 /* Project object */;
 }

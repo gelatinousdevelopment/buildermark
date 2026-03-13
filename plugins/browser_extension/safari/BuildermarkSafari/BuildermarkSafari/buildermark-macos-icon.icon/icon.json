@@ -1,0 +1,53 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.17442,0.53781,0.81006,1.00000",
+      "srgb:0.00000,0.40000,0.80000,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:1.00000,1.00000,1.00000,0.85098"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "buildermarkTall.svg",
+          "name" : "buildermarkTall",
+          "position" : {
+            "scale" : 2,
+            "translation-in-points" : [
+              0,
+              128
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}
