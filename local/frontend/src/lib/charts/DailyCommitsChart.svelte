@@ -16,6 +16,7 @@
 		selectedDate?: string | null;
 		onDateSelect?: (date: string | null) => void;
 		enableDateSelection?: boolean;
+		showMoreLink?: boolean;
 	}
 
 	let {
@@ -25,7 +26,8 @@
 		compact = false,
 		selectedDate = null,
 		onDateSelect,
-		enableDateSelection = true
+		enableDateSelection = true,
+		showMoreLink = true
 	}: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
 	let stretchBars = $derived(settingsStore.commitsChartStretchBars);
@@ -409,14 +411,14 @@
 		{/if}
 		<div class="dc-history-agent info-box">
 			<div class="title">{Math.round(historyAgentPercent)}% by agents</div>
-			<div class="title" style:font-size="0.9rem">
+			<div class="title" style:font-size="0.9rem" style:font-weight="normal">
 				{#if selectedDate}
 					{formatDateLong(selectedDate)}
 				{:else}
 					last {columns.length} day{columns.length === 1 ? '' : 's'}
 				{/if}
 			</div>
-			{#if projectId}
+			{#if projectId && showMoreLink}
 				<div class="subtitle">
 					<a
 						class="dc-more-link"

@@ -9,6 +9,7 @@
 	import DailyActivityChart from '$lib/charts/DailyActivityChart.svelte';
 	import type { DailyCommitSummary, DailyActivityRow } from '$lib/types';
 	import { referenceNowDate } from '$lib/utils';
+	import Icon from '$lib/Icon.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 
@@ -187,7 +188,7 @@
 			1,
 			'',
 			1,
-			'',
+			'@me+agents',
 			'',
 			'',
 			requestRange.startMs,
@@ -239,7 +240,12 @@
 <div class="outer">
 	<div class="insights-page">
 		<div class="filters">
-			<div><h1>{navStore.projectName}</h1></div>
+			<div>
+				<h1>{navStore.projectName}</h1>
+				{#if branch}
+					<span class="branch-label"><Icon name="branch" width="12px" />{branch}</span>
+				{/if}
+			</div>
 
 			<div class="date-range">
 				<label class="date-picker">
@@ -282,7 +288,13 @@
 				{:else if dailySummary.length === 0}
 					<p class="status">No commit data in the selected range.</p>
 				{:else}
-					<DailyCommitsChart {dailySummary} {branch} {projectId} enableDateSelection={false} />
+					<DailyCommitsChart
+						{dailySummary}
+						{branch}
+						{projectId}
+						enableDateSelection={false}
+						showMoreLink={false}
+					/>
 				{/if}
 			</div>
 
@@ -344,8 +356,18 @@
 	}
 
 	.filters h1 {
-		margin: 0;
 		font-size: 1.4rem;
+		margin: 0;
+		padding: 0;
+	}
+
+	.branch-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 1rem;
+		color: var(--color-text-secondary);
+		margin-top: 0.15rem;
 	}
 
 	.filters .date-range {

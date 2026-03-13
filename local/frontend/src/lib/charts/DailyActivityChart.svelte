@@ -242,7 +242,7 @@
 			<div class="title">
 				{totalPrompts} prompt{totalPrompts !== 1 ? 's' : ''}
 			</div>
-			<div class="subtitle">
+			<div class="title" style:font-size="0.9rem" style:font-weight="normal">
 				last {dailyActivity.length} day{dailyActivity.length === 1 ? '' : 's'}
 			</div>
 		</div>
@@ -399,11 +399,6 @@
 	.da-totals .title {
 		font-size: 1.15em;
 		font-weight: 600;
-	}
-
-	.da-totals .subtitle {
-		font-size: 1em;
-		opacity: 0.8;
 	}
 
 	@media (max-width: 780px) {
