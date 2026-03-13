@@ -18,7 +18,8 @@ import type {
 	DiscoverImportableProjectsResponse,
 	ImportProjectsResponse,
 	CommitConversationLinks,
-	ProjectSearchMatch
+	ProjectSearchMatch,
+	DailyActivityRow
 } from './types';
 
 interface Envelope<T> {
@@ -420,6 +421,19 @@ export function debugSendNotification(
 
 export function debugGetWSClients(): Promise<{ frontend: number; notification: number }> {
 	return api('/api/v1/debug/ws-clients');
+}
+
+export function getProjectDailyActivity(
+	projectId: string,
+	startMs: number,
+	endExclusiveMs: number
+): Promise<DailyActivityRow[]> {
+	const params = new URLSearchParams({
+		start: String(startMs),
+		end: String(endExclusiveMs),
+		tzOffset: String(new Date().getTimezoneOffset())
+	});
+	return api(`/api/v1/projects/${encodeURIComponent(projectId)}/activity?${params.toString()}`);
 }
 
 export function getCommitConversationLinks(

@@ -356,6 +356,12 @@ export interface ProjectSearchMatch {
 	commitMatches: number;
 }
 
+export interface DailyActivityRow {
+	date: string;
+	conversations: number;
+	userPrompts: number;
+}
+
 export interface CommitConversationLinks {
 	commitToConversations: Record<string, string[]>;
 	conversationToCommits: Record<string, string[]>;

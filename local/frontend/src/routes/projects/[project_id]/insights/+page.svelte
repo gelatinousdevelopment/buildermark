@@ -4,9 +4,10 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { listProjectCommitsPage } from '$lib/api';
+	import { listProjectCommitsPage, getProjectDailyActivity } from '$lib/api';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
-	import type { DailyCommitSummary } from '$lib/types';
+	import DailyActivityChart from '$lib/charts/DailyActivityChart.svelte';
+	import type { DailyCommitSummary, DailyActivityRow } from '$lib/types';
 	import { referenceNowDate } from '$lib/utils';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
@@ -39,6 +40,12 @@
 	let error: string | null = $state(null);
 	let lastLoadKey = '';
 	let requestToken = 0;
+
+	let dailyActivity: DailyActivityRow[] = $state([]);
+	let activityLoading = $state(false);
+	let activityError: string | null = $state(null);
+	let lastActivityLoadKey = '';
+	let activityRequestToken = 0;
 
 	function toYMD(date: Date): string {
 		const y = date.getFullYear();
@@ -203,6 +210,30 @@
 				loading = false;
 			});
 	});
+
+	$effect(() => {
+		if (!projectId) return;
+		const key = `activity:${projectId}:${requestRange.startMs}:${requestRange.endExclusiveMs}`;
+		if (key === lastActivityLoadKey) return;
+		lastActivityLoadKey = key;
+		const myToken = ++activityRequestToken;
+		activityLoading = true;
+		activityError = null;
+		void getProjectDailyActivity(projectId, requestRange.startMs, requestRange.endExclusiveMs)
+			.then((rows) => {
+				if (myToken !== activityRequestToken) return;
+				dailyActivity = rows ?? [];
+			})
+			.catch((e) => {
+				if (myToken !== activityRequestToken) return;
+				activityError = e instanceof Error ? e.message : 'Failed to load activity';
+				dailyActivity = [];
+			})
+			.finally(() => {
+				if (myToken !== activityRequestToken) return;
+				activityLoading = false;
+			});
+	});
 </script>
 
 <div class="outer">
@@ -241,16 +272,32 @@
 			</div>
 		</div>
 
-		<div class="chart-panel">
-			{#if loading}
-				<p class="status">Loading insights...</p>
-			{:else if error}
-				<p class="status error">{error}</p>
-			{:else if dailySummary.length === 0}
-				<p class="status">No commit data in the selected range.</p>
-			{:else}
-				<DailyCommitsChart {dailySummary} {branch} {projectId} enableDateSelection={false} />
-			{/if}
+		<div class="charts">
+			<div class="chart-panel">
+				<h2 class="chart-heading">Agent Attribution</h2>
+				{#if loading}
+					<p class="status">Loading insights...</p>
+				{:else if error}
+					<p class="status error">{error}</p>
+				{:else if dailySummary.length === 0}
+					<p class="status">No commit data in the selected range.</p>
+				{:else}
+					<DailyCommitsChart {dailySummary} {branch} {projectId} enableDateSelection={false} />
+				{/if}
+			</div>
+
+			<div class="chart-panel">
+				<h2 class="chart-heading">Conversations</h2>
+				{#if activityLoading}
+					<p class="status">Loading activity...</p>
+				{:else if activityError}
+					<p class="status error">{activityError}</p>
+				{:else if dailyActivity.length === 0}
+					<p class="status">No activity data in the selected range.</p>
+				{:else}
+					<DailyActivityChart {dailyActivity} />
+				{/if}
+			</div>
 		</div>
 	</div>
 </div>
@@ -263,7 +310,7 @@
 	.insights-page {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.5rem;
 		margin: 0;
 
 		max-width: 1100px;
@@ -358,9 +405,23 @@
 		color: var(--accent-color);
 	}
 
+	.charts {
+		display: flex;
+		flex-direction: column;
+		gap: 0rem;
+		padding: 0.5rem 0;
+	}
+
 	.chart-panel {
 		min-height: 10rem;
 		padding: 0 1rem 0.5rem 1rem;
+	}
+
+	.chart-heading {
+		margin: 0rem 0 0.75rem 0;
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--color-text-secondary);
 	}
 
 	.status {
