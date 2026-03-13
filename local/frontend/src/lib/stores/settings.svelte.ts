@@ -22,7 +22,7 @@ const defaults: Settings = {
 	commits_chart_stretch_bars: false,
 	content_width: 'default',
 	commit_sort_order: 'desc',
-	export_mode: 'commits-with-prompts',
+	export_mode: 'prompts-with-commits',
 	export_format: 'markdown',
 	export_preset_days: 30,
 	export_sort_order: 'newest' as ExportSortOrder
@@ -32,7 +32,14 @@ function load(): Settings {
 	if (!browser) return { ...defaults };
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY);
-		if (raw) return { ...defaults, ...JSON.parse(raw) };
+		if (raw) {
+			const parsed = { ...defaults, ...JSON.parse(raw) };
+			// Migrate removed export mode
+			if (parsed.export_mode === 'just-prompts') {
+				parsed.export_mode = 'prompts-with-commits';
+			}
+			return parsed;
+		}
 	} catch {
 		// ignore corrupt data
 	}
