@@ -50,7 +50,7 @@
                 <CheckBox x:Name="NotificationsCheckBox" Content="Enable notifications"
                           Checked="Notifications_Changed" Unchecked="Notifications_Changed"
                           Margin="0,0,0,8" />
-                <TextBlock Text="Show notifications for new commits."
+                <TextBlock Text="Show notifications for new commits and completed tasks."
                            FontSize="11" Foreground="Gray" Margin="20,0,0,0" />
             </StackPanel>
         </TabItem>

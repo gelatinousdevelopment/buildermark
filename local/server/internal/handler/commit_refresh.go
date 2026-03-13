@@ -48,10 +48,10 @@ func (s *Server) RefreshStaleProjects(ctx context.Context) {
 }
 
 func (s *Server) enqueueCommitRefresh(projectID, branch string) (bool, string) {
-	return s.enqueueCommitRefreshWithDays(projectID, branch, 0)
+	return s.enqueueCommitRefreshWithDays(projectID, branch, 0, false)
 }
 
-func (s *Server) enqueueCommitRefreshWithDays(projectID, branch string, days int) (bool, string) {
+func (s *Server) enqueueCommitRefreshWithDays(projectID, branch string, days int, manual bool) (bool, string) {
 	branch = strings.TrimSpace(branch)
 	if branch == "" {
 		branch = "main"
@@ -85,7 +85,7 @@ func (s *Server) enqueueCommitRefreshWithDays(projectID, branch string, days int
 
 	go func() {
 		defer s.refreshJobs.finish(key)
-		s.runCommitRefresh(projectID, branch, days)
+		s.runCommitRefresh(projectID, branch, days, manual)
 	}()
 
 	return true, key
@@ -103,7 +103,7 @@ func (s *Server) broadcastRefreshStatus(state, message, projectID, branch string
 	}
 }
 
-func (s *Server) runCommitRefresh(projectID, branch string, days int) {
+func (s *Server) runCommitRefresh(projectID, branch string, days int, manual bool) {
 	startedAt := time.Now().UnixMilli()
 	timeout := 2 * time.Minute
 	if days > 0 {
@@ -301,6 +301,11 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 	} else {
 		state.LastError = ""
 		s.broadcastRefreshStatus("complete", fmt.Sprintf("Refresh complete (%.1fs).", float64(duration)/1000), projectID, branch)
+		if manual {
+			label := db.RepoLabel(covCtx.repoProject.Path)
+			s.sendNotification("commit_refresh_complete", "Commit refresh complete",
+				fmt.Sprintf("Refresh complete for %s", label), "")
+		}
 	}
 	if upsertErr := db.UpsertCommitSyncState(context.Background(), s.DB, state); upsertErr != nil {
 		log.Printf("commit sync state upsert failed: %v", upsertErr)
@@ -471,7 +476,7 @@ func (s *Server) handleRefreshProjectCommits(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	queued, jobID := s.enqueueCommitRefreshWithDays(project.ID, branch, days)
+	queued, jobID := s.enqueueCommitRefreshWithDays(project.ID, branch, days, true)
 	writeSuccess(w, http.StatusOK, refreshCommitsResponse{
 		Queued: queued,
 		JobID:  jobID,

@@ -260,6 +260,7 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 
 	msg := fmt.Sprintf("Imported %d project(s), %d entries, %d commits", len(projectIDs), entriesProcessed, commitsIngested)
 	broadcast("complete", msg)
+	s.sendNotification("import_complete", "Project import complete", msg, "")
 }
 
 func normalizeImportPaths(paths []string) ([]string, error) {

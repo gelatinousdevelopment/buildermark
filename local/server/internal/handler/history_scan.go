@@ -171,6 +171,7 @@ func (s *Server) runHistoryScanJob(since time.Time, req historyScanRequest, path
 
 	msg := fmt.Sprintf("Imported %d conversation entries", count)
 	broadcast("complete", msg)
+	s.sendNotification("history_scan_complete", "History scan complete", msg, "")
 }
 
 func (s *Server) historyScanPaths(ctx context.Context, projectID string) ([]string, error) {

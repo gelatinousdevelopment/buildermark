@@ -243,43 +243,6 @@
 					{#if settingsError}<p class="error">{settingsError}</p>{/if}
 					{#if settingsNotice}<p class="status">{settingsNotice}</p>{/if}
 				</div>
-
-				<div class="section import-history">
-					<h2>Re-import Conversation History</h2>
-					<p class="muted">This may take a while.</p>
-					<div class="history-import-controls">
-						<label for="history-days-select">Import window</label>
-						<select
-							id="history-days-select"
-							bind:value={historyImportDays}
-							disabled={importingHistory}
-						>
-							{#each historyImportDayOptions as option (option)}
-								<option value={option}>{historyOptionLabel(option)}</option>
-							{/each}
-						</select>
-						<button
-							class="bordered small import-btn"
-							onclick={importHistory}
-							disabled={importingHistory}
-						>
-							{#if importingHistory}
-								<span class="spinner" aria-hidden="true"></span>
-								Importing...
-							{:else}
-								Import
-							{/if}
-						</button>
-					</div>
-					{#if importingHistory && importStatusMessage}
-						<p class="import-status">{importStatusMessage}</p>
-					{/if}
-					{#if historyImportError}
-						<p class="error">{historyImportError}</p>
-					{:else if historyImportResult}
-						<p class="status">{historyImportResult}</p>
-					{/if}
-				</div>
 			</div>
 
 			<hr class="divider" />
@@ -322,6 +285,44 @@
 
 				<div class="section">
 					<TeamServersSection />
+				</div>
+
+				<div class="section import-history">
+					<h2>Re-import Conversation History</h2>
+					<div class="history-import-controls">
+						<label for="history-days-select">Import window</label>
+						<select
+							id="history-days-select"
+							bind:value={historyImportDays}
+							disabled={importingHistory}
+						>
+							{#each historyImportDayOptions as option (option)}
+								<option value={option}>{historyOptionLabel(option)}</option>
+							{/each}
+						</select>
+						<button
+							class="bordered small import-btn"
+							onclick={importHistory}
+							disabled={importingHistory}
+						>
+							{#if importingHistory}
+								<span class="spinner" aria-hidden="true"></span>
+								Importing...
+							{:else}
+								Import
+							{/if}
+						</button>
+					</div>
+					{#if importingHistory && importStatusMessage}
+						<p class="import-status">{importStatusMessage}</p>
+					{:else}
+						<p class="import-status">This may take a while.</p>
+					{/if}
+					{#if historyImportError}
+						<p class="error">{historyImportError}</p>
+					{:else if historyImportResult}
+						<p class="status">{historyImportResult}</p>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -384,11 +385,6 @@
 		.columns {
 			flex-direction: column;
 		}
-	}
-
-	.section.import-history {
-		border-top: 0.5px solid var(--color-divider);
-		padding: 0.5rem 0;
 	}
 
 	ul {

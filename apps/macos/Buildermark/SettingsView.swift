@@ -94,7 +94,7 @@ private struct NotificationsTab: View {
         Form {
             Toggle("Enable notifications", isOn: $serverManager.notificationsEnabled)
 
-            Text("Show notifications for new commits.")
+            Text("Show notifications for new commits and completed tasks.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
