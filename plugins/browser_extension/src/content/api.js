@@ -1,13 +1,13 @@
 /**
  * API client for communicating with the Buildermark local server.
  */
-const API_BASE = 'http://localhost:7022/api/v1';
+const API_BASE = "http://localhost:55022/api/v1";
 
 function sendApiRequest(endpoint, options = {}) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
       {
-        type: 'buildermarkApiRequest',
+        type: "buildermarkApiRequest",
         endpoint,
         options,
       },
@@ -18,12 +18,12 @@ function sendApiRequest(endpoint, options = {}) {
         }
 
         if (!response) {
-          reject(new Error('No response from extension background worker'));
+          reject(new Error("No response from extension background worker"));
           return;
         }
 
         if (!response.ok) {
-          reject(new Error(response.error || 'Extension API request failed'));
+          reject(new Error(response.error || "Extension API request failed"));
           return;
         }
 
@@ -59,13 +59,13 @@ const BuildermarkAPI = {
    */
   async importConversation(params) {
     return sendApiRequest(`${API_BASE}/conversations/import-web`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
     });
   },
 };
 
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = { BuildermarkAPI, API_BASE };
 }

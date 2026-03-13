@@ -4,7 +4,7 @@ Shared MV3 browser extension that imports conversations from coding agent web in
 
 ## Prerequisites
 
-- Buildermark server running locally on port `7022`
+- Buildermark server running locally on port `55022`
 - Node.js for manifest generation in `build.sh`
 - Xcode for Safari packaging
 - ImageMagick for manual icon generation

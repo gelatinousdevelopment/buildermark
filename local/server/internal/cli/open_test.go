@@ -14,10 +14,10 @@ func (m *mockOpener) Open(url string) error {
 
 func TestRunOpen(t *testing.T) {
 	m := &mockOpener{}
-	if err := RunOpen(m, ":7022"); err != nil {
+	if err := RunOpen(m, ":55022"); err != nil {
 		t.Fatalf("RunOpen() error: %v", err)
 	}
-	want := "http://localhost:7022"
+	want := "http://localhost:55022"
 	if m.url != want {
 		t.Errorf("RunOpen() opened %q, want %q", m.url, want)
 	}
@@ -26,10 +26,10 @@ func TestRunOpen(t *testing.T) {
 func TestXDGOpener(t *testing.T) {
 	cmd := &mockCommander{}
 	opener := XDGOpener{Cmd: cmd}
-	if err := opener.Open("http://localhost:7022"); err != nil {
+	if err := opener.Open("http://localhost:55022"); err != nil {
 		t.Fatalf("XDGOpener.Open() error: %v", err)
 	}
-	want := "xdg-open http://localhost:7022"
+	want := "xdg-open http://localhost:55022"
 	if len(cmd.calls) != 1 || cmd.calls[0] != want {
 		t.Errorf("XDGOpener.Open() ran %v, want [%q]", cmd.calls, want)
 	}

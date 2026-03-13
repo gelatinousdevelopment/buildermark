@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:7022/api/v1";
+const API_BASE = "http://localhost:55022/api/v1";
 
 const serverDot = document.getElementById("server-dot");
 const pageDot = document.getElementById("page-dot");

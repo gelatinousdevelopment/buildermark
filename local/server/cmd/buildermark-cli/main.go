@@ -117,13 +117,13 @@ func dbPath() string {
 func runStatus() int {
 	dir := configDir()
 	db := dbPath()
-	result := cli.CheckStatus("http://localhost:7022", dir, db)
+	result := cli.CheckStatus("http://localhost:55022", dir, db)
 	cli.PrintStatus(os.Stdout, result)
 	return 0
 }
 
 func runServer(args []string) int {
-	addr := ":7022"
+	addr := ":55022"
 	db := dbPath()
 
 	// Parse optional flags.
@@ -237,7 +237,7 @@ func runService(args []string) int {
 func runOpen() int {
 	cmd := cli.ExecCommander{}
 	opener := cli.XDGOpener{Cmd: cmd}
-	if err := cli.RunOpen(opener, ":7022"); err != nil {
+	if err := cli.RunOpen(opener, ":55022"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}

@@ -1,6 +1,6 @@
 # bbrate - Gemini CLI Plugin
 
-Rate conversations on a 0-5 scale. Ratings are sent to the Buildermark Local server and viewable on the dashboard at http://localhost:7022.
+Rate conversations on a 0-5 scale. Ratings are sent to the Buildermark Local server and viewable on the dashboard at http://localhost:55022.
 
 ## Install
 

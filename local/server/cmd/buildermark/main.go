@@ -19,7 +19,7 @@ func main() {
 	}
 
 	dbPath := flag.String("db", defaultDB, "path to SQLite database file")
-	addr := flag.String("addr", ":7022", "listen address")
+	addr := flag.String("addr", ":55022", "listen address")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())

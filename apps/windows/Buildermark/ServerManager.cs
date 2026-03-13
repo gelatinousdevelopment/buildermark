@@ -23,7 +23,7 @@ public enum ServerStatus
 
 public sealed class ServerManager : INotifyPropertyChanged, IDisposable
 {
-    public const int Port = 7022;
+    public const int Port = 55022;
 
     private Process? _process;
     private Timer? _healthCheckTimer;

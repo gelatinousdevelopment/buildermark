@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVER="${BUILDERMARK_LOCAL_SERVER:-http://localhost:7022}"
-DASHBOARD="${BUILDERMARK_LOCAL_DASHBOARD:-http://localhost:5173}"
+SERVER="${BUILDERMARK_LOCAL_SERVER:-http://localhost:55022}"
 
 json_escape() {
   local s="${1:-}"
@@ -52,7 +51,7 @@ response=$(curl -s -X POST "${SERVER}/api/v1/rating" \
 }
 
 if printf '%s' "$response" | grep -q '"ok":true'; then
-  conversation_url="${DASHBOARD%/}/conv/${temp_cid}"
+  conversation_url="${SERVER%/}/conv/${temp_cid}"
   printf 'ok\n'
   printf 'rating: %s/5\n' "$rating"
   [[ -n "$note" ]] && printf 'note: %s\n' "$note"

@@ -9,13 +9,13 @@ cd web/server
 go run ./cmd/buildermark
 ```
 
-Server starts on [http://localhost:7022](http://localhost:7022).
+Server starts on [http://localhost:55022](http://localhost:55022).
 
 ## Options
 
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
-| `-addr` | — | `:7022` | Listen address |
+| `-addr` | — | `:55022` | Listen address |
 | `-db` | `BUILDERMARK_LOCAL_DB_PATH` | `../../.data/local.db` | SQLite database path |
 
 ## API
@@ -25,7 +25,7 @@ Server starts on [http://localhost:7022](http://localhost:7022).
 Create a rating.
 
 ```bash
-curl -X POST http://localhost:7022/api/v1/rating \
+curl -X POST http://localhost:55022/api/v1/rating \
   -H 'Content-Type: application/json' \
   -d '{"conversationId":"abc-123","rating":4,"note":"Helpful session"}'
 ```
@@ -50,7 +50,7 @@ List recent ratings (newest first). `limit` defaults to 50, max 500.
 Trigger conversation history re-import.
 
 ```bash
-curl -X POST http://localhost:7022/api/v1/history/scan \
+curl -X POST http://localhost:55022/api/v1/history/scan \
   -H 'Content-Type: application/json' \
   -d '{"agent":"codex","timeframe":"200000h","sync":true}'
 ```

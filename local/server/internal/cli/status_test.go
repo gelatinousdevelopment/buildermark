@@ -37,23 +37,23 @@ func TestPrintStatus(t *testing.T) {
 			name: "running",
 			status: StatusResult{
 				Running:   true,
-				URL:       "http://localhost:7022",
+				URL:       "http://localhost:55022",
 				ConfigDir: "/home/user/.buildermark",
 				DBPath:    "/home/user/.buildermark/local.db",
 				Version:   "1.0.0",
 			},
-			want: []string{"running", "http://localhost:7022", "/home/user/.buildermark", "local.db", "1.0.0"},
+			want: []string{"running", "http://localhost:55022", "/home/user/.buildermark", "local.db", "1.0.0"},
 		},
 		{
 			name: "stopped",
 			status: StatusResult{
 				Running:   false,
-				URL:       "http://localhost:7022",
+				URL:       "http://localhost:55022",
 				ConfigDir: "/home/user/.buildermark",
 				DBPath:    "/home/user/.buildermark/local.db",
 				Version:   "dev",
 			},
-			want: []string{"stopped", "http://localhost:7022"},
+			want: []string{"stopped", "http://localhost:55022"},
 		},
 	}
 

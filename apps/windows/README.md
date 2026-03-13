@@ -79,7 +79,7 @@ build/
 3. Run `Buildermark.exe`
 
 The app will:
-- Start the server on port 7022
+- Start the server on port 55022
 - Show a system tray icon
 - Open the Settings window
 

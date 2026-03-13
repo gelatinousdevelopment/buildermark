@@ -18,7 +18,7 @@ Buildermark is a system tray / menu bar app that manages a local `buildermark-se
 The tray icon uses a hammer icon and opens a dropdown menu with:
 
 1. **Server status** — read-only label with icon (e.g. "Server Running")
-2. **Open Buildermark** — opens `http://localhost:7022` in the default browser (keyboard shortcut: Cmd+O / Ctrl+O)
+2. **Open Buildermark** — opens `http://localhost:55022` in the default browser (keyboard shortcut: Cmd+O / Ctrl+O)
 3. **Settings** — opens the settings window (keyboard shortcut: Cmd+, / Ctrl+,)
 4. **Quit Buildermark** — stops the server and exits (keyboard shortcut: Cmd+Q / Ctrl+Q)
 
@@ -32,10 +32,10 @@ The app manages a bundled `buildermark-server` Go binary.
 3. System PATH
 
 ### Server Process
-- **Port**: 7022 (hardcoded — agent plugins depend on this)
-- **Launch args**: `-addr :7022 -db <db_path>`
+- **Port**: 55022 (hardcoded — agent plugins depend on this)
+- **Launch args**: `-addr :55022 -db <db_path>`
 - **Database path**: `BUILDERMARK_LOCAL_DB_PATH` env var, or platform app data directory + `Buildermark/local.db`
-- **Health check**: poll `GET http://localhost:7022/api/v1/settings` every 2 seconds
+- **Health check**: poll `GET http://localhost:55022/api/v1/settings` every 2 seconds
 - **Logging**: stdout and stderr from the server process are captured and forwarded to the platform's logging system
 
 ### Server Status States
@@ -64,7 +64,7 @@ A tabbed settings window with three tabs. The window should resize its height to
 
 | Element | Type | Details |
 |---------|------|---------|
-| Buildermark | Link | `http://localhost:7022` — opens in browser |
+| Buildermark | Link | `http://localhost:55022` — opens in browser |
 | Server status | Read-only | Status icon (colored per state table above) + status text |
 | Restart Server | Button | Restarts the server process |
 | _spacer_ | | Visual separation before options |

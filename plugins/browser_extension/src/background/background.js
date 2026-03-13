@@ -12,7 +12,7 @@ const BLUE_ICONS = {
   128: "../icons/blue_icon128.png",
 };
 
-const API_BASE = "http://localhost:7022/api/v1/";
+const API_BASE = "http://localhost:55022/api/v1/";
 
 // Track per-tab import state for the popup.
 const tabStates = new Map();

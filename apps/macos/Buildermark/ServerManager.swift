@@ -16,7 +16,7 @@ final class ServerManager: ObservableObject {
 
     @Published private(set) var status: Status = .stopped
 
-    static let port = 7022
+    static let port = 55022
 
     var statusText: String {
         switch status {
@@ -58,7 +58,8 @@ final class ServerManager: ObservableObject {
     private var notifyReconnectDelay: TimeInterval = 1
 
     init() {
-        self.notificationsEnabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
+        self.notificationsEnabled =
+            UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
 
         // Ensure the server is killed no matter how the app exits.
         terminateObserver = NotificationCenter.default.addObserver(
@@ -275,12 +276,12 @@ final class ServerManager: ObservableObject {
 
     private func handleNotificationMessage(_ text: String) {
         guard notificationsEnabled,
-              let data = text.data(using: .utf8),
-              let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              envelope["type"] as? String == "notification",
-              let payload = envelope["data"] as? [String: Any],
-              let title = payload["title"] as? String,
-              let body = payload["body"] as? String
+            let data = text.data(using: .utf8),
+            let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            envelope["type"] as? String == "notification",
+            let payload = envelope["data"] as? [String: Any],
+            let title = payload["title"] as? String,
+            let body = payload["body"] as? String
         else { return }
 
         let id = payload["id"] as? String ?? UUID().uuidString
@@ -297,7 +298,9 @@ final class ServerManager: ObservableObject {
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
-                logger.error("Failed to deliver notification: \(error.localizedDescription, privacy: .public)")
+                logger.error(
+                    "Failed to deliver notification: \(error.localizedDescription, privacy: .public)"
+                )
             }
         }
     }
