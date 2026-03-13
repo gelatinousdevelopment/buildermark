@@ -28,6 +28,9 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $BuildDir = Join-Path $ProjectDir "build"
 $CsprojPath = Join-Path (Join-Path $ProjectDir "Buildermark") "Buildermark.csproj"
+$TrayIconSourcePath = Join-Path $ProjectDir "tray-icon-128.png"
+$LargeIconSourcePath = Join-Path $ProjectDir "app-icon-256.png"
+$IconOutputPath = Join-Path (Join-Path $ProjectDir "Buildermark") "Resources\buildermark.ico"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -72,6 +75,112 @@ function Build-Runtime($rid) {
     Write-Host "  OK: $ExePath" -ForegroundColor Green
 }
 
+function Assert-FileExists($path, $description) {
+    if (-not (Test-Path $path)) {
+        Write-Host "Error: missing $description at $path" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function New-ResizedPngBytes($sourcePath, $size) {
+    $sourceImage = [System.Drawing.Image]::FromFile($sourcePath)
+    try {
+        $bitmap = New-Object System.Drawing.Bitmap $size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+        try {
+            $bitmap.SetResolution($sourceImage.HorizontalResolution, $sourceImage.VerticalResolution)
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            try {
+                $graphics.Clear([System.Drawing.Color]::Transparent)
+                $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+                $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+                $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+                $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+                $graphics.DrawImage($sourceImage, 0, 0, $size, $size)
+            } finally {
+                $graphics.Dispose()
+            }
+
+            $memoryStream = New-Object System.IO.MemoryStream
+            try {
+                $bitmap.Save($memoryStream, [System.Drawing.Imaging.ImageFormat]::Png)
+                return $memoryStream.ToArray()
+            } finally {
+                $memoryStream.Dispose()
+            }
+        } finally {
+            $bitmap.Dispose()
+        }
+    } finally {
+        $sourceImage.Dispose()
+    }
+}
+
+function New-IconEntry($sourcePath, $size) {
+    return [PSCustomObject]@{
+        Size = $size
+        Bytes = New-ResizedPngBytes -sourcePath $sourcePath -size $size
+    }
+}
+
+function Write-IcoFile($outputPath, $entries) {
+    $outputDir = Split-Path -Parent $outputPath
+    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+
+    $fileStream = [System.IO.File]::Open($outputPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+    try {
+        $writer = New-Object System.IO.BinaryWriter $fileStream
+        try {
+            $writer.Write([UInt16]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]$entries.Count)
+
+            $offset = 6 + (16 * $entries.Count)
+            foreach ($entry in $entries) {
+                $dimension = if ($entry.Size -ge 256) { 0 } else { [byte]$entry.Size }
+                $writer.Write($dimension)
+                $writer.Write($dimension)
+                $writer.Write([byte]0)
+                $writer.Write([byte]0)
+                $writer.Write([UInt16]1)
+                $writer.Write([UInt16]32)
+                $writer.Write([UInt32]$entry.Bytes.Length)
+                $writer.Write([UInt32]$offset)
+                $offset += $entry.Bytes.Length
+            }
+
+            foreach ($entry in $entries) {
+                $writer.Write($entry.Bytes)
+            }
+        } finally {
+            $writer.Dispose()
+        }
+    } finally {
+        $fileStream.Dispose()
+    }
+}
+
+function Update-AppIcon() {
+    Step "Generating Windows app icon"
+
+    Assert-FileExists -path $TrayIconSourcePath -description "tray icon source"
+    Assert-FileExists -path $LargeIconSourcePath -description "large app icon source"
+
+    Add-Type -AssemblyName System.Drawing
+
+    $entries = @(
+        (New-IconEntry -sourcePath $TrayIconSourcePath -size 16)
+        (New-IconEntry -sourcePath $TrayIconSourcePath -size 24)
+        (New-IconEntry -sourcePath $TrayIconSourcePath -size 32)
+        (New-IconEntry -sourcePath $TrayIconSourcePath -size 48)
+        (New-IconEntry -sourcePath $TrayIconSourcePath -size 64)
+        (New-IconEntry -sourcePath $LargeIconSourcePath -size 128)
+        (New-IconEntry -sourcePath $LargeIconSourcePath -size 256)
+    )
+
+    Write-IcoFile -outputPath $IconOutputPath -entries $entries
+    Write-Host "  OK: $IconOutputPath" -ForegroundColor Green
+}
+
 # ---------------------------------------------------------------------------
 # Preflight
 # ---------------------------------------------------------------------------
@@ -81,6 +190,8 @@ Check-Tool "dotnet" "Install .NET 8 SDK: https://dotnet.microsoft.com/download/d
 
 $dotnetVersion = dotnet --version
 Write-Host "  .NET SDK: $dotnetVersion"
+
+Update-AppIcon
 
 # ---------------------------------------------------------------------------
 # Resolve target runtimes

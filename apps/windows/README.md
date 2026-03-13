@@ -21,7 +21,9 @@ apps/windows/
 │   ├── UpdaterManager.cs        # Auto-update via NetSparkle (Sparkle-compatible)
 │   ├── PreferencesManager.cs    # Persists settings in Windows Registry
 │   └── Resources/
-│       └── buildermark.ico      # App/tray icon (placeholder — replace with real icon)
+│       └── buildermark.ico      # Generated app/tray icon used by WPF
+├── app-icon-256.png             # Large Windows app icon source (Explorer/high-DPI)
+├── tray-icon-128.png            # Tray/small-size Windows icon source
 ├── scripts/
 │   └── build.ps1                # Command-line build script
 └── README.md
@@ -107,7 +109,12 @@ Uses [NetSparkle](https://github.com/NetSparkleUpdater/NetSparkle), the .NET equ
 
 ## Replacing the Icon
 
-The placeholder icon at `Buildermark/Resources/buildermark.ico` should be replaced with the real app icon. The `.ico` file should include at least 16x16, 32x32, 48x48, and 256x256 sizes.
+The build script regenerates `Buildermark/Resources/buildermark.ico` on each build:
+
+- `tray-icon-128.png` is used for the smaller icon sizes that appear in the tray and windows.
+- `app-icon-256.png` is used for the larger embedded icon sizes that Windows can show in Explorer and other high-DPI surfaces.
+
+The generated `.ico` includes multiple sizes, including 16x16, 32x32, 48x48, 128x128, and 256x256.
 
 ## Distribution
 
