@@ -58,6 +58,9 @@ func run(args []string) int {
 	case "open":
 		return runOpen()
 
+	case "notifications":
+		return runNotifications(args[1:])
+
 	case "update":
 		return runUpdate(args[1:])
 
@@ -81,6 +84,7 @@ Commands:
   open             Open Buildermark in the browser
   service install  Install systemd user service
   service uninstall Remove systemd user service
+  notifications     Get or set desktop notifications (on, off)
   update check     Check for available updates
   update apply     Download and install an update
   update mode      Get or set update mode (auto, check, off)
@@ -238,6 +242,39 @@ func runOpen() int {
 		return 1
 	}
 	return 0
+}
+
+func runNotifications(args []string) int {
+	dir := configDir()
+	if dir == "" {
+		return 1
+	}
+	if len(args) == 0 {
+		if err := cli.RunNotificationsGet(os.Stdout, dir); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	switch args[0] {
+	case "on":
+		if err := cli.RunNotificationsSet(dir, true); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 1
+		}
+		fmt.Println("Desktop notifications enabled")
+		return 0
+	case "off":
+		if err := cli.RunNotificationsSet(dir, false); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 1
+		}
+		fmt.Println("Desktop notifications disabled")
+		return 0
+	default:
+		fmt.Fprintf(os.Stderr, "usage: buildermark notifications [on|off]\n")
+		return 1
+	}
 }
 
 func runUpdate(args []string) int {

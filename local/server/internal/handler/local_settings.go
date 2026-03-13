@@ -25,6 +25,7 @@ type localConfigFile struct {
 	UpdateMode           string   `json:"updateMode"`
 	ExtraAgentHomes      []string `json:"extraAgentHomes,omitempty"`
 	ExtraLocalUserEmails []string `json:"extraLocalUserEmails,omitempty"`
+	NotificationsEnabled *bool    `json:"notificationsEnabled,omitempty"`
 }
 
 type agentSearchPath struct {
@@ -213,6 +214,24 @@ func (s *Server) loadExtraLocalUserEmails() []string {
 		return []string{"noreply@anthropic.com"}
 	}
 	return effectiveExtraLocalUserEmails(cfg)
+}
+
+func effectiveNotificationsEnabled(cfg localConfigFile) bool {
+	if cfg.NotificationsEnabled == nil {
+		return true
+	}
+	return *cfg.NotificationsEnabled
+}
+
+func (s *Server) notificationsEnabled() bool {
+	if s.ConfigDir == "" {
+		return true
+	}
+	cfg, err := loadLocalConfigFile(s.ConfigDir)
+	if err != nil {
+		return true
+	}
+	return effectiveNotificationsEnabled(cfg)
 }
 
 func conversationSearchPathForAgent(home, agentName string) string {

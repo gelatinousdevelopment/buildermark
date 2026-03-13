@@ -91,3 +91,80 @@ func TestPutLocalSettings(t *testing.T) {
 		t.Fatalf("saved extraAgentHomes = %#v, want [/mnt/vm/user]", cfg.ExtraAgentHomes)
 	}
 }
+
+func TestNotificationsEnabledDefault(t *testing.T) {
+	s := setupTestServer(t)
+	s.ConfigDir = t.TempDir()
+
+	// No config file exists → default true.
+	if !s.notificationsEnabled() {
+		t.Fatal("notificationsEnabled() = false, want true (default)")
+	}
+}
+
+func TestNotificationsEnabledExplicit(t *testing.T) {
+	configDir := t.TempDir()
+
+	// Explicitly false.
+	f := false
+	cfg := localConfigFile{NotificationsEnabled: &f}
+	if err := saveLocalConfigFile(configDir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadLocalConfigFile(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effectiveNotificationsEnabled(loaded) {
+		t.Fatal("effectiveNotificationsEnabled = true, want false")
+	}
+
+	// Explicitly true.
+	tr := true
+	cfg.NotificationsEnabled = &tr
+	if err := saveLocalConfigFile(configDir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = loadLocalConfigFile(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !effectiveNotificationsEnabled(loaded) {
+		t.Fatal("effectiveNotificationsEnabled = false, want true")
+	}
+}
+
+func TestNotificationsEnabledConfigRoundTrip(t *testing.T) {
+	configDir := t.TempDir()
+
+	// Save with notificationsEnabled = false.
+	f := false
+	cfg := localConfigFile{NotificationsEnabled: &f}
+	if err := saveLocalConfigFile(configDir, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load and verify.
+	loaded, err := loadLocalConfigFile(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effectiveNotificationsEnabled(loaded) {
+		t.Fatal("expected false after round-trip, got true")
+	}
+
+	// Save with notificationsEnabled = true.
+	tr := true
+	loaded.NotificationsEnabled = &tr
+	if err := saveLocalConfigFile(configDir, loaded); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded2, err := loadLocalConfigFile(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !effectiveNotificationsEnabled(loaded2) {
+		t.Fatal("expected true after round-trip, got false")
+	}
+}

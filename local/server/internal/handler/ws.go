@@ -285,6 +285,9 @@ func (s *Server) sendNotification(kind, title, body, url string) {
 		return
 	}
 	s.notifyWS.broadcast(msg)
+	if s.notificationsEnabled() {
+		showDesktopNotification(title, body)
+	}
 }
 
 // notifyIngestedCommits sends a native notification summarizing ingested commits.
