@@ -237,8 +237,9 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 
 		identity, _ := resolveGitIdentity(ctx, repoProject.Path)
 		extraEmails := s.loadExtraLocalUserEmails()
+		var projectIngested []db.Commit
 		ingested, err := IngestCommitsForWindow(ctx, s.DB, repoProject, group, branch, since, includeAll, &identity, extraEmails,
-			func(c []db.Commit) { allIngested = append(allIngested, c...) },
+			func(c []db.Commit) { projectIngested = append(projectIngested, c...) },
 		)
 		if err != nil {
 			log.Printf("error ingesting commits for %s: %v", repoProject.Path, err)
@@ -246,6 +247,7 @@ func (s *Server) runImportJob(roots []string, since time.Time, includeAll bool) 
 			return
 		}
 		commitsIngested += ingested
+		allIngested = append(allIngested, newLocalUserAuthorFilter(identity, extraEmails).FilterCommits(projectIngested)...)
 	}
 
 	if len(allIngested) > 0 {

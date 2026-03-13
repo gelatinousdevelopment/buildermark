@@ -193,7 +193,8 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 			},
 		)
 		if err == nil && len(ingestedCommits) > 0 {
-			s.notifyIngestedCommits(ingestedCommits, db.RepoLabel(covCtx.repoProject.Path))
+			localCommits := newLocalUserAuthorFilter(covCtx.identity, covCtx.extraEmails).FilterCommits(ingestedCommits)
+			s.notifyIngestedCommits(localCommits, db.RepoLabel(covCtx.repoProject.Path))
 		}
 	} else {
 		var ingestedCommits []db.Commit
@@ -211,7 +212,8 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int) {
 			},
 		)
 		if err == nil && len(ingestedCommits) > 0 {
-			s.notifyIngestedCommits(ingestedCommits, db.RepoLabel(covCtx.repoProject.Path))
+			localCommits := newLocalUserAuthorFilter(covCtx.identity, covCtx.extraEmails).FilterCommits(ingestedCommits)
+			s.notifyIngestedCommits(localCommits, db.RepoLabel(covCtx.repoProject.Path))
 		}
 	}
 

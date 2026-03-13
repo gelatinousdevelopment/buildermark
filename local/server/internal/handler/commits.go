@@ -583,15 +583,7 @@ func (s *Server) handleListProjectCommitsForProject(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Resolve @me+agents sentinel to actual email addresses.
-	for i, e := range userEmails {
-		if e == "@me+agents" {
-			resolved := []string{identity.Email}
-			resolved = append(resolved, s.loadExtraLocalUserEmails()...)
-			userEmails = append(userEmails[:i], append(resolved, userEmails[i+1:]...)...)
-			break
-		}
-	}
+	userEmails = resolveCommitUserFilters(userEmails, identity, s.loadExtraLocalUserEmails())
 
 	// All data queries use branch_name from the DB — no git hash list needed.
 	users, _ := db.ListDistinctUsers(r.Context(), s.DB, repoProject.ID, branch)
@@ -1066,7 +1058,8 @@ func (s *Server) runCommitIngestion(projectID, branch string, missingHashes []st
 		},
 	)
 	if err == nil && len(ingestedCommits) > 0 {
-		s.notifyIngestedCommits(ingestedCommits, db.RepoLabel(covCtx.repoProject.Path))
+		localCommits := newLocalUserAuthorFilter(covCtx.identity, covCtx.extraEmails).FilterCommits(ingestedCommits)
+		s.notifyIngestedCommits(localCommits, db.RepoLabel(covCtx.repoProject.Path))
 	}
 	finishedAt := time.Now().UnixMilli()
 	duration := finishedAt - startedAt

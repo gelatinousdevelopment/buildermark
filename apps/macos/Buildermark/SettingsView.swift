@@ -94,7 +94,7 @@ private struct NotificationsTab: View {
         Form {
             Toggle("Enable notifications", isOn: $serverManager.notificationsEnabled)
 
-            Text("Receive native notifications when imports and scans complete.")
+            Text("Show notifications for new commits.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
