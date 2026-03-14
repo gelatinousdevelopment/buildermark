@@ -4,10 +4,15 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { listProjectCommitsPage, getProjectDailyActivity } from '$lib/api';
+	import {
+		listProjectCommitsPage,
+		getProjectDailyActivity,
+		getProjectRatingsByAgent
+	} from '$lib/api';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import DailyActivityChart from '$lib/charts/DailyActivityChart.svelte';
-	import type { DailyCommitSummary, DailyActivityRow } from '$lib/types';
+	import RatingsByAgentChart from '$lib/charts/RatingsByAgentChart.svelte';
+	import type { DailyCommitSummary, DailyActivityRow, AgentRatingDistribution } from '$lib/types';
 	import { referenceNowDate } from '$lib/utils';
 	import Icon from '$lib/Icon.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
@@ -47,6 +52,12 @@
 	let activityError: string | null = $state(null);
 	let lastActivityLoadKey = '';
 	let activityRequestToken = 0;
+
+	let ratingsByAgent: AgentRatingDistribution[] = $state([]);
+	let ratingsLoading = $state(false);
+	let ratingsError: string | null = $state(null);
+	let lastRatingsLoadKey = '';
+	let ratingsRequestToken = 0;
 
 	function toYMD(date: Date): string {
 		const y = date.getFullYear();
@@ -235,6 +246,30 @@
 				activityLoading = false;
 			});
 	});
+
+	$effect(() => {
+		if (!projectId) return;
+		const key = `ratings:${projectId}:${requestRange.startMs}:${requestRange.endExclusiveMs}`;
+		if (key === lastRatingsLoadKey) return;
+		lastRatingsLoadKey = key;
+		const myToken = ++ratingsRequestToken;
+		ratingsLoading = true;
+		ratingsError = null;
+		void getProjectRatingsByAgent(projectId, requestRange.startMs, requestRange.endExclusiveMs)
+			.then((rows) => {
+				if (myToken !== ratingsRequestToken) return;
+				ratingsByAgent = rows ?? [];
+			})
+			.catch((e) => {
+				if (myToken !== ratingsRequestToken) return;
+				ratingsError = e instanceof Error ? e.message : 'Failed to load ratings';
+				ratingsByAgent = [];
+			})
+			.finally(() => {
+				if (myToken !== ratingsRequestToken) return;
+				ratingsLoading = false;
+			});
+	});
 </script>
 
 <div class="outer">
@@ -242,9 +277,7 @@
 		<div class="filters">
 			<div>
 				<h1>{navStore.projectName}</h1>
-				{#if branch}
-					<span class="branch-label"><Icon name="branch" width="12px" />{branch}</span>
-				{/if}
+				<span class="branch-label"><Icon name="branch" width="12px" />{branch ? branch : '–'}</span>
 			</div>
 
 			<div class="date-range">
@@ -279,7 +312,7 @@
 		</div>
 
 		<div class="charts">
-			<div class="chart-panel">
+			<div class="chart-panel" style:min-height="174px">
 				<h2 class="chart-heading">Agent Attribution</h2>
 				{#if loading}
 					<p class="status">Loading insights...</p>
@@ -299,7 +332,7 @@
 				{/if}
 			</div>
 
-			<div class="chart-panel">
+			<div class="chart-panel" style:min-height="171px">
 				<h2 class="chart-heading">Conversations</h2>
 				{#if activityLoading}
 					<p class="status">Loading activity...</p>
@@ -309,6 +342,17 @@
 					<p class="status">No activity data in the selected range.</p>
 				{:else}
 					<DailyActivityChart {dailyActivity} height="130" />
+				{/if}
+			</div>
+
+			<div class="chart-panel">
+				<h2 class="chart-heading">Ratings by Agent</h2>
+				{#if ratingsLoading}
+					<p class="status">Loading ratings...</p>
+				{:else if ratingsError}
+					<p class="status error">{ratingsError}</p>
+				{:else}
+					<RatingsByAgentChart agents={ratingsByAgent} />
 				{/if}
 			</div>
 		</div>
@@ -346,10 +390,12 @@
 	}
 
 	.filters {
+		box-sizing: border-box;
 		gap: 1.5rem;
 		padding: 1rem;
 		border-bottom: 0.5px solid var(--color-divider);
 		justify-content: space-between;
+		min-height: 66px;
 	}
 
 	.filters > div {
@@ -431,12 +477,11 @@
 	.charts {
 		display: flex;
 		flex-direction: column;
-		gap: 0rem;
+		gap: 0.5rem;
 		padding: 0.5rem 0;
 	}
 
 	.chart-panel {
-		min-height: 10rem;
 		padding: 0 1rem 0.5rem 1rem;
 	}
 

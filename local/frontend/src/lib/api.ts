@@ -19,7 +19,8 @@ import type {
 	ImportProjectsResponse,
 	CommitConversationLinks,
 	ProjectSearchMatch,
-	DailyActivityRow
+	DailyActivityRow,
+	AgentRatingDistribution
 } from './types';
 
 interface Envelope<T> {
@@ -436,6 +437,20 @@ export function getProjectDailyActivity(
 	return api(`/api/v1/projects/${encodeURIComponent(projectId)}/activity?${params.toString()}`);
 }
 
+export function getProjectRatingsByAgent(
+	projectId: string,
+	startMs: number,
+	endExclusiveMs: number
+): Promise<AgentRatingDistribution[]> {
+	const params = new URLSearchParams({
+		start: String(startMs),
+		end: String(endExclusiveMs)
+	});
+	return api(
+		`/api/v1/projects/${encodeURIComponent(projectId)}/ratings-by-agent?${params.toString()}`
+	);
+}
+
 export function getCommitConversationLinks(
 	projectId: string,
 	commitHashes: string[],
@@ -443,24 +458,28 @@ export function getCommitConversationLinks(
 	fetchFn?: APIFetch
 ): Promise<CommitConversationLinks> {
 	// Use POST for large payloads to avoid URL length limits.
-	if (
-		commitHashes.length === 0 ||
-		commitHashes.length > 50 ||
-		conversationIds.length > 50
-	) {
-		return api(`/api/v1/projects/${projectId}/commit-conversation-links`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				commitHashes,
-				conversationIds: conversationIds.length > 0 ? conversationIds : undefined
-			})
-		}, fetchFn);
+	if (commitHashes.length === 0 || commitHashes.length > 50 || conversationIds.length > 50) {
+		return api(
+			`/api/v1/projects/${projectId}/commit-conversation-links`,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					commitHashes,
+					conversationIds: conversationIds.length > 0 ? conversationIds : undefined
+				})
+			},
+			fetchFn
+		);
 	}
 	const params = new URLSearchParams();
 	params.set('commitHashes', commitHashes.join(','));
 	if (conversationIds.length > 0) {
 		params.set('conversationIds', conversationIds.join(','));
 	}
-	return api(`/api/v1/projects/${projectId}/commit-conversation-links?${params.toString()}`, undefined, fetchFn);
+	return api(
+		`/api/v1/projects/${projectId}/commit-conversation-links?${params.toString()}`,
+		undefined,
+		fetchFn
+	);
 }

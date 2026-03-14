@@ -356,6 +356,14 @@ export interface ProjectSearchMatch {
 	commitMatches: number;
 }
 
+export interface AgentRatingDistribution {
+	agent: string;
+	totalConversations: number;
+	ratedConversations: number;
+	averageRating: number;
+	distribution: Record<string, number>;
+}
+
 export interface DailyActivityRow {
 	date: string;
 	conversations: number;

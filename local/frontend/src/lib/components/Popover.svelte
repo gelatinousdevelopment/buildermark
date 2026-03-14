@@ -5,6 +5,7 @@
 
 	interface Props {
 		wrapWidth?: string;
+		flex?: string;
 		position?: Position;
 		width?: string;
 		padding?: string;
@@ -15,6 +16,7 @@
 
 	let {
 		wrapWidth = undefined,
+		flex = undefined,
 		position = 'leading',
 		width,
 		padding = '1rem',
@@ -238,6 +240,7 @@
 <div
 	class="popover-wrap"
 	style:width={wrapWidth}
+	style:flex
 	bind:this={wrapperEl}
 	onmouseenter={() => (visible = true)}
 	onmouseleave={() => (visible = false)}
