@@ -11,3 +11,11 @@ dist
 .gocache
 .claude
 .gomodcache
+
+// Xcode
+build/
+*.xcuserdata
+xcuserdata/
+DerivedData/
+.swiftpm/
+.derivedData/
