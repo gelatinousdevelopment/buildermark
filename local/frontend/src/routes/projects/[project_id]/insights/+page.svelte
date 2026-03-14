@@ -15,6 +15,7 @@
 	import type { DailyCommitSummary, DailyActivityRow, AgentRatingDistribution } from '$lib/types';
 	import { referenceNowDate } from '$lib/utils';
 	import Icon from '$lib/Icon.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 
@@ -52,6 +53,9 @@
 	let activityError: string | null = $state(null);
 	let lastActivityLoadKey = '';
 	let activityRequestToken = 0;
+	let countChildConversationsSeparately = $derived(
+		settingsStore.activityChartCountChildConversationsSeparately
+	);
 
 	let ratingsByAgent: AgentRatingDistribution[] = $state([]);
 	let ratingsLoading = $state(false);
@@ -225,13 +229,18 @@
 
 	$effect(() => {
 		if (!projectId) return;
-		const key = `activity:${projectId}:${requestRange.startMs}:${requestRange.endExclusiveMs}`;
+		const key = `activity:${projectId}:${requestRange.startMs}:${requestRange.endExclusiveMs}:${countChildConversationsSeparately}`;
 		if (key === lastActivityLoadKey) return;
 		lastActivityLoadKey = key;
 		const myToken = ++activityRequestToken;
-		activityLoading = true;
+		// activityLoading = true;
 		activityError = null;
-		void getProjectDailyActivity(projectId, requestRange.startMs, requestRange.endExclusiveMs)
+		void getProjectDailyActivity(
+			projectId,
+			requestRange.startMs,
+			requestRange.endExclusiveMs,
+			countChildConversationsSeparately
+		)
 			.then((rows) => {
 				if (myToken !== activityRequestToken) return;
 				dailyActivity = rows ?? [];

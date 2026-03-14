@@ -13,6 +13,9 @@
 
 	let { dailyActivity, fillArea = true, height = 114 }: Props = $props();
 	let countAnswers = $derived(settingsStore.activityChartCountAnswers);
+	let countChildConversationsSeparately = $derived(
+		settingsStore.activityChartCountChildConversationsSeparately
+	);
 	const popoverId = `da-menu-${Math.random().toString(36).slice(2, 8)}`;
 	let menuBtn: HTMLButtonElement | undefined;
 	let menuBody: HTMLDivElement | undefined;
@@ -178,6 +181,17 @@
 			<label class="da-menu-option">
 				<input
 					type="checkbox"
+					checked={settingsStore.activityChartCountChildConversationsSeparately}
+					onchange={(e) =>
+						(settingsStore.activityChartCountChildConversationsSeparately = (
+							e.currentTarget as HTMLInputElement
+						).checked)}
+				/>
+				Count linked child conversations separately
+			</label>
+			<label class="da-menu-option">
+				<input
+					type="checkbox"
 					checked={settingsStore.activityChartCountAnswers}
 					onchange={(e) =>
 						(settingsStore.activityChartCountAnswers = (
@@ -299,14 +313,24 @@
 				{#snippet popover()}
 					<div class="da-details-popover">
 						<div class="da-details-row">
-							<strong>Conversations</strong> assigns each conversation to one day only: the day of its
-							latest user message.
+							<strong>Conversations</strong>
+							{#if countChildConversationsSeparately}
+								assigns each conversation to one day only: the day of its latest user message.
+							{:else}
+								merges linked child conversations into their root conversation and assigns each root
+								family to one day only: the day of its latest user message.
+							{/if}
 						</div>
 						<div class="da-details-row">
 							<strong>User Prompts</strong> assigns each prompt to one day only: the day it was sent.
 						</div>
+						{#if countAnswers}
+							<div class="da-details-row">
+								Answers are also included in prompt totals, once each on the day they were sent.
+							</div>
+						{/if}
 						<div class="da-details-row">
-							Agent-generated plan prompts are excluded from this chart.
+							First prompts in child conversations are excluded from this chart.
 						</div>
 						<div class="da-details-row">
 							The Conversations page date filter is broader and shows any conversation with any

@@ -25,8 +25,23 @@ func (s *Server) handleGetProjectActivity(w http.ResponseWriter, r *http.Request
 
 	tzOffset, _ := strconv.Atoi(q.Get("tzOffset"))
 	timeZone := q.Get("timeZone")
+	countChildConversationsSeparately := true
+	if raw := q.Get("countChildConversationsSeparately"); raw != "" {
+		if parsed, err := strconv.ParseBool(raw); err == nil {
+			countChildConversationsSeparately = parsed
+		}
+	}
 
-	rows, err := db.GetDailyActivity(r.Context(), s.DB, projectID, startMs, endMs, timeZone, tzOffset)
+	rows, err := db.GetDailyActivity(
+		r.Context(),
+		s.DB,
+		projectID,
+		startMs,
+		endMs,
+		timeZone,
+		tzOffset,
+		countChildConversationsSeparately,
+	)
 	if err != nil {
 		log.Printf("error getting daily activity: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to get daily activity")

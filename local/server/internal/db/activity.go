@@ -20,8 +20,10 @@ type DailyActivityRow struct {
 // project within the given time range. Each conversation is counted at most
 // once, on the local day of its latest role=user message. User prompts and
 // answers are counted by message timestamp, while excluding the first message
-// in child conversations since those are plan-generated handoff prompts.
-func GetDailyActivity(ctx context.Context, db *sql.DB, projectID string, startMs, endExclusiveMs int64, timeZone string, tzOffsetMin int) ([]DailyActivityRow, error) {
+// in child conversations since those are plan-generated handoff prompts. When
+// countChildConversationsSeparately is false, linked child conversations are
+// merged into their root family conversation for the conversation series.
+func GetDailyActivity(ctx context.Context, db *sql.DB, projectID string, startMs, endExclusiveMs int64, timeZone string, tzOffsetMin int, countChildConversationsSeparately bool) ([]DailyActivityRow, error) {
 	loc, err := activityLocation(timeZone, tzOffsetMin)
 	if err != nil {
 		return nil, err
@@ -42,14 +44,24 @@ func GetDailyActivity(ctx context.Context, db *sql.DB, projectID string, startMs
 	}
 
 	// Count non-hidden conversations once each by the day of their latest user message.
+	conversationGroupExpr := activityConversationGroupExpr(countChildConversationsSeparately)
 	convRows, err := db.QueryContext(ctx,
-		`SELECT MAX(m.timestamp) AS latest_user_ts
-		 FROM conversations c
-		 JOIN messages m ON m.conversation_id = c.id
-		 WHERE c.project_id = ? AND c.hidden = 0 AND m.role = 'user'
-		 GROUP BY c.id
-		 HAVING latest_user_ts >= ? AND latest_user_ts < ?`,
-		projectID, startMs, endExclusiveMs,
+		fmt.Sprintf(
+			`WITH visible_user_messages AS (
+				SELECT %s AS activity_conversation_id, m.timestamp
+				FROM conversations c
+				JOIN messages m ON m.conversation_id = c.id
+				WHERE c.project_id = ? AND c.hidden = 0 AND m.role = 'user'
+			)
+			SELECT MAX(timestamp) AS latest_user_ts
+			FROM visible_user_messages
+			GROUP BY activity_conversation_id
+			HAVING latest_user_ts >= ? AND latest_user_ts < ?`,
+			conversationGroupExpr,
+		),
+		projectID,
+		startMs,
+		endExclusiveMs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query daily conversations: %w", err)
@@ -123,6 +135,13 @@ func GetDailyActivity(ctx context.Context, db *sql.DB, projectID string, startMs
 		result[i] = *dateMap[d]
 	}
 	return result, nil
+}
+
+func activityConversationGroupExpr(countChildConversationsSeparately bool) string {
+	if countChildConversationsSeparately {
+		return "c.id"
+	}
+	return "c.family_root_id"
 }
 
 func activityLocation(timeZone string, tzOffsetMin int) (*time.Location, error) {

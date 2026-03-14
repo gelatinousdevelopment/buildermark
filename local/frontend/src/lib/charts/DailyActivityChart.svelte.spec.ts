@@ -16,6 +16,7 @@ const sampleActivity = [
 describe('DailyActivityChart', () => {
 	beforeEach(() => {
 		settingsStore.activityChartCountAnswers = false;
+		settingsStore.activityChartCountChildConversationsSeparately = true;
 	});
 
 	it('renders a Details popover explaining chart semantics', async () => {
@@ -40,6 +41,25 @@ describe('DailyActivityChart', () => {
 			.element(
 				page.getByText(
 					'The Conversations page date filter is broader and shows any conversation with any message on that day, so those counts can differ.'
+				)
+			)
+			.toBeInTheDocument();
+	});
+
+	it('updates the Details copy when linked child conversations are merged', async () => {
+		settingsStore.activityChartCountChildConversationsSeparately = false;
+
+		render(DailyActivityChart, {
+			dailyActivity: sampleActivity
+		});
+
+		const details = page.getByRole('button', { name: 'Activity chart details' });
+		await details.hover();
+
+		await expect
+			.element(
+				page.getByText(
+					'Conversations merges linked child conversations into their root conversation and assigns each root family to one day only: the day of its latest user message.'
 				)
 			)
 			.toBeInTheDocument();

@@ -10,6 +10,7 @@ interface Settings {
 	commits_chart_scale_by_lines: boolean;
 	commits_chart_stretch_bars: boolean;
 	activity_chart_count_answers: boolean;
+	activity_chart_count_child_conversations_separately: boolean;
 	content_width: ContentWidth;
 	commit_sort_order: CommitSortOrder;
 	export_mode: ExportMode;
@@ -22,6 +23,7 @@ const defaults: Settings = {
 	commits_chart_scale_by_lines: false,
 	commits_chart_stretch_bars: false,
 	activity_chart_count_answers: false,
+	activity_chart_count_child_conversations_separately: true,
 	content_width: 'default',
 	commit_sort_order: 'desc',
 	export_mode: 'prompts-with-commits',
@@ -53,6 +55,8 @@ function currentSettings(): Settings {
 		commits_chart_scale_by_lines: _commitsChartScaleByLines,
 		commits_chart_stretch_bars: _commitsChartStretchBars,
 		activity_chart_count_answers: _activityChartCountAnswers,
+		activity_chart_count_child_conversations_separately:
+			_activityChartCountChildConversationsSeparately,
 		content_width: _contentWidth,
 		commit_sort_order: _commitSortOrder,
 		export_mode: _exportMode,
@@ -85,6 +89,9 @@ const initial = load();
 let _commitsChartScaleByLines = $state(initial.commits_chart_scale_by_lines);
 let _commitsChartStretchBars = $state(initial.commits_chart_stretch_bars);
 let _activityChartCountAnswers = $state(initial.activity_chart_count_answers);
+let _activityChartCountChildConversationsSeparately = $state(
+	initial.activity_chart_count_child_conversations_separately
+);
 let _contentWidth = $state(initial.content_width);
 let _commitSortOrder: CommitSortOrder = $state(initial.commit_sort_order);
 let _exportMode: ExportMode = $state(initial.export_mode);
@@ -101,6 +108,8 @@ if (browser) {
 		_commitsChartScaleByLines = updated.commits_chart_scale_by_lines;
 		_commitsChartStretchBars = updated.commits_chart_stretch_bars;
 		_activityChartCountAnswers = updated.activity_chart_count_answers;
+		_activityChartCountChildConversationsSeparately =
+			updated.activity_chart_count_child_conversations_separately;
 		_contentWidth = updated.content_width;
 		_commitSortOrder = updated.commit_sort_order;
 		_exportMode = updated.export_mode;
@@ -131,6 +140,13 @@ export const settingsStore = {
 	},
 	set activityChartCountAnswers(v: boolean) {
 		_activityChartCountAnswers = v;
+		save();
+	},
+	get activityChartCountChildConversationsSeparately() {
+		return _activityChartCountChildConversationsSeparately;
+	},
+	set activityChartCountChildConversationsSeparately(v: boolean) {
+		_activityChartCountChildConversationsSeparately = v;
 		save();
 	},
 	get contentWidth(): ContentWidth {

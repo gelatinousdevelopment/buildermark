@@ -427,13 +427,15 @@ export function debugGetWSClients(): Promise<{ frontend: number; notification: n
 export function getProjectDailyActivity(
 	projectId: string,
 	startMs: number,
-	endExclusiveMs: number
+	endExclusiveMs: number,
+	countChildConversationsSeparately = true
 ): Promise<DailyActivityRow[]> {
 	const params = new URLSearchParams({
 		start: String(startMs),
 		end: String(endExclusiveMs),
 		tzOffset: String(new Date().getTimezoneOffset()),
-		timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+		timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+		countChildConversationsSeparately: String(countChildConversationsSeparately)
 	});
 	return api(`/api/v1/projects/${encodeURIComponent(projectId)}/activity?${params.toString()}`);
 }

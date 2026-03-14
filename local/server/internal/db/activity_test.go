@@ -110,6 +110,7 @@ func TestGetDailyActivityCountsConversationOnceOnLatestUserMessageDay(t *testing
 		mustUnixMsUTC(2026, time.March, 13, 0, 0),
 		"UTC",
 		0,
+		true,
 	)
 	if err != nil {
 		t.Fatalf("GetDailyActivity: %v", err)
@@ -163,6 +164,7 @@ func TestGetDailyActivityUsesTimeZoneAcrossDST(t *testing.T) {
 		time.Date(2026, time.March, 9, 0, 0, 0, 0, loc).UnixMilli(),
 		"America/Los_Angeles",
 		-420,
+		true,
 	)
 	if err != nil {
 		t.Fatalf("GetDailyActivity: %v", err)
@@ -174,6 +176,113 @@ func TestGetDailyActivityUsesTimeZoneAcrossDST(t *testing.T) {
 
 	assertDailyRow(t, rows[0], "2026-03-07", 1, 1, 0)
 	assertDailyRow(t, rows[1], "2026-03-08", 0, 0, 0)
+}
+
+func TestGetDailyActivityMergesLinkedChildrenIntoRootFamilyWhenDisabled(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	if err := EnsureConversation(ctx, db, "conv-root", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation conv-root: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-child", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation conv-child: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-grandchild", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation conv-grandchild: %v", err)
+	}
+	if err := UpdateConversationParent(ctx, db, "conv-child", "conv-root"); err != nil {
+		t.Fatalf("UpdateConversationParent child: %v", err)
+	}
+	if err := UpdateConversationParent(ctx, db, "conv-grandchild", "conv-child"); err != nil {
+		t.Fatalf("UpdateConversationParent grandchild: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{
+			Timestamp:      mustUnixMsUTC(2026, time.March, 10, 9, 0),
+			ProjectID:      projectID,
+			ConversationID: "conv-root",
+			Role:           "user",
+			MessageType:    MessageTypePrompt,
+			Content:        "root prompt",
+			RawJSON:        `{}`,
+		},
+		{
+			Timestamp:      mustUnixMsUTC(2026, time.March, 11, 10, 0),
+			ProjectID:      projectID,
+			ConversationID: "conv-child",
+			Role:           "user",
+			MessageType:    MessageTypePrompt,
+			Content:        "Implement the following plan:\n# Nested handoff",
+			RawJSON:        `{}`,
+		},
+		{
+			Timestamp:      mustUnixMsUTC(2026, time.March, 11, 12, 0),
+			ProjectID:      projectID,
+			ConversationID: "conv-child",
+			Role:           "user",
+			MessageType:    MessageTypePrompt,
+			Content:        "child follow-up prompt",
+			RawJSON:        `{}`,
+		},
+		{
+			Timestamp:      mustUnixMsUTC(2026, time.March, 12, 8, 0),
+			ProjectID:      projectID,
+			ConversationID: "conv-grandchild",
+			Role:           "user",
+			MessageType:    MessageTypePrompt,
+			Content:        "Implement the following plan:\n# Deeper handoff",
+			RawJSON:        `{}`,
+		},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	separateRows, err := GetDailyActivity(
+		ctx,
+		db,
+		projectID,
+		mustUnixMsUTC(2026, time.March, 10, 0, 0),
+		mustUnixMsUTC(2026, time.March, 13, 0, 0),
+		"UTC",
+		0,
+		true,
+	)
+	if err != nil {
+		t.Fatalf("GetDailyActivity separate: %v", err)
+	}
+
+	mergedRows, err := GetDailyActivity(
+		ctx,
+		db,
+		projectID,
+		mustUnixMsUTC(2026, time.March, 10, 0, 0),
+		mustUnixMsUTC(2026, time.March, 13, 0, 0),
+		"UTC",
+		0,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("GetDailyActivity merged: %v", err)
+	}
+
+	if len(separateRows) != 3 || len(mergedRows) != 3 {
+		t.Fatalf("row lengths = %d and %d, want 3 and 3", len(separateRows), len(mergedRows))
+	}
+
+	assertDailyRow(t, separateRows[0], "2026-03-10", 1, 1, 0)
+	assertDailyRow(t, separateRows[1], "2026-03-11", 1, 1, 0)
+	assertDailyRow(t, separateRows[2], "2026-03-12", 1, 0, 0)
+
+	assertDailyRow(t, mergedRows[0], "2026-03-10", 0, 1, 0)
+	assertDailyRow(t, mergedRows[1], "2026-03-11", 0, 1, 0)
+	assertDailyRow(t, mergedRows[2], "2026-03-12", 1, 0, 0)
 }
 
 func mustUnixMsUTC(year int, month time.Month, day, hour, minute int) int64 {
