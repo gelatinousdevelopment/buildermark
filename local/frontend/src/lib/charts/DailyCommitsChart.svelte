@@ -374,10 +374,16 @@
 															<span class="dc-popover-pct">{seg.percent.toFixed(1)}%</span>
 														</div>
 													{/each}
+													<h3 style:margin-top="0.5rem" style:text-align="center">
+														{col.segments
+															.reduce((a, b) => (b.key != 'manual' ? a + b.percent : a), 0)
+															.toFixed(1)}% by agents
+													</h3>
 												</div>
 											</div>
 											{#if col.summary.commits.length > 0}
 												<div class="dc-popover-commits">
+													<h3>Commits</h3>
 													{#each col.summary.commits as c (c.commitHash)}
 														<a
 															href={resolve(
@@ -745,6 +751,14 @@
 		max-height: 203px;
 		overflow-y: auto;
 		padding: 1rem;
+	}
+
+	.dc-popover h3 {
+		font-weight: 600;
+		font-size: 0.85rem;
+		color: var(--color-text-strong);
+		margin: 0;
+		padding: 0;
 	}
 
 	.dc-commit-link {
