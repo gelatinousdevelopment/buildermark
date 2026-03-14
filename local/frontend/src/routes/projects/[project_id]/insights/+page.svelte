@@ -7,12 +7,19 @@
 	import {
 		listProjectCommitsPage,
 		getProjectDailyActivity,
-		getProjectRatingsByAgent
+		getProjectRatingsByAgent,
+		getProjectFileTypeCoverage
 	} from '$lib/api';
 	import DailyCommitsChart from '$lib/charts/DailyCommitsChart.svelte';
 	import DailyActivityChart from '$lib/charts/DailyActivityChart.svelte';
 	import RatingsByAgentChart from '$lib/charts/RatingsByAgentChart.svelte';
-	import type { DailyCommitSummary, DailyActivityRow, AgentRatingDistribution } from '$lib/types';
+	import FileTypeCoverageChart from '$lib/charts/FileTypeCoverageChart.svelte';
+	import type {
+		DailyCommitSummary,
+		DailyActivityRow,
+		AgentRatingDistribution,
+		FileTypeCoverage
+	} from '$lib/types';
 	import { referenceNowDate } from '$lib/utils';
 	import Icon from '$lib/Icon.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -62,6 +69,12 @@
 	let ratingsError: string | null = $state(null);
 	let lastRatingsLoadKey = '';
 	let ratingsRequestToken = 0;
+
+	let fileTypeCoverage: FileTypeCoverage[] = $state([]);
+	let fileTypeCoverageLoading = $state(false);
+	let fileTypeCoverageError: string | null = $state(null);
+	let lastFileTypeCoverageLoadKey = '';
+	let fileTypeCoverageRequestToken = 0;
 
 	function toYMD(date: Date): string {
 		const y = date.getFullYear();
@@ -279,6 +292,31 @@
 				ratingsLoading = false;
 			});
 	});
+
+	$effect(() => {
+		if (!projectId) return;
+		const key = `ftcov:${projectId}:${requestRange.startMs}:${requestRange.endExclusiveMs}`;
+		if (key === lastFileTypeCoverageLoadKey) return;
+		lastFileTypeCoverageLoadKey = key;
+		const myToken = ++fileTypeCoverageRequestToken;
+		fileTypeCoverageLoading = true;
+		fileTypeCoverageError = null;
+		void getProjectFileTypeCoverage(projectId, requestRange.startMs, requestRange.endExclusiveMs)
+			.then((rows) => {
+				if (myToken !== fileTypeCoverageRequestToken) return;
+				fileTypeCoverage = rows ?? [];
+			})
+			.catch((e) => {
+				if (myToken !== fileTypeCoverageRequestToken) return;
+				fileTypeCoverageError =
+					e instanceof Error ? e.message : 'Failed to load file type coverage';
+				fileTypeCoverage = [];
+			})
+			.finally(() => {
+				if (myToken !== fileTypeCoverageRequestToken) return;
+				fileTypeCoverageLoading = false;
+			});
+	});
 </script>
 
 <div class="outer">
@@ -362,6 +400,17 @@
 					<p class="status error">{ratingsError}</p>
 				{:else}
 					<RatingsByAgentChart agents={ratingsByAgent} />
+				{/if}
+			</div>
+
+			<div class="chart-panel">
+				<h2 class="chart-heading">Agent Attribution by File Type</h2>
+				{#if fileTypeCoverageLoading}
+					<p class="status">Loading file type coverage...</p>
+				{:else if fileTypeCoverageError}
+					<p class="status error">{fileTypeCoverageError}</p>
+				{:else}
+					<FileTypeCoverageChart data={fileTypeCoverage} />
 				{/if}
 			</div>
 		</div>

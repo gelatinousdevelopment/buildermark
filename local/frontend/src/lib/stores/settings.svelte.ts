@@ -17,6 +17,7 @@ interface Settings {
 	export_format: ExportFormat;
 	export_preset_days: number | null;
 	export_sort_order: ExportSortOrder;
+	file_type_coverage_show_all: boolean;
 }
 
 const defaults: Settings = {
@@ -29,7 +30,8 @@ const defaults: Settings = {
 	export_mode: 'prompts-with-commits',
 	export_format: 'markdown',
 	export_preset_days: 30,
-	export_sort_order: 'newest' as ExportSortOrder
+	export_sort_order: 'newest' as ExportSortOrder,
+	file_type_coverage_show_all: false
 };
 
 function load(): Settings {
@@ -62,7 +64,8 @@ function currentSettings(): Settings {
 		export_mode: _exportMode,
 		export_format: _exportFormat,
 		export_preset_days: _exportPresetDays,
-		export_sort_order: _exportSortOrder
+		export_sort_order: _exportSortOrder,
+		file_type_coverage_show_all: _fileTypeCoverageShowAll
 	};
 }
 
@@ -98,6 +101,7 @@ let _exportMode: ExportMode = $state(initial.export_mode);
 let _exportFormat: ExportFormat = $state(initial.export_format);
 let _exportPresetDays: number | null = $state(initial.export_preset_days);
 let _exportSortOrder: ExportSortOrder = $state(initial.export_sort_order);
+let _fileTypeCoverageShowAll = $state(initial.file_type_coverage_show_all);
 
 applyContentWidth(initial.content_width);
 
@@ -116,6 +120,7 @@ if (browser) {
 		_exportFormat = updated.export_format;
 		_exportPresetDays = updated.export_preset_days;
 		_exportSortOrder = updated.export_sort_order;
+		_fileTypeCoverageShowAll = updated.file_type_coverage_show_all;
 		applyContentWidth(updated.content_width);
 	});
 }
@@ -190,6 +195,13 @@ export const settingsStore = {
 	},
 	set exportSortOrder(v: ExportSortOrder) {
 		_exportSortOrder = v;
+		save();
+	},
+	get fileTypeCoverageShowAll() {
+		return _fileTypeCoverageShowAll;
+	},
+	set fileTypeCoverageShowAll(v: boolean) {
+		_fileTypeCoverageShowAll = v;
 		save();
 	}
 };

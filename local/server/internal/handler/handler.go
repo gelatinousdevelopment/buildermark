@@ -114,6 +114,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignore-default-diff-paths", s.handleSetProjectIgnoreDefaultDiffPaths)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/activity", s.handleGetProjectActivity)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/ratings-by-agent", s.handleGetRatingsByAgent)
+	mux.HandleFunc("GET /api/v1/projects/{projectId}/file-type-coverage", s.handleGetFileTypeCoverage)
 	mux.HandleFunc("GET /api/v1/conversations", s.handleListConversations)
 	mux.HandleFunc("GET /api/v1/conversations/batch-detail", s.handleGetConversationsBatchDetail)
 	mux.HandleFunc("GET /api/v1/conversations/{id}", s.handleGetConversation)

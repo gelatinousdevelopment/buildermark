@@ -20,7 +20,8 @@ import type {
 	CommitConversationLinks,
 	ProjectSearchMatch,
 	DailyActivityRow,
-	AgentRatingDistribution
+	AgentRatingDistribution,
+	FileTypeCoverage
 } from './types';
 
 interface Envelope<T> {
@@ -451,6 +452,20 @@ export function getProjectRatingsByAgent(
 	});
 	return api(
 		`/api/v1/projects/${encodeURIComponent(projectId)}/ratings-by-agent?${params.toString()}`
+	);
+}
+
+export function getProjectFileTypeCoverage(
+	projectId: string,
+	startMs: number,
+	endExclusiveMs: number
+): Promise<FileTypeCoverage[]> {
+	const params = new URLSearchParams({
+		start: String(startMs),
+		end: String(endExclusiveMs)
+	});
+	return api(
+		`/api/v1/projects/${encodeURIComponent(projectId)}/file-type-coverage?${params.toString()}`
 	);
 }
 

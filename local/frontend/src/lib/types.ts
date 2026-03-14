@@ -371,6 +371,14 @@ export interface DailyActivityRow {
 	userAnswers: number;
 }
 
+export interface FileTypeCoverage {
+	extension: string;
+	totalFiles: number;
+	totalLines: number;
+	agentSegments: AgentCoverageSegment[];
+	manualPercent: number;
+}
+
 export interface CommitConversationLinks {
 	commitToConversations: Record<string, string[]>;
 	conversationToCommits: Record<string, string[]>;

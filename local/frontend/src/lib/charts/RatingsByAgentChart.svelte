@@ -173,7 +173,7 @@
 	}
 
 	.col-stat {
-		width: 80px;
+		width: 70px;
 		flex-shrink: 0;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
@@ -185,7 +185,7 @@
 		align-items: center;
 		justify-content: flex-end;
 		gap: 1px;
-		width: 40px;
+		width: 34px;
 	}
 
 	.star-icon {
