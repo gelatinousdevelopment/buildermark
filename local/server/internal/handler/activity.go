@@ -24,8 +24,9 @@ func (s *Server) handleGetProjectActivity(w http.ResponseWriter, r *http.Request
 	}
 
 	tzOffset, _ := strconv.Atoi(q.Get("tzOffset"))
+	timeZone := q.Get("timeZone")
 
-	rows, err := db.GetDailyActivity(r.Context(), s.DB, projectID, startMs, endMs, tzOffset)
+	rows, err := db.GetDailyActivity(r.Context(), s.DB, projectID, startMs, endMs, timeZone, tzOffset)
 	if err != nil {
 		log.Printf("error getting daily activity: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to get daily activity")

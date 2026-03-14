@@ -293,6 +293,28 @@
 				<span class="da-swatch" style="background:{PROMPTS_COLOR}"></span>
 				<span class="da-key-label">User Prompts</span>
 			</span>
+			<div style:flex="1"></div>
+			<Popover position="above" width="300px" padding="0.75rem" wrapWidth="18px">
+				<div class="da-details-icon"><Icon name="info" width="18px" /></div>
+				{#snippet popover()}
+					<div class="da-details-popover">
+						<div class="da-details-row">
+							<strong>Conversations</strong> assigns each conversation to one day only: the day of its
+							latest user message.
+						</div>
+						<div class="da-details-row">
+							<strong>User Prompts</strong> assigns each prompt to one day only: the day it was sent.
+						</div>
+						<div class="da-details-row">
+							Agent-generated plan prompts are excluded from this chart.
+						</div>
+						<div class="da-details-row">
+							The Conversations page date filter is broader and shows any conversation with any
+							message on that day, so those counts can differ.
+						</div>
+					</div>
+				{/snippet}
+			</Popover>
 		</div>
 		<div class="da-totals info-box">
 			<div class="title">
@@ -500,6 +522,32 @@
 		max-width: 110px;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	.da-details-icon {
+		color: var(--color-text-tertiary);
+	}
+
+	.da-details-icon:hover {
+		color: var(--accent-color);
+	}
+
+	.da-details-popover {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		white-space: normal;
+		font-size: 0.85rem;
+		line-height: 1.4;
+		color: var(--color-text-secondary);
+	}
+
+	.da-details-row {
+		max-width: 300px;
+	}
+
+	.da-details-row strong {
+		color: var(--color-text);
 	}
 
 	.da-totals {

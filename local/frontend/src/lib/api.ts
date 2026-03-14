@@ -432,7 +432,8 @@ export function getProjectDailyActivity(
 	const params = new URLSearchParams({
 		start: String(startMs),
 		end: String(endExclusiveMs),
-		tzOffset: String(new Date().getTimezoneOffset())
+		tzOffset: String(new Date().getTimezoneOffset()),
+		timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
 	});
 	return api(`/api/v1/projects/${encodeURIComponent(projectId)}/activity?${params.toString()}`);
 }
