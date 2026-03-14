@@ -25,8 +25,10 @@
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import { singleLineTitle, shortId } from '$lib/utils';
+	import { buildResumeCommand, KNOWN_AGENT_INFO } from '$lib/agents';
 	import { resolve } from '$app/paths';
 	import Icon from '$lib/Icon.svelte';
+	import type { Project } from '$lib/types';
 
 	type TimelineItem =
 		| { kind: 'message'; message: MessageRead; time: number }
@@ -54,6 +56,8 @@
 	let bottomNote: string = $state('');
 	let bottomSubmitting: boolean = $state(false);
 	let bottomError: string | null = $state(null);
+	let resumeCommandCopied: boolean = $state(false);
+	let resumeCommandError: string | null = $state(null);
 	let hiddenSubmitting: boolean = $state(false);
 	let hiddenError: string | null = $state(null);
 	let localHidden: boolean = $state(false);
@@ -75,6 +79,8 @@
 			bottomRatingValue = 0;
 			bottomNote = '';
 			bottomError = null;
+			resumeCommandCopied = false;
+			resumeCommandError = null;
 			hiddenError = null;
 			hiddenSubmitting = false;
 			localHidden = conversation.hidden;
@@ -90,6 +96,16 @@
 
 	// Local copy of ratings so we can append without mutating the load data.
 	let localRatings: Rating[] = $derived(conversation.ratings);
+	let projects: Project[] = $derived(data.projects ?? []);
+	let projectPath = $derived(
+		projects.find((project) => project.id === conversation.projectId)?.path ?? ''
+	);
+	let resumeAgentInfo = $derived(
+		KNOWN_AGENT_INFO[conversation.agent as keyof typeof KNOWN_AGENT_INFO]
+	);
+	let resumeCommand = $derived(
+		buildResumeCommand(conversation.agent, conversation.id, projectPath)
+	);
 
 	function selectMessage(message: MessageRead) {
 		if (selectedMessage?.id === message.id) {
@@ -177,6 +193,18 @@
 			bottomError = e instanceof Error ? e.message : 'Failed to submit rating';
 		} finally {
 			bottomSubmitting = false;
+		}
+	}
+
+	async function copyResumeCommand() {
+		if (!resumeCommand) return;
+		resumeCommandError = null;
+		try {
+			await navigator.clipboard.writeText(resumeCommand);
+			resumeCommandCopied = true;
+			setTimeout(() => (resumeCommandCopied = false), 2000);
+		} catch (e) {
+			resumeCommandError = e instanceof Error ? e.message : 'Failed to copy the resume command';
 		}
 	}
 
@@ -496,6 +524,31 @@
 				{#if bottomError}
 					<p class="inline-error">{bottomError}</p>
 				{/if}
+				{#if resumeCommand}
+					<div class="resume-command-section">
+						<div class="resume-command-header">
+							<strong>Ask agent to rate in terminal</strong>
+						</div>
+						<p class="resume-command-copy">
+							Copy this command and paste it into your terminal to resume this
+							<AgentTag agent={conversation.agent} subtle={true} />
+							conversation and run <code>bbrate</code>.
+						</p>
+						<div class="resume-command-block">
+							<code>{resumeCommand}</code>
+							<button class="bordered tiny" onclick={copyResumeCommand}>
+								{resumeCommandCopied ? 'Copied!' : 'Copy'}
+							</button>
+						</div>
+						<p class="resume-command-note">
+							Requires the matching <a href={resolve('/plugins')}>Buildermark plugin or skill</a> to already
+							be installed.
+						</p>
+						{#if resumeCommandError}
+							<p class="inline-error">{resumeCommandError}</p>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{/if}
 		{#if !localHidden}
@@ -545,17 +598,18 @@
 		{:else}
 			<div class="empty-state">
 				<div class="empty">No message selected</div>
-				<br />
-				<br />
-				<hr class="divider" style:max-width="60%" />
-				<br />
-				<br />
 				{#if matchedCommitHashes.length > 0}
+					<br />
+					<br />
+					<hr class="divider" style:max-width="60%" />
+					<br />
+					<br />
 					<section class="matched-commits matched-commits-side">
 						<h3>Matched commits</h3>
 						<div class="matched-commits-container">
 							<div class="matched-commit-list">
 								{#each matchedCommitHashes as commitHash (commitHash)}
+									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 									<a class="matched-commit-link" href={matchedCommitHref(commitHash)}>
 										<div class="matched-commit-icon"><Icon name="commit" width="18px" /></div>
 										<span class="matched-commit-text">
@@ -826,6 +880,50 @@
 		margin: 0;
 	}
 
+	.resume-command-section {
+		border-top: 1px solid var(--color-rating-border);
+		margin-top: 0.25rem;
+		padding-top: 0.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.resume-command-header {
+		font-size: 0.85rem;
+		color: var(--color-text-secondary);
+	}
+
+	.resume-command-copy,
+	.resume-command-note {
+		color: var(--color-text-secondary);
+		font-size: 0.85rem;
+		line-height: 1.4;
+		margin: 0;
+	}
+
+	.resume-command-block {
+		align-items: flex-start;
+		background: var(--color-background-surface);
+		border: 1px solid var(--color-border-medium);
+		border-radius: 6px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+		justify-content: space-between;
+		padding: 0.65rem 0.75rem;
+	}
+
+	.resume-command-block code {
+		color: var(--color-text);
+		flex: 1;
+		font-family: var(--font-family-monospace);
+		font-size: 0.8rem;
+		line-height: 1.5;
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+	}
+
 	.conversation-visibility {
 		align-items: center;
 		display: flex;
@@ -867,9 +965,9 @@
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.5rem 0.75rem;
+		padding: 0.75rem 0.75rem;
 		border-radius: 6px;
-		font-size: 0.9rem;
+		font-size: 1rem;
 		text-decoration: none;
 		margin-bottom: 0.5rem;
 		white-space: nowrap;
@@ -885,8 +983,8 @@
 	}
 
 	.link-icon {
-		width: 14px;
-		height: 14px;
+		width: 16px;
+		height: 16px;
 		flex-shrink: 0;
 		color: var(--color-relationship-foreground);
 	}
