@@ -1,4 +1,4 @@
-# bbrate — Claude Code Plugin
+# brate — Claude Code Plugin
 
 Rate conversations on a 0–5 scale. Ratings are sent to the local Buildermark Local server and viewable on the dashboard at http://localhost:55022.
 
@@ -10,15 +10,15 @@ From the repo root, launch Claude Code with the plugin loaded:
 claude --plugin-dir ./plugins/claudecode
 ```
 
-The `/bbrate` skill will be available as `/bbrate:rate` (or just `/bbrate` if unambiguous).
+The `/brate` skill will be available as `/brate:rate` (or just `/brate` if unambiguous).
 
 ## Usage
 
 ```
-/bbrate
-/bbrate 4 Great help with refactoring
-/bbrate 5
-/bbrate 2 Got stuck on the wrong approach
+/brate
+/brate 4 Great help with refactoring
+/brate 5
+/brate 2 Got stuck on the wrong approach
 ```
 
 If you omit the rating, the model will infer a 0-5 rating from the conversation.

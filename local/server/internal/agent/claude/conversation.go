@@ -444,7 +444,7 @@ func IsAssistantAuthoredConversationEntry(entry conversationEntry) bool {
 
 // isSkillExpansion returns true when content is a system-injected skill
 // expansion prompt (e.g. the expanded SKILL.md injected by Claude Code when
-// the user runs /bbrate). These are not user-authored messages.
+// the user runs /brate). These are not user-authored messages.
 // IsSkillExpansion returns true when content is a system-injected skill expansion prompt.
 func IsSkillExpansion(content string) bool {
 	return strings.HasPrefix(strings.TrimSpace(content), "Base directory for this skill:")

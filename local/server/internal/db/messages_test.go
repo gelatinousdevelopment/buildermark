@@ -744,8 +744,8 @@ func TestInsertMessagesExcludesBbCommandsFromPromptCount(t *testing.T) {
 
 	messages := []Message{
 		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real user prompt", RawJSON: `{"type":"user"}`},
-		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/bbrate 5", RawJSON: `{"type":"user"}`},
-		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "$bbrate 3 good work", RawJSON: `{"type":"user"}`},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/brate 5", RawJSON: `{"type":"user"}`},
+		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "$brate 3 good work", RawJSON: `{"type":"user"}`},
 		{Timestamp: 4000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "agent response", RawJSON: `{"type":"assistant"}`},
 		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/clear ", RawJSON: `{"type":"user"}`},
 		{Timestamp: 6000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/help", RawJSON: `{"type":"user"}`},

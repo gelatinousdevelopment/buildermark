@@ -251,9 +251,9 @@ func resolvePluginSourceDir() string {
 func pluginBundleExists(dir string) bool {
 	required := []string{
 		"claudecode/.claude-plugin/plugin.json",
-		"claudecode/skills/bbrate/SKILL.md",
-		"codex/skills/bbrate/SKILL.md",
-		"gemini/commands/bbrate.toml",
+		"claudecode/skills/brate/SKILL.md",
+		"codex/skills/brate/SKILL.md",
+		"gemini/commands/brate.toml",
 	}
 	for _, rel := range required {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {

@@ -23,7 +23,8 @@
 			name: 'Safari',
 			storeLabel: 'Mac App Store',
 			storeUrl: 'https://apps.apple.com/us/search?term=buildermark',
-			sourceUrl: 'https://github.com/Buildermark/buildermark/tree/main/plugins/browser_extension/safari'
+			sourceUrl:
+				'https://github.com/Buildermark/buildermark/tree/main/plugins/browser_extension/safari'
 		},
 		{
 			name: 'Firefox',
@@ -86,10 +87,10 @@
 			<p>
 				Install plugins for your agents, so you can rate and log analysis about each AI coding
 				session by running the
-				<code>bbrate</code> skill.
+				<code>brate</code> skill.
 			</p>
 			<p>For example, rate a conversation in Claude Code:</p>
-			<code>› /bbrate <span class="faded">[0-5] [Optional note or feedback]</span></code>
+			<code>› /brate <span class="faded">[0-5] [Optional note or feedback]</span></code>
 		</div>
 	</div>
 

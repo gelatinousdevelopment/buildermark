@@ -65,12 +65,12 @@
 		<p>
 			<a href={resolve('/plugins')} target="_blank">Install the plugins</a>
 			for your agents, so you can rate and log analysis about each AI coding session by running the
-			<code>bbrate</code> skill.
+			<code>brate</code> skill.
 		</p>
 		<h3>Rate a conversation in Claude Code:</h3>
-		<code class="bigger">› /bbrate</code>
+		<code class="bigger">› /brate</code>
 		<h3>Rate a conversation in Codex:</h3>
-		<code class="bigger">› $bbrate</code>
+		<code class="bigger">› $brate</code>
 		<p>
 			If you have questions or encounter a bug, start a discussion or file a bug report on github: <a
 				href="https://github.com/gelatinousdevelopment/buildermark"
