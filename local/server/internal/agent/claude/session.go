@@ -90,8 +90,8 @@ func (a *Agent) ResolveSession(rating int, note string, fallbackID string) *agen
 // command invocation. Matches "/bb", "/bb 4", "/bb:rate", etc.
 func isRatingDisplay(display string) bool {
 	d := strings.TrimSpace(display)
-	return d == "/bb" || d == "/bb:rate" || d == "/brate" ||
-		strings.HasPrefix(d, "/bb ") || strings.HasPrefix(d, "/bb:rate ") || strings.HasPrefix(d, "/brate ")
+	return d == "/bb" || d == "/bb:rate" || d == "/brate" || d == "/rate-buildermark" ||
+		strings.HasPrefix(d, "/bb ") || strings.HasPrefix(d, "/bb:rate ") || strings.HasPrefix(d, "/brate ") || strings.HasPrefix(d, "/rate-buildermark ")
 }
 
 // searchHistory reads the last tailBytes of the history file and searches
@@ -222,7 +222,7 @@ func isAssistantAuthoredHistoryEntry(entry historyEntry) bool {
 		return true
 	}
 	// Skill expansion prompts (e.g. the expanded SKILL.md injected by Claude
-	// Code when the user runs /brate) are system-generated, not user-authored.
+	// Code when the user runs /rate-buildermark) are system-generated, not user-authored.
 	if entry.Type == "user" && IsSkillExpansion(entry.Display) {
 		return true
 	}

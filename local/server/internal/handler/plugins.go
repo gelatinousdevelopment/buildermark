@@ -197,65 +197,61 @@ func pluginDefinitions() []pluginDefinition {
 		{
 			agent:  "claude",
 			name:   "Claude Code CLI",
-			syntax: "/brate",
+			syntax: "/rate-buildermark",
 			files: []pluginFileDefinition{
 				{
-					sourcePath:  "claudecode/.claude-plugin/plugin.json",
-					installPath: ".claude/plugins/buildermark/.claude-plugin/plugin.json",
-				},
-				{
-					sourcePath:  "claudecode/skills/brate/SKILL.md",
-					installPath: ".claude/plugins/buildermark/skills/brate/SKILL.md",
+					sourcePath:  "claudecode/skills/rate-buildermark/SKILL.md",
+					installPath: ".claude/skills/rate-buildermark/SKILL.md",
 					replacements: []pluginReplacement{
 						{
-							old: `"$(git rev-parse --show-toplevel)/plugins/claudecode/skills/brate/scripts/submit-rating.sh"`,
-							new: `"$HOME/.claude/plugins/buildermark/skills/brate/scripts/submit-rating.sh"`,
+							old: `"$(git rev-parse --show-toplevel)/plugins/claudecode/skills/rate-buildermark/scripts/submit-rating.sh"`,
+							new: `"$HOME/.claude/skills/rate-buildermark/scripts/submit-rating.sh"`,
 						},
 					},
 				},
 				{
-					sourcePath:  "claudecode/skills/brate/scripts/submit-rating.sh",
-					installPath: ".claude/plugins/buildermark/skills/brate/scripts/submit-rating.sh",
+					sourcePath:  "claudecode/skills/rate-buildermark/scripts/submit-rating.sh",
+					installPath: ".claude/skills/rate-buildermark/scripts/submit-rating.sh",
 					executable:  true,
 				},
 			},
 			cleanupPaths: []string{
-				".claude/plugins/buildermark",
+				".claude/skills/rate-buildermark",
 			},
 		},
 		{
 			agent:  "codex",
 			name:   "Codex CLI",
-			syntax: "$brate",
+			syntax: "$rate-buildermark",
 			files: []pluginFileDefinition{
 				{
-					sourcePath:  "codex/skills/brate/SKILL.md",
-					installPath: ".codex/skills/brate/SKILL.md",
+					sourcePath:  "codex/skills/rate-buildermark/SKILL.md",
+					installPath: ".codex/skills/rate-buildermark/SKILL.md",
 					replacements: []pluginReplacement{
 						{
-							old: "bash plugins/codex/skills/brate/scripts/submit-rating.sh",
-							new: `bash "$HOME/.codex/skills/brate/scripts/submit-rating.sh"`,
+							old: "bash plugins/codex/skills/rate-buildermark/scripts/submit-rating.sh",
+							new: `bash "$HOME/.codex/skills/rate-buildermark/scripts/submit-rating.sh"`,
 						},
 					},
 				},
 				{
-					sourcePath:  "codex/skills/brate/scripts/submit-rating.sh",
-					installPath: ".codex/skills/brate/scripts/submit-rating.sh",
+					sourcePath:  "codex/skills/rate-buildermark/scripts/submit-rating.sh",
+					installPath: ".codex/skills/rate-buildermark/scripts/submit-rating.sh",
 					executable:  true,
 				},
 			},
 			cleanupPaths: []string{
-				".codex/skills/brate",
+				".codex/skills/rate-buildermark",
 			},
 		},
 		{
 			agent:  "gemini",
 			name:   "Gemini CLI",
-			syntax: "/brate",
+			syntax: "/rate-buildermark",
 			files: []pluginFileDefinition{
 				{
-					sourcePath:  "gemini/commands/brate.toml",
-					installPath: ".gemini/commands/brate.toml",
+					sourcePath:  "gemini/commands/rate-buildermark.toml",
+					installPath: ".gemini/commands/rate-buildermark.toml",
 					replacements: []pluginReplacement{
 						{
 							old: `bash plugins/gemini/scripts/submit-rating.sh`,
@@ -270,7 +266,7 @@ func pluginDefinitions() []pluginDefinition {
 				},
 			},
 			cleanupPaths: []string{
-				".gemini/commands/brate.toml",
+				".gemini/commands/rate-buildermark.toml",
 				".gemini/scripts/submit-rating.sh",
 			},
 		},
@@ -412,10 +408,9 @@ func isPluginSourceDir(dir string) bool {
 		return false
 	}
 	required := []string{
-		"claudecode/.claude-plugin/plugin.json",
-		"claudecode/skills/brate/SKILL.md",
-		"codex/skills/brate/SKILL.md",
-		"gemini/commands/brate.toml",
+		"claudecode/skills/rate-buildermark/SKILL.md",
+		"codex/skills/rate-buildermark/SKILL.md",
+		"gemini/commands/rate-buildermark.toml",
 	}
 	for _, rel := range required {
 		if !fileExists(filepath.Join(dir, rel)) {

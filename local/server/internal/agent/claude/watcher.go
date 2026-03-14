@@ -1025,6 +1025,8 @@ func parseRatingDisplay(display string) (int, string) {
 	switch {
 	case strings.HasPrefix(rest, "/bb:rate "):
 		rest = strings.TrimPrefix(rest, "/bb:rate ")
+	case strings.HasPrefix(rest, "/rate-buildermark "):
+		rest = strings.TrimPrefix(rest, "/rate-buildermark ")
 	case strings.HasPrefix(rest, "/brate "):
 		rest = strings.TrimPrefix(rest, "/brate ")
 	case strings.HasPrefix(rest, "/bb "):

@@ -1,7 +1,0 @@
-{
-  "name": "Buildermark",
-  "author": { "name": "Gelatinous Development Studio", "email": "root@geldev.com" },
-  "version": "1.0.0",
-  "description": "Rate Claude Code conversations on a 0-5 scale. Ratings are stored locally via the Buildermark Local server.",
-  "skills": "./skills/"
-}

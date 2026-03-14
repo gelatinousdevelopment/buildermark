@@ -1,5 +1,5 @@
 ---
-name: brate
+name: rate-buildermark
 description: Rate this Codex CLI conversation (0-5 scale)
 argument-hint: "[0-5] [note]"
 allowed-tools: ["Bash"]
@@ -29,7 +29,7 @@ Guidelines:
 Then run the submission script, passing your analysis text in the `ANALYSIS` environment variable:
 
 ```bash
-ANALYSIS="your analysis text here" bash plugins/codex/skills/brate/scripts/submit-rating.sh <rating> [note...]
+ANALYSIS="your analysis text here" bash plugins/codex/skills/rate-buildermark/scripts/submit-rating.sh <rating> [note...]
 ```
 
 If the output starts with "ok", confirm to the user: **Rated N/5** (include the note if one was given), print a clickable conversation link using the `conversation_url` value from script output, then show your analysis under `**Prompt Suggestions:**` and `**Model Failures:**` headings.

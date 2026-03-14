@@ -14,7 +14,7 @@ export const KNOWN_AGENT_INFO: Record<KnownAgent, KnownAgentInfo> = {
 	claude: {
 		supportsResumeFromBuildermark: true,
 		resumeCommandTemplate: 'claude -r {{sessionId}} {{resumePrompt}}',
-		resumePrompt: '/brate'
+		resumePrompt: '/rate-buildermark'
 	},
 	claude_cloud: {
 		supportsResumeFromBuildermark: false,
@@ -24,7 +24,7 @@ export const KNOWN_AGENT_INFO: Record<KnownAgent, KnownAgentInfo> = {
 	codex: {
 		supportsResumeFromBuildermark: true,
 		resumeCommandTemplate: 'codex resume {{sessionId}} -a on-request {{resumePrompt}}',
-		resumePrompt: '$brate'
+		resumePrompt: '$rate-buildermark'
 	},
 	codex_cloud: {
 		supportsResumeFromBuildermark: false,
@@ -34,7 +34,7 @@ export const KNOWN_AGENT_INFO: Record<KnownAgent, KnownAgentInfo> = {
 	gemini: {
 		supportsResumeFromBuildermark: true,
 		resumeCommandTemplate: 'gemini -r {{sessionId}} {{resumePrompt}}',
-		resumePrompt: '/brate'
+		resumePrompt: '/rate-buildermark'
 	}
 };
 

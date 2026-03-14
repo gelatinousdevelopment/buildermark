@@ -4,6 +4,7 @@
 	import Icon from '$lib/Icon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import type { PluginHomeInfo, PluginInventoryResponse, PluginStatus } from '$lib/types';
+	import DailyActivityChart from '$lib/charts/DailyActivityChart.svelte';
 
 	let { data } = $props();
 	let inventory: PluginInventoryResponse | null = $state(null);
@@ -11,6 +12,10 @@
 	let notice: string | null = $state(null);
 	let busyKey: string | null = $state(null);
 	let initialized = $state(false);
+	let exampleCopied = $state(false);
+	let exampleCopyError: string | null = $state(null);
+
+	const exampleSkillCommand = '/rate-buildermark [0-5] [Optional note or feedback]';
 
 	const browserExtensions = [
 		{
@@ -78,23 +83,45 @@
 			busyKey = null;
 		}
 	}
+
+	async function copyExampleCommand() {
+		exampleCopyError = null;
+		try {
+			await navigator.clipboard.writeText(exampleSkillCommand);
+			exampleCopied = true;
+			setTimeout(() => (exampleCopied = false), 2000);
+		} catch (e) {
+			exampleCopyError = e instanceof Error ? e.message : 'Failed to copy the example command';
+		}
+	}
 </script>
 
 <div class="plugins limited-content-width inset-when-limited-content-width">
 	<div class="hero">
-		<h1>Coding Agent Plugins & Skills</h1>
-		<div class="description">
-			<p>
-				Install plugins for your agents, so you can rate and log analysis about each AI coding
-				session by running the
-				<code>brate</code> skill.
-			</p>
-			<p>For example, rate a conversation in Claude Code:</p>
-			<code>› /brate <span class="faded">[0-5] [Optional note or feedback]</span></code>
-		</div>
+		<h1>Skills & Extensions</h1>
 	</div>
 
 	<div class="content">
+		<h2>Coding Agent Skills</h2>
+		<div class="description" style:margin-bottom="1rem">
+			<p>
+				Install plugins for your agents, so you can rate and log analysis about each AI coding
+				session by running the
+				<code>rate-buildermark</code> skill.
+			</p>
+			<p>For example, rate a conversation in Claude Code:</p>
+			<div class="example-command">
+				<code>› /rate-buildermark <span class="faded">[0-5] [Optional note or feedback]</span></code
+				>
+				<button class="bordered tiny" type="button" onclick={copyExampleCommand}>
+					{exampleCopied ? 'Copied!' : 'Copy'}
+				</button>
+			</div>
+			{#if exampleCopyError}
+				<p class="error">{exampleCopyError}</p>
+			{/if}
+		</div>
+
 		{#if error}
 			<p class="error">{error}</p>
 		{/if}
@@ -145,7 +172,7 @@
 													</div>
 												</Popover>
 												<button
-													class="bordered tiny"
+													class="bordered small"
 													disabled={busyKey === `${home.homePath}:${plugin.agent}`}
 													onclick={() => handlePluginToggle(home.homePath, plugin)}
 												>
@@ -173,26 +200,46 @@
 
 		<section class="browser-extensions">
 			<h2>Browser Extension</h2>
-			<p class="muted">
-				Install Buildermark in your browser to rate sessions from web-based tools. You can install
-				directly from each browser’s extension store or install from source in developer mode.
-			</p>
-			<div class="browser-extension-grid">
-				{#each browserExtensions as extension (extension.name)}
-					<article class="browser-extension-card">
-						<h3>{extension.name}</h3>
-						<div class="browser-extension-links">
-							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-							<a href={extension.storeUrl} target="_blank" rel="noreferrer noopener"
-								>Install from {extension.storeLabel}</a
-							>
-							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-							<a href={extension.sourceUrl} target="_blank" rel="noreferrer noopener"
-								>Install from GitHub source</a
-							>
-						</div>
-					</article>
-				{/each}
+			<div class="description">
+				<p>
+					The Buildermark browser extension imports conversations when you visit a supported page.
+					It currently supports <a href="https://claude.ai/code">Claude Code cloud</a> and
+					<a href="https://chatgpt.com/codex">Codex cloud</a>.
+				</p>
+			</div>
+			<div class="table-wrap browser-extension-table-wrap">
+				<table class="data bordered hoverable browser-extension-table">
+					<tbody>
+						{#each browserExtensions as extension (extension.name)}
+							<tr>
+								<th scope="row" class="browser-name">{extension.name}</th>
+								<td>
+									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+									<a
+										class="bordered small browser-link"
+										href={extension.storeUrl}
+										target="_blank"
+										rel="noreferrer noopener"
+									>
+										{extension.storeLabel}
+									</a>
+								</td>
+								<td>
+									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+									<a
+										class="bordered small browser-link"
+										href={extension.sourceUrl}
+										target="_blank"
+										rel="noreferrer noopener"
+									>
+										<Icon name="github" width="14px" />
+										<span>GitHub Source</span>
+									</a>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 		</section>
 	</div>
@@ -348,7 +395,7 @@
 	}
 
 	.description {
-		margin: -1rem 1.5rem 1.5rem 1.5rem;
+		margin: 0.5rem 0;
 	}
 
 	.description p {
@@ -359,14 +406,26 @@
 		padding: 0.5rem 0.8rem;
 		border: 1px solid var(--color-code-border);
 		background: var(--color-code-inline-bg);
-		margin-top: 0.5rem;
+		margin-top: 0rem;
 		border-radius: 4px;
 		display: block;
-		max-width: 34rem;
+		max-width: 38rem;
 	}
 
 	.description code .faded {
 		opacity: 0.5;
+	}
+
+	.example-command {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+	}
+
+	.example-command code {
+		flex: 1 1 28rem;
+		margin-top: 0;
 	}
 
 	.description p code {
@@ -384,34 +443,38 @@
 		padding-top: 1.5rem;
 	}
 
-	.browser-extensions h2 {
+	h2 {
 		font-size: 1.1rem;
 		margin: 0;
 	}
 
-	.browser-extension-grid {
-		display: grid;
-		gap: 1rem;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	.browser-extension-table-wrap {
 		margin-top: 1rem;
 	}
 
-	.browser-extension-card {
-		background: var(--color-surface);
-		border: 1px solid var(--color-divider);
-		border-radius: 6px;
-		padding: 0.9rem;
+	.browser-extension-table {
+		min-width: 42rem;
+		table-layout: auto;
+		width: max-content;
 	}
 
-	.browser-extension-card h3 {
-		font-size: 1rem;
-		margin: 0;
+	.browser-extension-table th,
+	.browser-extension-table td {
+		vertical-align: middle;
 	}
 
-	.browser-extension-links {
-		display: flex;
-		flex-direction: column;
-		gap: 0.45rem;
-		margin-top: 0.6rem;
+	.browser-extension-table th.browser-name {
+		color: var(--color-text-strong);
+		font-size: 0.95rem;
+		font-weight: 600;
+		width: 10rem;
+	}
+
+	.browser-link {
+		width: fit-content;
+	}
+
+	.browser-link :global(svg) {
+		display: block;
 	}
 </style>

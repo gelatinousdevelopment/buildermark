@@ -532,7 +532,7 @@
 						<p class="resume-command-copy">
 							Copy this command and paste it into your terminal to resume this
 							<AgentTag agent={conversation.agent} subtle={true} />
-							conversation and run <code>brate</code>.
+							conversation and run <code>rate-buildermark</code>.
 						</p>
 						<div class="resume-command-block">
 							<code>{resumeCommand}</code>

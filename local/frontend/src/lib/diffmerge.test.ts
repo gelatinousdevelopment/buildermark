@@ -142,7 +142,7 @@ describe('mergeSequentialDiffs', () => {
 +
 +  lines := []string{
 +    // Skill expansion prompt injected by Claude Code
-+    fmt.Sprintf(\`{"type":"user","timestamp":"2026-02-18T10:00:00.000Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/brate\\n\\nThe user wants to rate this conversation."}}\`, sessionID, projectPath),
++    fmt.Sprintf(\`{"type":"user","timestamp":"2026-02-18T10:00:00.000Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/rate-buildermark\\n\\nThe user wants to rate this conversation."}}\`, sessionID, projectPath),
 +    // Real user message
 +    fmt.Sprintf(\`{"type":"user","timestamp":"2026-02-18T10:00:01.000Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"real user prompt"}}\`, sessionID, projectPath),
 +  }
@@ -185,7 +185,7 @@ describe('mergeSequentialDiffs', () => {
 +
 +    convPath := filepath.Join(convDir, sessionID+".jsonl")
 +    lines := []string{
-+        \`{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/brate\\n\\nThe user wants to rate this conversation."}}\`,
++        \`{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/rate-buildermark\\n\\nThe user wants to rate this conversation."}}\`,
 +        \`{"type":"user","timestamp":"2026-01-01T00:00:01.000Z","message":{"content":"real prompt"}}\`,
 +    }
 +    if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\\n", joinLines(lines))), 0644); err != nil {
@@ -222,7 +222,7 @@ describe('mergeSequentialDiffs', () => {
 +
 +  convPath := filepath.Join(convDir, sessionID+".jsonl")
 +  lines := []string{
-+    \`{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/brate\\n\\nThe user wants to rate this conversation."}}\`,
++    \`{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"content":"Base directory for this skill: /home/user/project/plugins/claudecode/skills/rate-buildermark\\n\\nThe user wants to rate this conversation."}}\`,
 +    \`{"type":"user","timestamp":"2026-01-01T00:00:01.000Z","message":{"content":"real prompt"}}\`,
 +  }
 +  if err := os.WriteFile(convPath, []byte(fmt.Sprintf("%s\\n", joinLines(lines))), 0644); err != nil {

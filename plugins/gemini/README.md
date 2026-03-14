@@ -1,4 +1,4 @@
-# brate - Gemini CLI Plugin
+# rate-buildermark - Gemini CLI Plugin
 
 Rate conversations on a 0-5 scale. Ratings are sent to the Buildermark Local server and viewable on the dashboard at http://localhost:55022.
 
@@ -10,23 +10,23 @@ Gemini CLI discovers custom commands from `~/.gemini/commands/` (user global) or
 
 ```bash
 mkdir -p ~/.gemini/commands
-ln -s ~/github/buildermark/plugins/gemini/commands/brate.toml ~/.gemini/commands/brate.toml
+ln -s ~/github/buildermark/plugins/gemini/commands/rate-buildermark.toml ~/.gemini/commands/rate-buildermark.toml
 ```
 
 **Option 2: Copy**
 
 ```bash
 mkdir -p ~/.gemini/commands
-cp /path/to/buildermark/plugins/gemini/commands/brate.toml ~/.gemini/commands/brate.toml
+cp /path/to/buildermark/plugins/gemini/commands/rate-buildermark.toml ~/.gemini/commands/rate-buildermark.toml
 ```
 
 ## Usage
 
 ```text
-/brate
-/brate 4 Great help with refactoring
-/brate 5
-/brate 2 Got stuck on the wrong approach
+/rate-buildermark
+/rate-buildermark 4 Great help with refactoring
+/rate-buildermark 5
+/rate-buildermark 2 Got stuck on the wrong approach
 ```
 
 If you omit the rating, the model will infer a 0-5 rating from the conversation.

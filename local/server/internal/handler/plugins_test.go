@@ -27,11 +27,11 @@ func TestGetPluginsIncludesPrimaryAndExtraHomes(t *testing.T) {
 		t.Fatalf("save config: %v", err)
 	}
 
-	if err := os.MkdirAll(filepath.Join(primaryHome, ".codex", "skills", "brate"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(primaryHome, ".codex", "skills", "rate-buildermark"), 0o755); err != nil {
 		t.Fatalf("mkdir primary codex skill dir: %v", err)
 	}
 	if err := os.WriteFile(
-		filepath.Join(primaryHome, ".codex", "skills", "brate", "SKILL.md"),
+		filepath.Join(primaryHome, ".codex", "skills", "rate-buildermark", "SKILL.md"),
 		[]byte("installed"),
 		0o644,
 	); err != nil {
@@ -58,7 +58,7 @@ func TestGetPluginsIncludesPrimaryAndExtraHomes(t *testing.T) {
 	if codexPrimary.Status != "partial" {
 		t.Fatalf("primary codex status = %q, want partial", codexPrimary.Status)
 	}
-	if !strings.HasSuffix(codexPrimary.Paths[0], filepath.Join(".codex", "skills", "brate")) {
+	if !strings.HasSuffix(codexPrimary.Paths[0], filepath.Join(".codex", "skills", "rate-buildermark")) {
 		t.Fatalf("primary codex path = %q", codexPrimary.Paths[0])
 	}
 
@@ -81,23 +81,23 @@ func TestPostPluginsInstallAndUninstall(t *testing.T) {
 		{
 			name:             "claude",
 			agent:            "claude",
-			verifyPath:       filepath.Join(".claude", "plugins", "buildermark", "skills", "brate", "SKILL.md"),
-			replacedContains: `"$HOME/.claude/plugins/buildermark/skills/brate/scripts/submit-rating.sh"`,
-			removedPath:      filepath.Join(".claude", "plugins", "buildermark"),
+			verifyPath:       filepath.Join(".claude", "skills", "rate-buildermark", "SKILL.md"),
+			replacedContains: `"$HOME/.claude/skills/rate-buildermark/scripts/submit-rating.sh"`,
+			removedPath:      filepath.Join(".claude", "skills", "rate-buildermark"),
 		},
 		{
 			name:             "codex",
 			agent:            "codex",
-			verifyPath:       filepath.Join(".codex", "skills", "brate", "SKILL.md"),
-			replacedContains: `bash "$HOME/.codex/skills/brate/scripts/submit-rating.sh"`,
-			removedPath:      filepath.Join(".codex", "skills", "brate"),
+			verifyPath:       filepath.Join(".codex", "skills", "rate-buildermark", "SKILL.md"),
+			replacedContains: `bash "$HOME/.codex/skills/rate-buildermark/scripts/submit-rating.sh"`,
+			removedPath:      filepath.Join(".codex", "skills", "rate-buildermark"),
 		},
 		{
 			name:             "gemini",
 			agent:            "gemini",
-			verifyPath:       filepath.Join(".gemini", "commands", "brate.toml"),
+			verifyPath:       filepath.Join(".gemini", "commands", "rate-buildermark.toml"),
 			replacedContains: `bash \"$HOME/.gemini/scripts/submit-rating.sh\"`,
-			removedPath:      filepath.Join(".gemini", "commands", "brate.toml"),
+			removedPath:      filepath.Join(".gemini", "commands", "rate-buildermark.toml"),
 		},
 	}
 
@@ -161,12 +161,11 @@ func createTestPluginBundle(t *testing.T) string {
 	root := t.TempDir()
 
 	files := map[string]string{
-		"claudecode/.claude-plugin/plugin.json":            `{"name":"Buildermark"}`,
-		"claudecode/skills/brate/SKILL.md":                 `"$(git rev-parse --show-toplevel)/plugins/claudecode/skills/brate/scripts/submit-rating.sh"`,
-		"claudecode/skills/brate/scripts/submit-rating.sh": "#!/bin/sh\nexit 0\n",
-		"codex/skills/brate/SKILL.md":                      "bash plugins/codex/skills/brate/scripts/submit-rating.sh\n",
-		"codex/skills/brate/scripts/submit-rating.sh":      "#!/bin/sh\nexit 0\n",
-		"gemini/commands/brate.toml":                       "bash plugins/gemini/scripts/submit-rating.sh\n",
+		"claudecode/skills/rate-buildermark/SKILL.md":                 `"$(git rev-parse --show-toplevel)/plugins/claudecode/skills/rate-buildermark/scripts/submit-rating.sh"`,
+		"claudecode/skills/rate-buildermark/scripts/submit-rating.sh": "#!/bin/sh\nexit 0\n",
+		"codex/skills/rate-buildermark/SKILL.md":                      "bash plugins/codex/skills/rate-buildermark/scripts/submit-rating.sh\n",
+		"codex/skills/rate-buildermark/scripts/submit-rating.sh":      "#!/bin/sh\nexit 0\n",
+		"gemini/commands/rate-buildermark.toml":                       "bash plugins/gemini/scripts/submit-rating.sh\n",
 		"gemini/scripts/submit-rating.sh":                  "#!/bin/sh\nexit 0\n",
 	}
 	for rel, content := range files {
@@ -185,9 +184,9 @@ func createTestPluginBundle(t *testing.T) string {
 func installedScriptPath(agent, home string) string {
 	switch agent {
 	case "claude":
-		return filepath.Join(home, ".claude", "plugins", "buildermark", "skills", "brate", "scripts", "submit-rating.sh")
+		return filepath.Join(home, ".claude", "skills", "rate-buildermark", "scripts", "submit-rating.sh")
 	case "codex":
-		return filepath.Join(home, ".codex", "skills", "brate", "scripts", "submit-rating.sh")
+		return filepath.Join(home, ".codex", "skills", "rate-buildermark", "scripts", "submit-rating.sh")
 	case "gemini":
 		return filepath.Join(home, ".gemini", "scripts", "submit-rating.sh")
 	default:

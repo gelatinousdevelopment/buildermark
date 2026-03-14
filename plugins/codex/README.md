@@ -1,4 +1,4 @@
-# brate — Codex CLI Plugin
+# rate-buildermark — Codex CLI Plugin
 
 Rate conversations on a 0–5 scale. Ratings are sent to the Buildermark Local server and viewable on the dashboard at http://localhost:55022.
 
@@ -10,23 +10,23 @@ Codex CLI discovers skills from `~/.codex/skills/` (user global) or `.agents/ski
 
 ```bash
 mkdir -p ~/.codex/skills
-ln -s /path/to/buildermark/plugins/codex/skills/brate ~/.codex/skills/brate
+ln -s /path/to/buildermark/plugins/codex/skills/rate-buildermark ~/.codex/skills/rate-buildermark
 ```
 
 **Option 2: Copy**
 
 ```bash
 mkdir -p ~/.codex/skills
-cp -r /path/to/buildermark/plugins/codex/skills/brate ~/.codex/skills/brate
+cp -r /path/to/buildermark/plugins/codex/skills/rate-buildermark ~/.codex/skills/rate-buildermark
 ```
 
 ## Usage
 
 ```
-$brate
-$brate 4 Great help with refactoring
-$brate 5
-$brate 2 Got stuck on the wrong approach
+$rate-buildermark
+$rate-buildermark 4 Great help with refactoring
+$rate-buildermark 5
+$rate-buildermark 2 Got stuck on the wrong approach
 ```
 
 If you omit the rating, the model will infer a 0-5 rating from the conversation.

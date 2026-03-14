@@ -250,6 +250,11 @@ a:active {
 /* Bordered Button */
 
 a.bordered,
+a.bordered:hover,
+a.bordered:visited,
+table.data a.bordered,
+table.data a.bordered:hover,
+table.data a.bordered:visited,
 button.bordered {
 	background: var(--color-button-bg);
 	border-radius: 4px;
@@ -268,12 +273,22 @@ button.bordered {
 }
 
 a.bordered.small,
-button.bordered.small {
+button.bordered.small,
+a.bordered.small:hover,
+a.bordered.small:visited,
+table.data a.bordered.small,
+table.data a.bordered.small:hover,
+table.data a.bordered.small:visited {
 	padding: 0.2rem 0.7em;
 }
 
 a.bordered.tiny,
-button.bordered.tiny {
+button.bordered.tiny,
+a.bordered.tiny:hover,
+a.bordered.tiny:visited,
+table.data a.bordered.tiny,
+table.data a.bordered.tiny:hover,
+table.data a.bordered.tiny:visited {
 	font-size: 0.8rem;
 	padding: 0.15rem 0.6em;
 }
@@ -284,7 +299,11 @@ button.bordered:disabled {
 }
 
 a.bordered:not(:disabled):hover,
-button.bordered:not(:disabled):hover {
+button.bordered:not(:disabled):hover,
+a.bordered.small:not(:disabled):hover,
+a.bordered.tiny:not(:disabled):hover,
+table.data a.bordered.small:not(:disabled):hover,
+table.data a.bordered.tiny:not(:disabled):hover {
 	background: var(--accent-color-ultralight);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 	color: var(--accent-color);
