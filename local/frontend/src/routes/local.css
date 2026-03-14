@@ -142,6 +142,13 @@
 	--color-status-connecting: light-dark(#e0a020, #e0a020);
 	--color-status-disconnected: light-dark(#999, #666);
 
+	/* Star Chart Colors */
+	--color-stars-1: light-dark(#cf2222, #af1111);
+	--color-stars-2: light-dark(#d97316, #c96310);
+	--color-stars-3: light-dark(#eab308, #ca9308);
+	--color-stars-4: light-dark(#84bc06, #548c06);
+	--color-stars-5: light-dark(#12954e, #12754e);
+
 	/* Hidden banner */
 	--color-hidden-bg: light-dark(#ececec, #333);
 	--color-hidden-border: light-dark(#d4d4d4, #444);

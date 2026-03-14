@@ -14,11 +14,11 @@
 	const BUCKETS = ['unrated', '1', '2', '3', '4', '5'] as const;
 	const BUCKET_COLORS: Record<string, string> = {
 		unrated: '#9ca3af',
-		'1': '#cf2222',
-		'2': '#d97316',
-		'3': '#eab308',
-		'4': '#84bc06',
-		'5': '#12954e'
+		'1': 'var(--color-stars-1)',
+		'2': 'var(--color-stars-2)',
+		'3': 'var(--color-stars-3)',
+		'4': 'var(--color-stars-4)',
+		'5': 'var(--color-stars-5)'
 	};
 	const BUCKET_LABELS: Record<string, string> = {
 		unrated: 'Unrated',
