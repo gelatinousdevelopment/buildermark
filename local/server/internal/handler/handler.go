@@ -45,6 +45,9 @@ type Server struct {
 	notifyWS *wsHub     // dedicated hub for native notification clients
 	importMu sync.Mutex // guards against concurrent imports
 
+	updateState updateState
+	version     string // build version, set by CLI runner
+
 	staleScanMu       sync.Mutex
 	staleScanInFlight map[string]struct{} // project IDs with pending stale scans
 
@@ -69,6 +72,24 @@ func (s *Server) Routes() http.Handler {
 	broadcastClients := func() { s.broadcastWSClients() }
 	s.ws.onClientChange = broadcastClients
 	s.notifyWS.onClientChange = broadcastClients
+
+	// Send update status to newly connected frontend clients.
+	s.ws.onRegister = func(c *wsClient) {
+		if event := s.getUpdateStatusForNewClient(); event != nil {
+			raw, err := json.Marshal(event)
+			if err != nil {
+				return
+			}
+			msg, err := json.Marshal(wsMessage{Type: "update_status", Data: raw})
+			if err != nil {
+				return
+			}
+			select {
+			case c.send <- msg:
+			default:
+			}
+		}
+	}
 	if s.refreshJobs == nil {
 		s.refreshJobs = newJobTracker()
 	}
@@ -137,8 +158,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PUT /api/v1/settings", s.handlePutLocalSettings)
 	mux.HandleFunc("GET /api/v1/plugins", s.handleGetPlugins)
 	mux.HandleFunc("POST /api/v1/plugins", s.handlePostPlugins)
+	mux.HandleFunc("GET /api/v1/update-status", s.handleGetUpdateStatus)
+	mux.HandleFunc("POST /api/v1/update-apply", s.handleUpdateApply)
 	mux.HandleFunc("POST /api/v1/debug/send-notification", s.handleDebugSendNotification)
 	mux.HandleFunc("GET /api/v1/debug/ws-clients", s.handleDebugWSClients)
+	mux.HandleFunc("POST /api/v1/debug/update-status", s.handleDebugSetUpdateStatus)
+	mux.HandleFunc("DELETE /api/v1/debug/update-status", s.handleDebugClearUpdateStatus)
 	mux.Handle("GET /_app/", staticFrontendHandler())
 	mux.HandleFunc("GET /", s.handleDashboard)
 	return corsMiddleware(requestLogMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux))))

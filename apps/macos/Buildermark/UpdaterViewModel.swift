@@ -1,18 +1,23 @@
 import Foundation
 import Sparkle
 
-final class UpdaterViewModel: ObservableObject {
-    private let updaterController: SPUStandardUpdaterController
-
-    @Published var canCheckForUpdates = false
-
-    init() {
-        updaterController = SPUStandardUpdaterController(
+final class UpdaterViewModel: NSObject, ObservableObject, SPUUpdaterDelegate {
+    // Lazy so we can pass `self` as the delegate after NSObject.init().
+    private lazy var updaterController: SPUStandardUpdaterController = {
+        SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: nil,
+            updaterDelegate: self,
             userDriverDelegate: nil
         )
+    }()
 
+    @Published var canCheckForUpdates = false
+    @Published var availableVersion: String?
+
+    override init() {
+        super.init()
+
+        // Accessing the lazy property triggers construction with self as delegate.
         updaterController.updater.publisher(for: \.canCheckForUpdates)
             .assign(to: &$canCheckForUpdates)
     }
@@ -25,7 +30,21 @@ final class UpdaterViewModel: ObservableObject {
         }
     }
 
+    var automaticallyDownloadsUpdates: Bool {
+        get { updaterController.updater.automaticallyDownloadsUpdates }
+        set {
+            objectWillChange.send()
+            updaterController.updater.automaticallyDownloadsUpdates = newValue
+        }
+    }
+
     func checkForUpdates() {
         updaterController.updater.checkForUpdates()
+    }
+
+    // MARK: - SPUUpdaterDelegate
+
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        availableVersion = item.displayVersionString
     }
 }

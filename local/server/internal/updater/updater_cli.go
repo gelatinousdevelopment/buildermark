@@ -68,6 +68,13 @@ func (u *cliUpdater) Apply(result *UpdateResult) error {
 		return fmt.Errorf("no download URL in update result")
 	}
 
+	// Write pre-update version marker so the next startup can detect the update.
+	if home, err := os.UserHomeDir(); err == nil {
+		markerDir := filepath.Join(home, ".buildermark")
+		os.MkdirAll(markerDir, 0o755)
+		os.WriteFile(filepath.Join(markerDir, "pre-update-version"), []byte(u.version), 0o644)
+	}
+
 	// Download to a temp file in the same directory as the current binary.
 	exe, err := os.Executable()
 	if err != nil {

@@ -55,6 +55,11 @@
             <StackPanel Margin="20">
                 <CheckBox x:Name="AutoUpdateCheckBox" Content="Automatically check for updates"
                           Checked="AutoUpdate_Changed" Unchecked="AutoUpdate_Changed"
+                          Margin="0,0,0,8" />
+
+                <CheckBox x:Name="AutoInstallCheckBox" Content="Automatically install updates"
+                          IsEnabled="{Binding ElementName=AutoUpdateCheckBox, Path=IsChecked}"
+                          Checked="AutoInstall_Changed" Unchecked="AutoInstall_Changed"
                           Margin="0,0,0,16" />
 
                 <Button x:Name="CheckUpdatesButton" Content="Check for Updates..."

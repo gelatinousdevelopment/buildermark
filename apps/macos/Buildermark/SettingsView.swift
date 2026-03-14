@@ -4,17 +4,21 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var serverManager: ServerManager
     @ObservedObject var updaterViewModel: UpdaterViewModel
+    @Binding var selectedTab: String
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             GeneralTab(serverManager: serverManager)
                 .tabItem { Label("General", systemImage: "gear") }
+                .tag("general")
 
             UpdatesTab(updaterViewModel: updaterViewModel)
                 .tabItem { Label("Updates", systemImage: "arrow.triangle.2.circlepath") }
+                .tag("updates")
 
             AboutTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
+                .tag("about")
         }
         .frame(width: 380)
         .fixedSize(horizontal: false, vertical: true)
@@ -104,6 +108,15 @@ private struct UpdatesTab: View {
                     set: { updaterViewModel.automaticallyChecksForUpdates = $0 }
                 )
             )
+
+            Toggle(
+                "Automatically install updates",
+                isOn: Binding(
+                    get: { updaterViewModel.automaticallyDownloadsUpdates },
+                    set: { updaterViewModel.automaticallyDownloadsUpdates = $0 }
+                )
+            )
+            .disabled(!updaterViewModel.automaticallyChecksForUpdates)
 
             Spacer()
                 .frame(height: 10)

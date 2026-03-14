@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using Hardcodet.Wpf.TaskbarNotification;
+using Microsoft.Win32;
 
 namespace Buildermark;
 
@@ -32,7 +33,9 @@ public partial class App : Application
         _mutex = new Mutex(true, PipeName, out bool createdNew);
         if (!createdNew)
         {
-            SignalExistingInstance();
+            // Pass the URL argument (if any) to the existing instance.
+            var urlArg = FindUrlArg(e.Args);
+            SignalExistingInstance(urlArg != null ? $"show:{urlArg}" : "show");
             Shutdown();
             return;
         }
@@ -42,6 +45,7 @@ public partial class App : Application
 
         _serverManager = new ServerManager();
         _updaterManager = new UpdaterManager();
+        _updaterManager.SetServerManager(_serverManager);
 
         _trayIcon = (TaskbarIcon)FindResource("TrayIcon");
 
@@ -79,7 +83,16 @@ public partial class App : Application
 
         _serverManager.NotificationReceived += OnServerNotification;
         _serverManager.Start();
-        ShowSettingsWindow();
+
+        RegisterUrlScheme();
+        DetectPostUpdate();
+
+        // Handle URL arg if launched with one.
+        var launchUrl = FindUrlArg(e.Args);
+        if (launchUrl != null && launchUrl.Contains("settings/update"))
+            ShowSettingsWindow("Updates");
+        else
+            ShowSettingsWindow();
     }
 
     private void UpdateStatusMenuItem()
@@ -106,16 +119,20 @@ public partial class App : Application
         QuitApplication();
     }
 
-    public void ShowSettingsWindow()
+    public void ShowSettingsWindow(string? tabName = null)
     {
         if (_settingsWindow is { IsLoaded: true })
         {
+            if (tabName != null)
+                _settingsWindow.SelectTab(tabName);
             _settingsWindow.Activate();
             return;
         }
 
         _settingsWindow = new SettingsWindow();
         _settingsWindow.Show();
+        if (tabName != null)
+            _settingsWindow.SelectTab(tabName);
         _settingsWindow.Activate();
     }
 
@@ -138,14 +155,14 @@ public partial class App : Application
         Shutdown();
     }
 
-    private static void SignalExistingInstance()
+    private static void SignalExistingInstance(string message = "show")
     {
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             client.Connect(timeout: 1000);
             using var writer = new StreamWriter(client);
-            writer.Write("show");
+            writer.Write(message);
         }
         catch { }
     }
@@ -159,11 +176,67 @@ public partial class App : Application
                 using var server = new NamedPipeServerStream(PipeName, PipeDirection.In, 1,
                     PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
                 await server.WaitForConnectionAsync(ct);
-                Dispatcher.Invoke(ShowSettingsWindow);
+                using var reader = new StreamReader(server);
+                var message = await reader.ReadToEndAsync(ct);
+                Dispatcher.Invoke(() =>
+                {
+                    if (message.StartsWith("show:") && message.Contains("settings/update"))
+                        ShowSettingsWindow("Updates");
+                    else
+                        ShowSettingsWindow();
+                });
             }
             catch (OperationCanceledException) { break; }
             catch { }
         }
+    }
+
+    private static string? FindUrlArg(string[] args)
+    {
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith("buildermark://", StringComparison.OrdinalIgnoreCase))
+                return arg;
+        }
+        return null;
+    }
+
+    private static void RegisterUrlScheme()
+    {
+        if (PreferencesManager.GetBool("urlSchemeRegistered", false))
+            return;
+
+        try
+        {
+            var exePath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (exePath == null) return;
+
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\buildermark");
+            key.SetValue("", "URL:Buildermark Protocol");
+            key.SetValue("URL Protocol", "");
+
+            using var shellKey = key.CreateSubKey(@"shell\open\command");
+            shellKey.SetValue("", $"\"{exePath}\" \"%1\"");
+
+            PreferencesManager.SetBool("urlSchemeRegistered", true);
+        }
+        catch { }
+    }
+
+    private void DetectPostUpdate()
+    {
+        try
+        {
+            var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "";
+            var lastKnownVersion = PreferencesManager.GetString("lastKnownVersion", "");
+
+            if (!string.IsNullOrEmpty(lastKnownVersion) && lastKnownVersion != currentVersion)
+            {
+                PreferencesManager.SetString("previousVersion", lastKnownVersion);
+            }
+            PreferencesManager.SetString("lastKnownVersion", currentVersion);
+        }
+        catch { }
     }
 
     protected override void OnExit(ExitEventArgs e)

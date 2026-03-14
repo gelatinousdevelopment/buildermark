@@ -13,8 +13,12 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
 
     private readonly SparkleUpdater _updater;
     private bool _canCheckForUpdates = true;
+    private ServerManager? _serverManager;
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Raised when Sparkle finds an available update.</summary>
+    public event Action<string>? UpdateAvailable;
 
     public UpdaterManager()
     {
@@ -24,7 +28,23 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
             RelaunchAfterUpdate = true,
         };
 
+        _updater.UpdateDetected += (_, e) =>
+        {
+            var version = e.LatestVersion?.Version;
+            if (version != null)
+            {
+                UpdateAvailable?.Invoke(version);
+                _serverManager?.SendUpdateStatus("available", version);
+            }
+        };
+
         _updater.StartLoop(true, true);
+    }
+
+    /// <summary>Sets the server manager reference for sending WS update notifications.</summary>
+    public void SetServerManager(ServerManager serverManager)
+    {
+        _serverManager = serverManager;
     }
 
     public bool AutomaticallyChecksForUpdates
@@ -35,6 +55,17 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
             // NetSparkle handles auto-check via the loop configuration.
             // Re-start the loop with the new setting.
             _updater.StartLoop(value, true);
+            OnPropertyChanged();
+        }
+    }
+
+    public bool AutomaticallyInstallsUpdates
+    {
+        get => _updater.SilentMode != null;
+        set
+        {
+            // When enabled, NetSparkle downloads and installs silently.
+            _updater.SilentMode = value ? NetSparkleUpdater.Enums.SilentModeType.DownloadAndInstall : null;
             OnPropertyChanged();
         }
     }

@@ -11,6 +11,7 @@
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 	import ServerStatusIndicator from '$lib/components/ServerStatusIndicator.svelte';
+	import UpdatePill from '$lib/components/UpdatePill.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import type { Project } from '$lib/types';
 	import { env } from '$env/dynamic/public';
@@ -182,9 +183,16 @@
 			</nav>
 		</section>
 		<section style:flex="1"></section>
+		{#if !READ_ONLY && websocketStore.updateStatus.state !== 'none'}
+			<section>
+				<nav class="right pill">
+					<UpdatePill />
+				</nav>
+			</section>
+		{/if}
 		{#if READ_ONLY}
 			<section>
-				<nav class="right">
+				<nav class="right pill">
 					<button class="read-only-pill" onclick={() => (showReadOnlyDialog = true)}>
 						Read-only mode
 					</button>
@@ -490,6 +498,10 @@
 		min-width: 50px;
 	}
 
+	header nav.right.pill {
+		padding-right: 0.7rem;
+	}
+
 	header nav.right .read-only-pill {
 		background: #727272;
 		border-radius: 999px;
@@ -499,7 +511,6 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 		height: 20px;
-		margin-right: 1rem;
 		padding: 0 0.8rem;
 		text-transform: uppercase;
 	}

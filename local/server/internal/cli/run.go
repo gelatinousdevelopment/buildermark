@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
@@ -17,6 +19,7 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/gitmonitor"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/handler"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/updater"
 )
 
 // RunOptions configures the server startup.
@@ -106,6 +109,11 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		ConfigDir:       configDir,
 		PluginSourceDir: resolvePluginSourceDir(),
 	}
+	hsrv.SetVersion(Version)
+
+	// Detect "just installed" update from marker file.
+	detectPostUpdate(hsrv, configDir)
+
 	hsrv.RepoMonitor = gitmonitor.New(ctx, gitmonitor.Options{
 		OnBranchChange: hsrv.HandleGitBranchChange,
 	})
@@ -164,6 +172,11 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		}
 		hsrv.RefreshStaleProjects(ctx)
 	}()
+
+	// Periodic update check for Linux CLI.
+	if cfg.UpdateMode != "off" {
+		go runPeriodicUpdateCheck(ctx, hsrv, cfg)
+	}
 
 	srv := &http.Server{
 		Addr:         opts.Addr,
@@ -246,6 +259,86 @@ func resolvePluginSourceDir() string {
 	}
 
 	return ""
+}
+
+// detectPostUpdate checks for a pre-update marker file and sets the "installed"
+// update status if the version changed since the marker was written.
+func detectPostUpdate(hsrv *handler.Server, configDir string) {
+	markerPath := filepath.Join(configDir, "pre-update-version")
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		return
+	}
+	os.Remove(markerPath)
+
+	previousVersion := strings.TrimSpace(string(data))
+	if previousVersion != "" && previousVersion != Version {
+		hsrv.SetUpdateStatus(handler.UpdateStatusEvent{
+			State:           "installed",
+			Version:         Version,
+			PreviousVersion: previousVersion,
+			Platform:        runtime.GOOS,
+		})
+		log.Printf("update detected: %s -> %s", previousVersion, Version)
+	}
+}
+
+// runPeriodicUpdateCheck checks for updates periodically on Linux CLI.
+func runPeriodicUpdateCheck(ctx context.Context, hsrv *handler.Server, cfg Config) {
+	// Wait 30 seconds after startup before first check.
+	select {
+	case <-time.After(30 * time.Second):
+	case <-ctx.Done():
+		return
+	}
+
+	check := func() {
+		u := updater.GetUpdater(Version)
+		result, err := u.Check()
+		if err != nil {
+			log.Printf("periodic update check failed: %v", err)
+			return
+		}
+		if !result.HasUpdate {
+			return
+		}
+
+		if cfg.UpdateMode == "auto" {
+			log.Printf("auto-applying update: %s -> %s", result.CurrentVersion, result.LatestVersion)
+			if err := u.Apply(result); err != nil {
+				log.Printf("auto-update apply failed: %v", err)
+				return
+			}
+			// Signal that the update was installed; systemd will restart the binary.
+			hsrv.SetUpdateStatus(handler.UpdateStatusEvent{
+				State:           "installed",
+				Version:         result.LatestVersion,
+				PreviousVersion: result.CurrentVersion,
+				Platform:        runtime.GOOS,
+			})
+			return
+		}
+
+		// "check" mode: just notify that an update is available.
+		hsrv.SetUpdateStatus(handler.UpdateStatusEvent{
+			State:    "available",
+			Version:  result.LatestVersion,
+			Platform: runtime.GOOS,
+		})
+	}
+
+	check()
+
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			check()
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func pluginBundleExists(dir string) bool {

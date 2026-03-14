@@ -33,6 +33,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
     private string _errorMessage = "";
     private string _lastStderr = "";
     private CancellationTokenSource? _notifyWsCts;
+    private ClientWebSocket? _activeWs;
     private int _notifyReconnectDelayMs = 1000;
 
     /// <summary>Raised when a notification arrives from the server.</summary>
@@ -273,12 +274,16 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             try
             {
                 using var ws = new ClientWebSocket();
+                _activeWs = ws;
                 var uri = new Uri($"ws://localhost:{Port}/api/v1/notifications/ws");
                 await ws.ConnectAsync(uri, ct);
                 _notifyReconnectDelayMs = 1000;
                 // WS connected — stop polling and mark server as running.
                 StopHealthCheck();
                 Status = ServerStatus.Running;
+
+                // Send post-update "installed" notification if the app was just updated.
+                SendPostUpdateNotification();
 
                 var buffer = new byte[4096];
                 while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
@@ -326,6 +331,38 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             NotificationReceived?.Invoke(title, body, url);
         }
         catch { }
+    }
+
+    /// <summary>Sends a JSON message upstream through the notifications WebSocket.</summary>
+    public async void SendWSMessage(string json)
+    {
+        var ws = _activeWs;
+        if (ws == null || ws.State != WebSocketState.Open) return;
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(json);
+            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+        catch { }
+    }
+
+    /// <summary>Notifies the server of an update status change.</summary>
+    public void SendUpdateStatus(string state, string version, string? previousVersion = null)
+    {
+        var prev = previousVersion != null ? $",\"previousVersion\":\"{previousVersion}\"" : "";
+        var message = $"{{\"type\":\"update_status\",\"data\":{{\"state\":\"{state}\",\"version\":\"{version}\",\"platform\":\"windows\"{prev}}}}}";
+        SendWSMessage(message);
+    }
+
+    private void SendPostUpdateNotification()
+    {
+        var previousVersion = PreferencesManager.GetString("previousVersion", "");
+        if (string.IsNullOrEmpty(previousVersion)) return;
+
+        PreferencesManager.SetString("previousVersion", "");
+        var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "";
+        if (!string.IsNullOrEmpty(currentVersion))
+            SendUpdateStatus("installed", currentVersion, previousVersion);
     }
 
     private static string? ResolveServerBinary()

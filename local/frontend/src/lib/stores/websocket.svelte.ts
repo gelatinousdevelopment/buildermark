@@ -18,6 +18,14 @@ export type WSClients = {
 	notification: number;
 };
 
+export type UpdateStatus = {
+	state: 'available' | 'installed' | 'none';
+	version?: string;
+	previousVersion?: string;
+	platform?: string;
+	releaseNotesUrl?: string;
+};
+
 type WSMessage = {
 	type: string;
 	data: unknown;
@@ -26,6 +34,7 @@ type WSMessage = {
 let _connectionState = $state<ConnectionState>('disconnected');
 let _activeJobs = $state<Record<string, JobStatus>>({});
 let _wsClients = $state<WSClients>({ frontend: 0, notification: 0 });
+let _updateStatus = $state<UpdateStatus>({ state: 'none' });
 
 let _ws: WebSocket | null = null;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,6 +71,7 @@ function connect() {
 	ws.onopen = () => {
 		_connectionState = 'connected';
 		_reconnectAttempts = 0;
+		hydrateUpdateStatus();
 	};
 
 	ws.onclose = () => {
@@ -109,6 +119,8 @@ function handleMessage(msg: WSMessage) {
 		}
 	} else if (msg.type === 'ws_clients') {
 		_wsClients = msg.data as WSClients;
+	} else if (msg.type === 'update_status') {
+		_updateStatus = msg.data as UpdateStatus;
 	}
 }
 
@@ -147,6 +159,24 @@ function waitForJob(jobType: string): Promise<JobStatus> {
 	});
 }
 
+function hydrateUpdateStatus() {
+	const url = API_URL
+		? `${API_URL}/api/v1/update-status`
+		: `${window.location.origin}/api/v1/update-status`;
+	fetch(url)
+		.then((r) => r.json())
+		.then((envelope) => {
+			if (envelope.ok && envelope.data) {
+				_updateStatus = envelope.data as UpdateStatus;
+			}
+		})
+		.catch(() => {});
+}
+
+function clearUpdateStatus() {
+	_updateStatus = { state: 'none' };
+}
+
 function clearJob(jobType: string) {
 	const { [jobType]: _removed, ...rest } = _activeJobs;
 	void _removed;
@@ -171,8 +201,12 @@ export const websocketStore = {
 	get wsClients() {
 		return _wsClients;
 	},
+	get updateStatus() {
+		return _updateStatus;
+	},
 	connect,
 	disconnect,
 	waitForJob,
-	clearJob
+	clearJob,
+	clearUpdateStatus
 };

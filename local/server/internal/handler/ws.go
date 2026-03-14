@@ -44,7 +44,8 @@ type wsHub struct {
 	mu               sync.RWMutex
 	clients          map[*wsClient]struct{}
 	runningJobStatus map[string][]byte
-	onClientChange   func() // called after register/unregister (with lock released)
+	onClientChange   func()            // called after register/unregister (with lock released)
+	onRegister       func(c *wsClient) // called after a new client registers (with lock released)
 }
 
 func newWSHub() *wsHub {
@@ -72,6 +73,9 @@ func (h *wsHub) register(c *wsClient) {
 	}
 	if h.onClientChange != nil {
 		h.onClientChange()
+	}
+	if h.onRegister != nil {
+		h.onRegister(c)
 	}
 }
 
@@ -372,16 +376,18 @@ func (s *Server) handleNotificationsWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Reader loop: reads and discards messages, keeps connection alive via pong handler.
+	// Reader loop: parses incoming messages from native apps.
 	conn.SetReadDeadline(time.Now().Add(wsPongWait))
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(wsPongWait))
 		return nil
 	})
 	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
 			break
 		}
+		s.handleNotificationsWSMessage(data)
 	}
 
 	s.notifyWS.unregister(client)

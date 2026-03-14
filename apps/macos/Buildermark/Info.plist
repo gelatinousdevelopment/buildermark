@@ -28,5 +28,16 @@
 	<string>https://buildermark.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>ej6jDgZczuarlscgV2RMH0JZoFHZzokVys3/YfRelAY=</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.buildermark.local</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>buildermark</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -1,6 +1,11 @@
+import Combine
 import SwiftUI
 import UserNotifications
 
+/// Port constant accessible from any isolation context.
+private let serverPort = 55022
+
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
@@ -10,15 +15,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+
+        // Detect post-update: compare current version with last known version.
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let lastKnownVersion = UserDefaults.standard.string(forKey: "lastKnownVersion") ?? ""
+        if !lastKnownVersion.isEmpty && lastKnownVersion != currentVersion {
+            UserDefaults.standard.set(lastKnownVersion, forKey: "previousVersion")
+        }
+        UserDefaults.standard.set(currentVersion, forKey: "lastKnownVersion")
     }
 
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if let urlPath = response.notification.request.content.userInfo["url"] as? String {
-            let base = "http://localhost:\(ServerManager.port)"
+            let base = "http://localhost:\(serverPort)"
             if let url = URL(string: base + urlPath) {
                 NSWorkspace.shared.open(url)
             }
@@ -26,7 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         completionHandler()
     }
 
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
@@ -42,6 +55,8 @@ struct BuildermarkApp: App {
     @StateObject private var updaterViewModel = UpdaterViewModel()
 
     @AppStorage("hideMenuBarIcon") private var hideMenuBarIcon = false
+    @State private var selectedSettingsTab = "general"
+    @State private var updateCancellable: AnyCancellable?
 
     var body: some Scene {
         // Invisible helper window — provides the SwiftUI environment
@@ -75,7 +90,38 @@ struct BuildermarkApp: App {
         .menuBarExtraStyle(.menu)
 
         Settings {
-            SettingsView(serverManager: serverManager, updaterViewModel: updaterViewModel)
+            SettingsView(
+                serverManager: serverManager,
+                updaterViewModel: updaterViewModel,
+                selectedTab: $selectedSettingsTab
+            )
+            .onOpenURL { url in
+                handleURL(url)
+            }
+            .task {
+                // When Sparkle finds an available update, notify the server via WS.
+                updateCancellable = updaterViewModel.$availableVersion
+                    .compactMap { $0 }
+                    .sink { version in
+                        Task { @MainActor in
+                            serverManager.sendUpdateStatus(state: "available", version: version)
+                        }
+                    }
+            }
+        }
+    }
+
+    @MainActor
+    private func handleURL(_ url: URL) {
+        if url.absoluteString.contains("settings/update") {
+            selectedSettingsTab = "updates"
+            if let w = NSApp.windows.first(where: {
+                $0.identifier?.rawValue.contains("Settings") == true
+            }) {
+                w.orderFrontRegardless()
+            }
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 }

@@ -26,6 +26,19 @@ public static class PreferencesManager
         regKey.SetValue(key, value ? 1 : 0, RegistryValueKind.DWord);
     }
 
+    public static string GetString(string key, string defaultValue)
+    {
+        using var regKey = Registry.CurrentUser.OpenSubKey(RegistryKeyPath);
+        var value = regKey?.GetValue(key);
+        return value is string strVal ? strVal : defaultValue;
+    }
+
+    public static void SetString(string key, string value)
+    {
+        using var regKey = Registry.CurrentUser.CreateSubKey(RegistryKeyPath);
+        regKey.SetValue(key, value, RegistryValueKind.String);
+    }
+
     public static bool StartAtLogin
     {
         get

@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { debugSendNotification, debugGetWSClients } from '$lib/api';
+	import {
+		debugSendNotification,
+		debugGetWSClients,
+		debugSetUpdateStatus,
+		debugClearUpdateStatus
+	} from '$lib/api';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
 
 	let notifKind = $state('debug_test');
@@ -29,6 +34,50 @@
 	let displayClients = $derived(
 		wsClients.frontend > 0 || wsClients.notification > 0 ? wsClients : (initialClients ?? wsClients)
 	);
+
+	let updateVersion = $state('v1.2.3');
+	let updatePreviousVersion = $state('v1.1.0');
+	let updatePlatform = $state('darwin');
+	let updateResult: string | null = $state(null);
+
+	async function setUpdateAvailable() {
+		updateResult = null;
+		try {
+			await debugSetUpdateStatus({
+				state: 'available',
+				version: updateVersion,
+				platform: updatePlatform
+			});
+			updateResult = 'Set to available';
+		} catch (e) {
+			updateResult = e instanceof Error ? e.message : 'Failed';
+		}
+	}
+
+	async function setUpdateInstalled() {
+		updateResult = null;
+		try {
+			await debugSetUpdateStatus({
+				state: 'installed',
+				version: updateVersion,
+				previousVersion: updatePreviousVersion,
+				platform: updatePlatform
+			});
+			updateResult = 'Set to installed';
+		} catch (e) {
+			updateResult = e instanceof Error ? e.message : 'Failed';
+		}
+	}
+
+	async function clearUpdate() {
+		updateResult = null;
+		try {
+			await debugClearUpdateStatus();
+			updateResult = 'Cleared';
+		} catch (e) {
+			updateResult = e instanceof Error ? e.message : 'Failed';
+		}
+	}
 
 	async function sendTestNotification() {
 		sending = true;
@@ -81,6 +130,49 @@
 					{/if}
 				</div>
 			</div>
+		</div>
+
+		<div class="section">
+			<h2>Update Status</h2>
+			<p class="muted">
+				Set or clear the update notification pill. Changes are broadcast to all connected frontends
+				via WebSocket.
+			</p>
+			<div class="form">
+				<label>
+					<span class="field-label">Version</span>
+					<input type="text" bind:value={updateVersion} />
+				</label>
+				<label>
+					<span class="field-label">Previous Version (for installed)</span>
+					<input type="text" bind:value={updatePreviousVersion} />
+				</label>
+				<label>
+					<span class="field-label">Platform</span>
+					<select bind:value={updatePlatform}>
+						<option value="darwin">darwin</option>
+						<option value="linux">linux</option>
+						<option value="windows">windows</option>
+					</select>
+				</label>
+				<div class="actions">
+					<button class="bordered prominent" onclick={setUpdateAvailable}> Set "Available" </button>
+					<button class="bordered prominent" onclick={setUpdateInstalled}> Set "Installed" </button>
+					<button class="bordered" onclick={clearUpdate}>Clear</button>
+					{#if updateResult}
+						<span class="result">{updateResult}</span>
+					{/if}
+				</div>
+			</div>
+			<p class="muted connection-state">
+				Current state: <strong>{websocketStore.updateStatus.state}</strong>
+				{#if websocketStore.updateStatus.version}
+					&mdash; {websocketStore.updateStatus.version}
+				{/if}
+				{#if websocketStore.updateStatus.platform}
+					({websocketStore.updateStatus.platform})
+				{/if}
+			</p>
 		</div>
 
 		<div class="section">
@@ -177,7 +269,8 @@
 		text-transform: uppercase;
 	}
 
-	.form input {
+	.form input,
+	.form select {
 		padding: 0.4rem 0.6rem;
 		border: 1px solid var(--color-border-input);
 		border-radius: 4px;

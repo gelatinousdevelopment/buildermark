@@ -28,6 +28,7 @@ public partial class SettingsWindow : Window
         StartAtLoginCheckBox.IsChecked = PreferencesManager.GetBool("startAtLogin", true);
         HideIconCheckBox.IsChecked = PreferencesManager.GetBool("hideMenuBarIcon", false);
         AutoUpdateCheckBox.IsChecked = _updaterManager.AutomaticallyChecksForUpdates;
+        AutoInstallCheckBox.IsChecked = _updaterManager.AutomaticallyInstallsUpdates;
         NotificationsCheckBox.IsChecked = PreferencesManager.GetBool("notificationsEnabled", true);
 
         // Sync start-at-login on first appearance
@@ -108,6 +109,11 @@ public partial class SettingsWindow : Window
         _updaterManager.AutomaticallyChecksForUpdates = AutoUpdateCheckBox.IsChecked == true;
     }
 
+    private void AutoInstall_Changed(object sender, RoutedEventArgs e)
+    {
+        _updaterManager.AutomaticallyInstallsUpdates = AutoInstallCheckBox.IsChecked == true;
+    }
+
     private void CheckUpdates_Click(object sender, RoutedEventArgs e)
     {
         _updaterManager.CheckForUpdates();
@@ -119,6 +125,19 @@ public partial class SettingsWindow : Window
     }
 
     private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+
+    /// <summary>Selects a tab by header name (e.g., "Updates").</summary>
+    public void SelectTab(string tabHeader)
+    {
+        foreach (var item in TabControl.Items)
+        {
+            if (item is TabItem tab && tab.Header?.ToString() == tabHeader)
+            {
+                TabControl.SelectedItem = tab;
+                break;
+            }
+        }
+    }
 
     protected override void OnClosing(CancelEventArgs e)
     {

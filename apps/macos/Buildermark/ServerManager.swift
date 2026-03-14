@@ -254,6 +254,13 @@ final class ServerManager: ObservableObject {
         healthCheckTimer = nil
         status = .running
         receiveNotification()
+
+        // Send post-update "installed" notification if the app was just updated.
+        if let previousVersion = UserDefaults.standard.string(forKey: "previousVersion") {
+            let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+            UserDefaults.standard.removeObject(forKey: "previousVersion")
+            sendUpdateStatus(state: "installed", version: currentVersion, previousVersion: previousVersion)
+        }
     }
 
     private func receiveNotification() {
@@ -272,6 +279,32 @@ final class ServerManager: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Sends a JSON message upstream through the notifications WebSocket.
+    func sendWSMessage(_ json: String) {
+        guard let task = notifyWSTask else { return }
+        task.send(.string(json)) { error in
+            if let error {
+                logger.error("Failed to send WS message: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Notifies the server of an update status change (available or installed).
+    func sendUpdateStatus(state: String, version: String, previousVersion: String? = nil) {
+        var data: [String: String] = [
+            "state": state,
+            "version": version,
+            "platform": "darwin"
+        ]
+        if let prev = previousVersion {
+            data["previousVersion"] = prev
+        }
+        guard let dataJSON = try? JSONSerialization.data(withJSONObject: data),
+              let dataStr = String(data: dataJSON, encoding: .utf8) else { return }
+        let message = "{\"type\":\"update_status\",\"data\":\(dataStr)}"
+        sendWSMessage(message)
     }
 
     private func handleNotificationMessage(_ text: String) {

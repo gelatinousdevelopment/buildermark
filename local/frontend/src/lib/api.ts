@@ -425,6 +425,23 @@ export function debugGetWSClients(): Promise<{ frontend: number; notification: n
 	return api('/api/v1/debug/ws-clients');
 }
 
+export function debugSetUpdateStatus(event: {
+	state: string;
+	version?: string;
+	previousVersion?: string;
+	platform?: string;
+}): Promise<unknown> {
+	return api('/api/v1/debug/update-status', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(event)
+	});
+}
+
+export function debugClearUpdateStatus(): Promise<unknown> {
+	return api('/api/v1/debug/update-status', { method: 'DELETE' });
+}
+
 export function getProjectDailyActivity(
 	projectId: string,
 	startMs: number,
