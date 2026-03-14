@@ -17,6 +17,7 @@
 		onDateSelect?: (date: string | null) => void;
 		enableDateSelection?: boolean;
 		showMoreLink?: boolean;
+		height?: number;
 	}
 
 	let {
@@ -27,7 +28,8 @@
 		selectedDate = null,
 		onDateSelect,
 		enableDateSelection = true,
-		showMoreLink = true
+		showMoreLink = true,
+		height = 114
 	}: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
 	let stretchBars = $derived(settingsStore.commitsChartStretchBars);
@@ -258,6 +260,14 @@
 
 	const showDayNumbers = $derived(!denseBars && effectiveBarWidth > 12);
 
+	let endsToday = $derived.by(() => {
+		if (columns.length === 0) return true;
+		const lastDate = columns[columns.length - 1].date;
+		const now = new Date();
+		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+		return lastDate === today;
+	});
+
 	$effect(() => {
 		if (!stretchBars || !chartEl) return;
 		const updateWidth = () => {
@@ -338,7 +348,7 @@
 							}
 						}}
 					>
-						<div class="dc-bar-area">
+						<div class="dc-bar-area" style:height={compact ? undefined : `${height}px`}>
 							{#if col.total > 0}
 								<Popover position="below" width="220px" padding="0" fixed={true}>
 									<div class="dc-bar">
@@ -415,7 +425,7 @@
 				{#if selectedDate}
 					{formatDateLong(selectedDate)}
 				{:else}
-					last {columns.length} day{columns.length === 1 ? '' : 's'}
+					{endsToday ? 'last ' : ''}{columns.length} day{columns.length === 1 ? '' : 's'}
 				{/if}
 			</div>
 			{#if projectId && showMoreLink}
@@ -634,7 +644,7 @@
 	}
 
 	.dc-bar-area {
-		height: 114px;
+		height: 114px; /* default; overridden by inline style when height prop is set */
 	}
 
 	/* Popover wrapper must fill bar area */

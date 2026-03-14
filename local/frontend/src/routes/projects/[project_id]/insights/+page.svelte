@@ -294,6 +294,7 @@
 						{projectId}
 						enableDateSelection={false}
 						showMoreLink={false}
+						height="130"
 					/>
 				{/if}
 			</div>
@@ -307,7 +308,7 @@
 				{:else if dailyActivity.length === 0}
 					<p class="status">No activity data in the selected range.</p>
 				{:else}
-					<DailyActivityChart {dailyActivity} />
+					<DailyActivityChart {dailyActivity} height="130" />
 				{/if}
 			</div>
 		</div>

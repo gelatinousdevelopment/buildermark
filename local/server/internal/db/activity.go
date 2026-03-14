@@ -7,11 +7,13 @@ import (
 	"time"
 )
 
-// DailyActivityRow holds the daily counts for conversations and user prompts.
+// DailyActivityRow holds the daily counts for conversations, user prompts, and
+// user answers (responses to tool questions / permission prompts).
 type DailyActivityRow struct {
 	Date          string `json:"date"`
 	Conversations int    `json:"conversations"`
 	UserPrompts   int    `json:"userPrompts"`
+	UserAnswers   int    `json:"userAnswers"`
 }
 
 // GetDailyActivity returns daily conversation and user-prompt counts for a
@@ -75,16 +77,9 @@ func GetDailyActivity(ctx context.Context, db *sql.DB, projectID string, startMs
 		return nil, fmt.Errorf("iterate daily conversations: %w", err)
 	}
 
-	// Count user prompts per day.
+	// Count user prompts and answers per day (separately).
 	// Exclude the first message of child conversations (parent_conversation_id != '').
-	promptRows, err := db.QueryContext(ctx,
-		fmt.Sprintf(`SELECT DATE(m.timestamp / 1000, 'unixepoch', '%s') AS day, COUNT(*) AS cnt
-		 FROM messages m
-		 JOIN conversations c ON m.conversation_id = c.id
-		 WHERE m.project_id = ? AND m.message_type IN ('prompt', 'answer')
-		   AND m.timestamp >= ? AND m.timestamp < ?
-		   AND c.hidden = 0
-		   AND NOT (
+	childFirstExclusion := `AND NOT (
 		     c.parent_conversation_id != ''
 		     AND m.id = (
 		       SELECT m2.id FROM messages m2
@@ -92,27 +87,48 @@ func GetDailyActivity(ctx context.Context, db *sql.DB, projectID string, startMs
 		       ORDER BY m2.timestamp ASC, m2.id ASC
 		       LIMIT 1
 		     )
-		   )
-		 GROUP BY day`, offsetStr),
-		projectID, startMs, endExclusiveMs,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query daily prompts: %w", err)
-	}
-	defer promptRows.Close()
+		   )`
 
-	for promptRows.Next() {
-		var day string
-		var cnt int
-		if err := promptRows.Scan(&day, &cnt); err != nil {
-			return nil, fmt.Errorf("scan daily prompts: %w", err)
+	for _, mt := range []struct {
+		msgType string
+		field   string
+	}{
+		{"prompt", "UserPrompts"},
+		{"answer", "UserAnswers"},
+	} {
+		rows, err := db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT DATE(m.timestamp / 1000, 'unixepoch', '%s') AS day, COUNT(*) AS cnt
+			 FROM messages m
+			 JOIN conversations c ON m.conversation_id = c.id
+			 WHERE m.project_id = ? AND m.message_type = ?
+			   AND m.timestamp >= ? AND m.timestamp < ?
+			   AND c.hidden = 0
+			   %s
+			 GROUP BY day`, offsetStr, childFirstExclusion),
+			projectID, mt.msgType, startMs, endExclusiveMs,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("query daily %s: %w", mt.field, err)
 		}
-		if row, ok := dateMap[day]; ok {
-			row.UserPrompts = cnt
+		defer rows.Close()
+
+		for rows.Next() {
+			var day string
+			var cnt int
+			if err := rows.Scan(&day, &cnt); err != nil {
+				return nil, fmt.Errorf("scan daily %s: %w", mt.field, err)
+			}
+			if row, ok := dateMap[day]; ok {
+				if mt.field == "UserPrompts" {
+					row.UserPrompts = cnt
+				} else {
+					row.UserAnswers = cnt
+				}
+			}
 		}
-	}
-	if err := promptRows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate daily prompts: %w", err)
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("iterate daily %s: %w", mt.field, err)
+		}
 	}
 
 	result := make([]DailyActivityRow, len(dates))

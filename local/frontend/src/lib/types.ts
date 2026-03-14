@@ -360,6 +360,7 @@ export interface DailyActivityRow {
 	date: string;
 	conversations: number;
 	userPrompts: number;
+	userAnswers: number;
 }
 
 export interface CommitConversationLinks {

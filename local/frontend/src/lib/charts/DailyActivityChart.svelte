@@ -1,14 +1,32 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import Popover from '$lib/components/Popover.svelte';
+	import Icon from '$lib/Icon.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import type { DailyActivityRow } from '$lib/types';
 
 	interface Props {
 		dailyActivity: DailyActivityRow[];
 		fillArea?: boolean;
+		height?: number;
 	}
 
-	let { dailyActivity, fillArea = true }: Props = $props();
+	let { dailyActivity, fillArea = true, height = 114 }: Props = $props();
+	let countAnswers = $derived(settingsStore.activityChartCountAnswers);
+	const popoverId = `da-menu-${Math.random().toString(36).slice(2, 8)}`;
+	let menuBtn: HTMLButtonElement | undefined;
+	let menuBody: HTMLDivElement | undefined;
+
+	function effectivePrompts(row: DailyActivityRow): number {
+		return row.userPrompts + (countAnswers ? row.userAnswers : 0);
+	}
+
+	function positionMenu() {
+		if (!menuBtn || !menuBody) return;
+		const rect = menuBtn.getBoundingClientRect();
+		menuBody.style.top = `${rect.bottom + 4}px`;
+		menuBody.style.left = `${rect.left}px`;
+	}
 
 	const CONVERSATIONS_COLOR = 'var(--accent-color-darker)';
 	const PROMPTS_COLOR = 'var(--accent-color-divider)';
@@ -18,10 +36,10 @@
 	let wrapWidth = $state(0);
 	let lastAutoScrollKey = '';
 
-	const CHART_HEIGHT = 114;
 	const PADDING_TOP = 3;
 	const PADDING_BOTTOM = 6;
-	const DRAW_HEIGHT = CHART_HEIGHT - PADDING_TOP - PADDING_BOTTOM;
+	let CHART_HEIGHT = $derived(height);
+	let DRAW_HEIGHT = $derived(CHART_HEIGHT - PADDING_TOP - PADDING_BOTTOM);
 
 	let cols = $derived(Math.max(dailyActivity.length, 1));
 
@@ -29,7 +47,8 @@
 		let max = 1;
 		for (const row of dailyActivity) {
 			if (row.conversations > max) max = row.conversations;
-			if (row.userPrompts > max) max = row.userPrompts;
+			const p = effectivePrompts(row);
+			if (p > max) max = p;
 		}
 		return max;
 	});
@@ -64,12 +83,23 @@
 	}
 
 	let conversationsPath = $derived(buildLinePath((r) => r.conversations));
-	let promptsPath = $derived(buildLinePath((r) => r.userPrompts));
+	let promptsPath = $derived(buildLinePath((r) => effectivePrompts(r)));
 	let conversationsFillPath = $derived(buildFillPath((r) => r.conversations));
-	let promptsFillPath = $derived(buildFillPath((r) => r.userPrompts));
+	let promptsFillPath = $derived(buildFillPath((r) => effectivePrompts(r)));
 
 	let totalConversations = $derived(dailyActivity.reduce((s, r) => s + r.conversations, 0));
-	let totalPrompts = $derived(dailyActivity.reduce((s, r) => s + r.userPrompts, 0));
+	let totalPrompts = $derived(dailyActivity.reduce((s, r) => s + effectivePrompts(r), 0));
+	let promptsPerConversation = $derived(
+		totalConversations > 0 ? (totalPrompts / totalConversations).toFixed(2) : '0'
+	);
+
+	let endsToday = $derived.by(() => {
+		if (dailyActivity.length === 0) return true;
+		const lastDate = dailyActivity[dailyActivity.length - 1].date;
+		const now = new Date();
+		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+		return lastDate === today;
+	});
 
 	function formatDateLong(dateStr: string): string {
 		const [y, m, d] = dateStr.split('-').map(Number);
@@ -128,6 +158,35 @@
 
 <div class="da-layout">
 	<div class="da-chart-area">
+		<button
+			class="da-menu-btn"
+			bind:this={menuBtn}
+			popovertarget={popoverId}
+			aria-label="Chart options"
+		>
+			<Icon name="chevronRight" width="12px" />
+		</button>
+		<div
+			id={popoverId}
+			class="da-menu-body"
+			bind:this={menuBody}
+			popover="auto"
+			onbeforetoggle={(e: ToggleEvent) => {
+				if (e.newState === 'open') positionMenu();
+			}}
+		>
+			<label class="da-menu-option">
+				<input
+					type="checkbox"
+					checked={settingsStore.activityChartCountAnswers}
+					onchange={(e) =>
+						(settingsStore.activityChartCountAnswers = (
+							e.currentTarget as HTMLInputElement
+						).checked)}
+				/>
+				Count answers as prompts
+			</label>
+		</div>
 		<div class="da-wrap" bind:this={scrollWrap}>
 			<div class="da-chart-outer" bind:this={wrapEl}>
 				{#if wrapWidth > 0}
@@ -178,7 +237,7 @@
 						{#each dailyActivity as row, i (row.date)}
 							{@const x = i * colWidth + colWidth / 2}
 							<circle cx={x} cy={yPos(row.conversations)} r="3" fill={CONVERSATIONS_COLOR} />
-							<circle cx={x} cy={yPos(row.userPrompts)} r="3" fill={PROMPTS_COLOR} />
+							<circle cx={x} cy={yPos(effectivePrompts(row))} r="3" fill={PROMPTS_COLOR} />
 						{/each}
 					</svg>
 
@@ -200,7 +259,7 @@
 											<div class="da-popover-row">
 												<span class="da-swatch" style="background:{PROMPTS_COLOR}"></span>
 												<span class="da-popover-name">Prompts</span>
-												<span class="da-popover-val">{row.userPrompts}</span>
+												<span class="da-popover-val">{effectivePrompts(row)}</span>
 											</div>
 										</div>
 									{/snippet}
@@ -232,7 +291,7 @@
 			</span>
 			<span class="da-key-item">
 				<span class="da-swatch" style="background:{PROMPTS_COLOR}"></span>
-				<span class="da-key-label">User prompts</span>
+				<span class="da-key-label">User Prompts</span>
 			</span>
 		</div>
 		<div class="da-totals info-box">
@@ -242,8 +301,11 @@
 			<div class="title">
 				{totalPrompts} prompt{totalPrompts !== 1 ? 's' : ''}
 			</div>
+			<div class="title" style:font-weight="normal">
+				avg {promptsPerConversation} p/c
+			</div>
 			<div class="title" style:font-size="0.9rem" style:font-weight="normal">
-				last {dailyActivity.length} day{dailyActivity.length === 1 ? '' : 's'}
+				{endsToday ? 'last ' : ''}{dailyActivity.length} day{dailyActivity.length === 1 ? '' : 's'}
 			</div>
 		</div>
 	</div>
@@ -260,6 +322,56 @@
 		flex: 1;
 		position: relative;
 		min-width: 0;
+	}
+
+	.da-menu-btn {
+		position: absolute;
+		top: 6px;
+		left: 6px;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 4px;
+		background: var(--color-background-elevated);
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+
+	.da-menu-btn :global(.icon) {
+		transform: rotate(90deg);
+	}
+
+	.da-chart-area:hover .da-menu-btn,
+	.da-chart-area:has(:popover-open) .da-menu-btn {
+		opacity: 1;
+	}
+
+	.da-menu-body {
+		position: fixed;
+		inset: unset;
+		margin: 0;
+		background: var(--color-background-surface);
+		border: 0.5px solid var(--color-divider);
+		border-radius: 5px;
+		box-shadow: 0 2px 8px var(--color-popover-shadow);
+		padding: 0.5rem 1rem 0.5rem 0.7rem;
+		white-space: nowrap;
+	}
+
+	.da-menu-option {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		color: var(--color-text);
+		cursor: pointer;
+		user-select: none;
 	}
 
 	.da-wrap {
