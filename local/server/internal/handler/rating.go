@@ -138,6 +138,22 @@ func (s *Server) handleCreateRating(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, http.StatusCreated, rating)
 }
 
+func (s *Server) handleDeleteRating(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "missing rating id")
+		return
+	}
+
+	if err := db.DeleteRating(r.Context(), s.DB, id); err != nil {
+		log.Printf("error deleting rating: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete rating")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, nil)
+}
+
 func (s *Server) handleListRatings(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {

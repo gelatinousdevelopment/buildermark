@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { createRating, setConversationHidden } from '$lib/api';
+	import { createRating, deleteRating, setConversationHidden } from '$lib/api';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
@@ -193,6 +193,15 @@
 			bottomError = e instanceof Error ? e.message : 'Failed to submit rating';
 		} finally {
 			bottomSubmitting = false;
+		}
+	}
+
+	async function handleDeleteRating(id: string) {
+		try {
+			await deleteRating(id);
+			localRatings = localRatings.filter((r) => r.id !== id);
+		} catch (e) {
+			console.error('Failed to delete rating', e);
 		}
 	}
 
@@ -437,7 +446,7 @@
 					</div>
 				{:else if item.kind === 'rating'}
 					<div class="rating-card">
-						<RatingMessageCard rating={item.rating} />
+						<RatingMessageCard rating={item.rating} ondelete={handleDeleteRating} />
 					</div>
 				{:else if item.kind === 'log-group'}
 					{@const groupExpanded = expandedLogGroups.has(item.id)}

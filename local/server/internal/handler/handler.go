@@ -114,6 +114,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/notifications/ws", s.handleNotificationsWS)
 	mux.HandleFunc("POST /api/v1/rating", s.handleCreateRating)
 	mux.HandleFunc("GET /api/v1/ratings", s.handleListRatings)
+	mux.HandleFunc("DELETE /api/v1/ratings/{id}", s.handleDeleteRating)
 	mux.HandleFunc("GET /api/v1/projects", s.handleListProjects)
 	mux.HandleFunc("GET /api/v1/search/projects", s.handleSearchProjects)
 	mux.HandleFunc("GET /api/v1/projects/discover-importable", s.handleDiscoverImportableProjects)
