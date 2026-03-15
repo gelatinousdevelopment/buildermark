@@ -5,13 +5,27 @@
 
 	interface Props {
 		rating: Rating;
+		ondelete?: (id: string) => void;
 	}
 
-	let { rating }: Props = $props();
+	let { rating, ondelete }: Props = $props();
+	let deleting = $state(false);
+
+	function handleDelete(e: MouseEvent) {
+		e.stopPropagation();
+		if (deleting) return;
+		deleting = true;
+		ondelete?.(rating.id);
+	}
 </script>
 
 <div class="message-header">
 	<strong>Rating</strong> &middot; {fmtTime(rating.createdAt)}
+	{#if ondelete}
+		<button class="delete-btn" title="Delete rating" disabled={deleting} onclick={handleDelete}>
+			{deleting ? '...' : '×'}
+		</button>
+	{/if}
 </div>
 <div class="rating-stars">{stars(rating.rating)}</div>
 {#if rating.note}
@@ -54,5 +68,27 @@
 
 	.markdown-body {
 		font-size: 1rem;
+	}
+
+	.delete-btn {
+		margin-left: auto;
+		background: none;
+		border: none;
+		color: var(--color-text-tertiary);
+		cursor: pointer;
+		font-size: 1.1rem;
+		line-height: 1;
+		padding: 0.1rem 0.3rem;
+		border-radius: 4px;
+	}
+
+	.delete-btn:hover {
+		color: var(--color-danger, #e53e3e);
+		background: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
+	}
+
+	.delete-btn:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 </style>

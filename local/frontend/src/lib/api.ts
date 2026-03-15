@@ -248,6 +248,10 @@ export function listRatings(): Promise<Rating[]> {
 	return api('/api/v1/ratings');
 }
 
+export function deleteRating(id: string): Promise<void> {
+	return api(`/api/v1/ratings/${id}`, { method: 'DELETE' });
+}
+
 export function createRating(
 	conversationId: string,
 	rating: number,

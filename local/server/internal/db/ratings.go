@@ -121,6 +121,22 @@ func ResolveConversationIDByTempID(ctx context.Context, db *sql.DB, tempConversa
 	return conversationID, true, nil
 }
 
+// DeleteRating removes a rating by ID.
+func DeleteRating(ctx context.Context, db *sql.DB, ratingID string) error {
+	res, err := db.ExecContext(ctx, "DELETE FROM ratings WHERE id = ?", ratingID)
+	if err != nil {
+		return fmt.Errorf("delete rating: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("rating %s: %w", ratingID, ErrNotFound)
+	}
+	return nil
+}
+
 // ReconcileOrphanedRating finds an orphaned rating (whose conversation_id has no
 // matching row in conversations) that matches the given rating value, note, and
 // timestamp within 60 seconds, then updates it to point to realSessionID.
