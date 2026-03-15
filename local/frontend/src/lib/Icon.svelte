@@ -21,6 +21,7 @@
 	import cloudSvg from '$lib/icons/cloud.svg?raw';
 	import commitSvg from '$lib/icons/commit.svg?raw';
 	import starSvg from '$lib/icons/star.svg?raw';
+	import deleteSvg from '$lib/icons/delete.svg?raw';
 
 	export let name: Icon;
 	export let width: string = '100%';
@@ -50,7 +51,8 @@
 		buildermarkTallAnimated: buildermarkTallAnimatedSvg,
 		cloud: cloudSvg,
 		commit: commitSvg,
-		star: starSvg
+		star: starSvg,
+		delete: deleteSvg
 	};
 </script>
 

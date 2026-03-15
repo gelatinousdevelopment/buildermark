@@ -23,5 +23,6 @@ declare global {
 		| 'buildermarkTallAnimated'
 		| 'cloud'
 		| 'commit'
-		| 'star';
+		| 'star'
+		| 'delete';
 }

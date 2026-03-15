@@ -606,7 +606,7 @@
 			{/if}
 		{:else}
 			<div class="empty-state">
-				<div class="empty">No message selected</div>
+				<div class="empty">No agent message selected</div>
 				{#if matchedCommitHashes.length > 0}
 					<br />
 					<br />

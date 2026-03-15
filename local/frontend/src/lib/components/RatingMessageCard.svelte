@@ -2,6 +2,7 @@
 	import { stars, fmtTime } from '$lib/utils';
 	import { renderMarkdown, normalizeEscapedNewlines } from '$lib/messageUtils';
 	import type { Rating } from '$lib/types';
+	import Icon from '$lib/Icon.svelte';
 
 	interface Props {
 		rating: Rating;
@@ -13,6 +14,7 @@
 
 	function handleDelete(e: MouseEvent) {
 		e.stopPropagation();
+		if (!confirm('Are you sure you want to delete this rating?')) return;
 		if (deleting) return;
 		deleting = true;
 		ondelete?.(rating.id);
@@ -23,7 +25,7 @@
 	<strong>Rating</strong> &middot; {fmtTime(rating.createdAt)}
 	{#if ondelete}
 		<button class="delete-btn" title="Delete rating" disabled={deleting} onclick={handleDelete}>
-			{deleting ? '...' : '×'}
+			{#if deleting}...{:else}<Icon name="delete" width="13px" />{/if}
 		</button>
 	{/if}
 </div>
