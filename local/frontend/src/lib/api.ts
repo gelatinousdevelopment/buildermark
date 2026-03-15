@@ -408,6 +408,10 @@ export function setProjectTeamServer(id: string, teamServerId: string): Promise<
 	});
 }
 
+export function clearUpdateStatus(): Promise<void> {
+	return api('/api/v1/update-status', { method: 'DELETE' });
+}
+
 export function debugSendNotification(
 	kind: string,
 	title: string,

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { websocketStore } from '$lib/stores/websocket.svelte';
+	import { clearUpdateStatus } from '$lib/api';
 	import { API_URL } from '$lib/config';
 	import Popover from '$lib/components/Popover.svelte';
 
@@ -43,6 +44,16 @@
 	function dismiss() {
 		websocketStore.clearUpdateStatus();
 	}
+
+	async function ignore() {
+		applyError = '';
+		try {
+			await clearUpdateStatus();
+			websocketStore.clearUpdateStatus();
+		} catch (error) {
+			applyError = error instanceof Error ? error.message : 'Failed to ignore update';
+		}
+	}
 </script>
 
 <Popover position="below" padding="1rem 1.2rem">
@@ -63,19 +74,22 @@
 				{#if releaseUrl}
 					<a href={releaseUrl} target="_blank" class="update-link">View release notes</a>
 				{/if}
-				{#if isLinux}
-					<button
-						class="update-action bordered small prominent"
-						onclick={applyUpdate}
-						disabled={applying}
-					>
-						{applying ? 'Updating...' : 'Update Now'}
-					</button>
-				{:else}
-					<button class="update-action bordered small prominent" onclick={openNativeSettings}>
-						Open Update Settings
-					</button>
-				{/if}
+				<div style:display="flex" style:gap="0.5rem">
+					{#if isLinux}
+						<button
+							class="update-action bordered small prominent"
+							onclick={applyUpdate}
+							disabled={applying}
+						>
+							{applying ? 'Updating...' : 'Update Now'}
+						</button>
+					{:else}
+						<button class="update-action bordered small prominent" onclick={openNativeSettings}>
+							Open Update Settings
+						</button>
+					{/if}
+					<button class="update-action bordered small" onclick={ignore}> Ignore </button>
+				</div>
 				{#if applyError}
 					<div class="update-error">{applyError}</div>
 				{/if}
@@ -150,20 +164,5 @@
 	.update-error {
 		color: var(--status-color-red, #e53e3e);
 		font-size: 0.85rem;
-	}
-
-	.dismiss {
-		background: none;
-		border: 0.5px solid var(--color-divider);
-		border-radius: 6px;
-		color: var(--color-text-secondary);
-		cursor: pointer;
-		font-size: 0.85rem;
-		padding: 0.3rem 0.6rem;
-		width: fit-content;
-	}
-
-	.dismiss:hover {
-		background: var(--color-background-page);
 	}
 </style>

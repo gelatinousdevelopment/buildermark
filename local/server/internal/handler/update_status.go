@@ -77,7 +77,13 @@ func (s *Server) getUpdateStatusForNewClient() *UpdateStatusEvent {
 func (s *Server) ClearUpdateStatus() {
 	s.updateState.mu.Lock()
 	s.updateState.status = nil
+	s.updateState.installedTime = time.Time{}
+	s.updateState.installedSent = false
 	s.updateState.mu.Unlock()
+
+	if s.ws != nil {
+		s.ws.broadcastEvent("update_status", UpdateStatusEvent{State: "none", Platform: runtime.GOOS})
+	}
 }
 
 // SetVersion sets the server version string.
@@ -147,10 +153,12 @@ func (s *Server) handleDebugSetUpdateStatus(w http.ResponseWriter, r *http.Reque
 
 // handleDebugClearUpdateStatus clears the update status.
 func (s *Server) handleDebugClearUpdateStatus(w http.ResponseWriter, r *http.Request) {
+	s.handleClearUpdateStatus(w, r)
+}
+
+// handleClearUpdateStatus clears the update status.
+func (s *Server) handleClearUpdateStatus(w http.ResponseWriter, r *http.Request) {
 	s.ClearUpdateStatus()
-	if s.ws != nil {
-		s.ws.broadcastEvent("update_status", UpdateStatusEvent{State: "none", Platform: runtime.GOOS})
-	}
 	writeSuccess(w, http.StatusOK, map[string]string{"cleared": "true"})
 }
 

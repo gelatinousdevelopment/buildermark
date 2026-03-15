@@ -159,6 +159,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/plugins", s.handleGetPlugins)
 	mux.HandleFunc("POST /api/v1/plugins", s.handlePostPlugins)
 	mux.HandleFunc("GET /api/v1/update-status", s.handleGetUpdateStatus)
+	mux.HandleFunc("DELETE /api/v1/update-status", s.handleClearUpdateStatus)
 	mux.HandleFunc("POST /api/v1/update-apply", s.handleUpdateApply)
 	mux.HandleFunc("POST /api/v1/debug/send-notification", s.handleDebugSendNotification)
 	mux.HandleFunc("GET /api/v1/debug/ws-clients", s.handleDebugWSClients)
