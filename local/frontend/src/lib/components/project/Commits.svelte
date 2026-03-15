@@ -535,6 +535,7 @@
 		>
 			{#each visibleCommits as c (c.commitHash)}
 				<tr
+					class:ignored={c.ignored}
 					class:relationship-highlight={enableRelationshipHover &&
 						!c.workingCopy &&
 						relationshipCache.highlightedCommitHashes.has(c.commitHash)}
@@ -999,6 +1000,10 @@
 	.branch-picker label {
 		text-align: right;
 		width: 54px;
+	}
+
+	tr.ignored {
+		opacity: 0.6;
 	}
 
 	tr.relationship-highlight {

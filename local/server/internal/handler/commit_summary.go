@@ -40,13 +40,18 @@ func dbCommitToCoverage(c db.Commit, repoProject *db.Project) projectCommitCover
 		LinesRemoved:          c.LinesRemoved,
 		OverrideAgentPercents: overrideMap,
 		NeedsParent:           c.NeedsParent,
+		Ignored:               c.Ignored,
 	}
 }
 
 func summarizeCommitCoverage(commits []projectCommitCoverage) projectCommitSummary {
-	s := projectCommitSummary{CommitCount: len(commits)}
+	s := projectCommitSummary{}
 	agentTotals := make(map[string]int)
 	for _, c := range commits {
+		if c.Ignored {
+			continue
+		}
+		s.CommitCount++
 		s.LinesTotal += c.LinesTotal
 		s.LinesFromAgent += c.LinesFromAgent
 		for _, seg := range c.AgentSegments {
@@ -115,10 +120,12 @@ func buildDailySummaryWindow(
 			b = &bucket{agentTotals: make(map[string]int)}
 			buckets[date] = b
 		}
-		b.linesTotal += c.LinesTotal
-		b.linesFromAgent += c.LinesFromAgent
-		for _, seg := range c.AgentSegments {
-			b.agentTotals[seg.Agent] += seg.LinesFromAgent
+		if !c.Ignored {
+			b.linesTotal += c.LinesTotal
+			b.linesFromAgent += c.LinesFromAgent
+			for _, seg := range c.AgentSegments {
+				b.agentTotals[seg.Agent] += seg.LinesFromAgent
+			}
 		}
 		b.commits = append(b.commits, dailyCommitRef{
 			CommitHash: c.CommitHash,

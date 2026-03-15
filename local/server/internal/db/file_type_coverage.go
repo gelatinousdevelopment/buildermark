@@ -15,7 +15,8 @@ FROM commits
 WHERE project_id = ?
   AND authored_at >= ?
   AND authored_at < ?
-  AND detail_files != ''`
+  AND detail_files != ''
+  AND ignored = 0`
 
 	rows, err := db.QueryContext(ctx, query, projectID, startSec, endSec)
 	if err != nil {

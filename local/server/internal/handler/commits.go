@@ -245,6 +245,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 				UserEmail:        dbCommit.UserEmail,
 				AuthoredAtUnixMs: dbCommit.AuthoredAt * 1000,
 				NeedsParent:      true,
+				Ignored:          dbCommit.Ignored,
 			},
 		})
 		return
@@ -434,6 +435,7 @@ func (s *Server) handleGetProjectCommit(w http.ResponseWriter, r *http.Request) 
 			LinesRemoved:          detailRemoved,
 			AgentSegments:         agentSegments,
 			OverrideAgentPercents: detailOverrideMap,
+			Ignored:               dbCommit != nil && dbCommit.Ignored,
 		},
 		Attribution: commitAttribution{
 			ExactMatchedLines:    exactMatchedLines,
@@ -1158,6 +1160,41 @@ func (s *Server) handleSetCommitOverrideAgentPercents(w http.ResponseWriter, r *
 		"projectId":             projectID,
 		"commitHash":            commitHash,
 		"overrideAgentPercents": body.OverrideAgentPercents,
+	})
+}
+
+func (s *Server) handleSetCommitIgnored(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
+
+	projectID := strings.TrimSpace(r.PathValue("projectId"))
+	commitHash := strings.TrimSpace(r.PathValue("commitHash"))
+	if projectID == "" || commitHash == "" {
+		writeError(w, http.StatusBadRequest, "project id and commit hash are required")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var body struct {
+		Ignored bool `json:"ignored"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if err := db.UpdateCommitIgnored(r.Context(), s.DB, projectID, commitHash, body.Ignored); err != nil {
+		log.Printf("error setting commit ignored: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to set ignored")
+		return
+	}
+
+	writeSuccess(w, http.StatusOK, map[string]any{
+		"projectId":  projectID,
+		"commitHash": commitHash,
+		"ignored":    body.Ignored,
 	})
 }
 

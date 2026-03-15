@@ -82,6 +82,7 @@ type projectCommitCoverage struct {
 	AgentSegments       []agentCoverageSegment `json:"agentSegments,omitempty"`
 	OverrideAgentPercents map[string]int        `json:"overrideAgentPercents,omitempty"`
 	NeedsParent         bool                   `json:"needsParent,omitempty"`
+	Ignored             bool                   `json:"ignored,omitempty"`
 }
 
 type projectCommitDetailResponse struct {

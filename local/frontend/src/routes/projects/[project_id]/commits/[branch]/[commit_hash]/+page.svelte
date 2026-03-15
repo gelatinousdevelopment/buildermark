@@ -5,6 +5,7 @@
 	import {
 		getProjectCommitDetail,
 		setCommitOverrideAgentPercents,
+		setCommitIgnored,
 		deepenCommit,
 		recalculateCommitDiffMatch
 	} from '$lib/api';
@@ -50,6 +51,7 @@
 	let savingOverride = $state(false);
 	let actionsOpen = $state(false);
 	let recalculating = $state(false);
+	let togglingIgnored = $state(false);
 
 	let hasOverride = $derived.by(
 		() =>
@@ -151,6 +153,23 @@
 			error = e instanceof Error ? e.message : 'Failed to recalculate';
 		} finally {
 			recalculating = false;
+		}
+	}
+
+	let isIgnored = $derived.by(() => !!detail?.commit?.ignored);
+
+	async function handleToggleIgnored() {
+		if (!detail || togglingIgnored) return;
+		actionsOpen = false;
+		togglingIgnored = true;
+		try {
+			const newValue = !detail.commit.ignored;
+			await setCommitIgnored(detail.commit.projectId, detail.commit.commitHash, newValue);
+			detail.commit.ignored = newValue;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to update ignored state';
+		} finally {
+			togglingIgnored = false;
 		}
 	}
 
@@ -408,6 +427,9 @@
 				{#if !isNeedsParent}
 					<p>Changes: <DiffCount added={totalAdded} removed={totalRemoved} /></p>
 				{/if}
+				{#if isIgnored}
+					<span class="ignored-pill">Ignored from Stats</span>
+				{/if}
 			</div>
 
 			<div class="right">
@@ -463,6 +485,13 @@
 											disabled={recalculating}
 										>
 											Recalculate Diff Match
+										</button>
+										<button
+											class="actions-menu-item"
+											onclick={handleToggleIgnored}
+											disabled={togglingIgnored}
+										>
+											{isIgnored ? 'Include in Stats' : 'Ignore from Stats'}
 										</button>
 									</div>
 								{/if}
@@ -743,6 +772,17 @@
 	.diff-card-collapsed:hover {
 		border-color: var(--accent-color);
 		background: var(--accent-color-ultralight);
+	}
+
+	.ignored-pill {
+		display: inline-block;
+		padding: 0.3rem 0.9rem;
+		border-radius: 999px;
+		background: var(--color-danger);
+		color: var(--color-background-content);
+		font-size: 0.9rem;
+		font-weight: bold;
+		margin-bottom: 0.5rem;
 	}
 
 	.override-display {

@@ -230,6 +230,21 @@ export function deepenCommit(
 	);
 }
 
+export function setCommitIgnored(
+	projectId: string,
+	commitHash: string,
+	ignored: boolean
+): Promise<void> {
+	return api(
+		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/ignored`,
+		{
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ignored })
+		}
+	);
+}
+
 export function recalculateCommitDiffMatch(
 	projectId: string,
 	commitHash: string

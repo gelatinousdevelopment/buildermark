@@ -348,6 +348,7 @@ export interface ProjectCommitCoverage {
 	agentSegments?: AgentCoverageSegment[];
 	overrideAgentPercents?: Record<string, number> | null;
 	needsParent?: boolean;
+	ignored?: boolean;
 }
 
 export interface ProjectSearchMatch {

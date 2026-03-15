@@ -126,6 +126,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/override-agent-percents", s.handleSetCommitOverrideAgentPercents)
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/deepen", s.handleDeepenCommit)
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/recalculate", s.handleRecalculateCommitDiffMatch)
+	mux.HandleFunc("POST /api/v1/projects/{projectId}/commits/{commitHash}/ignored", s.handleSetCommitIgnored)
 	mux.HandleFunc("DELETE /api/v1/projects/{id}", s.handleDeleteProject)
 	mux.HandleFunc("POST /api/v1/projects/{id}/ignored", s.handleSetProjectIgnored)
 	mux.HandleFunc("POST /api/v1/projects/{id}/label", s.handleSetProjectLabel)
