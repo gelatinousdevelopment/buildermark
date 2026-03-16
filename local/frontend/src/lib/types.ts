@@ -34,6 +34,7 @@ export interface LocalSettings {
 	conversationSearchPaths: AgentConversationSearchPath[];
 	extraAgentHomes: string[];
 	extraLocalUserEmails: string[];
+	localAgents: string[];
 }
 
 export interface PluginAgentInfo {

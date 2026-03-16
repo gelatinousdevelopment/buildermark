@@ -270,6 +270,31 @@ func pluginDefinitions() []pluginDefinition {
 				".gemini/scripts/submit-rating.sh",
 			},
 		},
+		{
+			agent:  "cursor",
+			name:   "Cursor IDE",
+			syntax: "/rate-buildermark",
+			files: []pluginFileDefinition{
+				{
+					sourcePath:  "cursor/skills/rate-buildermark/SKILL.md",
+					installPath: ".cursor/skills/rate-buildermark/SKILL.md",
+					replacements: []pluginReplacement{
+						{
+							old: `"$(git rev-parse --show-toplevel)/plugins/cursor/skills/rate-buildermark/scripts/submit-rating.sh"`,
+							new: `"$HOME/.cursor/skills/rate-buildermark/scripts/submit-rating.sh"`,
+						},
+					},
+				},
+				{
+					sourcePath:  "cursor/skills/rate-buildermark/scripts/submit-rating.sh",
+					installPath: ".cursor/skills/rate-buildermark/scripts/submit-rating.sh",
+					executable:  true,
+				},
+			},
+			cleanupPaths: []string{
+				".cursor/skills/rate-buildermark",
+			},
+		},
 	}
 }
 
@@ -411,6 +436,7 @@ func isPluginSourceDir(dir string) bool {
 		"claudecode/skills/rate-buildermark/SKILL.md",
 		"codex/skills/rate-buildermark/SKILL.md",
 		"gemini/commands/rate-buildermark.toml",
+		"cursor/skills/rate-buildermark/SKILL.md",
 	}
 	for _, rel := range required {
 		if !fileExists(filepath.Join(dir, rel)) {

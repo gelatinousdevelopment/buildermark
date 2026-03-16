@@ -15,6 +15,7 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/claude"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/codex"
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/cursor"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/gemini"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/gitmonitor"
@@ -67,6 +68,7 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		registry.Register(claude.NewForHome(database, h))
 		registry.Register(codex.NewForHome(database, h))
 		registry.Register(gemini.NewForHome(database, h))
+		registry.Register(cursor.NewForHome(database, h))
 	}
 
 	// Register the primary home and extra homes from config.
@@ -142,7 +144,7 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 		}
 		// Start the newly registered watchers.
 		watchers := registry.Watchers()
-		newWatchers := watchers[len(watchers)-len(added)*3:]
+		newWatchers := watchers[len(watchers)-len(added)*4:]
 		for i, w := range newWatchers {
 			delay := time.Duration(i) * 5 * time.Second
 			go func(w agent.Watcher, d time.Duration) {
@@ -228,7 +230,7 @@ func normalizeHomePath(candidate string) string {
 		return ""
 	}
 	clean := filepath.Clean(candidate)
-	if filepath.Base(clean) == ".claude" || filepath.Base(clean) == ".codex" || filepath.Base(clean) == ".gemini" {
+	if filepath.Base(clean) == ".claude" || filepath.Base(clean) == ".codex" || filepath.Base(clean) == ".gemini" || filepath.Base(clean) == ".cursor" {
 		clean = filepath.Dir(clean)
 	}
 	return clean
@@ -346,6 +348,7 @@ func pluginBundleExists(dir string) bool {
 		"claudecode/skills/rate-buildermark/SKILL.md",
 		"codex/skills/rate-buildermark/SKILL.md",
 		"gemini/commands/rate-buildermark.toml",
+		"cursor/skills/rate-buildermark/SKILL.md",
 	}
 	for _, rel := range required {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {

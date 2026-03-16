@@ -305,7 +305,7 @@
 			</span>
 			<span class="da-key-item">
 				<span class="da-swatch" style="background:{PROMPTS_COLOR}"></span>
-				<span class="da-key-label">User Prompts</span>
+				<span class="da-key-label">Builder Prompts</span>
 			</span>
 			<div style:flex="1"></div>
 			<Popover position="above" width="300px" padding="0.75rem" wrapWidth="18px">
@@ -322,7 +322,7 @@
 							{/if}
 						</div>
 						<div class="da-details-row">
-							<strong>User Prompts</strong> assigns each prompt to one day only: the day it was sent.
+							<strong>Builder Prompts</strong> assigns each prompt to one day only: the day it was sent.
 						</div>
 						{#if countAnswers}
 							<div class="da-details-row">

@@ -19,7 +19,11 @@ type localSettingsResponse struct {
 	ConversationSearchPaths []agentSearchPath `json:"conversationSearchPaths"`
 	ExtraAgentHomes         []string          `json:"extraAgentHomes"`
 	ExtraLocalUserEmails    []string          `json:"extraLocalUserEmails"`
+	LocalAgents             []string          `json:"localAgents"`
 }
+
+// localAgentNames is the hard-coded list of non-cloud local agent names.
+var localAgentNames = []string{"claude", "codex", "gemini", "cursor"}
 
 type localConfigFile struct {
 	UpdateMode           string   `json:"updateMode"`
@@ -62,6 +66,7 @@ func (s *Server) handleGetLocalSettings(w http.ResponseWriter, r *http.Request) 
 		ConversationSearchPaths: paths,
 		ExtraAgentHomes:         extraHomes,
 		ExtraLocalUserEmails:    effectiveExtraLocalUserEmails(cfg),
+		LocalAgents:             localAgentNames,
 	})
 }
 

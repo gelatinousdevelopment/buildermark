@@ -1,4 +1,11 @@
-const KNOWN_AGENT_VALUES = ['claude', 'claude_cloud', 'codex', 'codex_cloud', 'gemini'] as const;
+const KNOWN_AGENT_VALUES = [
+	'claude',
+	'claude_cloud',
+	'codex',
+	'codex_cloud',
+	'cursor',
+	'gemini'
+] as const;
 
 export const KNOWN_AGENTS: string[] = [...KNOWN_AGENT_VALUES];
 
@@ -27,6 +34,11 @@ export const KNOWN_AGENT_INFO: Record<KnownAgent, KnownAgentInfo> = {
 		resumePrompt: '$rate-buildermark'
 	},
 	codex_cloud: {
+		supportsResumeFromBuildermark: false,
+		resumeCommandTemplate: null,
+		resumePrompt: null
+	},
+	cursor: {
 		supportsResumeFromBuildermark: false,
 		resumeCommandTemplate: null,
 		resumePrompt: null

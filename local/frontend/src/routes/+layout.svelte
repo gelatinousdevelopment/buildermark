@@ -115,7 +115,7 @@
 				</a>
 				<Popover position="below" padding="1.3rem 1.5rem 1rem 1.3rem">
 					{#snippet popover()}
-						<span class="logo-popover-text">Buildermark Local</span>
+						<a href={resolve('/')} class="logo-popover-text">Buildermark Local</a>
 						{#if projects.length > 0}
 							<ul class="logo-popover-projects">
 								{#each projects as project (project.id)}
@@ -416,9 +416,18 @@
 		position: relative;
 	}
 
-	.logo-popover-text {
-		font-size: 1.2rem;
+	header .brand .logo-popover-text {
+		font-size: 1.1rem;
 		font-weight: bold;
+		text-align: left;
+		display: block;
+		padding: 0;
+	}
+
+	header .brand .logo-popover-text:hover {
+		background: none;
+		color: var(--accent-color);
+		text-decoration: underline;
 	}
 
 	.logo-popover-projects {

@@ -658,11 +658,11 @@
 	{#if showLoadMore && ingestionStatus && !ingestionStatus.reachedRoot}
 		<div class="load-more">
 			<span class="load-more-info">
-				{ingestionStatus.ingestedCount} of {ingestionStatus.totalGitCommits} commits loaded
+				{ingestionStatus.ingestedCount} of {ingestionStatus.totalGitCommits} commits imported
 			</span>
 			<div class="load-more-controls">
 				<label>
-					Load
+					Import
 					<input
 						type="number"
 						min="1"
@@ -674,7 +674,7 @@
 					more
 				</label>
 				<button class="bordered small" onclick={handleLoadMore} disabled={loadingMore}>
-					{loadingMore ? 'Loading...' : 'Load'}
+					{loadingMore ? 'Importing...' : 'Import'}
 				</button>
 			</div>
 			{#if loadMoreError}

@@ -447,7 +447,7 @@
 									</div>{/if}{(conv.title && singleLineTitle(conv.title)) || shortId(conv.id)}
 							</a>
 							{#if conv.userPromptCount > 1}
-								<span class="prompt-count" title="{conv.userPromptCount} user prompts"
+								<span class="prompt-count" title="{conv.userPromptCount} builder prompts"
 									>{conv.userPromptCount}</span
 								>
 							{/if}
