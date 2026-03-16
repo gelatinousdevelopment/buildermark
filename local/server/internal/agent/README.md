@@ -73,40 +73,169 @@ Provider-specific structured question sources currently supported:
 
 ## Implementing a New Agent
 
-1. Create a new package under `agent/` (e.g. `agent/myagent/`).
+### Step 1: Create the agent package
 
-2. Define an `Agent` struct that embeds `agent.Base`:
+Create `agent/myagent/` with at least these files:
+
+**`myagent.go`** — struct, constructors, compile-time assertions:
+
+```go
+package myagent
+
+import (
+    "database/sql"
+    "github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
+)
+
+var (
+    _ agent.Watcher               = (*Agent)(nil)
+    _ agent.PathFilteredWatcher   = (*Agent)(nil)  // optional
+    _ agent.ProjectPathDiscoverer = (*Agent)(nil)  // optional
+    _ agent.SessionResolver       = (*Agent)(nil)  // optional
+)
+
+type Agent struct {
+    agent.Base
+    // agent-specific fields (paths to history files, caches, etc.)
+}
+
+func NewForHome(database *sql.DB, home string) *Agent {
+    return &Agent{
+        Base: agent.NewBase(database, home, "myagent"),
+        // ...
+    }
+}
+```
+
+Provide an internal `newAgent()` constructor that accepts explicit paths so tests can use temp directories without touching the real filesystem.
+
+**`watcher.go`** — `Run()`, `ScanSince()`, and optionally `ScanPathsSince()` / `DiscoverProjectPathsSince()`:
+
+The `Run()` method follows this pattern:
+
+```go
+func (a *Agent) Run(ctx context.Context) {
+    // 1. Determine startup scan window
+    scanWindow := agent.DefaultScanWindow
+    if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.DB, a.Name()); err == nil {
+        scanWindow = agent.StartupScanWindow(latestMs)
+    }
+
+    // 2. Initial scan
+    trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
+    a.scanSince(ctx, time.Now().Add(-scanWindow), trackedFilter)
+    _ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
+        Agent: a.Name(), SourceKind: "scan_marker", SourceKey: "startup",
+    })
+    a.BackfillGitIDs(ctx)
+    a.BackfillLabels(ctx)
+
+    // 3. Poll loop
+    ticker := time.NewTicker(a.Interval)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            trackedFilter = agent.TrackedProjectFilter(ctx, a.DB, nil)
+            count := a.poll(ctx, trackedFilter)
+            a.BackfillGitIDsThrottled(ctx)
+            var newInterval time.Duration
+            if count > 0 {
+                newInterval = a.MarkActive()
+            } else {
+                newInterval = a.MarkIdle()
+            }
+            a.RecordPoll()
+            ticker.Reset(newInterval)
+        }
+    }
+}
+```
+
+When processing each conversation/session:
+- Resolve the project path, then call `agent.FindGitRoot()` to normalize to the repo root.
+- Call `db.EnsureProject()`, then verify the conversation has at least one user message before calling `db.EnsureConversation()`.
+- Set a title via `db.UpdateConversationTitle()` using `agent.TitleFromPrompt()`.
+- Append diff messages with `agent.AppendDiffDBMessages()` or `agent.AppendDiffDBMessagesWithOptions()`.
+- Insert messages with `db.InsertMessages()`.
+
+**Additional files** as needed for parsing/formatting (e.g. `format.go`, `session.go`).
+
+### Step 2: Register in `cli/run.go`
+
+1. Add the import:
    ```go
-   type Agent struct {
-       agent.Base
-       // agent-specific fields
-   }
+   "github.com/gelatinousdevelopment/buildermark/local/server/internal/agent/myagent"
    ```
 
-3. Add constructors:
+2. Add to the registration block (alongside existing agents):
    ```go
-   func New(db *sql.DB) (*Agent, error)
-   func NewForHome(db *sql.DB, home string) *Agent
+   registry.Register(myagent.NewForHome(database, h))
    ```
 
-4. Implement the required interfaces. Add compile-time assertions:
-   ```go
-   var (
-       _ agent.Watcher             = (*Agent)(nil)
-       _ agent.SessionResolver     = (*Agent)(nil)
-       // etc.
-   )
-   ```
+3. Update the `newWatchers` slice calculation — the multiplier in `watchers[len(watchers)-len(added)*N:]` must equal the total number of registered agent types.
 
-5. Use shared utilities:
-   - `agent.TrackedProjectFilter(ctx, a.DB, nil)` for path filtering
-   - `agent.AppendDiffEntries(entries)` / `agent.AppendDiffDBMessages(messages)` for diff derivation
-   - `agent.AppendDiffDBMessagesWithOptions(messages, opts)` when an agent needs multi-diff extraction or dedupe behavior
-   - `agent.TitleFromPrompt(text)` for title generation
-   - `agent.FirstNonEmpty(...)` for model resolution
-   - `a.BackfillGitIDs(ctx)` / `a.BackfillLabels(ctx)` in your `Run()` loop
-   - Follow message classification conventions above (`prompt/question/answer/log`)
+4. Add to `normalizeHomePath()` — if the agent has a config directory like `.myagent`, add it to the check so paths like `/home/user/.myagent` resolve to `/home/user`.
 
-6. Register the agent in `cli/run.go`.
+5. Add to `pluginBundleExists()` — add the plugin path to the `required` slice.
 
-7. If the agent doesn't support an optional interface (e.g. `ProjectPathDiscoverer`), simply don't implement it — the registry checks via type assertion.
+### Step 3: Handler integration
+
+**`handler/local_settings.go`:**
+- Add `"myagent"` to the `localAgentNames` slice.
+- If the agent has a config directory (e.g. `.myagent`), add it to `normalizeHomeEntries()`.
+- If the agent stores conversations in a predictable filesystem path (like JSONL files), add it to `collectConversationSearchPaths()`.
+
+**`handler/plugins.go`:**
+- Add a plugin definition in `pluginDefinitions()` with source paths, install paths, and any template replacements.
+
+### Step 4: Frontend changes
+
+**`local/frontend/src/lib/agents.ts`:**
+- Add the agent name to `KNOWN_AGENT_VALUES`.
+- Add an entry to `KNOWN_AGENT_INFO` with resume configuration:
+  ```typescript
+  myagent: {
+      supportsResumeFromBuildermark: true,  // or false
+      resumeCommandTemplate: 'myagent -r {{sessionId}} {{resumePrompt}}',  // or null
+      resumePrompt: '/rate-buildermark'  // or null
+  }
+  ```
+
+### Step 5: Plugin files
+
+Create `plugins/myagent/` with a rating skill/command and submission script. The structure varies by agent type — see existing plugins for examples. The submission script POSTs to `http://localhost:55022/api/ratings`.
+
+### Step 6: Tests
+
+Add `*_test.go` files in the agent package. Use the internal `newAgent()` constructor with temp directories. Test parsing, path filtering, scanning, and session resolution.
+
+### Shared utilities reference
+
+| Utility | Usage |
+|---------|-------|
+| `agent.TrackedProjectFilter(ctx, a.DB, nil)` | Filter to only tracked projects |
+| `agent.NewPathFilter(paths)` | Filter to specific project paths |
+| `agent.FindGitRoot(path)` | Resolve path to git repo root |
+| `agent.AppendDiffDBMessages(messages)` | Add synthetic diff messages (single best diff per message) |
+| `agent.AppendDiffDBMessagesWithOptions(messages, opts)` | Add diffs with multi-diff or dedupe behavior |
+| `agent.TitleFromPrompt(text)` | Generate conversation title from first prompt |
+| `agent.FirstNonEmpty(...)` | Select first non-empty string |
+| `a.BackfillGitIDs(ctx)` | Resolve git root commits for projects |
+| `a.BackfillGitIDsThrottled(ctx)` | Throttled version for poll loops |
+| `a.BackfillLabels(ctx)` | Update project labels from repo directory names |
+| `a.MarkActive()` / `a.MarkIdle()` | Manage adaptive poll interval |
+| `a.RecordPoll()` | Record last poll time |
+
+### Interface summary
+
+Only implement the interfaces your agent supports — the registry checks via type assertion.
+
+| Interface | Methods | When to implement |
+|-----------|---------|-------------------|
+| `Watcher` (required) | `Run(ctx)`, `ScanSince(ctx, since, progress)` | Always — this is the core import loop |
+| `PathFilteredWatcher` | `ScanPathsSince(ctx, since, paths, progress)` | When the agent can efficiently scan specific project paths |
+| `ProjectPathDiscoverer` | `DiscoverProjectPathsSince(ctx, since)` | When the agent can enumerate project paths without full import |
+| `SessionResolver` | `ResolveSession(rating, note, fallbackID)` | When the agent supports rating the current session from a plugin |
