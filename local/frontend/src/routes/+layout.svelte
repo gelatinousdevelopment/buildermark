@@ -6,7 +6,7 @@
 	import { page } from '$app/state';
 	import { onMount, onDestroy } from 'svelte';
 	import Icon from '$lib/Icon.svelte';
-	import Dialog from '$lib/Dialog.svelte';
+	import ReadOnlyDialog from '$lib/components/ReadOnlyDialog.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
@@ -49,7 +49,6 @@
 	let projectId = $derived(page.params.project_id);
 	let showReadOnlyDialog = $state(READ_ONLY);
 	let bigBrand = $derived(data.projects && data.projects.length == 0);
-
 	const projectTabs = [
 		{
 			label: 'Conversations',
@@ -259,50 +258,7 @@
 		{@render children()}
 	</div>
 
-	<Dialog open={showReadOnlyDialog} onclose={() => (showReadOnlyDialog = false)} width="500px">
-		<div class="read-only-dialog">
-			<a href="https://buildermark.dev" target="_blank" style:color="var(--color-text)"
-				><Icon name="buildermarkWordmark" width="140px" /></a
-			>
-			<hr style:height="2px" style:background="var(--color-text)" />
-			<h2>Rate, measure, and benchmark your AI coding sessions.</h2>
-			<p>
-				This website is a read-only demo of Buildermark Local. You can browse all of the prompts
-				that I wrote to create it in less than a month.
-			</p>
-			<h2>Open source, local-first, and free.</h2>
-			<p>
-				Buildermark Local runs on your dev computer (macOS, Linux, and Windows) with a very light
-				footprint (written in Go), a UI on localhost, and is <a
-					href="https://github.com/gelatinousdevelopment/buildermark"
-					target="_blank">open source on github</a
-				>. Nothing leaves your machine, not even usage data.
-			</p>
-			<!-- <h2>Download</h2> -->
-			<div style:display="flex" style:gap="0.5rem" style:align-items="center">
-				<span>Download at</span>
-				<a
-					href="https://buildermark.dev"
-					target="_blank"
-					class="bordered prominent small"
-					style:width="fit-content">buildermark.dev</a
-				>
-				<span>or</span>
-				<a
-					href="https://github.com/gelatinousdevelopment/buildermark/releases"
-					target="_blank"
-					class="bordered prominent small"
-					style:width="fit-content">GitHub</a
-				>
-			</div>
-			<p style:margin-top="1rem">
-				Buildermark <a href="https://buildermark.dev" target="_blank">Team Server</a> is coming soon.
-			</p>
-		</div>
-		{#snippet actions()}
-			<button class="bordered small" onclick={() => (showReadOnlyDialog = false)}>Close</button>
-		{/snippet}
-	</Dialog>
+	<ReadOnlyDialog open={showReadOnlyDialog} onclose={() => (showReadOnlyDialog = false)} />
 
 	<footer>
 		<div class="content">
@@ -588,16 +544,5 @@
 
 	footer a:hover {
 		text-decoration: underline;
-	}
-
-	.read-only-dialog h2 {
-		font-size: 1rem;
-		font-weight: bold;
-		margin: 1.2rem 0 0.8rem 0;
-		line-height: 1;
-	}
-
-	.read-only-dialog p {
-		font-size: 1rem;
 	}
 </style>

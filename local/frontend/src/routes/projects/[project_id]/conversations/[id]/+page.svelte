@@ -64,6 +64,7 @@
 	let recalculatingDiffMatching: boolean = $state(false);
 	let expandedMessages = new SvelteSet<string>();
 	let expandedLogGroups = new SvelteSet<string>();
+	let isMobileDevice = $state(false);
 	let selectedMessage: MessageRead | null = $state(null);
 	let selectedCombinedDiffId: string | null = $state(null);
 	let selectedCombinedDiffContent: string | null = $state(null);
@@ -347,7 +348,10 @@
 	});
 
 	onMount(() => {
-		layoutStore.fixedHeight = true;
+		isMobileDevice = window.screen.width < 900;
+		if (!isMobileDevice) {
+			layoutStore.fixedHeight = true;
+		}
 		layoutStore.hideContainer = true;
 	});
 
@@ -357,7 +361,7 @@
 	});
 </script>
 
-<div class="content">
+<div class="content" class:mobile={isMobileDevice}>
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="column left" bind:this={leftColumn} onclick={clearSelectionOnLeftBackground}>
@@ -707,6 +711,10 @@
 		.column.left :global(.log-item .message-content) {
 			display: block;
 		}
+	}
+
+	.content.mobile .column {
+		overflow-y: visible;
 	}
 
 	.column .divider {

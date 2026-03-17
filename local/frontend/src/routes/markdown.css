@@ -40,6 +40,8 @@
 	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	font-size: 0.8em;
 	padding: 0.2rem 0.4rem;
+	overflow-wrap: anywhere;
+	word-break: break-word;
 }
 
 .markdown-body pre code {
