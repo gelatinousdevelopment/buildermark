@@ -341,16 +341,18 @@
 			</Popover>
 		</div>
 		<div class="da-totals info-box">
-			<div class="title">
-				{totalConversations} conversation{totalConversations !== 1 ? 's' : ''}
+			<div class="title big">
+				{totalConversations}
 			</div>
-			<div class="title">
-				{totalPrompts} prompt{totalPrompts !== 1 ? 's' : ''}
+			<div class="title medium">conversation{totalConversations !== 1 ? 's' : ''}</div>
+			<div class="title big">
+				{totalPrompts}
 			</div>
-			<div class="title" style:font-weight="normal">
+			<div class="title medium">prompt{totalPrompts !== 1 ? 's' : ''}</div>
+			<div class="title small">
 				avg {promptsPerConversation} p/c
 			</div>
-			<div class="title" style:font-size="0.9rem" style:font-weight="normal">
+			<div class="title small">
 				{endsToday ? 'last ' : ''}{dailyActivity.length} day{dailyActivity.length === 1 ? '' : 's'}
 			</div>
 		</div>
@@ -581,8 +583,23 @@
 	}
 
 	.da-totals .title {
-		font-size: 1.15em;
+		font-size: 1.4em;
+		font-weight: 500;
+		line-height: 1.1;
+	}
+
+	.da-totals .title.big {
+		font-size: 1.8em;
 		font-weight: 600;
+	}
+
+	.da-totals .title.medium {
+		margin-top: -4px;
+	}
+
+	.da-totals .title.small {
+		font-size: 0.9rem;
+		font-weight: normal;
 	}
 
 	@media (max-width: 780px) {

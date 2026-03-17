@@ -426,7 +426,8 @@
 			</div>
 		{/if}
 		<div class="dc-history-agent info-box">
-			<div class="title">{Math.round(historyAgentPercent)}% by agents</div>
+			<div class="title big">{Math.round(historyAgentPercent)}%</div>
+			<div class="title medium">by agents</div>
 			<div class="title" style:font-size="0.9rem" style:font-weight="normal">
 				{#if selectedDate}
 					{formatDateLong(selectedDate)}
@@ -586,6 +587,18 @@
 	.dc-history-agent .title {
 		font-size: 1.4em;
 		font-weight: 600;
+	}
+
+	.dc-history-agent .title.big {
+		font-size: 2.7em;
+		font-weight: 500;
+		line-height: 1;
+	}
+
+	.dc-history-agent .title.medium {
+		font-size: 1.5em;
+		font-weight: 500;
+		margin-top: -4px;
 	}
 
 	.dc-history-agent .subtitle {
