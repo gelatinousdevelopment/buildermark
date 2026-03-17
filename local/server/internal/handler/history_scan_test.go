@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,27 @@ type mockWatcher struct {
 	scanPathsCount int
 	lastSince      time.Time
 	lastPaths      []string
+}
+
+type replacingWatcher struct {
+	db       *sql.DB
+	project  string
+	convID   string
+	agent    string
+	messages []db.Message
+}
+
+func (w *replacingWatcher) Name() string            { return w.agent }
+func (w *replacingWatcher) Run(ctx context.Context) {}
+func (w *replacingWatcher) LastPollTime() time.Time { return time.Time{} }
+func (w *replacingWatcher) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
+	if err := db.EnsureConversation(ctx, w.db, w.convID, w.project, w.agent); err != nil {
+		return 0
+	}
+	if err := db.InsertMessages(ctx, w.db, w.messages); err != nil {
+		return 0
+	}
+	return len(w.messages)
 }
 
 func (m *mockWatcher) Name() string            { return m.name }
@@ -49,7 +71,7 @@ func (m *mockWatcher) snapshot() (scanCount, scanPathsCount int, lastSince time.
 	return m.scanCount, m.scanPathsCount, m.lastSince, append([]string(nil), m.lastPaths...)
 }
 
-func setupTestServerWithWatcher(t *testing.T, watchers ...*mockWatcher) *Server {
+func setupTestServerWithWatcher(t *testing.T, watchers ...agent.Watcher) *Server {
 	t.Helper()
 	s := setupTestServer(t)
 	reg := agent.NewRegistry()
@@ -108,10 +130,10 @@ func TestHistoryScan(t *testing.T) {
 			wantOK:     true,
 		},
 		{
-			name:       "replace derived diffs requires scope",
+			name:       "replace derived diffs global",
 			body:       map[string]any{"replaceDerivedDiffs": true, "agent": "codex"},
-			wantStatus: http.StatusBadRequest,
-			wantOK:     false,
+			wantStatus: http.StatusAccepted,
+			wantOK:     true,
 		},
 		{
 			name:       "invalid timeframe",
@@ -366,7 +388,82 @@ func TestHistoryScanSpecificProjectUsesPathScan(t *testing.T) {
 	}
 }
 
-func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing.T) {
+func TestHistoryScanReplaceDerivedDiffsReplacesSyntheticMessagesOnlyWhenReplacementExists(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/test-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-codex", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation codex: %v", err)
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-codex", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\nold-derived\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1001, ProjectID: projectID, ConversationID: "conv-codex", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\nsource\n```", RawJSON: `{"type":"source_diff"}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	reg := agent.NewRegistry()
+	reg.Register(&replacingWatcher{
+		db:      s.DB,
+		project: projectID,
+		convID:  "conv-codex",
+		agent:   "codex",
+		messages: []db.Message{
+			{
+				Timestamp:      1000,
+				ProjectID:      projectID,
+				ConversationID: "conv-codex",
+				Role:           "agent",
+				MessageType:    db.MessageTypeDiff,
+				Content:        "```diff\nnew-derived\n```",
+				RawJSON:        `{"source":"derived_diff"}`,
+			},
+		},
+	})
+	s.Agents = reg
+
+	body, _ := json.Marshal(map[string]any{
+		"agent":               "codex",
+		"replaceDerivedDiffs": true,
+		"sync":                true,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var oldDerived, newDerived, sourceDiff int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND content = ?`, "conv-codex", "```diff\nold-derived\n```").Scan(&oldDerived); err != nil {
+		t.Fatalf("count old derived: %v", err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND content = ?`, "conv-codex", "```diff\nnew-derived\n```").Scan(&newDerived); err != nil {
+		t.Fatalf("count new derived: %v", err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-codex", `{"type":"source_diff"}`).Scan(&sourceDiff); err != nil {
+		t.Fatalf("count source diff: %v", err)
+	}
+
+	if oldDerived != 0 {
+		t.Fatalf("oldDerived = %d, want 0", oldDerived)
+	}
+	if newDerived != 1 {
+		t.Fatalf("newDerived = %d, want 1", newDerived)
+	}
+	if sourceDiff != 1 {
+		t.Fatalf("sourceDiff = %d, want 1", sourceDiff)
+	}
+}
+
+func TestHistoryScanReplaceDerivedDiffsDoesNotDeleteWithoutReplacement(t *testing.T) {
 	w := &mockWatcher{name: "codex"}
 	s := setupTestServerWithWatcher(t, w)
 	handler := s.Routes()
@@ -414,11 +511,11 @@ func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing
 	}
 
 	var scopedDerived int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type = 'diff'`, "conv-codex").Scan(&scopedDerived); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-codex", `{"source":"derived_diff"}`).Scan(&scopedDerived); err != nil {
 		t.Fatalf("count scoped derived: %v", err)
 	}
-	if scopedDerived != 0 {
-		t.Fatalf("scopedDerived = %d, want 0", scopedDerived)
+	if scopedDerived != 1 {
+		t.Fatalf("scopedDerived = %d, want 1", scopedDerived)
 	}
 
 	var keptSource int
@@ -430,18 +527,92 @@ func TestHistoryScanReplaceDerivedDiffsDeletesScopedSyntheticMessages(t *testing
 	}
 
 	var otherDerived int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type = 'diff'`, "conv-claude").Scan(&otherDerived); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-claude", `{"source":"derived_diff"}`).Scan(&otherDerived); err != nil {
 		t.Fatalf("count claude derived: %v", err)
 	}
 	if otherDerived != 1 {
 		t.Fatalf("claude derived = %d, want 1", otherDerived)
 	}
 
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND message_type = 'diff'`, "conv-other").Scan(&otherDerived); err != nil {
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-other", `{"source":"derived_diff"}`).Scan(&otherDerived); err != nil {
 		t.Fatalf("count other project derived: %v", err)
 	}
 	if otherDerived != 1 {
 		t.Fatalf("other project derived = %d, want 1", otherDerived)
+	}
+}
+
+func TestHistoryScanReplaceDerivedDiffsGlobalScopeDoesNotDeleteWithoutReplacement(t *testing.T) {
+	w := &mockWatcher{name: "claude"}
+	s := setupTestServerWithWatcher(t, w)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectID, err := db.EnsureProject(ctx, s.DB, "/tmp/test-project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	otherProjectID, err := db.EnsureProject(ctx, s.DB, "/tmp/other-project")
+	if err != nil {
+		t.Fatalf("EnsureProject other: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-a", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation conv-a: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-b", otherProjectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation conv-b: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-c", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation conv-c: %v", err)
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-a", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\nderived-a\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1001, ProjectID: projectID, ConversationID: "conv-a", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\nsource-a\n```", RawJSON: `{"type":"source_diff"}`},
+		{Timestamp: 1002, ProjectID: otherProjectID, ConversationID: "conv-b", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\nderived-b\n```", RawJSON: `{"source":"derived_diff"}`},
+		{Timestamp: 1003, ProjectID: projectID, ConversationID: "conv-c", Role: "agent", MessageType: db.MessageTypeDiff, Content: "```diff\nderived-c\n```", RawJSON: `{"source":"derived_diff"}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"agent":               "claude",
+		"replaceDerivedDiffs": true,
+		"sync":                true,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/history/scan", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var convADerived, convASource, convBDerived, convCDerived int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-a", `{"source":"derived_diff"}`).Scan(&convADerived); err != nil {
+		t.Fatalf("count conv-a derived: %v", err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-a", `{"type":"source_diff"}`).Scan(&convASource); err != nil {
+		t.Fatalf("count conv-a source: %v", err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-b", `{"source":"derived_diff"}`).Scan(&convBDerived); err != nil {
+		t.Fatalf("count conv-b derived: %v", err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND raw_json = ?`, "conv-c", `{"source":"derived_diff"}`).Scan(&convCDerived); err != nil {
+		t.Fatalf("count conv-c derived: %v", err)
+	}
+
+	if convADerived != 1 {
+		t.Fatalf("conv-a derived = %d, want 1", convADerived)
+	}
+	if convASource != 1 {
+		t.Fatalf("conv-a source = %d, want 1", convASource)
+	}
+	if convBDerived != 1 {
+		t.Fatalf("conv-b derived = %d, want 1", convBDerived)
+	}
+	if convCDerived != 1 {
+		t.Fatalf("conv-c derived = %d, want 1", convCDerived)
 	}
 }
 

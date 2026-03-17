@@ -1339,8 +1339,9 @@ func computeCoverageForRepo(
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
 		totalLines := tokenTotals(commitTokens)
-		_, matchedLines, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
-		_, fallbackLines := summarizeDiffFiles(parsed.Files, commitTokens, fileAgent, remainingNorms)
+		_, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		files := summarizeDiffFiles(parsed.Files, fileAgent)
+		_, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
 		matchedLines += fallbackLines
 
 		cAdded, cRemoved := countDiffAddedRemoved(commitDiff)
@@ -1478,13 +1479,14 @@ func computeWorkingCopyDetail(
 	}
 
 	totalLines := tokenTotals(commitTokens)
-	contribMessages, matchedLines, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	contribMessages, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	exactMatchedLines := matchedLines
-	files, fallbackLines := summarizeDiffFiles(parsed.Files, commitTokens, fileAgent, remainingNorms)
+	files := summarizeDiffFiles(parsed.Files, fileAgent)
+	files, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
 	matchedLines += fallbackLines
 	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 
-	agentSegments := attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
+	agentSegments := summarizeCommitAgentSegments(files, totalLines)
 
 	attribution := commitAttribution{
 		ExactMatchedLines:    exactMatchedLines,

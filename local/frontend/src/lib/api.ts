@@ -367,11 +367,15 @@ export function refreshProjectCommits(
 	});
 }
 
-export function scanHistory(timeframe: string, agent = ''): Promise<ImportProjectsResponse> {
+export function scanHistory(
+	timeframe: string,
+	agent = '',
+	replaceDerivedDiffs = false
+): Promise<ImportProjectsResponse> {
 	return api('/api/v1/history/scan', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ timeframe, agent })
+		body: JSON.stringify({ timeframe, agent, replaceDerivedDiffs })
 	});
 }
 

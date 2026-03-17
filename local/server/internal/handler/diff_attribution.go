@@ -45,11 +45,13 @@ func buildMessageIndex(messages []messageDiff, windowStart, windowEnd int64) *me
 	})
 
 	idx := &messageIndex{
-		messages:       sorted,
-		tokenSources:   make(map[string][]tokenSource),
-		tokensByBucket: make(map[int]map[string][]int),
-		normSources:    make(map[string]int),
-		normAgents:     make(map[string]map[string]int),
+		messages:               sorted,
+		tokenSources:           make(map[string][]tokenSource),
+		tokensByBucket:         make(map[int]map[string][]int),
+		normSources:            make(map[string]int),
+		normAgents:             make(map[string]map[string]int),
+		normConversationCounts: make(map[string]map[string]int),
+		conversationMeta:       make(map[string]fallbackConversationMeta),
 	}
 
 	for i, msg := range sorted {
@@ -59,6 +61,13 @@ func buildMessageIndex(messages []messageDiff, windowStart, windowEnd int64) *me
 		agent := strings.TrimSpace(msg.Agent)
 		if agent == "" {
 			agent = "unknown"
+		}
+		if msg.ConversationID != "" {
+			idx.conversationMeta[msg.ConversationID] = fallbackConversationMeta{
+				Title: msg.ConversationTitle,
+				Agent: agent,
+				Model: msg.Model,
+			}
 		}
 		pathTokens := make(map[string][]int)
 		for pos, tok := range msg.Tokens {
@@ -75,6 +84,14 @@ func buildMessageIndex(messages []messageDiff, windowStart, windowEnd int64) *me
 					idx.normAgents[tok.Norm] = agents
 				}
 				agents[agent]++
+				if msg.ConversationID != "" {
+					conversations := idx.normConversationCounts[tok.Norm]
+					if conversations == nil {
+						conversations = make(map[string]int)
+						idx.normConversationCounts[tok.Norm] = conversations
+					}
+					conversations[msg.ConversationID]++
+				}
 			}
 		}
 		idx.tokensByBucket[i] = pathTokens
@@ -86,7 +103,7 @@ func attributeCommitToMessages(
 	commitTokens []diffToken,
 	messages []messageDiff,
 	windowStart, windowEnd int64,
-) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int) {
+) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int, map[string][]string) {
 	idx := buildMessageIndex(messages, windowStart, windowEnd)
 	return attributeCommitToMessagesWithIndex(commitTokens, idx, windowStart, windowEnd)
 }
@@ -95,7 +112,7 @@ func attributeCommitToMessagesWithIndex(
 	commitTokens []diffToken,
 	idx *messageIndex,
 	windowStart, windowEnd int64,
-) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int) {
+) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int, map[string][]string) {
 	messages := idx.messages
 
 	matchedLines := 0
@@ -328,7 +345,15 @@ func attributeCommitToMessagesWithIndex(
 		fileCoverageByPath[filePath] = fileCov
 	}
 
-	return out, matchedLines, fileCoverageByPath, normSources
+	unmatchedNormsByPath := make(map[string][]string)
+	for i, tok := range commitTokens {
+		if tok.Path == "" || tok.Norm == "" || !tok.Attributable || commitMatched[i] {
+			continue
+		}
+		unmatchedNormsByPath[tok.Path] = append(unmatchedNormsByPath[tok.Path], tok.Norm)
+	}
+
+	return out, matchedLines, fileCoverageByPath, normSources, unmatchedNormsByPath
 }
 
 func concatCommitNorms(tokens []diffToken, indices []int) string {
@@ -522,10 +547,8 @@ func attributeCopiedFromAgentFilesWithIndex(
 
 func summarizeDiffFiles(
 	diffFiles []diffFileInfo,
-	commitTokens []diffToken,
 	fileAgent map[string]commitFileCoverage,
-	remainingNorms map[string]int,
-) ([]commitFileCoverage, int) {
+) []commitFileCoverage {
 	coverageByPath := make(map[string]commitFileCoverage, len(diffFiles))
 	for _, fi := range diffFiles {
 		coverageByPath[fi.Path] = commitFileCoverage{
@@ -544,16 +567,6 @@ func summarizeDiffFiles(
 	}
 	sort.Strings(filePaths)
 
-	fileNorms := make(map[string][]string)
-	for _, tok := range commitTokens {
-		path := tok.Path
-		if path == "" || tok.Norm == "" || !tok.Attributable {
-			continue
-		}
-		fileNorms[path] = append(fileNorms[path], tok.Norm)
-	}
-
-	var extraLines int
 	out := make([]commitFileCoverage, 0, len(filePaths))
 	for _, filePath := range filePaths {
 		c := coverageByPath[filePath]
@@ -576,35 +589,202 @@ func summarizeDiffFiles(
 					c.AgentSegments = segments
 				}
 			}
-			// Fallback: detect relocated/copied agent code by matching normalized
-			// lines independent of file path. For large diffs (>=10 lines) require
-			// at least 10 matched lines; for small diffs (<10 lines) require ALL
-			// attributable lines to match with a minimum of 2.
-			if !c.Moved && c.LinesFromAgent == 0 {
-				norms := fileNorms[filePath]
-				minMatch := 10
-				if c.LinesTotal < 10 && len(norms) >= 2 && len(norms) < 10 {
-					minMatch = len(norms)
-				}
-				if len(norms) >= minMatch {
-					fallbackMatched := 0
-					for _, norm := range norms {
-						if remainingNorms[norm] <= 0 {
-							continue
-						}
-						remainingNorms[norm]--
-						fallbackMatched++
-					}
-					if fallbackMatched >= minMatch {
-						c.LinesFromAgent = fallbackMatched
-						c.LinePercent = percentage(c.LinesFromAgent, len(norms))
-						c.CopiedFromAgent = true
-						extraLines += fallbackMatched
-					}
-				}
-			}
 		}
 		out = append(out, c)
 	}
-	return out, extraLines
+	return out
+}
+
+func applyFallbackFileCoverage(
+	files []commitFileCoverage,
+	fileAgent map[string]commitFileCoverage,
+	unmatchedNormsByPath map[string][]string,
+	remainingNorms map[string]int,
+	idx *messageIndex,
+) ([]commitFileCoverage, int, []string) {
+	if len(files) == 0 || len(unmatchedNormsByPath) == 0 || len(remainingNorms) == 0 || idx == nil {
+		return files, 0, nil
+	}
+
+	conversationCountsByNorm := make(map[string]map[string]int, len(idx.normConversationCounts))
+	for norm, counts := range idx.normConversationCounts {
+		cloned := make(map[string]int, len(counts))
+		for convID, n := range counts {
+			cloned[convID] = n
+		}
+		conversationCountsByNorm[norm] = cloned
+	}
+
+	convSeen := make(map[string]bool)
+	var convIDs []string
+	extraLines := 0
+
+	for i := range files {
+		c := &files[i]
+		if c.Ignored || c.Moved {
+			continue
+		}
+
+		norms := unmatchedNormsByPath[c.Path]
+		minMatch := fallbackMinMatch(c.LinesTotal, len(norms))
+		if len(norms) < minMatch {
+			continue
+		}
+
+		type consumedLine struct {
+			norm   string
+			convID string
+		}
+		consumed := make([]consumedLine, 0, len(norms))
+		agentLines := make(map[string]int)
+		convLines := make(map[string]int)
+		fallbackMatched := 0
+
+		for _, norm := range norms {
+			if remainingNorms[norm] <= 0 {
+				continue
+			}
+			remainingNorms[norm]--
+			convID := dominantConversationForNorm(norm, conversationCountsByNorm)
+			if convID != "" {
+				convLines[convID]++
+				if meta, ok := idx.conversationMeta[convID]; ok {
+					agent := strings.TrimSpace(meta.Agent)
+					if agent == "" {
+						agent = "unknown"
+					}
+					agentLines[agent]++
+				}
+			}
+			consumed = append(consumed, consumedLine{norm: norm, convID: convID})
+			fallbackMatched++
+		}
+
+		if fallbackMatched < minMatch {
+			for _, item := range consumed {
+				remainingNorms[item.norm]++
+				if item.convID != "" {
+					conversationCountsByNorm[item.norm][item.convID]++
+				}
+			}
+			continue
+		}
+
+		attributableTotal := len(norms)
+		if exact, ok := fileAgent[c.Path]; ok && exact.Added > 0 {
+			attributableTotal = exact.Added
+		} else if attributableTotal == 0 {
+			attributableTotal = c.LinesTotal
+		}
+		c.LinesFromAgent += fallbackMatched
+		c.CopiedFromAgent = true
+		c.LinePercent = percentage(c.LinesFromAgent, attributableTotal)
+		c.AgentSegments = mergeFileAgentSegments(c.AgentSegments, agentLines, attributableTotal)
+		extraLines += fallbackMatched
+
+		for convID, lines := range convLines {
+			if lines < 2 || convSeen[convID] {
+				continue
+			}
+			convSeen[convID] = true
+			convIDs = append(convIDs, convID)
+		}
+	}
+
+	sort.Strings(convIDs)
+	return files, extraLines, convIDs
+}
+
+func summarizeCommitAgentSegments(files []commitFileCoverage, linesTotal int) []agentCoverageSegment {
+	overallAgentLines := make(map[string]int)
+	for _, f := range files {
+		if f.Ignored || f.Moved {
+			continue
+		}
+		for _, seg := range f.AgentSegments {
+			if seg.LinesFromAgent <= 0 {
+				continue
+			}
+			overallAgentLines[seg.Agent] += seg.LinesFromAgent
+		}
+	}
+	if len(overallAgentLines) == 0 {
+		return nil
+	}
+	agents := make([]string, 0, len(overallAgentLines))
+	for agent := range overallAgentLines {
+		agents = append(agents, agent)
+	}
+	sort.Strings(agents)
+	out := make([]agentCoverageSegment, 0, len(agents))
+	for _, agent := range agents {
+		out = append(out, agentCoverageSegment{
+			Agent:          agent,
+			LinesFromAgent: overallAgentLines[agent],
+			LinePercent:    percentage(overallAgentLines[agent], linesTotal),
+		})
+	}
+	return out
+}
+
+func fallbackMinMatch(linesTotal, normCount int) int {
+	minMatch := 10
+	if linesTotal < 10 && normCount >= 2 && normCount < 10 {
+		minMatch = normCount
+	}
+	return minMatch
+}
+
+func dominantConversationForNorm(norm string, conversationCountsByNorm map[string]map[string]int) string {
+	counts := conversationCountsByNorm[norm]
+	bestID := ""
+	bestCount := 0
+	for convID, n := range counts {
+		if n <= 0 {
+			continue
+		}
+		if n > bestCount || (n == bestCount && (bestID == "" || convID < bestID)) {
+			bestID = convID
+			bestCount = n
+		}
+	}
+	if bestID != "" {
+		counts[bestID]--
+	}
+	return bestID
+}
+
+func mergeFileAgentSegments(
+	existing []agentCoverageSegment,
+	extra map[string]int,
+	attributableTotal int,
+) []agentCoverageSegment {
+	combined := make(map[string]int, len(existing)+len(extra))
+	for _, seg := range existing {
+		if seg.LinesFromAgent > 0 {
+			combined[seg.Agent] += seg.LinesFromAgent
+		}
+	}
+	for agent, lines := range extra {
+		if lines > 0 {
+			combined[agent] += lines
+		}
+	}
+	if len(combined) == 0 {
+		return nil
+	}
+	agents := make([]string, 0, len(combined))
+	for agent := range combined {
+		agents = append(agents, agent)
+	}
+	sort.Strings(agents)
+	out := make([]agentCoverageSegment, 0, len(agents))
+	for _, agent := range agents {
+		out = append(out, agentCoverageSegment{
+			Agent:          agent,
+			LinesFromAgent: combined[agent],
+			LinePercent:    percentage(combined[agent], attributableTotal),
+		})
+	}
+	return out
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/gitutil"
 )
 
+type replaceDerivedDiffsContextKey struct{}
+
 // Message holds the data for a single conversation message to be inserted.
 type Message struct {
 	Timestamp      int64
@@ -170,6 +172,17 @@ var hiddenIngestMessageRe = regexp.MustCompile(`(?s)^[\[<].*[\]>]$`)
 
 const derivedDiffRawJSON = `{"source":"derived_diff"}`
 
+// WithReplaceDerivedDiffs marks a DB write context so synthetic derived diff
+// rows are replaced only when an incoming replacement row is being inserted.
+func WithReplaceDerivedDiffs(ctx context.Context) context.Context {
+	return context.WithValue(ctx, replaceDerivedDiffsContextKey{}, true)
+}
+
+func shouldReplaceDerivedDiffs(ctx context.Context) bool {
+	v, _ := ctx.Value(replaceDerivedDiffsContextKey{}).(bool)
+	return v
+}
+
 // InsertMessages inserts multiple messages in a single transaction, skipping duplicates.
 // Duplicates are detected both within the batch (same conversation + role + content
 // within dupWindowMs) and against existing rows in the database.
@@ -200,6 +213,22 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	}
 	defer stmt.Close()
 
+	var replaceDerivedStmt *sql.Stmt
+	if shouldReplaceDerivedDiffs(ctx) {
+		replaceDerivedStmt, err = tx.PrepareContext(ctx,
+			`DELETE FROM messages
+			 WHERE conversation_id = ?
+			   AND role = ?
+			   AND timestamp = ?
+			   AND message_type = ?
+			   AND raw_json = ?`,
+		)
+		if err != nil {
+			return fmt.Errorf("prepare replace derived diff delete: %w", err)
+		}
+		defer replaceDerivedStmt.Close()
+	}
+
 	updateModelStmt, err := tx.PrepareContext(ctx,
 		`UPDATE messages
 		 SET model = ?
@@ -213,6 +242,18 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	conversationIDs := make(map[string]struct{}, len(messages))
 	for _, m := range messages {
 		conversationIDs[m.ConversationID] = struct{}{}
+		if replaceDerivedStmt != nil && m.MessageType == MessageTypeDiff && m.RawJSON == derivedDiffRawJSON {
+			if _, err := replaceDerivedStmt.ExecContext(
+				ctx,
+				m.ConversationID,
+				m.Role,
+				m.Timestamp,
+				MessageTypeDiff,
+				derivedDiffRawJSON,
+			); err != nil {
+				return fmt.Errorf("replace derived diff message: %w", err)
+			}
+		}
 		if _, err := stmt.ExecContext(ctx,
 			newID(), m.Timestamp, m.ProjectID, m.ConversationID, m.Role, m.MessageType, m.Model, m.Content, m.RawJSON,
 			m.ConversationID, m.Role, m.MessageType, m.Model, m.Content, m.Timestamp, dupWindowMs,
@@ -297,19 +338,32 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	return tx.Commit()
 }
 
-// DeleteDerivedDiffMessages removes synthetic diff messages for conversations
-// in the specified project and agent scope. It returns the number of rows
-// deleted.
+// DeleteDerivedDiffMessages removes synthetic diff messages matching the
+// optional project and agent scope. Empty projectID or agent values act as
+// wildcards. It returns the number of rows deleted.
 func DeleteDerivedDiffMessages(ctx context.Context, db *sql.DB, projectID, agent string) (int64, error) {
-	res, err := db.ExecContext(ctx,
-		`DELETE FROM messages
-		 WHERE message_type = ?
-		   AND conversation_id IN (
-		     SELECT id FROM conversations
-		     WHERE project_id = ? AND agent = ?
-		   )`,
-		MessageTypeDiff, projectID, agent,
-	)
+	query := `DELETE FROM messages
+		WHERE message_type = ?
+		  AND raw_json = ?`
+	args := []any{MessageTypeDiff, derivedDiffRawJSON}
+	if strings.TrimSpace(projectID) != "" || strings.TrimSpace(agent) != "" {
+		query += `
+		  AND conversation_id IN (
+		    SELECT id FROM conversations
+		    WHERE 1 = 1`
+		if strings.TrimSpace(projectID) != "" {
+			query += ` AND project_id = ?`
+			args = append(args, projectID)
+		}
+		if strings.TrimSpace(agent) != "" {
+			query += ` AND agent = ?`
+			args = append(args, agent)
+		}
+		query += `
+		  )`
+	}
+
+	res, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("delete derived diff messages: %w", err)
 	}

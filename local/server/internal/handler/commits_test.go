@@ -517,6 +517,74 @@ func TestListProjectCommits_UsesRawJSONFileSnapshotForNewFile(t *testing.T) {
 	}
 }
 
+func TestListProjectCommits_LinksFallbackConversationWhenPathsDiffer(t *testing.T) {
+	lines := []string{
+		"alpha01", "alpha02", "alpha03", "alpha04", "alpha05", "alpha06",
+		"alpha07", "alpha08", "alpha09", "alpha10", "alpha11", "alpha12",
+	}
+	commitTokens := make([]diffToken, 0, len(lines))
+	for _, line := range lines {
+		commitTokens = append(commitTokens, testToken("local/frontend/src/lib/diffmerge.ts", '+', line, len(line)))
+	}
+	messages := []messageDiff{
+		{
+			ID:                "m-old",
+			Timestamp:         1000,
+			ConversationID:    "conv-old-path",
+			ConversationTitle: "old path source",
+			Agent:             "claude",
+			Tokens: func() []diffToken {
+				out := make([]diffToken, 0, len(lines))
+				for _, line := range lines {
+					out = append(out, testToken("diffmerge.ts", '+', line, len(line)))
+				}
+				return out
+			}(),
+		},
+		{
+			ID:                "m-local",
+			Timestamp:         1500,
+			ConversationID:    "conv-local",
+			ConversationTitle: "local exact tweak",
+			Agent:             "claude",
+			Tokens: []diffToken{
+				testToken("local/frontend/src/lib/diffmerge.ts", '+', lines[len(lines)-1], len(lines[len(lines)-1])),
+			},
+		},
+	}
+	diffText := strings.Join([]string{
+		"diff --git a/local/frontend/src/lib/diffmerge.ts b/local/frontend/src/lib/diffmerge.ts",
+		"--- /dev/null",
+		"+++ b/local/frontend/src/lib/diffmerge.ts",
+		"@@ -0,0 +1,12 @@",
+		"+" + strings.Join(lines, "\n+"),
+		"",
+	}, "\n")
+
+	contribs, exactLines, fileAgent, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	if exactLines != 1 {
+		t.Fatalf("exact matched lines = %d, want 1", exactLines)
+	}
+	if len(contribs) != 1 || contribs[0].ConversationID != "conv-local" {
+		t.Fatalf("exact contribs = %+v, want only conv-local", contribs)
+	}
+
+	files := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, fileAgent)
+	files, fallbackLines, fallbackConvIDs := applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, 0, 2000))
+	if fallbackLines != len(lines)-1 {
+		t.Fatalf("fallback lines = %d, want %d", fallbackLines, len(lines)-1)
+	}
+	if got, want := strings.Join(fallbackConvIDs, ","), "conv-old-path"; got != want {
+		t.Fatalf("fallback conversation ids = %q, want %q", got, want)
+	}
+	if len(files) != 1 {
+		t.Fatalf("files len = %d, want 1", len(files))
+	}
+	if got := files[0].LinesFromAgent; got != len(lines) {
+		t.Fatalf("file linesFromAgent = %d, want %d", got, len(lines))
+	}
+}
+
 func TestProjectCommitsPageAlwaysImportsLatestCommits(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
@@ -1021,7 +1089,8 @@ func TestSummarizeDiffFiles_ExactUsesTokenTotalsAndFallbackCopyStillApplies(t *t
 		"c10": 1,
 	}
 
-	files, _ := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
+	files := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, fileAgent)
+	files, _, _ = applyFallbackFileCoverage(files, fileAgent, normsByPathFromTokens(commitTokens), remainingNorms, &messageIndex{})
 	if len(files) != 2 {
 		t.Fatalf("files len = %d, want 2", len(files))
 	}
@@ -1131,8 +1200,9 @@ func TestSummarizeDiffFiles_CopiedFallbackUsesFullNormPool(t *testing.T) {
 		"",
 	}, "\n")
 
-	_, _, fileAgent, normCounts := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files, _ := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, normCounts)
+	_, _, fileAgent, normCounts, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	files := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, fileAgent)
+	files, _, _ = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, normCounts, buildMessageIndex(messages, 0, 2000))
 
 	byPath := make(map[string]commitFileCoverage, len(files))
 	for _, f := range files {
@@ -1169,7 +1239,7 @@ func TestAttributeCommitToMessages_MatchesFormattingOnlyLineWraps(t *testing.T) 
 		},
 	}
 
-	contrib, lines, fileAgent, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	contrib, lines, fileAgent, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
 	if lines != 3 {
 		t.Fatalf("matched lines = %d, want 3", lines)
 	}
@@ -1221,8 +1291,9 @@ func TestSummarizeDiffFiles_IncludesPerFileAgentSegments(t *testing.T) {
 		"",
 	}, "\n")
 
-	_, _, fileAgent, remainingNorms := attributeCommitToMessages(commitTokens, messages, 0, 2000)
-	files, _ := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
+	_, _, fileAgent, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	files := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, fileAgent)
+	files, _, _ = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, 0, 2000))
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1269,7 +1340,7 @@ func TestAttributeCommitToMessages_DeletionMatchesDeletingAgent(t *testing.T) {
 		},
 	}
 
-	contrib, lines, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
+	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 2000)
 	if lines != 1 {
 		t.Fatalf("matched lines = %d, want 1", lines)
 	}
@@ -1308,7 +1379,7 @@ func TestAttributeCommitToMessages_PrefersNewerMessage(t *testing.T) {
 		},
 	}
 
-	contrib, lines, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
+	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
 	if lines != 1 {
 		t.Fatalf("matched lines = %d, want 1", lines)
 	}
@@ -1352,7 +1423,7 @@ func TestAttributeCommitToMessages_FormattingPassPrefersNewerMessage(t *testing.
 		},
 	}
 
-	contrib, lines, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
+	contrib, lines, _, _, _ := attributeCommitToMessages(commitTokens, messages, 0, 10000)
 	if lines != 1 {
 		t.Fatalf("matched lines = %d, want 1", lines)
 	}
@@ -1616,6 +1687,17 @@ func testToken(path string, sign byte, norm string, _ int) diffToken {
 	}
 }
 
+func normsByPathFromTokens(tokens []diffToken) map[string][]string {
+	out := make(map[string][]string)
+	for _, tok := range tokens {
+		if tok.Path == "" || tok.Norm == "" || !tok.Attributable {
+			continue
+		}
+		out[tok.Path] = append(out[tok.Path], tok.Norm)
+	}
+	return out
+}
+
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
@@ -1756,7 +1838,8 @@ func TestSummarizeDiffFiles_SmallDiffFullMatchAttributed(t *testing.T) {
 		"epsilon": 1,
 	}
 
-	files, fbLines := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
+	files := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, fileAgent)
+	files, fbLines, _ := applyFallbackFileCoverage(files, fileAgent, normsByPathFromTokens(commitTokens), remainingNorms, &messageIndex{})
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1794,7 +1877,8 @@ func TestSummarizeDiffFiles_SingleLineDiffNotAttributed(t *testing.T) {
 	fileAgent := map[string]commitFileCoverage{}
 	remainingNorms := map[string]int{"onlyone": 1}
 
-	files, fbLines := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
+	files := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, fileAgent)
+	files, fbLines, _ := applyFallbackFileCoverage(files, fileAgent, normsByPathFromTokens(commitTokens), remainingNorms, &messageIndex{})
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))
 	}
@@ -1833,7 +1917,8 @@ func TestSummarizeDiffFiles_FallbackTotalsReturnedForLargeDiff(t *testing.T) {
 	}
 
 	fileAgent := map[string]commitFileCoverage{}
-	files, fbLines := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, commitTokens, fileAgent, remainingNorms)
+	files := summarizeDiffFiles(parseUnifiedDiffTokensWithFiles(diffText, nil).Files, fileAgent)
+	files, fbLines, _ := applyFallbackFileCoverage(files, fileAgent, normsByPathFromTokens(commitTokens), remainingNorms, &messageIndex{})
 
 	if len(files) != 1 {
 		t.Fatalf("files len = %d, want 1", len(files))

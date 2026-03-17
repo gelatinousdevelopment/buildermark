@@ -549,18 +549,25 @@ func recomputeSingleCommit(
 	var files []commitFileCoverage
 	fallbackLines := 0
 	var contribs []commitContributionMessage
+	var fallbackConvIDs []string
 
 	windowStart := c.AuthoredAt*1000 - defaultMessageWindowMs
 	windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
 	if matchesIdent {
 		var fileAgent map[string]commitFileCoverage
 		var remainingNorms map[string]int
+		var unmatchedNormsByPath map[string][]string
 		if msgIdx != nil {
-			contribs, matchedLines, fileAgent, remainingNorms = attributeCommitToMessagesWithIndex(commitTokens, msgIdx, windowStart, windowEnd)
+			contribs, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath = attributeCommitToMessagesWithIndex(commitTokens, msgIdx, windowStart, windowEnd)
 		} else {
-			contribs, matchedLines, fileAgent, remainingNorms = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			contribs, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		}
-		files, fallbackLines = summarizeDiffFiles(parsed.Files, commitTokens, fileAgent, remainingNorms)
+		files = summarizeDiffFiles(parsed.Files, fileAgent)
+		if msgIdx != nil {
+			files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, msgIdx)
+		} else {
+			files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
+		}
 		matchedLines += fallbackLines
 	}
 
@@ -584,11 +591,7 @@ func recomputeSingleCommit(
 
 	var byAgent map[string]agentStats
 	var segs []agentCoverageSegment
-	if msgIdx != nil {
-		segs = attributeCopiedFromAgentFilesWithIndex(files, commitTokens, msgIdx, totalLines)
-	} else {
-		segs = attributeCopiedFromAgentFiles(files, commitTokens, messages, windowStart, windowEnd, totalLines)
-	}
+	segs = summarizeCommitAgentSegments(files, totalLines)
 	if len(segs) > 0 {
 		byAgent = make(map[string]agentStats, len(segs))
 		for _, seg := range segs {
@@ -596,14 +599,25 @@ func recomputeSingleCommit(
 		}
 	}
 
-	// Collect unique conversation IDs from contribs.
+	// Collect unique conversation IDs from exact contributors plus fallback-only
+	// copied/relocated matches.
 	convSeen := make(map[string]bool)
 	var convIDs []string
 	for _, contrib := range contribs {
+		if contrib.ConversationID == "" {
+			continue
+		}
 		if !convSeen[contrib.ConversationID] {
 			convSeen[contrib.ConversationID] = true
 			convIDs = append(convIDs, contrib.ConversationID)
 		}
+	}
+	for _, convID := range fallbackConvIDs {
+		if convID == "" || convSeen[convID] {
+			continue
+		}
+		convSeen[convID] = true
+		convIDs = append(convIDs, convID)
 	}
 
 	result := &CommitDetailResult{

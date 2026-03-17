@@ -33,6 +33,64 @@ func TestExtractReliableDiffRejectsAmbiguousText(t *testing.T) {
 	}
 }
 
+func TestExtractReliableDiffFromCreatedFileLogWithEmbeddedDiffExamples(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	filePath := filepath.Join(repo, "local", "frontend", "src", "lib", "diffmerge.test.ts")
+	input := strings.Join([]string{
+		"File created successfully at: " + filePath,
+		`import { describe, it, expect } from "vitest";`,
+		`function fenced(raw: string): string {`,
+		"  return \"```diff\\n\" + raw + \"\\n```\";",
+		"}",
+		"`diff --git a/example.go b/example.go",
+		"--- a/example.go",
+		"+++ b/example.go",
+		"@@ -1 +1 @@",
+		"-old",
+		"+new`",
+	}, "\n")
+
+	diff, ok := ExtractReliableDiff(input)
+	if !ok || diff == "" {
+		t.Fatal("expected created-file log to produce a diff")
+	}
+	if !strings.Contains(diff, "diff --git a/local/frontend/src/lib/diffmerge.test.ts b/local/frontend/src/lib/diffmerge.test.ts") {
+		t.Fatalf("expected created file path in diff, got: %q", diff)
+	}
+	got := strings.Count(diff, "\ndiff --git ")
+	if strings.HasPrefix(diff, "diff --git ") {
+		got++
+	}
+	if got != 1 {
+		t.Fatalf("expected exactly one real diff header, got %d in %q", got, diff)
+	}
+	if strings.Contains(diff, "\n+++ b/example.go\n") {
+		t.Fatalf("expected embedded example diff to stay plain file content, got: %q", diff)
+	}
+}
+
+func TestExtractReliableDiffRejectsSourceSnapshotWithEmbeddedDiffExamples(t *testing.T) {
+	input := strings.Join([]string{
+		`import { describe, it, expect } from "vitest";`,
+		`function fenced(raw: string): string {`,
+		"  return \"```diff\\n\" + raw + \"\\n```\";",
+		"}",
+		"`diff --git a/example.go b/example.go",
+		"--- a/example.go",
+		"+++ b/example.go",
+		"@@ -1 +1 @@",
+		"-old",
+		"+new`",
+	}, "\n")
+
+	if _, ok := ExtractReliableDiff(input); ok {
+		t.Fatal("expected source snapshot with embedded diff examples to be rejected")
+	}
+}
+
 func TestExtractReliableDiffFromJSON(t *testing.T) {
 	raw := `{"type":"response_item","payload":{"type":"function_call_output","output":"diff --git a/x.txt b/x.txt\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-old\n+new\n"}}`
 	diff, ok := ExtractReliableDiffFromJSON(raw)

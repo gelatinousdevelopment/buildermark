@@ -20,6 +20,9 @@ func ExtractReliableDiff(content string) (string, bool) {
 		return "", false
 	}
 
+	if converted, ok := extractCreatedFileSnapshotDiff(content); ok {
+		return converted, true
+	}
 	if diff, ok := extractDirectUnifiedDiff(content); ok {
 		return diff, true
 	}
@@ -85,6 +88,9 @@ func ExtractReliableDiffsFromJSON(raw string) []string {
 
 	walkStrings(value, func(s string) {
 		diff, ok := extractDirectUnifiedDiff(s)
+		if !ok {
+			diff, ok = extractJSONWrappedUnifiedDiff(s)
+		}
 		if !ok {
 			return
 		}
@@ -1028,7 +1034,7 @@ func extractDirectUnifiedDiff(content string) (string, bool) {
 		accepted := make([]string, 0, len(blocks))
 		for _, block := range blocks {
 			block = strings.TrimSpace(block)
-			if block == "" || !looksLikeUnifiedDiff(block) {
+			if block == "" || !startsWithUnifiedDiffHeader(block) || !looksLikeUnifiedDiff(block) {
 				continue
 			}
 			accepted = append(accepted, block)
@@ -1039,10 +1045,111 @@ func extractDirectUnifiedDiff(content string) (string, bool) {
 		return strings.Join(accepted, "\n\n"), true
 	}
 
-	if !looksLikeUnifiedDiff(content) {
+	if !startsWithUnifiedDiffHeader(content) || !looksLikeUnifiedDiff(content) {
 		return "", false
 	}
 	return content, true
+}
+
+func startsWithUnifiedDiffHeader(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		return strings.HasPrefix(trimmed, "diff --git ") ||
+			strings.HasPrefix(trimmed, "--- ") ||
+			strings.HasPrefix(trimmed, "@@ ")
+	}
+	return false
+}
+
+func extractJSONWrappedUnifiedDiff(content string) (string, bool) {
+	trimmed := strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n"))
+	if trimmed == "" {
+		return "", false
+	}
+	if !(strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) {
+		return "", false
+	}
+
+	candidates := []string{"diff --git ", "--- ", "@@ "}
+	for _, marker := range candidates {
+		idx := strings.Index(trimmed, marker)
+		if idx < 0 {
+			continue
+		}
+		if diff, ok := extractDirectUnifiedDiff(trimmed[idx:]); ok {
+			return diff, true
+		}
+	}
+	return "", false
+}
+
+var fileCreatedAtPattern = regexp.MustCompile(`^File created successfully at:\s*(.+)$`)
+
+func extractCreatedFileSnapshotDiff(content string) (string, bool) {
+	content = strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n"))
+	if content == "" {
+		return "", false
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(lines) < 2 {
+		return "", false
+	}
+	match := fileCreatedAtPattern.FindStringSubmatch(strings.TrimSpace(lines[0]))
+	if len(match) != 2 {
+		return "", false
+	}
+
+	paths := buildStructuredPatchPathCandidates(strings.TrimSpace(match[1]), "")
+	if len(paths) == 0 {
+		return "", false
+	}
+
+	bodyLines := lines[1:]
+	for len(bodyLines) > 0 && strings.TrimSpace(bodyLines[0]) == "" {
+		bodyLines = bodyLines[1:]
+	}
+	if len(bodyLines) == 0 {
+		return "", false
+	}
+	if stripped, ok := stripCatNumbering(bodyLines); ok {
+		bodyLines = stripped
+	}
+
+	hasContent := false
+	for _, line := range bodyLines {
+		if strings.TrimSpace(line) != "" {
+			hasContent = true
+			break
+		}
+	}
+	if !hasContent {
+		return "", false
+	}
+
+	var out strings.Builder
+	out.WriteString("diff --git a/")
+	out.WriteString(paths[0])
+	out.WriteString(" b/")
+	out.WriteString(paths[0])
+	out.WriteString("\n--- /dev/null\n+++ b/")
+	out.WriteString(paths[0])
+	out.WriteString("\n")
+	out.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(bodyLines)))
+	for _, line := range bodyLines {
+		out.WriteString("+")
+		out.WriteString(line)
+		out.WriteString("\n")
+	}
+
+	diff := strings.TrimSpace(out.String())
+	if diff == "" || !looksLikeUnifiedDiff(diff) {
+		return "", false
+	}
+	return diff, true
 }
 
 func extractContextualStringDiffs(v any, extractor func(string, string) (string, bool)) []string {

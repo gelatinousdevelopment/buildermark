@@ -64,25 +64,25 @@ type projectCommitSummary struct {
 }
 
 type projectCommitCoverage struct {
-	WorkingCopy         bool                   `json:"workingCopy"`
-	ProjectID           string                 `json:"projectId"`
-	ProjectLabel        string                 `json:"projectLabel"`
-	ProjectPath         string                 `json:"projectPath"`
-	ProjectGitID        string                 `json:"projectGitId"`
-	CommitHash          string                 `json:"commitHash"`
-	Subject             string                 `json:"subject"`
-	UserName            string                 `json:"userName,omitempty"`
-	UserEmail           string                 `json:"userEmail,omitempty"`
-	AuthoredAtUnixMs    int64                  `json:"authoredAtUnixMs"`
-	LinesTotal          int                    `json:"linesTotal"`
-	LinesFromAgent      int                    `json:"linesFromAgent"`
-	LinePercent         float64                `json:"linePercent"`
-	LinesAdded          int                    `json:"linesAdded"`
-	LinesRemoved        int                    `json:"linesRemoved"`
-	AgentSegments       []agentCoverageSegment `json:"agentSegments,omitempty"`
-	OverrideAgentPercents map[string]int        `json:"overrideAgentPercents,omitempty"`
-	NeedsParent         bool                   `json:"needsParent,omitempty"`
-	Ignored             bool                   `json:"ignored,omitempty"`
+	WorkingCopy           bool                   `json:"workingCopy"`
+	ProjectID             string                 `json:"projectId"`
+	ProjectLabel          string                 `json:"projectLabel"`
+	ProjectPath           string                 `json:"projectPath"`
+	ProjectGitID          string                 `json:"projectGitId"`
+	CommitHash            string                 `json:"commitHash"`
+	Subject               string                 `json:"subject"`
+	UserName              string                 `json:"userName,omitempty"`
+	UserEmail             string                 `json:"userEmail,omitempty"`
+	AuthoredAtUnixMs      int64                  `json:"authoredAtUnixMs"`
+	LinesTotal            int                    `json:"linesTotal"`
+	LinesFromAgent        int                    `json:"linesFromAgent"`
+	LinePercent           float64                `json:"linePercent"`
+	LinesAdded            int                    `json:"linesAdded"`
+	LinesRemoved          int                    `json:"linesRemoved"`
+	AgentSegments         []agentCoverageSegment `json:"agentSegments,omitempty"`
+	OverrideAgentPercents map[string]int         `json:"overrideAgentPercents,omitempty"`
+	NeedsParent           bool                   `json:"needsParent,omitempty"`
+	Ignored               bool                   `json:"ignored,omitempty"`
 }
 
 type projectCommitDetailResponse struct {
@@ -220,6 +220,12 @@ type tokenSource struct {
 	tokenPos int
 }
 
+type fallbackConversationMeta struct {
+	Title string
+	Agent string
+	Model string
+}
+
 // agentStats tracks per-agent line counts for commit coverage.
 type agentStats struct {
 	lines int
@@ -244,11 +250,13 @@ type diffParseResult struct {
 // messageIndex holds pre-built indexes for message token matching.
 // It is built once per batch and reused across commits.
 type messageIndex struct {
-	messages     []messageDiff           // sorted newest-first
-	tokenSources map[string][]tokenSource
-	tokensByBucket map[int]map[string][]int
-	normSources  map[string]int
-	normAgents   map[string]map[string]int // norm → agent → count
+	messages               []messageDiff // sorted newest-first
+	tokenSources           map[string][]tokenSource
+	tokensByBucket         map[int]map[string][]int
+	normSources            map[string]int
+	normAgents             map[string]map[string]int // norm → agent → count
+	normConversationCounts map[string]map[string]int // norm → conversation → count
+	conversationMeta       map[string]fallbackConversationMeta
 }
 
 // CommitDetailResult holds all computed detail data for a single commit.

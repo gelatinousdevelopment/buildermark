@@ -450,6 +450,141 @@ func TestAppendDiffDBMessagesSnapshotBackupMissingSkipsDiff(t *testing.T) {
 	}
 }
 
+func TestAppendDiffDBMessagesDerivesDiffFromSequentialWriteSnapshots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	filePath := filepath.Join(repo, "diffmerge.ts")
+	oldContent := "export function mergeSequentialDiffs(): string {\n  return \"old\";\n}\n"
+	newContent := "export function mergeSequentialDiffs(): string {\n  trimNewLinesFromStart();\n  return \"new\";\n}\n"
+	rawWrite1 := fmt.Sprintf(`{
+		"sessionId":"sess-write-seq",
+		"cwd":%q,
+		"message":{
+			"content":[{
+				"type":"tool_use",
+				"name":"Write",
+				"input":{
+					"file_path":%q,
+					"content":%q
+				}
+			}]
+		}
+	}`, repo, filePath, oldContent)
+	rawSuccess := fmt.Sprintf(`{
+		"sessionId":"sess-write-seq",
+		"cwd":%q,
+		"message":{
+			"content":[{
+				"type":"tool_result",
+				"tool_use_id":"toolu_success",
+				"content":"The file %s has been updated successfully."
+			}]
+		},
+		"sourceToolAssistantUUID":"assist-1"
+	}`, repo, filePath)
+	rawWrite2 := fmt.Sprintf(`{
+		"sessionId":"sess-write-seq",
+		"cwd":%q,
+		"message":{
+			"content":[{
+				"type":"tool_use",
+				"name":"Write",
+				"input":{
+					"file_path":%q,
+					"content":%q
+				}
+			}]
+		}
+	}`, repo, filePath, newContent)
+
+	messages := []db.Message{
+		{Timestamp: 1000, ConversationID: "sess-write-seq", Role: "agent", Content: oldContent, RawJSON: rawWrite1},
+		{Timestamp: 1500, ConversationID: "sess-write-seq", Role: "agent", Content: "The file " + filePath + " has been updated successfully.", RawJSON: rawSuccess},
+		{Timestamp: 2000, ConversationID: "sess-write-seq", Role: "agent", Content: newContent, RawJSON: rawWrite2},
+	}
+
+	out := appendDiffDBMessages(messages)
+	if len(out) != 4 {
+		t.Fatalf("len(out) = %d, want 4", len(out))
+	}
+	diff := out[3]
+	if diff.MessageType != db.MessageTypeDiff {
+		t.Fatalf("message type = %q, want %q", diff.MessageType, db.MessageTypeDiff)
+	}
+	if diff.Timestamp != 2001 {
+		t.Fatalf("diff timestamp = %d, want 2001", diff.Timestamp)
+	}
+	if !strings.Contains(diff.Content, "--- a/diffmerge.ts") || !strings.Contains(diff.Content, "+++ b/diffmerge.ts") {
+		t.Fatalf("missing expected diff headers: %q", diff.Content)
+	}
+	if !strings.Contains(diff.Content, "+  trimNewLinesFromStart();") {
+		t.Fatalf("missing trimNewLinesFromStart addition in diff: %q", diff.Content)
+	}
+}
+
+func TestAppendDiffDBMessagesStructuredPatchSnapshotUpdatesStateForLaterWrites(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	filePath := filepath.Join(repo, "main.go")
+	firstContent := "package main\n\nfunc alpha() string {\n\treturn \"old\"\n}\n"
+	secondContent := "package main\n\nfunc alpha() string {\n\treturn \"new\"\n}\n\nfunc beta() string {\n\treturn \"later\"\n}\n"
+	rawToolResult := fmt.Sprintf(`{
+		"sessionId":"sess-state",
+		"cwd":%q,
+		"toolUseResult":{
+			"type":"update",
+			"filePath":%q,
+			"content":%q,
+			"originalFile":"package main\n\nfunc alpha() string {\n\treturn \"old\"\n}\n",
+			"structuredPatch":[{"oldStart":3,"oldLines":1,"newStart":3,"newLines":1,"lines":["-\treturn \"old\"","+\treturn \"new\""]}]
+		}
+	}`, repo, filePath, firstContent)
+	rawWriteLater := fmt.Sprintf(`{
+		"sessionId":"sess-state",
+		"cwd":%q,
+		"message":{
+			"content":[{
+				"type":"tool_use",
+				"name":"Write",
+				"input":{
+					"file_path":%q,
+					"content":%q
+				}
+			}]
+		}
+	}`, repo, filePath, secondContent)
+
+	messages := []db.Message{
+		{Timestamp: 1000, ConversationID: "sess-state", Role: "agent", Content: "[tool_result]", RawJSON: rawToolResult},
+		{Timestamp: 2000, ConversationID: "sess-state", Role: "agent", Content: secondContent, RawJSON: rawWriteLater},
+	}
+
+	out := appendDiffDBMessages(messages)
+	if len(out) != 4 {
+		t.Fatalf("len(out) = %d, want 4", len(out))
+	}
+	firstDiff := out[1].Content
+	secondDiff := out[3].Content
+	if !strings.Contains(firstDiff, "+\treturn \"new\"") {
+		t.Fatalf("missing structured patch diff: %q", firstDiff)
+	}
+	if !strings.Contains(secondDiff, "+func beta() string {") {
+		t.Fatalf("missing later write diff derived from prior snapshot state: %q", secondDiff)
+	}
+}
+
 func TestWatcherFileRotation(t *testing.T) {
 	database := setupTestDB(t)
 	tmpDir := t.TempDir()

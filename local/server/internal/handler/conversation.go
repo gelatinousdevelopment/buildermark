@@ -360,7 +360,7 @@ func (s *Server) listCommitHashesMatchedToConversation(
 		}
 		windowStart := commit.AuthoredAt*1000 - defaultMessageWindowMs
 		windowEnd := commit.AuthoredAt*1000 + commitWindowLookaheadMs
-		contribs, _, _, _ := attributeCommitToMessages(tokens, messages, windowStart, windowEnd)
+		contribs, _, _, _, _ := attributeCommitToMessages(tokens, messages, windowStart, windowEnd)
 		found := false
 		for _, contrib := range contribs {
 			if contrib.ConversationID == conversationID {

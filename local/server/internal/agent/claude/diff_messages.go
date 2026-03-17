@@ -31,6 +31,7 @@ func appendDiffDBMessages(messages []db.Message) []db.Message {
 		if !ok {
 			diff, ok = deriveClaudeSnapshotDiff(m, snapshotState)
 		}
+		snapshotState.observeMessage(m)
 		if !ok {
 			continue
 		}

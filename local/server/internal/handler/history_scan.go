@@ -76,10 +76,6 @@ func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if req.ReplaceDerivedDiffs && (req.Agent == "" || req.ProjectID == "") {
-		writeError(w, http.StatusBadRequest, "replaceDerivedDiffs requires both agent and projectId")
-		return
-	}
 
 	if req.Timeframe == "" {
 		req.Timeframe = agent.DefaultScanWindow.String()
@@ -107,19 +103,17 @@ func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "an import is already in progress")
 		return
 	}
+	scanCtx := r.Context()
+	if req.ReplaceDerivedDiffs {
+		scanCtx = db.WithReplaceDerivedDiffs(scanCtx)
+	}
 	if req.Sync {
 		defer s.importMu.Unlock()
-		deleted, err := s.prepareHistoryScan(r.Context(), req)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to prepare history scan")
-			return
-		}
-		count := s.scanWatchersSincePaths(r.Context(), since, req.Agent, paths, nil)
+		count := s.scanWatchersSincePaths(scanCtx, since, req.Agent, paths, nil)
 		writeSuccess(w, http.StatusOK, map[string]any{
-			"started":                    true,
-			"completed":                  true,
-			"entriesProcessed":           count,
-			"derivedDiffMessagesDeleted": deleted,
+			"started":          true,
+			"completed":        true,
+			"entriesProcessed": count,
 		})
 		return
 	}
@@ -137,6 +131,9 @@ func (s *Server) runHistoryScanJob(since time.Time, req historyScanRequest, path
 	defer s.importMu.Unlock()
 
 	ctx := context.Background()
+	if req.ReplaceDerivedDiffs {
+		ctx = db.WithReplaceDerivedDiffs(ctx)
+	}
 
 	broadcast := func(state, message string) {
 		s.ws.broadcastEvent("job_status", jobStatusEvent{
@@ -157,12 +154,6 @@ func (s *Server) runHistoryScanJob(since time.Time, req historyScanRequest, path
 		}
 		lastProgress = now
 		broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)))
-	}
-
-	if _, err := s.prepareHistoryScan(ctx, req); err != nil {
-		errMsg := fmt.Sprintf("History scan preparation failed: %v", err)
-		broadcast("error", errMsg)
-		return
 	}
 
 	// Pass nil paths so the scan is unfiltered — a manual re-import should
@@ -208,11 +199,4 @@ func (s *Server) historyScanPaths(ctx context.Context, projectID string) ([]stri
 		add(path)
 	}
 	return paths, nil
-}
-
-func (s *Server) prepareHistoryScan(ctx context.Context, req historyScanRequest) (int64, error) {
-	if !req.ReplaceDerivedDiffs {
-		return 0, nil
-	}
-	return db.DeleteDerivedDiffMessages(ctx, s.DB, req.ProjectID, req.Agent)
 }

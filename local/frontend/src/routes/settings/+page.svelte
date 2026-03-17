@@ -37,6 +37,7 @@
 
 	let historyImportDays = $state('7');
 	let historyImportAgent = $state('');
+	let historyImportReplaceDerivedDiffs = $state(false);
 	let importingHistory = $state(false);
 	let historyImportError: string | null = $state(null);
 	let historyImportResult: string | null = $state(null);
@@ -103,7 +104,11 @@
 		historyImportResult = null;
 		websocketStore.clearJob('history_scan');
 		try {
-			await scanHistory(historyImportTimeframe(historyImportDays), historyImportAgent);
+			await scanHistory(
+				historyImportTimeframe(historyImportDays),
+				historyImportAgent,
+				historyImportReplaceDerivedDiffs
+			);
 			const result = await websocketStore.waitForJob('history_scan');
 			if (result.state === 'error') {
 				historyImportError = result.message;
@@ -291,39 +296,55 @@
 					<div class="section import-history">
 						<h2>Re-import Conversation History</h2>
 						<div class="history-import-controls">
-							<label for="history-agent-select">Agent</label>
-							<select
-								id="history-agent-select"
-								bind:value={historyImportAgent}
-								disabled={importingHistory}
-							>
-								<option value="">All Agents</option>
-								{#each localSettings?.localAgents ?? [] as agent (agent)}
-									<option value={agent}>{agent}</option>
-								{/each}
-							</select>
-							<label for="history-days-select">Import window</label>
-							<select
-								id="history-days-select"
-								bind:value={historyImportDays}
-								disabled={importingHistory}
-							>
-								{#each historyImportDayOptions as option (option)}
-									<option value={option}>{historyOptionLabel(option)}</option>
-								{/each}
-							</select>
-							<button
-								class="bordered small import-btn"
-								onclick={importHistory}
-								disabled={importingHistory}
-							>
-								{#if importingHistory}
-									<span class="spinner" aria-hidden="true"></span>
-									Importing...
-								{:else}
-									Import
-								{/if}
-							</button>
+							<div>
+								<label for="history-agent-select">Agent: </label>
+								<select
+									id="history-agent-select"
+									bind:value={historyImportAgent}
+									disabled={importingHistory}
+								>
+									<option value="">All Agents</option>
+									{#each localSettings?.localAgents ?? [] as agent (agent)}
+										<option value={agent}>{agent}</option>
+									{/each}
+								</select>
+							</div>
+							<div>
+								<label for="history-days-select">Import Window: </label>
+								<select
+									id="history-days-select"
+									bind:value={historyImportDays}
+									disabled={importingHistory}
+								>
+									{#each historyImportDayOptions as option (option)}
+										<option value={option}>{historyOptionLabel(option)}</option>
+									{/each}
+								</select>
+							</div>
+							<div>
+								<label class="history-import-checkbox">
+									<input
+										type="checkbox"
+										bind:checked={historyImportReplaceDerivedDiffs}
+										disabled={importingHistory}
+									/>
+									<span>Replace derived diffs</span>
+								</label>
+							</div>
+							<div>
+								<button
+									class="bordered small import-btn"
+									onclick={importHistory}
+									disabled={importingHistory}
+								>
+									{#if importingHistory}
+										<span class="spinner" aria-hidden="true"></span>
+										Importing...
+									{:else}
+										Import
+									{/if}
+								</button>
+							</div>
 						</div>
 						{#if importingHistory && importStatusMessage}
 							<p class="import-status">{importStatusMessage}</p>
@@ -473,7 +494,8 @@
 	.history-import-controls {
 		display: flex;
 		gap: 0.6rem;
-		align-items: center;
+		align-items: flex-start;
+		flex-direction: column;
 		flex-wrap: wrap;
 	}
 
@@ -484,6 +506,13 @@
 		background: var(--color-background-surface);
 		color: var(--color-text);
 		font-size: 0.85rem;
+	}
+
+	.history-import-checkbox {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		color: var(--color-text);
 	}
 
 	.import-btn {
