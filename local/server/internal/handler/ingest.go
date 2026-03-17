@@ -555,19 +555,22 @@ func recomputeSingleCommit(
 	windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
 	if matchesIdent {
 		var fileAgent map[string]commitFileCoverage
-		var remainingNorms map[string]int
 		var unmatchedNormsByPath map[string][]string
 		if msgIdx != nil {
-			contribs, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath = attributeCommitToMessagesWithIndex(commitTokens, msgIdx, windowStart, windowEnd)
+			contribs, matchedLines, fileAgent, _, unmatchedNormsByPath = attributeCommitToMessagesWithIndex(commitTokens, msgIdx, windowStart, windowEnd)
 		} else {
-			contribs, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			contribs, matchedLines, fileAgent, _, unmatchedNormsByPath = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		}
 		files = summarizeDiffFiles(parsed.Files, fileAgent)
-		if msgIdx != nil {
-			files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, msgIdx)
-		} else {
-			files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
+		// Always build a per-commit-window index for fallback matching so that
+		// norm counts and conversation metadata are scoped to this commit's
+		// window, not the potentially wider batch window.
+		fallbackIdx := buildMessageIndex(messages, windowStart, windowEnd)
+		fallbackNorms := make(map[string]int, len(fallbackIdx.normSources))
+		for k, v := range fallbackIdx.normSources {
+			fallbackNorms[k] = v
 		}
+		files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, fallbackNorms, fallbackIdx)
 		matchedLines += fallbackLines
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -160,6 +161,11 @@ func (s *Server) runHistoryScanJob(since time.Time, req historyScanRequest, path
 	// discover all conversations, not just those matching existing projects.
 	count := s.scanWatchersSincePaths(ctx, since, req.Agent, paths, progress)
 
+	// Recompute commit coverage for affected projects so newly imported
+	// messages are matched against existing commits.
+	broadcast("running", "Recomputing commit coverage...")
+	s.recomputeCommitCoverageAfterHistoryScan(ctx, since, paths, broadcast)
+
 	msg := fmt.Sprintf("Imported %d conversation entries", count)
 	broadcast("complete", msg)
 	s.sendNotification("history_scan_complete", "History scan complete", msg, "")
@@ -199,4 +205,90 @@ func (s *Server) historyScanPaths(ctx context.Context, projectID string) ([]stri
 		add(path)
 	}
 	return paths, nil
+}
+
+// recomputeCommitCoverageAfterHistoryScan recomputes commit coverage for
+// tracked projects so newly imported messages are matched against existing
+// commits. If paths is non-nil, only projects whose path appears in the list
+// are recomputed.
+func (s *Server) recomputeCommitCoverageAfterHistoryScan(ctx context.Context, since time.Time, paths []string, broadcast func(string, string)) {
+	groups, err := listAllProjectGroups(ctx, s.DB)
+	if err != nil {
+		log.Printf("history scan: failed to list projects for recompute: %v", err)
+		return
+	}
+
+	pathSet := make(map[string]struct{}, len(paths))
+	for _, p := range paths {
+		pathSet[p] = struct{}{}
+	}
+
+	afterMs := since.UnixMilli()
+	recomputed := 0
+
+	for _, group := range groups {
+		repoProject, err := resolveRepoProject(ctx, group)
+		if err != nil || repoProject == nil {
+			continue
+		}
+
+		// If paths were specified, only recompute projects that match.
+		if len(pathSet) > 0 {
+			if !projectGroupMatchesPaths(group, pathSet) {
+				continue
+			}
+		}
+
+		branch := strings.TrimSpace(ensureProjectDefaultBranch(ctx, s.DB, repoProject))
+		if branch == "" {
+			branch = "main"
+		}
+
+		label := db.RepoLabel(repoProject.Path)
+		broadcast("running", fmt.Sprintf("Recomputing commits for %s...", label))
+
+		identity, _ := resolveGitIdentity(ctx, repoProject.Path)
+		extraEmails := s.loadExtraLocalUserEmails()
+		n, err := recomputeCommitCoverageForProjectWithChangedPatterns(
+			ctx, s.DB, repoProject, group, branch, "", nil, &identity, extraEmails, nil, afterMs,
+		)
+		if err != nil {
+			log.Printf("history scan: recompute failed for %s: %v", repoProject.Path, err)
+			continue
+		}
+		recomputed += n
+	}
+
+	if recomputed > 0 {
+		broadcast("running", fmt.Sprintf("Recomputed %d commits", recomputed))
+	}
+}
+
+// projectGroupMatchesPaths returns true if any project in the group has a path
+// (primary or worktree) that appears in the given path set.
+func projectGroupMatchesPaths(group projectGroup, pathSet map[string]struct{}) bool {
+	for _, p := range group.Projects {
+		if _, ok := pathSet[p.Path]; ok {
+			return true
+		}
+		for _, wt := range strings.Split(p.GitWorktreePaths, "\n") {
+			wt = strings.TrimSpace(wt)
+			if wt == "" {
+				continue
+			}
+			if _, ok := pathSet[wt]; ok {
+				return true
+			}
+		}
+		for _, op := range strings.Split(p.OldPaths, "\n") {
+			op = strings.TrimSpace(op)
+			if op == "" {
+				continue
+			}
+			if _, ok := pathSet[op]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
