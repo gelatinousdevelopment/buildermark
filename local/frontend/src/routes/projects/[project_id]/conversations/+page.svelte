@@ -126,12 +126,14 @@
 	{#if conversationPagination && conversationPagination.totalPages > 1}
 		<div class="pager">
 			{#if currentPage > 1}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- pageHref uses resolve() -->
 				<a class="bordered small" href={pageHref(currentPage - 1)}>Previous</a>
 			{:else}
 				<span class="bordered small pager-disabled">Previous</span>
 			{/if}
 			<span>Page {conversationPagination.page} of {conversationPagination.totalPages}</span>
 			{#if currentPage < conversationPagination.totalPages}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- pageHref uses resolve() -->
 				<a class="bordered small" href={pageHref(currentPage + 1)}>Next</a>
 			{:else}
 				<span class="bordered small pager-disabled">Next</span>

@@ -25,7 +25,7 @@
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
 	import AgentTag from '$lib/components/AgentTag.svelte';
 	import { singleLineTitle, shortId } from '$lib/utils';
-	import { buildResumeCommand, KNOWN_AGENT_INFO } from '$lib/agents';
+	import { buildResumeCommand } from '$lib/agents';
 	import { resolve } from '$app/paths';
 	import Icon from '$lib/Icon.svelte';
 	import type { Project } from '$lib/types';
@@ -100,9 +100,6 @@
 	let projects: Project[] = $derived(data.projects ?? []);
 	let projectPath = $derived(
 		projects.find((project) => project.id === conversation.projectId)?.path ?? ''
-	);
-	let resumeAgentInfo = $derived(
-		KNOWN_AGENT_INFO[conversation.agent as keyof typeof KNOWN_AGENT_INFO]
 	);
 	let resumeCommand = $derived(
 		buildResumeCommand(conversation.agent, conversation.id, projectPath)

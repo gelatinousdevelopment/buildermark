@@ -126,7 +126,9 @@
 	let internalUser = $state('');
 	let internalAgent = $state('');
 	let internalOrder = $state(settingsStore.sortOrder);
+	// eslint-disable-next-line svelte/prefer-writable-derived -- also set by user interaction (date picker)
 	let internalStart: number | undefined = $state(undefined);
+	// eslint-disable-next-line svelte/prefer-writable-derived -- also set by user interaction (date picker)
 	let internalEnd: number | undefined = $state(undefined);
 	let userDefaultApplied = false;
 	let initialized = $state(false);

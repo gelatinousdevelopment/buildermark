@@ -4,8 +4,6 @@
 	import Icon from '$lib/Icon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import type { PluginHomeInfo, PluginInventoryResponse, PluginStatus } from '$lib/types';
-	import DailyActivityChart from '$lib/charts/DailyActivityChart.svelte';
-
 	let { data } = $props();
 	let inventory: PluginInventoryResponse | null = $state(null);
 	let error: string | null = $state(null);
@@ -213,8 +211,8 @@
 						{#each browserExtensions as extension (extension.name)}
 							<tr>
 								<th scope="row" class="browser-name">{extension.name}</th>
+								<!-- eslint-disable svelte/no-navigation-without-resolve -- external URLs -->
 								<td>
-									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 									<a
 										class="bordered small browser-link"
 										href={extension.storeUrl}
@@ -225,7 +223,6 @@
 									</a>
 								</td>
 								<td>
-									<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 									<a
 										class="bordered small browser-link"
 										href={extension.sourceUrl}
@@ -236,6 +233,7 @@
 										<span>GitHub Source</span>
 									</a>
 								</td>
+								<!-- eslint-enable svelte/no-navigation-without-resolve -->
 							</tr>
 						{/each}
 					</tbody>

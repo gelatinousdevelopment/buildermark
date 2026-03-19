@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { getProject, listTeamServers } from '$lib/api';
-import type { ProjectDetail, TeamServer } from '$lib/types';
+import type { TeamServer } from '$lib/types';
 
 export async function load({ params, fetch }) {
 	const id = params.project_id;
@@ -8,7 +8,6 @@ export async function load({ params, fetch }) {
 		throw error(400, 'Missing project ID');
 	}
 
-	let project: ProjectDetail;
 	let teamServers: TeamServer[] = [];
 
 	const [projectResult, serversResult] = await Promise.allSettled([
@@ -24,7 +23,7 @@ export async function load({ params, fetch }) {
 				: 'Failed to load project'
 		);
 	}
-	project = projectResult.value;
+	const project = projectResult.value;
 
 	if (serversResult.status === 'fulfilled') {
 		teamServers = serversResult.value;

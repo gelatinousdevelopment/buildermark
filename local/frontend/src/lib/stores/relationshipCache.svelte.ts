@@ -1,3 +1,4 @@
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { getCommitConversationLinks } from '$lib/api';
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -9,13 +10,13 @@ interface CacheEntry {
 }
 
 // The cache is keyed by projectId.
-const cache = new Map<string, CacheEntry>();
+const cache = new SvelteMap<string, CacheEntry>();
 
 // Reactive state for the currently hovered item's related IDs.
 let _hoveredConversationId = $state<string | null>(null);
 let _hoveredCommitHash = $state<string | null>(null);
-let _highlightedConversationIds = $state<Set<string>>(new Set());
-let _highlightedCommitHashes = $state<Set<string>>(new Set());
+let _highlightedConversationIds: SvelteSet<string> = new SvelteSet();
+let _highlightedCommitHashes: SvelteSet<string> = new SvelteSet();
 
 function getCacheEntry(projectId: string): CacheEntry | null {
 	const entry = cache.get(projectId);
@@ -111,14 +112,14 @@ export const relationshipCache = {
 		_hoveredConversationId = conversationId;
 		_hoveredCommitHash = null;
 		if (!conversationId) {
-			_highlightedCommitHashes = new Set();
-			_highlightedConversationIds = new Set();
+			_highlightedCommitHashes = new SvelteSet();
+			_highlightedConversationIds = new SvelteSet();
 			return;
 		}
 		const entry = getCacheEntry(projectId);
 		const hashes = entry?.conversationToCommits[conversationId] ?? [];
-		_highlightedCommitHashes = new Set(hashes);
-		_highlightedConversationIds = new Set();
+		_highlightedCommitHashes = new SvelteSet(hashes);
+		_highlightedConversationIds = new SvelteSet();
 	},
 
 	/**
@@ -129,14 +130,14 @@ export const relationshipCache = {
 		_hoveredCommitHash = commitHash;
 		_hoveredConversationId = null;
 		if (!commitHash) {
-			_highlightedConversationIds = new Set();
-			_highlightedCommitHashes = new Set();
+			_highlightedConversationIds = new SvelteSet();
+			_highlightedCommitHashes = new SvelteSet();
 			return;
 		}
 		const entry = getCacheEntry(projectId);
 		const convIds = entry?.commitToConversations[commitHash] ?? [];
-		_highlightedConversationIds = new Set(convIds);
-		_highlightedCommitHashes = new Set();
+		_highlightedConversationIds = new SvelteSet(convIds);
+		_highlightedCommitHashes = new SvelteSet();
 	},
 
 	/**
@@ -145,8 +146,8 @@ export const relationshipCache = {
 	clearHover(): void {
 		_hoveredConversationId = null;
 		_hoveredCommitHash = null;
-		_highlightedConversationIds = new Set();
-		_highlightedCommitHashes = new Set();
+		_highlightedConversationIds = new SvelteSet();
+		_highlightedCommitHashes = new SvelteSet();
 	},
 
 	clearProject(projectId: string): void {

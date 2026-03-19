@@ -43,6 +43,7 @@
 			}
 		}
 		const query = params.toString();
+		/* eslint-disable svelte/no-navigation-without-resolve -- template uses resolve() */
 		void goto(
 			`${resolve('/projects/[project_id]/commits/[branch]', {
 				project_id: projectId,
@@ -54,6 +55,7 @@
 				keepFocus: true
 			}
 		);
+		/* eslint-enable svelte/no-navigation-without-resolve */
 	}
 
 	function pageHref(nextPage: number) {
@@ -134,12 +136,14 @@
 	{#if commitPagination && commitPagination.totalPages > 1}
 		<div class="pager">
 			{#if currentPage > 1}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- pageHref uses resolve() -->
 				<a class="bordered small" href={pageHref(currentPage - 1)}>Previous</a>
 			{:else}
 				<span class="bordered small pager-disabled">Previous</span>
 			{/if}
 			<span>Page {commitPagination.page} of {commitPagination.totalPages}</span>
 			{#if currentPage < commitPagination.totalPages}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- pageHref uses resolve() -->
 				<a class="bordered small" href={pageHref(currentPage + 1)}>Next</a>
 			{:else}
 				<span class="bordered small pager-disabled">Next</span>

@@ -148,6 +148,7 @@
 
 	{#if canLoadMore}
 		<div class="load-more-row">
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- derived from page.url which is already resolved -->
 			<a class="bordered" href={currentProjectUrl} onclick={handleLoadMore}>Load More...</a>
 		</div>
 	{/if}

@@ -637,7 +637,7 @@ function trimContext(
 	lines: { text: string; oldPos: number; newPos: number; type: string }[],
 	maxContext: number
 ): typeof lines {
-	let firstChange = lines.findIndex((l) => l.type !== 'context');
+	const firstChange = lines.findIndex((l) => l.type !== 'context');
 	if (firstChange === -1) return [];
 	const startTrim = Math.max(0, firstChange - maxContext);
 

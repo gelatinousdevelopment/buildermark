@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import Popover from '$lib/components/Popover.svelte';
 	import type { FileTypeCoverage } from '$lib/types';
 	import { agentColor, MANUAL_COLOR } from './chartColors';
@@ -21,7 +21,7 @@
 	const hasHiddenItems = $derived(filteredData.length < data.length);
 
 	const agents = $derived.by(() => {
-		const names = new Set<string>();
+		const names = new SvelteSet<string>();
 		for (const row of data) {
 			for (const seg of row?.agentSegments || []) {
 				names.add(seg.agent);
