@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+type exactTokenCandidate struct {
+	source    tokenSource
+	exact     bool
+	preferred bool
+}
+
 // countDiffAddedRemoved counts the total lines added and removed from a unified diff.
 func countDiffAddedRemoved(diffText string) (added, removed int) {
 	for _, line := range strings.Split(diffText, "\n") {
@@ -45,13 +51,15 @@ func buildMessageIndex(messages []messageDiff, windowStart, windowEnd int64) *me
 	})
 
 	idx := &messageIndex{
-		messages:               sorted,
-		tokenSources:           make(map[string][]tokenSource),
-		tokensByBucket:         make(map[int]map[string][]int),
-		normSources:            make(map[string]int),
-		normAgents:             make(map[string]map[string]int),
-		normConversationCounts: make(map[string]map[string]int),
-		conversationMeta:       make(map[string]fallbackConversationMeta),
+		messages:                   sorted,
+		tokenSources:               make(map[string][]tokenSource),
+		styleTokenSources:          make(map[string][]tokenSource),
+		tokensByBucket:             make(map[int]map[string][]int),
+		normSources:                make(map[string]int),
+		normAgents:                 make(map[string]map[string]int),
+		normConversationCounts:     make(map[string]map[string]int),
+		pathNormConversationCounts: make(map[string]map[string]map[string]int),
+		conversationMeta:           make(map[string]fallbackConversationMeta),
 	}
 
 	for i, msg := range sorted {
@@ -74,7 +82,20 @@ func buildMessageIndex(messages []messageDiff, windowStart, windowEnd int64) *me
 			if !tok.Attributable {
 				continue
 			}
-			idx.tokenSources[tok.Key] = append(idx.tokenSources[tok.Key], tokenSource{msgIdx: i, tokenPos: pos})
+			for _, matchKey := range tok.MatchKeys {
+				idx.tokenSources[matchKey] = append(idx.tokenSources[matchKey], tokenSource{
+					msgIdx:   i,
+					tokenPos: pos,
+					matchLen: len(strings.Split(strings.SplitN(matchKey, "\x1f", 2)[0], "/")),
+				})
+			}
+			for _, matchKey := range tok.StyleMatchKeys {
+				idx.styleTokenSources[matchKey] = append(idx.styleTokenSources[matchKey], tokenSource{
+					msgIdx:   i,
+					tokenPos: pos,
+					matchLen: len(strings.Split(strings.SplitN(matchKey, "\x1f", 2)[0], "/")),
+				})
+			}
 			pathTokens[tokenBucketKey(tok.Path, tok.Sign)] = append(pathTokens[tokenBucketKey(tok.Path, tok.Sign)], pos)
 			if tok.Norm != "" {
 				idx.normSources[tok.Norm]++
@@ -91,6 +112,19 @@ func buildMessageIndex(messages []messageDiff, windowStart, windowEnd int64) *me
 						idx.normConversationCounts[tok.Norm] = conversations
 					}
 					conversations[msg.ConversationID]++
+					for _, alias := range buildDiffPathAliases(tok.Path) {
+						byPath := idx.pathNormConversationCounts[alias]
+						if byPath == nil {
+							byPath = make(map[string]map[string]int)
+							idx.pathNormConversationCounts[alias] = byPath
+						}
+						byNorm := byPath[tok.Norm]
+						if byNorm == nil {
+							byNorm = make(map[string]int)
+							byPath[tok.Norm] = byNorm
+						}
+						byNorm[msg.ConversationID]++
+					}
 				}
 			}
 		}
@@ -103,7 +137,7 @@ func attributeCommitToMessages(
 	commitTokens []diffToken,
 	messages []messageDiff,
 	windowStart, windowEnd int64,
-) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int, map[string][]string) {
+) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]map[string]int, map[string]int, map[string][]string) {
 	idx := buildMessageIndex(messages, windowStart, windowEnd)
 	return attributeCommitToMessagesWithIndex(commitTokens, idx, windowStart, windowEnd)
 }
@@ -112,12 +146,10 @@ func attributeCommitToMessagesWithIndex(
 	commitTokens []diffToken,
 	idx *messageIndex,
 	windowStart, windowEnd int64,
-) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]int, map[string][]string) {
+) ([]commitContributionMessage, int, map[string]commitFileCoverage, map[string]map[string]int, map[string]int, map[string][]string) {
 	messages := idx.messages
 
 	matchedLines := 0
-	// Per-commit offset tracking into the shared tokenSources.
-	tokenSourceOffset := make(map[string]int)
 	messageTokenUsed := make(map[int][]bool)
 	commitMatched := make([]bool, len(commitTokens))
 	// Copy normSources so per-commit consumption doesn't affect the shared index.
@@ -128,6 +160,7 @@ func attributeCommitToMessagesWithIndex(
 
 	contribByIndex := make(map[int]*commitContributionMessage)
 	fileCoverageByPath := make(map[string]commitFileCoverage)
+	exactConversationByPath := make(map[string]map[string]int)
 	type fileAgentStats struct{ lines int }
 	fileAgentByPath := make(map[string]map[string]*fileAgentStats)
 	recordFileAgentMatch := func(filePath string, msgIdx int) {
@@ -149,6 +182,14 @@ func attributeCommitToMessagesWithIndex(
 			byAgent[agent] = stats
 		}
 		stats.lines++
+		if convID := messages[msgIdx].ConversationID; convID != "" {
+			byConv := exactConversationByPath[filePath]
+			if byConv == nil {
+				byConv = make(map[string]int)
+				exactConversationByPath[filePath] = byConv
+			}
+			byConv[convID]++
+		}
 	}
 	for tokIdx, tok := range commitTokens {
 		if !tok.Attributable {
@@ -162,27 +203,11 @@ func attributeCommitToMessagesWithIndex(
 		fileCov.Path = path
 		fileCov.Added++
 
-		sources := idx.tokenSources[tok.Key]
-		offset := tokenSourceOffset[tok.Key]
-		if offset >= len(sources) {
+		source, ok := selectExactTokenSource(tok, idx, messages, messageTokenUsed, windowStart, windowEnd)
+		if !ok {
 			fileCoverageByPath[path] = fileCov
 			continue
 		}
-		source := sources[offset]
-		// Skip sources outside the commit's time window.
-		for source.msgIdx >= 0 && (messages[source.msgIdx].Timestamp <= windowStart || messages[source.msgIdx].Timestamp > windowEnd) {
-			offset++
-			if offset >= len(sources) {
-				break
-			}
-			source = sources[offset]
-		}
-		if offset >= len(sources) {
-			tokenSourceOffset[tok.Key] = offset
-			fileCoverageByPath[path] = fileCov
-			continue
-		}
-		tokenSourceOffset[tok.Key] = offset + 1
 		if messageTokenUsed[source.msgIdx] == nil {
 			messageTokenUsed[source.msgIdx] = make([]bool, len(messages[source.msgIdx].Tokens))
 		}
@@ -315,6 +340,53 @@ func attributeCommitToMessagesWithIndex(
 		}
 	}
 
+	// Third pass: recover style-equivalent changes where the authored line only
+	// differs in safe quote style, such as CSS attribute selectors using
+	// single-vs-double quotes. This pass is lower priority than strict exact
+	// matches and formatting-window matches.
+	for tokIdx, tok := range commitTokens {
+		if commitMatched[tokIdx] || !tok.Attributable || tok.StyleNorm == "" {
+			continue
+		}
+		path := tok.Path
+		if path == "" {
+			continue
+		}
+		preferredConversationID := dominantConversationFromCounts(exactConversationByPath[path])
+		source, ok := selectStyleTokenSource(tok, preferredConversationID, idx, messages, messageTokenUsed, windowStart, windowEnd)
+		if !ok {
+			continue
+		}
+		if messageTokenUsed[source.msgIdx] == nil {
+			messageTokenUsed[source.msgIdx] = make([]bool, len(messages[source.msgIdx].Tokens))
+		}
+		messageTokenUsed[source.msgIdx][source.tokenPos] = true
+		commitMatched[tokIdx] = true
+		matchedLines++
+
+		fileCov := fileCoverageByPath[path]
+		fileCov.Path = path
+		fileCov.Removed++
+		fileCoverageByPath[path] = fileCov
+		recordFileAgentMatch(path, source.msgIdx)
+
+		contrib := contribByIndex[source.msgIdx]
+		if contrib == nil {
+			msg := messages[source.msgIdx]
+			contrib = &commitContributionMessage{
+				ID:                msg.ID,
+				Timestamp:         msg.Timestamp,
+				ConversationID:    msg.ConversationID,
+				ConversationTitle: msg.ConversationTitle,
+				Agent:             msg.Agent,
+				Model:             msg.Model,
+				Content:           msg.Content,
+			}
+			contribByIndex[source.msgIdx] = contrib
+		}
+		contrib.LinesMatched++
+	}
+
 	out := make([]commitContributionMessage, 0, len(contribByIndex))
 	for _, contrib := range contribByIndex {
 		out = append(out, *contrib)
@@ -353,7 +425,136 @@ func attributeCommitToMessagesWithIndex(
 		unmatchedNormsByPath[tok.Path] = append(unmatchedNormsByPath[tok.Path], tok.Norm)
 	}
 
-	return out, matchedLines, fileCoverageByPath, normSources, unmatchedNormsByPath
+	return out, matchedLines, fileCoverageByPath, exactConversationByPath, normSources, unmatchedNormsByPath
+}
+
+func selectExactTokenSource(
+	tok diffToken,
+	idx *messageIndex,
+	messages []messageDiff,
+	messageTokenUsed map[int][]bool,
+	windowStart, windowEnd int64,
+) (tokenSource, bool) {
+	var best exactTokenCandidate
+	bestSet := false
+	seen := make(map[tokenSource]struct{}, len(tok.MatchKeys))
+
+	for _, matchKey := range tok.MatchKeys {
+		for _, source := range idx.tokenSources[matchKey] {
+			if _, ok := seen[source]; ok {
+				continue
+			}
+			seen[source] = struct{}{}
+
+			msg := messages[source.msgIdx]
+			if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
+				continue
+			}
+			if messageTokenUsed[source.msgIdx] != nil && messageTokenUsed[source.msgIdx][source.tokenPos] {
+				continue
+			}
+
+			msgTok := msg.Tokens[source.tokenPos]
+			current := exactTokenCandidate{
+				source: source,
+				exact:  msgTok.Path == tok.Path,
+			}
+			if !bestSet || betterExactTokenSource(current, best, messages) {
+				best = current
+				bestSet = true
+			}
+		}
+	}
+
+	if !bestSet {
+		return tokenSource{}, false
+	}
+	return best.source, true
+}
+
+func betterExactTokenSource(current, best exactTokenCandidate, messages []messageDiff) bool {
+	if current.exact != best.exact {
+		return current.exact
+	}
+	if current.preferred != best.preferred {
+		return current.preferred
+	}
+	if current.source.matchLen != best.source.matchLen {
+		return current.source.matchLen > best.source.matchLen
+	}
+
+	currentMsg := messages[current.source.msgIdx]
+	bestMsg := messages[best.source.msgIdx]
+	if currentMsg.Timestamp != bestMsg.Timestamp {
+		return currentMsg.Timestamp > bestMsg.Timestamp
+	}
+	if currentMsg.ID != bestMsg.ID {
+		return currentMsg.ID > bestMsg.ID
+	}
+	if current.source.msgIdx != best.source.msgIdx {
+		return current.source.msgIdx < best.source.msgIdx
+	}
+	return current.source.tokenPos < best.source.tokenPos
+}
+
+func selectStyleTokenSource(
+	tok diffToken,
+	preferredConversationID string,
+	idx *messageIndex,
+	messages []messageDiff,
+	messageTokenUsed map[int][]bool,
+	windowStart, windowEnd int64,
+) (tokenSource, bool) {
+	if len(tok.StyleMatchKeys) == 0 || tok.StyleNorm == "" {
+		return tokenSource{}, false
+	}
+
+	var best exactTokenCandidate
+	bestSet := false
+	seen := make(map[tokenSource]struct{}, len(tok.StyleMatchKeys))
+
+	for _, matchKey := range tok.StyleMatchKeys {
+		for _, source := range idx.styleTokenSources[matchKey] {
+			if _, ok := seen[source]; ok {
+				continue
+			}
+			seen[source] = struct{}{}
+
+			msg := messages[source.msgIdx]
+			if msg.Timestamp <= windowStart || msg.Timestamp > windowEnd {
+				continue
+			}
+			if messageTokenUsed[source.msgIdx] != nil && messageTokenUsed[source.msgIdx][source.tokenPos] {
+				continue
+			}
+
+			msgTok := msg.Tokens[source.tokenPos]
+			if msgTok.StyleNorm == "" || msgTok.StyleNorm != tok.StyleNorm {
+				continue
+			}
+			current := exactTokenCandidate{
+				source:    source,
+				exact:     msgTok.Path == tok.Path,
+				preferred: preferredConversationID != "" && msg.ConversationID == preferredConversationID,
+			}
+			if !bestSet || betterStyleTokenSource(current, best, messages) {
+				best = current
+				bestSet = true
+			}
+		}
+	}
+
+	if !bestSet {
+		return tokenSource{}, false
+	}
+	return best.source, true
+}
+
+func betterStyleTokenSource(current, best exactTokenCandidate, messages []messageDiff) bool {
+	if current.preferred != best.preferred {
+		return current.preferred
+	}
+	return betterExactTokenSource(current, best, messages)
 }
 
 func concatCommitNorms(tokens []diffToken, indices []int) string {
@@ -598,6 +799,7 @@ func summarizeDiffFiles(
 func applyFallbackFileCoverage(
 	files []commitFileCoverage,
 	fileAgent map[string]commitFileCoverage,
+	exactConversationByPath map[string]map[string]int,
 	unmatchedNormsByPath map[string][]string,
 	remainingNorms map[string]int,
 	idx *messageIndex,
@@ -613,6 +815,18 @@ func applyFallbackFileCoverage(
 			cloned[convID] = n
 		}
 		conversationCountsByNorm[norm] = cloned
+	}
+	pathConversationCountsByNorm := make(map[string]map[string]map[string]int, len(idx.pathNormConversationCounts))
+	for alias, byNorm := range idx.pathNormConversationCounts {
+		clonedByNorm := make(map[string]map[string]int, len(byNorm))
+		for norm, counts := range byNorm {
+			clonedCounts := make(map[string]int, len(counts))
+			for convID, n := range counts {
+				clonedCounts[convID] = n
+			}
+			clonedByNorm[norm] = clonedCounts
+		}
+		pathConversationCountsByNorm[alias] = clonedByNorm
 	}
 
 	convSeen := make(map[string]bool)
@@ -639,13 +853,15 @@ func applyFallbackFileCoverage(
 		agentLines := make(map[string]int)
 		convLines := make(map[string]int)
 		fallbackMatched := 0
+		preferredConvID := dominantConversationFromCounts(exactConversationByPath[c.Path])
+		pathAliases := buildDiffPathAliases(c.Path)
 
 		for _, norm := range norms {
 			if remainingNorms[norm] <= 0 {
 				continue
 			}
 			remainingNorms[norm]--
-			convID := dominantConversationForNorm(norm, conversationCountsByNorm)
+			convID := dominantConversationForFileNorm(norm, preferredConvID, pathAliases, pathConversationCountsByNorm, conversationCountsByNorm)
 			if convID != "" {
 				convLines[convID]++
 				if meta, ok := idx.conversationMeta[convID]; ok {
@@ -663,9 +879,7 @@ func applyFallbackFileCoverage(
 		if fallbackMatched < minMatch {
 			for _, item := range consumed {
 				remainingNorms[item.norm]++
-				if item.convID != "" {
-					conversationCountsByNorm[item.norm][item.convID]++
-				}
+				restoreConversationCount(item.norm, item.convID, pathAliases, pathConversationCountsByNorm, conversationCountsByNorm)
 			}
 			continue
 		}
@@ -737,6 +951,10 @@ func fallbackMinMatch(linesTotal, normCount int) int {
 
 func dominantConversationForNorm(norm string, conversationCountsByNorm map[string]map[string]int) string {
 	counts := conversationCountsByNorm[norm]
+	return dominantConversationFromCounts(counts)
+}
+
+func dominantConversationFromCounts(counts map[string]int) string {
 	bestID := ""
 	bestCount := 0
 	for convID, n := range counts {
@@ -748,10 +966,70 @@ func dominantConversationForNorm(norm string, conversationCountsByNorm map[strin
 			bestCount = n
 		}
 	}
-	if bestID != "" {
-		counts[bestID]--
-	}
 	return bestID
+}
+
+func dominantConversationForFileNorm(
+	norm string,
+	preferredConvID string,
+	pathAliases []string,
+	pathConversationCountsByNorm map[string]map[string]map[string]int,
+	conversationCountsByNorm map[string]map[string]int,
+) string {
+	if preferredConvID != "" {
+		for _, alias := range pathAliases {
+			if counts := pathConversationCountsByNorm[alias][norm]; counts != nil && counts[preferredConvID] > 0 {
+				counts[preferredConvID]--
+				if global := conversationCountsByNorm[norm]; global != nil && global[preferredConvID] > 0 {
+					global[preferredConvID]--
+				}
+				return preferredConvID
+			}
+		}
+		if counts := conversationCountsByNorm[norm]; counts != nil && counts[preferredConvID] > 0 {
+			counts[preferredConvID]--
+			return preferredConvID
+		}
+	}
+
+	for _, alias := range pathAliases {
+		if counts := pathConversationCountsByNorm[alias][norm]; counts != nil {
+			if convID := dominantConversationFromCounts(counts); convID != "" {
+				counts[convID]--
+				if global := conversationCountsByNorm[norm]; global != nil && global[convID] > 0 {
+					global[convID]--
+				}
+				return convID
+			}
+		}
+	}
+
+	counts := conversationCountsByNorm[norm]
+	convID := dominantConversationFromCounts(counts)
+	if convID != "" {
+		counts[convID]--
+	}
+	return convID
+}
+
+func restoreConversationCount(
+	norm, convID string,
+	pathAliases []string,
+	pathConversationCountsByNorm map[string]map[string]map[string]int,
+	conversationCountsByNorm map[string]map[string]int,
+) {
+	if convID == "" {
+		return
+	}
+	if counts := conversationCountsByNorm[norm]; counts != nil {
+		counts[convID]++
+	}
+	for _, alias := range pathAliases {
+		if counts := pathConversationCountsByNorm[alias][norm]; counts != nil {
+			counts[convID]++
+			return
+		}
+	}
 }
 
 func mergeFileAgentSegments(

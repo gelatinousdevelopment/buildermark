@@ -555,11 +555,12 @@ func recomputeSingleCommit(
 	windowEnd := c.AuthoredAt*1000 + commitWindowLookaheadMs
 	if matchesIdent {
 		var fileAgent map[string]commitFileCoverage
+		var exactConversationByPath map[string]map[string]int
 		var unmatchedNormsByPath map[string][]string
 		if msgIdx != nil {
-			contribs, matchedLines, fileAgent, _, unmatchedNormsByPath = attributeCommitToMessagesWithIndex(commitTokens, msgIdx, windowStart, windowEnd)
+			contribs, matchedLines, fileAgent, exactConversationByPath, _, unmatchedNormsByPath = attributeCommitToMessagesWithIndex(commitTokens, msgIdx, windowStart, windowEnd)
 		} else {
-			contribs, matchedLines, fileAgent, _, unmatchedNormsByPath = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+			contribs, matchedLines, fileAgent, exactConversationByPath, _, unmatchedNormsByPath = attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		}
 		files = summarizeDiffFiles(parsed.Files, fileAgent)
 		// Always build a per-commit-window index for fallback matching so that
@@ -570,7 +571,7 @@ func recomputeSingleCommit(
 		for k, v := range fallbackIdx.normSources {
 			fallbackNorms[k] = v
 		}
-		files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, fallbackNorms, fallbackIdx)
+		files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, fallbackNorms, fallbackIdx)
 		matchedLines += fallbackLines
 	}
 

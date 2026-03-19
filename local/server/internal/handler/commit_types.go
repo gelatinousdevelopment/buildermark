@@ -15,7 +15,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 10
+	currentCommitCoverageVersion = 12
 	maxFormattingWindowLines     = 5
 )
 
@@ -208,16 +208,20 @@ type messageDiff struct {
 }
 
 type diffToken struct {
-	Path         string
-	Sign         byte
-	Norm         string
-	Key          string
-	Attributable bool
+	Path           string
+	Sign           byte
+	Norm           string
+	StyleNorm      string
+	Key            string
+	MatchKeys      []string
+	StyleMatchKeys []string
+	Attributable   bool
 }
 
 type tokenSource struct {
 	msgIdx   int
 	tokenPos int
+	matchLen int
 }
 
 type fallbackConversationMeta struct {
@@ -250,13 +254,15 @@ type diffParseResult struct {
 // messageIndex holds pre-built indexes for message token matching.
 // It is built once per batch and reused across commits.
 type messageIndex struct {
-	messages               []messageDiff // sorted newest-first
-	tokenSources           map[string][]tokenSource
-	tokensByBucket         map[int]map[string][]int
-	normSources            map[string]int
-	normAgents             map[string]map[string]int // norm → agent → count
-	normConversationCounts map[string]map[string]int // norm → conversation → count
-	conversationMeta       map[string]fallbackConversationMeta
+	messages                   []messageDiff // sorted newest-first
+	tokenSources               map[string][]tokenSource
+	styleTokenSources          map[string][]tokenSource
+	tokensByBucket             map[int]map[string][]int
+	normSources                map[string]int
+	normAgents                 map[string]map[string]int            // norm → agent → count
+	normConversationCounts     map[string]map[string]int            // norm → conversation → count
+	pathNormConversationCounts map[string]map[string]map[string]int // path alias → norm → conversation → count
+	conversationMeta           map[string]fallbackConversationMeta
 }
 
 // CommitDetailResult holds all computed detail data for a single commit.

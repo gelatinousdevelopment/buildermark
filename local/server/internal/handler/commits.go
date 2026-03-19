@@ -1339,9 +1339,9 @@ func computeCoverageForRepo(
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
 		totalLines := tokenTotals(commitTokens)
-		_, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		_, matchedLines, fileAgent, exactConversationByPath, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		files := summarizeDiffFiles(parsed.Files, fileAgent)
-		_, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
+		_, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
 		matchedLines += fallbackLines
 
 		cAdded, cRemoved := countDiffAddedRemoved(commitDiff)
@@ -1479,10 +1479,10 @@ func computeWorkingCopyDetail(
 	}
 
 	totalLines := tokenTotals(commitTokens)
-	contribMessages, matchedLines, fileAgent, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+	contribMessages, matchedLines, fileAgent, exactConversationByPath, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	exactMatchedLines := matchedLines
 	files := summarizeDiffFiles(parsed.Files, fileAgent)
-	files, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
+	files, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
 	matchedLines += fallbackLines
 	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 

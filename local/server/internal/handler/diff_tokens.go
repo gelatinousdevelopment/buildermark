@@ -6,6 +6,8 @@ import (
 	"unicode"
 )
 
+const minPathAliasSegments = 3
+
 // DefaultIgnoreDiffPaths is the hardcoded list of glob patterns ignored when
 // the "Ignore default paths" option is enabled for a project.
 var DefaultIgnoreDiffPaths = []string{
@@ -270,16 +272,23 @@ func globMatchSegments(patternSegs, pathSegs []string) bool {
 }
 
 func makeDiffToken(path string, sign byte, line string) (diffToken, bool) {
+	path = normalizeDiffTokenPath(path)
 	norm := normalizeWhitespace(line)
 	if norm == "" {
 		return diffToken{}, false
 	}
+	matchKeys := buildDiffTokenMatchKeys(path, sign, norm)
+	styleNorm := normalizeStyleEquivalentLine(path, line, norm)
+	styleMatchKeys := buildDiffTokenMatchKeys(path, sign, styleNorm)
 	return diffToken{
-		Path:         path,
-		Sign:         sign,
-		Norm:         norm,
-		Key:          path + "\x1f" + string(sign) + "\x1f" + norm,
-		Attributable: isAttributionCandidate(norm),
+		Path:           path,
+		Sign:           sign,
+		Norm:           norm,
+		StyleNorm:      styleNorm,
+		Key:            path + "\x1f" + string(sign) + "\x1f" + norm,
+		MatchKeys:      matchKeys,
+		StyleMatchKeys: styleMatchKeys,
+		Attributable:   isAttributionCandidate(norm),
 	}, true
 }
 
@@ -301,4 +310,120 @@ func normalizeWhitespace(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+func normalizeDiffTokenPath(p string) string {
+	p = strings.TrimSpace(strings.ReplaceAll(p, "\\", "/"))
+	p = strings.TrimPrefix(p, "./")
+	p = strings.TrimPrefix(p, "/")
+	return p
+}
+
+func buildDiffTokenMatchKeys(path string, sign byte, norm string) []string {
+	if norm == "" {
+		return nil
+	}
+	aliases := buildDiffPathAliases(path)
+	if len(aliases) == 0 {
+		return []string{path + "\x1f" + string(sign) + "\x1f" + norm}
+	}
+	keys := make([]string, 0, len(aliases))
+	for _, alias := range aliases {
+		keys = append(keys, alias+"\x1f"+string(sign)+"\x1f"+norm)
+	}
+	return keys
+}
+
+func buildDiffPathAliases(path string) []string {
+	path = normalizeDiffTokenPath(path)
+	if path == "" {
+		return nil
+	}
+
+	parts := strings.Split(path, "/")
+	aliases := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	add := func(alias string) {
+		if alias == "" {
+			return
+		}
+		if _, ok := seen[alias]; ok {
+			return
+		}
+		seen[alias] = struct{}{}
+		aliases = append(aliases, alias)
+	}
+
+	add(path)
+	for start := 1; start < len(parts); start++ {
+		if len(parts)-start < minPathAliasSegments {
+			break
+		}
+		add(strings.Join(parts[start:], "/"))
+	}
+	return aliases
+}
+
+func normalizeStyleEquivalentLine(path, line, norm string) string {
+	if !supportsStyleEquivalentQuotes(path) {
+		return ""
+	}
+	if !strings.ContainsAny(line, `'"`) {
+		return ""
+	}
+	if strings.ContainsAny(line, "`\\") {
+		return ""
+	}
+	normalized, processed, ok := normalizeSimpleQuotedStrings(line)
+	if !ok || !processed {
+		return ""
+	}
+	styleNorm := normalizeWhitespace(normalized)
+	if styleNorm == "" {
+		return ""
+	}
+	return styleNorm
+}
+
+func supportsStyleEquivalentQuotes(path string) bool {
+	path = strings.ToLower(normalizeDiffTokenPath(path))
+	switch {
+	case strings.HasSuffix(path, ".css"),
+		strings.HasSuffix(path, ".scss"),
+		strings.HasSuffix(path, ".sass"),
+		strings.HasSuffix(path, ".less"),
+		strings.HasSuffix(path, ".html"),
+		strings.HasSuffix(path, ".svelte"),
+		strings.HasSuffix(path, ".tsx"),
+		strings.HasSuffix(path, ".jsx"),
+		strings.HasSuffix(path, ".ts"),
+		strings.HasSuffix(path, ".js"):
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeSimpleQuotedStrings(line string) (string, bool, bool) {
+	var b strings.Builder
+	processed := false
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case '\'', '"':
+			quote := line[i]
+			end := strings.IndexByte(line[i+1:], quote)
+			if end < 0 {
+				return "", false, false
+			}
+			end += i + 1
+			b.WriteByte('"')
+			b.WriteString(line[i+1 : end])
+			b.WriteByte('"')
+			processed = true
+			i = end
+		default:
+			b.WriteByte(line[i])
+		}
+	}
+	return b.String(), processed, true
 }
