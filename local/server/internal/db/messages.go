@@ -275,7 +275,10 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 		         WHEN ? = 0 THEN started_at
 		         ELSE MIN(started_at, ?)
 		     END,
-		     ended_at = MAX(ended_at, ?)
+		     ended_at = CASE
+		         WHEN ? = 0 THEN ended_at
+		         ELSE MAX(ended_at, ?)
+		     END
 		 WHERE id = ?`,
 	)
 	if err != nil {
@@ -283,29 +286,28 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	}
 	defer updateConversationBoundsStmt.Close()
 
-	conversationBounds := make(map[string][2]int64, len(messages))
+	// Track started_at from ALL messages (min timestamp).
+	conversationStartBounds := make(map[string]int64, len(messages))
+	// Track ended_at from USER messages only (max timestamp).
+	conversationEndBounds := make(map[string]int64, len(messages))
 	for _, m := range messages {
-		b, ok := conversationBounds[m.ConversationID]
-		if !ok {
-			conversationBounds[m.ConversationID] = [2]int64{m.Timestamp, m.Timestamp}
-			continue
+		if prev, ok := conversationStartBounds[m.ConversationID]; !ok || m.Timestamp < prev {
+			conversationStartBounds[m.ConversationID] = m.Timestamp
 		}
-		if m.Timestamp < b[0] {
-			b[0] = m.Timestamp
+		if m.MessageType == MessageTypePrompt || m.MessageType == MessageTypeAnswer {
+			if prev, ok := conversationEndBounds[m.ConversationID]; !ok || m.Timestamp > prev {
+				conversationEndBounds[m.ConversationID] = m.Timestamp
+			}
 		}
-		if m.Timestamp > b[1] {
-			b[1] = m.Timestamp
-		}
-		conversationBounds[m.ConversationID] = b
 	}
 
 	for conversationID := range conversationIDs {
-		bounds, ok := conversationBounds[conversationID]
+		batchMin, ok := conversationStartBounds[conversationID]
 		if !ok {
 			continue
 		}
-		batchMin, batchMax := bounds[0], bounds[1]
-		if _, err := updateConversationBoundsStmt.ExecContext(ctx, batchMin, batchMin, batchMin, batchMax, conversationID); err != nil {
+		batchMaxUser := conversationEndBounds[conversationID] // 0 if no user messages
+		if _, err := updateConversationBoundsStmt.ExecContext(ctx, batchMin, batchMin, batchMin, batchMaxUser, batchMaxUser, conversationID); err != nil {
 			return fmt.Errorf("update conversation bounds: %w", err)
 		}
 	}

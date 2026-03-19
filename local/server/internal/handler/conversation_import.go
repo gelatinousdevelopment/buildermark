@@ -191,7 +191,15 @@ func (s *Server) handleImportWebConversation(w http.ResponseWriter, r *http.Requ
 		startedAt = body.Messages[0].Timestamp
 	}
 	if endedAt == 0 && len(body.Messages) > 0 {
-		endedAt = body.Messages[len(body.Messages)-1].Timestamp
+		for i := len(body.Messages) - 1; i >= 0; i-- {
+			if body.Messages[i].Role == "user" && isRealUserContent(body.Messages[i].Content) {
+				endedAt = body.Messages[i].Timestamp
+				break
+			}
+		}
+		if endedAt == 0 {
+			endedAt = startedAt
+		}
 	}
 	now := time.Now().UnixMilli()
 	if startedAt == 0 {
@@ -429,7 +437,15 @@ func (s *Server) upsertCloudConversation(ctx context.Context, url, projectID, ti
 	var startedAt, endedAt int64
 	if len(messages) > 0 {
 		startedAt = messages[0].Timestamp
-		endedAt = messages[len(messages)-1].Timestamp
+		for i := len(messages) - 1; i >= 0; i-- {
+			if messages[i].Role == "user" && isRealUserContent(messages[i].Content) {
+				endedAt = messages[i].Timestamp
+				break
+			}
+		}
+		if endedAt == 0 {
+			endedAt = startedAt
+		}
 	}
 	now := time.Now().UnixMilli()
 	if startedAt == 0 {
@@ -604,6 +620,17 @@ func findProjectByRepoURL(ctx context.Context, database *sql.DB, repoURL string)
 		}
 	}
 	return "", rows.Err()
+}
+
+// isRealUserContent returns true if the content represents a real user prompt
+// (not a slash command or $bb command). Mirrors inferMessageType logic in
+// message_type.go for imported messages that don't have MessageType pre-set.
+func isRealUserContent(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return false
+	}
+	return !strings.HasPrefix(trimmed, "/") && !strings.HasPrefix(trimmed, "$bb")
 }
 
 func (s *Server) recomputeCoverageAfterImport(projectID string, startedAtMs int64) {

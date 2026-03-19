@@ -706,8 +706,123 @@ func TestInsertMessagesUpdatesConversationBounds(t *testing.T) {
 	if startedAt != 1000 {
 		t.Errorf("started_at = %d, want 1000", startedAt)
 	}
+	// ended_at should reflect only user messages, not the agent message at 3000.
+	if endedAt != 2000 {
+		t.Errorf("ended_at = %d, want 2000 (last user message)", endedAt)
+	}
+}
+
+func TestInsertMessagesEndedAtOnlyFromUserMessages(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// Insert user and agent messages where agent has later timestamp.
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "prompt", RawJSON: "{}"},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "thinking...", RawJSON: "{}"},
+		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "follow-up", RawJSON: "{}"},
+		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "final answer", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	var startedAt, endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
 	if endedAt != 3000 {
-		t.Errorf("ended_at = %d, want 3000", endedAt)
+		t.Errorf("ended_at = %d, want 3000 (last user message, not agent at 5000)", endedAt)
+	}
+}
+
+func TestInsertMessagesAgentOnlyDoesNotChangeEndedAt(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// First insert a user message to set ended_at.
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "hello", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages user: %v", err)
+	}
+
+	// Now insert only agent messages with later timestamps.
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "response", RawJSON: "{}"},
+		{Timestamp: 8000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "more response", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages agent: %v", err)
+	}
+
+	var startedAt, endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	// ended_at should remain at 1000 (the user message), not advance to 8000.
+	if endedAt != 1000 {
+		t.Errorf("ended_at = %d, want 1000 (should not advance from agent-only messages)", endedAt)
+	}
+}
+
+func TestInsertMessagesStartedAtUsesAllMessages(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// Insert user message first.
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "prompt", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages user: %v", err)
+	}
+
+	// Insert agent message with earlier timestamp.
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "system init", RawJSON: "{}"},
+	}); err != nil {
+		t.Fatalf("InsertMessages agent: %v", err)
+	}
+
+	var startedAt, endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	// started_at should use the agent message (earliest overall).
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000 (agent message is earliest)", startedAt)
+	}
+	// ended_at should use the user message only.
+	if endedAt != 5000 {
+		t.Errorf("ended_at = %d, want 5000 (user message)", endedAt)
 	}
 }
 
@@ -730,6 +845,47 @@ func TestDeduplicateMessages(t *testing.T) {
 	}
 }
 
+func TestInsertMessagesSlashCommandDoesNotAdvanceEndedAt(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	// Insert a real user prompt.
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real prompt", RawJSON: `{}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages real: %v", err)
+	}
+
+	// Insert slash commands and $bb commands (type=log) with later timestamps.
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/rate-buildermark 5", RawJSON: `{}`},
+		{Timestamp: 6000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/clear", RawJSON: `{}`},
+		{Timestamp: 7000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "$bb rate 3", RawJSON: `{}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages commands: %v", err)
+	}
+
+	var startedAt, endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	// ended_at should remain at 1000 (the real prompt), not advance to 7000.
+	if endedAt != 1000 {
+		t.Errorf("ended_at = %d, want 1000 (slash commands should not advance ended_at)", endedAt)
+	}
+}
+
 func TestInsertMessagesExcludesBbCommandsFromPromptCount(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -745,7 +901,7 @@ func TestInsertMessagesExcludesBbCommandsFromPromptCount(t *testing.T) {
 	messages := []Message{
 		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real user prompt", RawJSON: `{"type":"user"}`},
 		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/rate-buildermark 5", RawJSON: `{"type":"user"}`},
-		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "$rate-buildermark 3 good work", RawJSON: `{"type":"user"}`},
+		{Timestamp: 3000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "$bb rate 3 good work", RawJSON: `{"type":"user"}`},
 		{Timestamp: 4000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "agent response", RawJSON: `{"type":"assistant"}`},
 		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/clear ", RawJSON: `{"type":"user"}`},
 		{Timestamp: 6000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "/help", RawJSON: `{"type":"user"}`},
