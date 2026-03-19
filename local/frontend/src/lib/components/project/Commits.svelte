@@ -15,7 +15,7 @@
 	import Icon from '$lib/Icon.svelte';
 	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
-	import { settingsStore, type CommitSortOrder } from '$lib/stores/settings.svelte';
+	import { settingsStore, type SortOrder } from '$lib/stores/settings.svelte';
 	import { formatRelativeOrShortDate, formatFullDateTitle, commitUrl } from '$lib/utils';
 
 	const USER_AND_AGENTS = '@me+agents';
@@ -125,7 +125,7 @@
 	let internalBranch = $state('');
 	let internalUser = $state('');
 	let internalAgent = $state('');
-	let internalOrder = $state(settingsStore.commitSortOrder);
+	let internalOrder = $state(settingsStore.sortOrder);
 	let internalStart: number | undefined = $state(undefined);
 	let internalEnd: number | undefined = $state(undefined);
 	let userDefaultApplied = false;
@@ -150,7 +150,7 @@
 		internalBranch = branch ?? '';
 		if (start !== undefined) internalStart = start;
 		if (end !== undefined) internalEnd = end;
-		if (order !== undefined) internalOrder = order as CommitSortOrder;
+		if (order !== undefined) internalOrder = order as SortOrder;
 		loading = autoload;
 	});
 
@@ -174,7 +174,7 @@
 	});
 
 	$effect(() => {
-		if (order !== undefined) internalOrder = order as CommitSortOrder;
+		if (order !== undefined) internalOrder = order as SortOrder;
 	});
 
 	$effect(() => {
@@ -352,9 +352,9 @@
 	}
 
 	function handleOrderChange(event: Event) {
-		const value = (event.currentTarget as HTMLSelectElement).value as CommitSortOrder;
+		const value = (event.currentTarget as HTMLSelectElement).value as SortOrder;
 		internalOrder = value;
-		settingsStore.commitSortOrder = value;
+		settingsStore.sortOrder = value;
 		internalPage = 1;
 		if (onOrderChange) {
 			onOrderChange(value);

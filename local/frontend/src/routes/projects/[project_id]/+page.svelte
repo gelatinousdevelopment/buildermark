@@ -13,7 +13,7 @@
 	const PAGE_SIZE = 100;
 
 	const projectId = $derived(page.params.project_id ?? '');
-	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.commitSortOrder);
+	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.sortOrder);
 	const selectedDate = $derived(projectDateFilterStore.selectedDate);
 	const dateRange = $derived.by(() => {
 		if (!selectedDate) return null;

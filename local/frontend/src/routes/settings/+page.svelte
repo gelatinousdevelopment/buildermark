@@ -5,17 +5,17 @@
 	import {
 		settingsStore,
 		type ContentWidth,
-		type CommitSortOrder,
+		type SortOrder,
 		type Theme
 	} from '$lib/stores/settings.svelte';
 	import TeamServersSection from '$lib/TeamServersSection.svelte';
 
 	let { data } = $props();
 
-	const contentWidthOptions: { value: ContentWidth; label: string; description: string }[] = [
-		{ value: 'default', label: 'Default', description: '1540px' },
-		{ value: 'wider', label: 'Wider', description: '1800px' },
-		{ value: 'full', label: 'Full', description: '100%' }
+	const contentWidthOptions: { value: ContentWidth; label: string }[] = [
+		{ value: 'default', label: 'Default' },
+		{ value: 'wider', label: 'Wider' },
+		{ value: 'full', label: 'Full' }
 	];
 
 	const themeOptions: { value: Theme; label: string }[] = [
@@ -24,7 +24,7 @@
 		{ value: 'dark', label: 'Dark' }
 	];
 
-	const commitSortOrderOptions: { value: CommitSortOrder; label: string }[] = [
+	const sortOrderOptions: { value: SortOrder; label: string }[] = [
 		{ value: 'desc', label: 'Newest First' },
 		{ value: 'asc', label: 'Oldest First' }
 	];
@@ -142,56 +142,67 @@
 				<div class="column">
 					<div class="section">
 						<h2>User Interface</h2>
-						<p class="label">Theme</p>
-						<fieldset class="radio-group">
-							{#each themeOptions as option (option.value)}
-								<label class="radio-option">
-									<input
-										type="radio"
-										name="theme"
-										value={option.value}
-										checked={settingsStore.theme === option.value}
-										onchange={() => (settingsStore.theme = option.value)}
-									/>
-									<span class="radio-label">{option.label}</span>
-								</label>
-							{/each}
-						</fieldset>
-
-						<br />
-						<p class="label">Page Max Width</p>
-						<fieldset class="radio-group">
-							{#each contentWidthOptions as option (option.value)}
-								<label class="radio-option">
-									<input
-										type="radio"
-										name="content-width"
-										value={option.value}
-										checked={settingsStore.contentWidth === option.value}
-										onchange={() => (settingsStore.contentWidth = option.value)}
-									/>
-									<span class="radio-label">{option.label}</span>
-									<span class="radio-description">{option.description}</span>
-								</label>
-							{/each}
-						</fieldset>
-
-						<br />
-						<p class="label">Default Commit Sort</p>
-						<fieldset class="radio-group">
-							{#each commitSortOrderOptions as option (option.value)}
-								<label class="radio-option">
-									<input
-										type="radio"
-										name="commit-sort-order"
-										value={option.value}
-										checked={settingsStore.commitSortOrder === option.value}
-										onchange={() => (settingsStore.commitSortOrder = option.value)}
-									/>
-									<span class="radio-label">{option.label}</span>
-								</label>
-							{/each}
-						</fieldset>
+						<table class="data bordered striped hoverable">
+							<tbody>
+								<tr>
+									<td class="label-cell">Theme</td>
+									<td>
+										<fieldset class="radio-group">
+											{#each themeOptions as option (option.value)}
+												<label class="radio-option">
+													<input
+														type="radio"
+														name="theme"
+														value={option.value}
+														checked={settingsStore.theme === option.value}
+														onchange={() => (settingsStore.theme = option.value)}
+													/>
+													<span class="radio-label">{option.label}</span>
+												</label>
+											{/each}
+										</fieldset>
+									</td>
+								</tr>
+								<tr>
+									<td class="label-cell">Page Max Width</td>
+									<td>
+										<fieldset class="radio-group">
+											{#each contentWidthOptions as option (option.value)}
+												<label class="radio-option">
+													<input
+														type="radio"
+														name="content-width"
+														value={option.value}
+														checked={settingsStore.contentWidth === option.value}
+														onchange={() => (settingsStore.contentWidth = option.value)}
+													/>
+													<span class="radio-label">{option.label}</span>
+												</label>
+											{/each}
+										</fieldset>
+									</td>
+								</tr>
+								<tr>
+									<td class="label-cell">Default Sort</td>
+									<td>
+										<fieldset class="radio-group">
+											{#each sortOrderOptions as option (option.value)}
+												<label class="radio-option">
+													<input
+														type="radio"
+														name="sort-order"
+														value={option.value}
+														checked={settingsStore.sortOrder === option.value}
+														onchange={() => (settingsStore.sortOrder = option.value)}
+													/>
+													<span class="radio-label">{option.label}</span>
+												</label>
+											{/each}
+										</fieldset>
+									</td>
+								</tr>
+							</tbody>
+						</table>
 					</div>
 
 					<div class="section">
@@ -503,6 +514,7 @@
 	}
 
 	.label-cell {
+		width: 175px;
 		white-space: nowrap;
 		vertical-align: top;
 		color: var(--color-text-secondary);
@@ -591,11 +603,11 @@
 
 	.radio-group {
 		border: none;
-		margin: 0.8rem 0 0 0;
+		margin: 0;
 		padding: 0;
 		display: flex;
-		flex-direction: row;
-		gap: 2rem;
+		flex-direction: column;
+		gap: 0.3rem;
 	}
 
 	.radio-option {
@@ -609,11 +621,7 @@
 	}
 
 	.radio-label {
-		font-weight: 600;
-	}
-
-	.radio-description {
-		color: var(--color-text-faded);
+		font-weight: normal;
 	}
 
 	textarea {

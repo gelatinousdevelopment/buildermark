@@ -19,6 +19,7 @@
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
+	import { settingsStore, type SortOrder } from '$lib/stores/settings.svelte';
 
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
 	type HiddenChangeHandler = (value: boolean) => void | Promise<void>;
@@ -104,7 +105,7 @@
 	let internalAgent = $state('');
 	let internalRating = $state(0);
 	let internalShowHidden = $state(false);
-	let internalOrder = $state('desc');
+	let internalOrder = $state(settingsStore.sortOrder);
 	let internalStart: number | undefined = $state(undefined);
 	let internalEnd: number | undefined = $state(undefined);
 	let detailed = $state(false);
@@ -125,7 +126,7 @@
 		internalAgent = agent ?? '';
 		internalRating = rating ?? 0;
 		internalShowHidden = showHidden ?? false;
-		internalOrder = order ?? 'desc';
+		internalOrder = (order as SortOrder) ?? settingsStore.sortOrder;
 		loading = autoload && !initialData;
 	});
 
@@ -146,7 +147,7 @@
 	});
 
 	$effect(() => {
-		if (order !== undefined) internalOrder = order;
+		if (order !== undefined) internalOrder = order as SortOrder;
 	});
 
 	const currentPage = $derived(page ?? internalPage);
@@ -282,8 +283,9 @@
 	}
 
 	function handleOrderChange(event: Event) {
-		const value = (event.currentTarget as HTMLSelectElement).value;
+		const value = (event.currentTarget as HTMLSelectElement).value as SortOrder;
 		internalOrder = value;
+		settingsStore.sortOrder = value;
 		internalPage = 1;
 		if (onOrderChange) {
 			onOrderChange(value);

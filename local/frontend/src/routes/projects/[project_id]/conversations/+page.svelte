@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import Conversations from '$lib/components/project/Conversations.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import type { ProjectDetail } from '$lib/types';
 
 	const projectId = $derived(page.params.project_id ?? '');
@@ -23,7 +24,7 @@
 		return Number.isInteger(parsed) ? parsed : 0;
 	});
 	const currentHidden = $derived(page.url.searchParams.get('hidden') === 'true');
-	const currentOrder = $derived(page.url.searchParams.get('order') === 'asc' ? 'asc' : 'desc');
+	const currentOrder = $derived(page.url.searchParams.get('order') ?? settingsStore.sortOrder);
 
 	const startMs = $derived.by(() => {
 		const raw = page.url.searchParams.get('start');

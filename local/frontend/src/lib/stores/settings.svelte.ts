@@ -4,7 +4,7 @@ import type { ExportMode, ExportFormat, ExportSortOrder } from '$lib/exportGener
 const STORAGE_KEY = 'buildermark_local_settings';
 
 export type ContentWidth = 'default' | 'wider' | 'full';
-export type CommitSortOrder = 'desc' | 'asc';
+export type SortOrder = 'desc' | 'asc';
 export type Theme = 'system' | 'light' | 'dark';
 
 interface Settings {
@@ -13,7 +13,7 @@ interface Settings {
 	activity_chart_count_answers: boolean;
 	activity_chart_count_child_conversations_separately: boolean;
 	content_width: ContentWidth;
-	commit_sort_order: CommitSortOrder;
+	sort_order: SortOrder;
 	theme: Theme;
 	export_mode: ExportMode;
 	export_format: ExportFormat;
@@ -28,7 +28,7 @@ const defaults: Settings = {
 	activity_chart_count_answers: false,
 	activity_chart_count_child_conversations_separately: true,
 	content_width: 'default',
-	commit_sort_order: 'desc',
+	sort_order: 'desc',
 	theme: 'system' as Theme,
 	export_mode: 'prompts-with-commits',
 	export_format: 'markdown',
@@ -47,6 +47,11 @@ function load(): Settings {
 			if (parsed.export_mode === 'just-prompts') {
 				parsed.export_mode = 'prompts-with-commits';
 			}
+			// Migrate renamed sort order key
+			if (parsed.commit_sort_order && !JSON.parse(raw).sort_order) {
+				parsed.sort_order = parsed.commit_sort_order;
+			}
+			delete parsed.commit_sort_order;
 			return parsed;
 		}
 	} catch {
@@ -63,7 +68,7 @@ function currentSettings(): Settings {
 		activity_chart_count_child_conversations_separately:
 			_activityChartCountChildConversationsSeparately,
 		content_width: _contentWidth,
-		commit_sort_order: _commitSortOrder,
+		sort_order: _sortOrder,
 		theme: _theme,
 		export_mode: _exportMode,
 		export_format: _exportFormat,
@@ -111,7 +116,7 @@ let _activityChartCountChildConversationsSeparately = $state(
 	initial.activity_chart_count_child_conversations_separately
 );
 let _contentWidth = $state(initial.content_width);
-let _commitSortOrder: CommitSortOrder = $state(initial.commit_sort_order);
+let _sortOrder: SortOrder = $state(initial.sort_order);
 let _theme: Theme = $state(initial.theme);
 let _exportMode: ExportMode = $state(initial.export_mode);
 let _exportFormat: ExportFormat = $state(initial.export_format);
@@ -132,7 +137,7 @@ if (browser) {
 		_activityChartCountChildConversationsSeparately =
 			updated.activity_chart_count_child_conversations_separately;
 		_contentWidth = updated.content_width;
-		_commitSortOrder = updated.commit_sort_order;
+		_sortOrder = updated.sort_order;
 		_theme = updated.theme;
 		_exportMode = updated.export_mode;
 		_exportFormat = updated.export_format;
@@ -181,11 +186,11 @@ export const settingsStore = {
 		applyContentWidth(v);
 		save();
 	},
-	get commitSortOrder(): CommitSortOrder {
-		return _commitSortOrder;
+	get sortOrder(): SortOrder {
+		return _sortOrder;
 	},
-	set commitSortOrder(v: CommitSortOrder) {
-		_commitSortOrder = v;
+	set sortOrder(v: SortOrder) {
+		_sortOrder = v;
 		save();
 	},
 	get theme(): Theme {
