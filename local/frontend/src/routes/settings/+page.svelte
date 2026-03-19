@@ -5,7 +5,8 @@
 	import {
 		settingsStore,
 		type ContentWidth,
-		type CommitSortOrder
+		type CommitSortOrder,
+		type Theme
 	} from '$lib/stores/settings.svelte';
 	import TeamServersSection from '$lib/TeamServersSection.svelte';
 
@@ -15,6 +16,12 @@
 		{ value: 'default', label: 'Default', description: '1540px' },
 		{ value: 'wider', label: 'Wider', description: '1800px' },
 		{ value: 'full', label: 'Full', description: '100%' }
+	];
+
+	const themeOptions: { value: Theme; label: string }[] = [
+		{ value: 'system', label: 'System' },
+		{ value: 'light', label: 'Light' },
+		{ value: 'dark', label: 'Dark' }
 	];
 
 	const commitSortOrderOptions: { value: CommitSortOrder; label: string }[] = [
@@ -135,6 +142,23 @@
 				<div class="column">
 					<div class="section">
 						<h2>User Interface</h2>
+						<p class="label">Theme</p>
+						<fieldset class="radio-group">
+							{#each themeOptions as option (option.value)}
+								<label class="radio-option">
+									<input
+										type="radio"
+										name="theme"
+										value={option.value}
+										checked={settingsStore.theme === option.value}
+										onchange={() => (settingsStore.theme = option.value)}
+									/>
+									<span class="radio-label">{option.label}</span>
+								</label>
+							{/each}
+						</fieldset>
+
+						<br />
 						<p class="label">Page Max Width</p>
 						<fieldset class="radio-group">
 							{#each contentWidthOptions as option (option.value)}

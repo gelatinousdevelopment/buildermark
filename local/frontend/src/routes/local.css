@@ -1,4 +1,5 @@
 :root {
+	/* Color scheme support */
 	color-scheme: light dark;
 
 	--accent-color: light-dark(#0066cc, #4d9aff);
@@ -163,6 +164,46 @@
 	--color-visibility-btn-bg: light-dark(#e8e8e8, #333);
 
 	--content-section-border-radius: 8px;
+}
+
+/* Theme overrides - these force a specific color scheme */
+html[data-theme='light'] {
+	color-scheme: light only;
+}
+
+html[data-theme='dark'] {
+	color-scheme: dark only;
+}
+
+/* Theme-dependent visibility utilities */
+.dark-only {
+	display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+	.light-only {
+		display: none;
+	}
+	.dark-only {
+		display: block;
+	}
+}
+
+/* Forced theme overrides */
+html[data-theme='light'] .light-only {
+	display: block;
+}
+
+html[data-theme='light'] .dark-only {
+	display: none;
+}
+
+html[data-theme='dark'] .light-only {
+	display: none;
+}
+
+html[data-theme='dark'] .dark-only {
+	display: block;
 }
 
 :root[data-content-width='wider'] {

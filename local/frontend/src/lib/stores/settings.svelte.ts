@@ -5,6 +5,7 @@ const STORAGE_KEY = 'buildermark_local_settings';
 
 export type ContentWidth = 'default' | 'wider' | 'full';
 export type CommitSortOrder = 'desc' | 'asc';
+export type Theme = 'system' | 'light' | 'dark';
 
 interface Settings {
 	commits_chart_scale_by_lines: boolean;
@@ -13,6 +14,7 @@ interface Settings {
 	activity_chart_count_child_conversations_separately: boolean;
 	content_width: ContentWidth;
 	commit_sort_order: CommitSortOrder;
+	theme: Theme;
 	export_mode: ExportMode;
 	export_format: ExportFormat;
 	export_preset_days: number | null;
@@ -27,6 +29,7 @@ const defaults: Settings = {
 	activity_chart_count_child_conversations_separately: true,
 	content_width: 'default',
 	commit_sort_order: 'desc',
+	theme: 'system' as Theme,
 	export_mode: 'prompts-with-commits',
 	export_format: 'markdown',
 	export_preset_days: 30,
@@ -61,6 +64,7 @@ function currentSettings(): Settings {
 			_activityChartCountChildConversationsSeparately,
 		content_width: _contentWidth,
 		commit_sort_order: _commitSortOrder,
+		theme: _theme,
 		export_mode: _exportMode,
 		export_format: _exportFormat,
 		export_preset_days: _exportPresetDays,
@@ -75,6 +79,17 @@ function save() {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSettings()));
 	} catch {
 		// ignore quota errors
+	}
+}
+
+function applyTheme(theme: Theme) {
+	if (!browser) return;
+	if (theme === 'light' || theme === 'dark') {
+		document.documentElement.setAttribute('data-theme', theme);
+		localStorage.setItem('theme', theme);
+	} else {
+		document.documentElement.removeAttribute('data-theme');
+		localStorage.removeItem('theme');
 	}
 }
 
@@ -97,6 +112,7 @@ let _activityChartCountChildConversationsSeparately = $state(
 );
 let _contentWidth = $state(initial.content_width);
 let _commitSortOrder: CommitSortOrder = $state(initial.commit_sort_order);
+let _theme: Theme = $state(initial.theme);
 let _exportMode: ExportMode = $state(initial.export_mode);
 let _exportFormat: ExportFormat = $state(initial.export_format);
 let _exportPresetDays: number | null = $state(initial.export_preset_days);
@@ -104,6 +120,7 @@ let _exportSortOrder: ExportSortOrder = $state(initial.export_sort_order);
 let _fileTypeCoverageShowAll = $state(initial.file_type_coverage_show_all);
 
 applyContentWidth(initial.content_width);
+applyTheme(initial.theme);
 
 if (browser) {
 	window.addEventListener('storage', (e) => {
@@ -116,12 +133,14 @@ if (browser) {
 			updated.activity_chart_count_child_conversations_separately;
 		_contentWidth = updated.content_width;
 		_commitSortOrder = updated.commit_sort_order;
+		_theme = updated.theme;
 		_exportMode = updated.export_mode;
 		_exportFormat = updated.export_format;
 		_exportPresetDays = updated.export_preset_days;
 		_exportSortOrder = updated.export_sort_order;
 		_fileTypeCoverageShowAll = updated.file_type_coverage_show_all;
 		applyContentWidth(updated.content_width);
+		applyTheme(updated.theme);
 	});
 }
 
@@ -167,6 +186,14 @@ export const settingsStore = {
 	},
 	set commitSortOrder(v: CommitSortOrder) {
 		_commitSortOrder = v;
+		save();
+	},
+	get theme(): Theme {
+		return _theme;
+	},
+	set theme(v: Theme) {
+		_theme = v;
+		applyTheme(v);
 		save();
 	},
 	get exportMode(): ExportMode {
