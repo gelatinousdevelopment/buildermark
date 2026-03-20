@@ -32,9 +32,18 @@ From the repository root:
 ./scripts/build-linux.sh --arch amd64             # x86_64 only
 ./scripts/build-linux.sh --arch arm64             # aarch64 only
 ./scripts/build-linux.sh --arch all --version 1.0.0
+./scripts/build-linux-vm.sh                       # build in Debian VM from macOS
+./scripts/build-linux-vm.sh --arch all --version 1.0.0
 ```
 
 Binaries are written to `apps/linux-cli/build/<arch>/buildermark`.
+
+On macOS, `scripts/build-linux-vm.sh` starts the `Debian Desktop` UTM VM, waits
+for `ssh debianvm`, updates the existing checkout at
+`/home/debian/github/buildermark`, overlays only local uncommitted files from
+the macOS checkout, runs the Linux build in Debian, copies the binaries back to
+`apps/linux-cli/build/<arch>/buildermark`, and leaves the VM running. If no
+`--arch` is passed, it builds for the Debian VM's native architecture.
 
 ## Install
 
