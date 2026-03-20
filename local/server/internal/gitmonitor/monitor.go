@@ -194,6 +194,7 @@ func (r *repoMonitor) run() {
 
 	ticker := time.NewTicker(r.reconcileInterval)
 	defer ticker.Stop()
+	lastReconcile := time.Now()
 
 	var debounce *time.Timer
 	var debounceC <-chan time.Time
@@ -232,7 +233,14 @@ func (r *repoMonitor) run() {
 				log.Printf("git monitor: watcher error for %s: %v", r.config.RepoPath, err)
 			}
 		case <-ticker.C:
-			r.refresh(watcher, "reconcile")
+			elapsed := time.Since(lastReconcile)
+			if elapsed > 2*r.reconcileInterval {
+				log.Printf("git monitor: sleep detected for %s (elapsed %s > %s), updating heads silently", r.config.RepoPath, elapsed, 2*r.reconcileInterval)
+				r.refreshSilent(watcher)
+			} else {
+				r.refresh(watcher, "reconcile")
+			}
+			lastReconcile = time.Now()
 		case <-debounceC:
 			debounceC = nil
 			r.refresh(watcher, "fs_event")
@@ -280,6 +288,24 @@ func (r *repoMonitor) refresh(watcher *fsnotify.Watcher, reason string) {
 		}
 		go r.onChange(r.ctx, change)
 	}
+}
+
+// refreshSilent updates lastHeads and watch paths without firing onChange.
+// Used after detecting a system sleep to avoid treating stale state as changes.
+func (r *repoMonitor) refreshSilent(watcher *fsnotify.Watcher) {
+	state, err := discoverRepoState(r.ctx, r.config)
+	if err != nil {
+		if r.ctx.Err() == nil {
+			log.Printf("git monitor: silent refresh for %s failed: %v", r.config.RepoPath, err)
+		}
+		return
+	}
+
+	r.applyWatchPaths(watcher, state.watchPaths)
+
+	r.mu.Lock()
+	r.lastHeads = state.branchHeads
+	r.mu.Unlock()
 }
 
 func (r *repoMonitor) applyWatchPaths(watcher *fsnotify.Watcher, paths []string) {
