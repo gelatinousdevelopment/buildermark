@@ -41,8 +41,8 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
 
     public ServerManager()
     {
-        _jobHandle = CreateJobObject(nint.Zero, null);
-        if (_jobHandle != nint.Zero)
+        _jobHandle = CreateJobObject(IntPtr.Zero, null);
+        if (_jobHandle != IntPtr.Zero)
         {
             var info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION
             {
@@ -114,7 +114,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
         var startInfo = new ProcessStartInfo
         {
             FileName = binaryPath,
-            Arguments = $"-addr :{Port} -db \"{dbPath}\"",
+            Arguments = $"-addr 127.0.0.1:{Port} -db \"{dbPath}\"",
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
@@ -151,7 +151,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
                     Status = ServerStatus.Error;
                     var stderr = _lastStderr.Trim();
                     ErrorMessage = stderr.Length > 0
-                        ? (stderr.Length > 200 ? stderr[..200] : stderr)
+                        ? (stderr.Length > 200 ? stderr.Substring(0, 200) : stderr)
                         : $"Exited ({exitCode})";
                 }
                 else
@@ -162,7 +162,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
 
             _process.Start();
 
-            if (_jobHandle != nint.Zero)
+            if (_jobHandle != IntPtr.Zero)
                 AssignProcessToJobObject(_jobHandle, _process.Handle);
 
             _process.BeginOutputReadLine();
@@ -188,7 +188,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             {
                 // On Windows, Process.Kill with entireProcessTree is the reliable way to stop.
                 // There is no SIGTERM equivalent; CloseMainWindow doesn't work for console apps.
-                _process.Kill(entireProcessTree: true);
+                _process.Kill();
                 _process.WaitForExit(5000);
             }
             catch { }
@@ -375,7 +375,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
             return alongside;
 
         // 2. System PATH.
-        var pathDirs = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? [];
+        var pathDirs = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? Array.Empty<string>();
         foreach (var dir in pathDirs)
         {
             var candidate = Path.Combine(dir, "buildermark-server.exe");
@@ -405,7 +405,7 @@ public sealed class ServerManager : INotifyPropertyChanged, IDisposable
     {
         Stop();
         _httpClient.Dispose();
-        if (_jobHandle != nint.Zero)
+        if (_jobHandle != IntPtr.Zero)
             CloseHandle(_jobHandle);
     }
 

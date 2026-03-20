@@ -2467,6 +2467,11 @@ func TestNormalizeWorktreePath(t *testing.T) {
 			path: "/home/user/repo/.claude/worktrees/fix-bug-123",
 			want: "/home/user/repo",
 		},
+		{
+			name: "windows worktree path",
+			path: `C:\Users\Test\github\buildermark\.claude\worktrees\fix-bug`,
+			want: `C:\Users\Test\github\buildermark`,
+		},
 	}
 
 	for _, tc := range tests {
@@ -2532,6 +2537,16 @@ func TestClaudeProjectDirName(t *testing.T) {
 			name: "dotfile in path",
 			path: "/home/user/.config/app",
 			want: "-home-user--config-app",
+		},
+		{
+			name: "windows backslashes",
+			path: `C:\Users\Test\github\buildermark`,
+			want: "C--Users-Test-github-buildermark",
+		},
+		{
+			name: "windows dots and backslashes",
+			path: `C:\Users\Test\.claude\projects`,
+			want: "C--Users-Test--claude-projects",
 		},
 	}
 

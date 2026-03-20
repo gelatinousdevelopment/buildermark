@@ -11,8 +11,8 @@
 #   ARCH             - "amd64", "arm64", or "all" (default: "all")
 #   VM_NAME          - UTM VM name (default: "Windows Desktop")
 #   SSH_HOST         - SSH host alias for the VM (default: "windowsvm")
-#   REMOTE_REPO_DIR  - existing repo checkout inside Windows
-#                      (default: "C:/Users/builder/github/buildermark")
+#   REMOTE_REPO_DIR  - repo checkout inside Windows (cloned automatically if missing)
+#                      (default: "C:/Users/Test/github/buildermark")
 #   SSH_WAIT_SECONDS - SSH readiness timeout in seconds (default: 180)
 #
 
@@ -27,7 +27,7 @@ DELETED_FILES_LIST=""
 ARCH="${ARCH:-all}"
 VM_NAME="${VM_NAME:-Windows Desktop}"
 SSH_HOST="${SSH_HOST:-windowsvm}"
-REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-C:/Users/builder/github/buildermark}"
+REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-C:/Users/Test/github/buildermark}"
 SSH_WAIT_SECONDS="${SSH_WAIT_SECONDS:-180}"
 
 while [[ $# -gt 0 ]]; do
@@ -102,7 +102,7 @@ wait_for_ssh() {
     deadline=$((SECONDS + SSH_WAIT_SECONDS))
 
     while true; do
-        if ssh_cmd true >/dev/null 2>&1; then
+        if ssh_cmd "echo ok" >/dev/null 2>&1; then
             return 0
         fi
 
@@ -133,18 +133,31 @@ update_remote_checkout() {
     repo_e="$(pwsh_escape "$repo")"
     branch_e="$(pwsh_escape "$branch")"
 
+    local remote_url
+    remote_url="$(git -C "$ROOT_DIR" remote get-url origin)"
+    local remote_url_e
+    remote_url_e="$(pwsh_escape "$remote_url")"
+
     script="\$ErrorActionPreference='Stop'; \
-if (-not (Test-Path -LiteralPath '$repo_e')) { throw 'Expected existing checkout at $repo_e' }; \
+if (-not (Test-Path -LiteralPath '$repo_e')) { \
+  \$parent = Split-Path -LiteralPath '$repo_e'; \
+  New-Item -ItemType Directory -Force -Path \$parent | Out-Null; \
+  git clone '$remote_url_e' '$repo_e'; \
+}; \
 Set-Location -LiteralPath '$repo_e'; \
 git reset --hard HEAD; \
 git clean -fd; \
 git fetch origin '$branch_e' --prune; \
-if (git show-ref --verify --quiet ('refs/heads/' + '$branch_e')) { \
+git show-ref --verify --quiet ('refs/heads/' + '$branch_e'); \
+if (\$LASTEXITCODE -eq 0) { \
   git checkout '$branch_e' | Out-Null \
-} elseif (git show-ref --verify --quiet ('refs/remotes/origin/' + '$branch_e')) { \
-  git checkout -B '$branch_e' ('origin/' + '$branch_e') | Out-Null \
 } else { \
-  throw \"Branch '$branch_e' not found in remote checkout.\" \
+  git show-ref --verify --quiet ('refs/remotes/origin/' + '$branch_e'); \
+  if (\$LASTEXITCODE -eq 0) { \
+    git checkout -B '$branch_e' ('origin/' + '$branch_e') | Out-Null \
+  } else { \
+    throw ('Branch $branch_e not found in remote checkout.') \
+  } \
 }; \
 git pull --ff-only origin '$branch_e'"
 
@@ -160,7 +173,7 @@ sync_changed_files_to_remote() {
     repo_e="$(pwsh_escape "$REMOTE_REPO_DIR")"
     script="\$ErrorActionPreference='Stop'; New-Item -ItemType Directory -Force -Path '$repo_e' | Out-Null; tar -xzf - -C '$repo_e'"
 
-    tar -czf - --null -T "$CHANGED_FILES_LIST" -C "$ROOT_DIR" | \
+    COPYFILE_DISABLE=1 tar -czf - --null -T "$CHANGED_FILES_LIST" -C "$ROOT_DIR" | \
         ssh_cmd "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$script\""
 }
 
@@ -176,7 +189,8 @@ apply_deleted_files_remote() {
         target="$repo/$rel_path"
         target_e="$(pwsh_escape "$target")"
         script="\$ErrorActionPreference='Stop'; if (Test-Path -LiteralPath '$target_e') { Remove-Item -LiteralPath '$target_e' -Recurse -Force }"
-        run_remote_powershell "$script"
+        # Use ssh -n to prevent SSH from consuming stdin (the while-read pipe).
+        ssh -n -o BatchMode=yes -o ConnectTimeout=5 "$SSH_HOST" "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$script\""
     done < "$DELETED_FILES_LIST"
 }
 
@@ -213,7 +227,7 @@ copy_artifacts_back() {
         rm -rf "$LOCAL_BUILD_DIR/$runtime"
         mkdir -p "$LOCAL_BUILD_DIR/$runtime"
 
-        ssh_cmd "tar -czf - -C '$remote_dir' ." | tar -xzf - -C "$LOCAL_BUILD_DIR/$runtime"
+        ssh_cmd "tar -czf - -C \"$remote_dir\" ." | tar -xzf - -C "$LOCAL_BUILD_DIR/$runtime"
         echo "  OK: $LOCAL_BUILD_DIR/$runtime"
     done
 }
@@ -235,10 +249,13 @@ prepare_file_lists
 resolve_runtimes
 
 step "Starting Windows VM"
-start_vm || echo "VM start helper returned non-zero; continuing to SSH readiness check in case the VM is already running."
-
-step "Waiting for SSH"
-wait_for_ssh
+if ssh_cmd "echo ok" >/dev/null 2>&1; then
+    echo "VM is already running and SSH-reachable; skipping start."
+else
+    start_vm || echo "VM start helper returned non-zero; continuing to SSH readiness check in case the VM is already running."
+    step "Waiting for SSH"
+    wait_for_ssh
+fi
 
 step "Updating Windows checkout"
 update_remote_checkout

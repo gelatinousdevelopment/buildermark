@@ -13,6 +13,7 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
 
     private readonly SparkleUpdater _updater;
     private bool _canCheckForUpdates = true;
+    private bool _automaticallyInstallsUpdates;
     private ServerManager? _serverManager;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -24,7 +25,7 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
     {
         _updater = new SparkleUpdater(AppcastUrl, new Ed25519Checker(NetSparkleUpdater.Enums.SecurityMode.Strict, EdDSAPublicKey))
         {
-            UIFactory = new NetSparkleUpdater.UI.WPF.UIFactory(null),
+            UIFactory = new NetSparkleUpdater.UI.WinForms.UIFactory(),
             RelaunchAfterUpdate = true,
         };
 
@@ -61,11 +62,10 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
 
     public bool AutomaticallyInstallsUpdates
     {
-        get => _updater.SilentMode != null;
+        get => _automaticallyInstallsUpdates;
         set
         {
-            // When enabled, NetSparkle downloads and installs silently.
-            _updater.SilentMode = value ? NetSparkleUpdater.Enums.SilentModeType.DownloadAndInstall : null;
+            _automaticallyInstallsUpdates = value;
             OnPropertyChanged();
         }
     }

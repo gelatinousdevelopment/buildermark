@@ -1,8 +1,8 @@
 #
-# Build the Buildermark Windows app for x64 and ARM64.
+# Build the Buildermark Windows app (.NET Framework 4.8, AnyCPU).
 #
 # Prerequisites:
-#   - .NET 8 SDK (https://dotnet.microsoft.com/download/dotnet/8.0)
+#   - .NET SDK (any recent version with SDK-style project support)
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\build.ps1
@@ -20,6 +20,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Drawing
 
 if (-not $Configuration) { $Configuration = "Release" }
 if (-not $Runtime) { $Runtime = "all" }
@@ -53,17 +54,13 @@ function Check-Tool($name, $installHint) {
 function Build-Runtime($rid) {
     $PublishDir = Join-Path $BuildDir $rid
 
-    Step "Restoring NuGet packages ($rid)"
-    dotnet restore $CsprojPath --runtime $rid
+    Step "Restoring NuGet packages"
+    dotnet restore $CsprojPath
 
-    Step "Publishing $Configuration ($rid)"
+    Step "Publishing $Configuration (AnyCPU -> $rid)"
     dotnet publish $CsprojPath `
         --configuration $Configuration `
-        --runtime $rid `
-        --self-contained true `
-        --output $PublishDir `
-        -p:PublishSingleFile=true `
-        -p:IncludeNativeLibrariesForSelfExtract=true
+        --output $PublishDir
 
     $ExePath = Join-Path $PublishDir "Buildermark.exe"
 
@@ -83,36 +80,42 @@ function Assert-FileExists($path, $description) {
 }
 
 function New-ResizedPngBytes($sourcePath, $size) {
-    $sourceImage = [System.Drawing.Image]::FromFile($sourcePath)
+    # Build the resize script as a string so that System.Drawing type references
+    # are resolved at invocation time (after Add-Type), not at parse time.
+    $script = @"
+param(`$srcPath, `$sz)
+`$sourceImage = [System.Drawing.Image]::FromFile(`$srcPath)
+try {
+    `$bitmap = New-Object System.Drawing.Bitmap `$sz, `$sz, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     try {
-        $bitmap = New-Object System.Drawing.Bitmap $size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+        `$bitmap.SetResolution(`$sourceImage.HorizontalResolution, `$sourceImage.VerticalResolution)
+        `$graphics = [System.Drawing.Graphics]::FromImage(`$bitmap)
         try {
-            $bitmap.SetResolution($sourceImage.HorizontalResolution, $sourceImage.VerticalResolution)
-            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-            try {
-                $graphics.Clear([System.Drawing.Color]::Transparent)
-                $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-                $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-                $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-                $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
-                $graphics.DrawImage($sourceImage, 0, 0, $size, $size)
-            } finally {
-                $graphics.Dispose()
-            }
-
-            $memoryStream = New-Object System.IO.MemoryStream
-            try {
-                $bitmap.Save($memoryStream, [System.Drawing.Imaging.ImageFormat]::Png)
-                return $memoryStream.ToArray()
-            } finally {
-                $memoryStream.Dispose()
-            }
+            `$graphics.Clear([System.Drawing.Color]::Transparent)
+            `$graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            `$graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+            `$graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            `$graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+            `$graphics.DrawImage(`$sourceImage, 0, 0, `$sz, `$sz)
         } finally {
-            $bitmap.Dispose()
+            `$graphics.Dispose()
+        }
+        `$memoryStream = New-Object System.IO.MemoryStream
+        try {
+            `$bitmap.Save(`$memoryStream, [System.Drawing.Imaging.ImageFormat]::Png)
+            return `$memoryStream.ToArray()
+        } finally {
+            `$memoryStream.Dispose()
         }
     } finally {
-        $sourceImage.Dispose()
+        `$bitmap.Dispose()
     }
+} finally {
+    `$sourceImage.Dispose()
+}
+"@
+    $block = [ScriptBlock]::Create($script)
+    return & $block $sourcePath $size
 }
 
 function New-IconEntry($sourcePath, $size) {
@@ -136,9 +139,9 @@ function Write-IcoFile($outputPath, $entries) {
 
             $offset = 6 + (16 * $entries.Count)
             foreach ($entry in $entries) {
-                $dimension = if ($entry.Size -ge 256) { 0 } else { [byte]$entry.Size }
-                $writer.Write($dimension)
-                $writer.Write($dimension)
+                $dimension = if ($entry.Size -ge 256) { [byte]0 } else { [byte]$entry.Size }
+                $writer.Write([byte]$dimension)
+                $writer.Write([byte]$dimension)
                 $writer.Write([byte]0)
                 $writer.Write([byte]0)
                 $writer.Write([UInt16]1)
@@ -149,7 +152,8 @@ function Write-IcoFile($outputPath, $entries) {
             }
 
             foreach ($entry in $entries) {
-                $writer.Write($entry.Bytes)
+                $bytes = [byte[]]$entry.Bytes
+                $writer.Write($bytes, 0, $bytes.Length)
             }
         } finally {
             $writer.Dispose()
@@ -165,14 +169,12 @@ function Update-AppIcon() {
     Assert-FileExists -path $TrayIconSourcePath -description "tray icon source"
     Assert-FileExists -path $LargeIconSourcePath -description "large app icon source"
 
-    Add-Type -AssemblyName System.Drawing
-
     $entries = @(
-        (New-IconEntry -sourcePath $TrayIconSourcePath -size 16)
-        (New-IconEntry -sourcePath $TrayIconSourcePath -size 24)
-        (New-IconEntry -sourcePath $TrayIconSourcePath -size 32)
-        (New-IconEntry -sourcePath $TrayIconSourcePath -size 48)
-        (New-IconEntry -sourcePath $TrayIconSourcePath -size 64)
+        (New-IconEntry -sourcePath $LargeIconSourcePath -size 16)
+        (New-IconEntry -sourcePath $LargeIconSourcePath -size 24)
+        (New-IconEntry -sourcePath $LargeIconSourcePath -size 32)
+        (New-IconEntry -sourcePath $LargeIconSourcePath -size 48)
+        (New-IconEntry -sourcePath $LargeIconSourcePath -size 64)
         (New-IconEntry -sourcePath $LargeIconSourcePath -size 128)
         (New-IconEntry -sourcePath $LargeIconSourcePath -size 256)
     )
@@ -186,7 +188,7 @@ function Update-AppIcon() {
 # ---------------------------------------------------------------------------
 
 Step "Checking prerequisites"
-Check-Tool "dotnet" "Install .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0"
+Check-Tool "dotnet" "Install .NET SDK: https://dotnet.microsoft.com/download"
 
 $dotnetVersion = dotnet --version
 Write-Host "  .NET SDK: $dotnetVersion"
@@ -210,7 +212,7 @@ if ($Runtime -eq "all") {
 Step "Cleaning previous build"
 # Stop any running instances that may lock files in the build directory
 Get-Process -Name "Buildermark", "buildermark-server" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-# Clean obj to avoid stale XAML cache
+# Clean obj to avoid stale build cache
 $ObjDir = Join-Path (Join-Path $ProjectDir "Buildermark") "obj"
 if (Test-Path $ObjDir) {
     Remove-Item -Recurse -Force $ObjDir

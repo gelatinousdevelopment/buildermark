@@ -68,7 +68,7 @@ Check-Tool "npm"    "Install Node.js: https://nodejs.org/"
 Check-Tool "go"     "Install Go: https://go.dev/dl/"
 Check-Tool "x86_64-w64-mingw32-gcc"   "Install LLVM MinGW: winget install -e --id MartinStorsjo.LLVM-MinGW.UCRT"
 Check-Tool "aarch64-w64-mingw32-gcc" "Install LLVM MinGW: winget install -e --id MartinStorsjo.LLVM-MinGW.UCRT"
-Check-Tool "dotnet" "Install .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0"
+Check-Tool "dotnet" "Install .NET SDK: https://dotnet.microsoft.com/download"
 
 # ---------------------------------------------------------------------------
 # 1. Build Svelte frontend

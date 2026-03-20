@@ -53,6 +53,9 @@ type conversationLogEntry struct {
 // worktreePathMarker identifies /.claude/worktrees/ in filesystem paths (from cwd fields).
 const worktreePathMarker = "/.claude/worktrees/"
 
+// worktreePathMarkerWindows identifies \.claude\worktrees\ in Windows filesystem paths.
+const worktreePathMarkerWindows = `\.claude\worktrees\`
+
 // worktreeDirMarker identifies --claude-worktrees- in encoded directory names.
 const worktreeDirMarker = "--claude-worktrees-"
 
@@ -63,13 +66,20 @@ func normalizeWorktreePath(path string) string {
 	if idx := strings.Index(path, worktreePathMarker); idx >= 0 {
 		return path[:idx]
 	}
+	if idx := strings.Index(path, worktreePathMarkerWindows); idx >= 0 {
+		return path[:idx]
+	}
 	return path
 }
 
 // claudeProjectDirName encodes a project path into a directory name matching
 // Claude Code's actual encoding: both "/" and "." are replaced with "-".
 func claudeProjectDirName(projectPath string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(projectPath, "/", "-"), ".", "-")
+	result := strings.ReplaceAll(projectPath, "\\", "-")
+	result = strings.ReplaceAll(result, "/", "-")
+	result = strings.ReplaceAll(result, ":", "-")
+	result = strings.ReplaceAll(result, ".", "-")
+	return result
 }
 
 func conversationPath(home, projectPath, sessionID string) string {

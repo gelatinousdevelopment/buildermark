@@ -2,8 +2,9 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <UseWPF>true</UseWPF>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
     <ApplicationIcon>Resources\buildermark.ico</ApplicationIcon>
     <AssemblyName>Buildermark</AssemblyName>
     <RootNamespace>Buildermark</RootNamespace>
@@ -13,21 +14,23 @@
     <Company>Gelatinous Development Studio</Company>
     <Product>Buildermark</Product>
     <Copyright>Copyright (c) 2026 Gelatinous Development Studio</Copyright>
-    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
-    <WindowsSdkPackageVersion>10.0.19041.41</WindowsSdkPackageVersion>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
-    <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.0.0" />
-    <PackageReference Include="NetSparkleUpdater.UI.WPF" Version="3.0.0" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Resources\buildermark.ico" />
+    <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.0.4" />
+    <PackageReference Include="NetSparkleUpdater.UI.WinForms.NetFramework" Version="3.0.6" />
+    <PackageReference Include="System.Text.Json" Version="9.0.8" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\buildermark.ico" />
   </ItemGroup>
 
 </Project>
