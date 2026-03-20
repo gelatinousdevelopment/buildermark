@@ -321,6 +321,7 @@
 		box-shadow: 0 2px 8px var(--color-popover-shadow);
 		z-index: 999;
 		white-space: nowrap;
+		overflow-x: hidden;
 		overflow-y: auto;
 	}
 

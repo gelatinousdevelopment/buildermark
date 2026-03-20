@@ -515,8 +515,8 @@
 		flex-direction: column;
 		flex: 1;
 		margin: 0 auto;
-		max-width: 100vw;
-		width: 100vw;
+		max-width: 100%;
+		width: 100%;
 	}
 
 	footer {
