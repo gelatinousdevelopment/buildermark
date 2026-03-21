@@ -64,8 +64,8 @@ type repoMonitor struct {
 
 	mu sync.Mutex
 
-	lastHeads    map[string]string
-	watchedPaths map[string]struct{}
+	lastHeads   map[string]string
+	watchedDirs map[string]struct{}
 }
 
 type repoState struct {
@@ -167,8 +167,8 @@ func newRepoMonitor(parent context.Context, cfg RepoConfig, debounce, reconcile 
 		config:            cfg,
 		debounceInterval:  debounce,
 		reconcileInterval: reconcile,
-		lastHeads:         make(map[string]string),
-		watchedPaths:      make(map[string]struct{}),
+		lastHeads:   make(map[string]string),
+		watchedDirs: make(map[string]struct{}),
 	}
 }
 
@@ -211,6 +211,7 @@ func (r *repoMonitor) run() {
 			}
 		}
 		debounce.Reset(r.debounceInterval)
+		debounceC = debounce.C
 	}
 
 	for {
@@ -308,42 +309,42 @@ func (r *repoMonitor) refreshSilent(watcher *fsnotify.Watcher) {
 	r.mu.Unlock()
 }
 
-func (r *repoMonitor) applyWatchPaths(watcher *fsnotify.Watcher, paths []string) {
-	next := make(map[string]struct{}, len(paths))
-	for _, path := range paths {
-		path = filepath.Clean(strings.TrimSpace(path))
-		if path == "" {
+func (r *repoMonitor) applyWatchPaths(watcher *fsnotify.Watcher, dirs []string) {
+	next := make(map[string]struct{}, len(dirs))
+	for _, dir := range dirs {
+		dir = filepath.Clean(strings.TrimSpace(dir))
+		if dir == "" {
 			continue
 		}
-		next[path] = struct{}{}
+		next[dir] = struct{}{}
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for path := range r.watchedPaths {
-		if _, ok := next[path]; ok {
+	for dir := range r.watchedDirs {
+		if _, ok := next[dir]; ok {
 			continue
 		}
-		if err := watcher.Remove(path); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
-			log.Printf("git monitor: remove watch %s: %v", path, err)
+		if err := watcher.Remove(dir); err != nil && !errors.Is(err, fsnotify.ErrNonExistentWatch) {
+			log.Printf("git monitor: remove watch %s: %v", dir, err)
 		}
-		delete(r.watchedPaths, path)
+		delete(r.watchedDirs, dir)
 	}
 
-	for path := range next {
-		if _, ok := r.watchedPaths[path]; ok {
+	for dir := range next {
+		if _, ok := r.watchedDirs[dir]; ok {
 			continue
 		}
-		if _, err := os.Stat(path); err != nil {
+		if _, err := os.Stat(dir); err != nil {
 			continue
 		}
-		if err := watcher.Add(path); err != nil {
-			log.Printf("git monitor: add watch %s: %v", path, err)
+		if err := watcher.Add(dir); err != nil {
+			log.Printf("git monitor: add watch %s: %v", dir, err)
 			continue
 		}
-		r.watchedPaths[path] = struct{}{}
-		log.Printf("git monitor: watching repo_id=%s repo_path=%s path=%s", r.config.RepoID, r.config.RepoPath, path)
+		r.watchedDirs[dir] = struct{}{}
+		log.Printf("git monitor: watching repo_id=%s repo_path=%s dir=%s", r.config.RepoID, r.config.RepoPath, dir)
 	}
 }
 
@@ -371,23 +372,32 @@ func discoverRepoState(ctx context.Context, cfg RepoConfig) (repoState, error) {
 		branches[defaultBranch] = struct{}{}
 	}
 
-	watchPaths := make([]string, 0, len(worktrees)+len(branches)*2)
-
 	for _, wt := range worktrees {
 		if wt.activeBranch != "" {
 			branches[wt.activeBranch] = struct{}{}
 		}
-		watchPaths = append(
-			watchPaths,
-			filepath.Join(wt.gitDir, "logs", "HEAD"),
-		)
 	}
 
-	for branch := range branches {
-		watchPaths = append(
-			watchPaths,
-			filepath.Join(commonDir, "logs", "refs", "heads", branch),
-		)
+	// Watch directories rather than individual files. Many programs
+	// (including git) update files atomically via write-to-temp-then-rename,
+	// which silently removes fsnotify watches on individual files.
+	// Additionally, on macOS/kqueue, directory watches only fire for
+	// structural changes (create/delete/rename), not for writes to existing
+	// files. Git updates refs/heads/<branch> atomically (creating a .lock
+	// file then renaming), which triggers directory events reliably.
+	watchDirs := make(map[string]struct{}, len(worktrees)+2)
+	for _, wt := range worktrees {
+		// Watch <gitDir>/logs/ for worktree HEAD reflog changes.
+		watchDirs[filepath.Join(wt.gitDir, "logs")] = struct{}{}
+	}
+	// Watch refs/heads/ for atomic ref updates (the primary signal).
+	watchDirs[filepath.Join(commonDir, "refs", "heads")] = struct{}{}
+	// Watch logs/refs/heads/ for reflog updates.
+	watchDirs[filepath.Join(commonDir, "logs", "refs", "heads")] = struct{}{}
+
+	watchPaths := make([]string, 0, len(watchDirs))
+	for dir := range watchDirs {
+		watchPaths = append(watchPaths, dir)
 	}
 
 	heads := make(map[string]string, len(branches))
