@@ -6,11 +6,16 @@ import (
 	"fmt"
 )
 
-// GetCommitDetailFilesInRange returns raw detail_files JSON strings from commits
-// in the given project and time range where detail_files is not empty.
-func GetCommitDetailFilesInRange(ctx context.Context, db *sql.DB, projectID string, startSec, endSec int64) ([]string, error) {
+type CommitDetailFilesRow struct {
+	DetailFiles           string
+	OverrideAgentPercents *string
+}
+
+// GetCommitDetailFilesInRange returns raw detail_files JSON and override data
+// from commits in the given project and time range where detail_files is not empty.
+func GetCommitDetailFilesInRange(ctx context.Context, db *sql.DB, projectID string, startSec, endSec int64) ([]CommitDetailFilesRow, error) {
 	query := `
-SELECT detail_files
+SELECT detail_files, override_agent_percents
 FROM commits
 WHERE project_id = ?
   AND authored_at >= ?
@@ -24,13 +29,17 @@ WHERE project_id = ?
 	}
 	defer rows.Close()
 
-	var results []string
+	var results []CommitDetailFilesRow
 	for rows.Next() {
-		var detailFiles string
-		if err := rows.Scan(&detailFiles); err != nil {
+		var row CommitDetailFilesRow
+		var override sql.NullString
+		if err := rows.Scan(&row.DetailFiles, &override); err != nil {
 			return nil, fmt.Errorf("scan commit detail files: %w", err)
 		}
-		results = append(results, detailFiles)
+		if override.Valid {
+			row.OverrideAgentPercents = &override.String
+		}
+		results = append(results, row)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate commit detail files: %w", err)

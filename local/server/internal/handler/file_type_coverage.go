@@ -49,15 +49,16 @@ func (s *Server) handleGetFileTypeCoverage(w http.ResponseWriter, r *http.Reques
 	type extData struct {
 		uniqueFiles map[string]struct{}
 		totalLines  int
-		agentLines  map[string]int // agent name -> lines
+		agentLines  map[string]float64 // agent name -> effective lines
 	}
 	byExt := make(map[string]*extData)
 
-	for _, raw := range detailFilesJSON {
+	for _, row := range detailFilesJSON {
 		var files []commitFileCoverage
-		if err := json.Unmarshal([]byte(raw), &files); err != nil {
+		if err := json.Unmarshal([]byte(row.DetailFiles), &files); err != nil {
 			continue
 		}
+		override := parseOverrideAgentPercents(row.OverrideAgentPercents, "")
 		for _, f := range files {
 			if f.Ignored || f.LinesTotal == 0 {
 				continue
@@ -73,14 +74,23 @@ func (s *Server) handleGetFileTypeCoverage(w http.ResponseWriter, r *http.Reques
 			if !ok {
 				data = &extData{
 					uniqueFiles: make(map[string]struct{}),
-					agentLines:  make(map[string]int),
+					agentLines:  make(map[string]float64),
 				}
 				byExt[ext] = data
 			}
 			data.uniqueFiles[f.Path] = struct{}{}
 			data.totalLines += f.LinesTotal
+			if len(override) > 0 {
+				for agent, pct := range override {
+					if pct <= 0 {
+						continue
+					}
+					data.agentLines[agent] += float64(f.LinesTotal) * float64(pct) / 100
+				}
+				continue
+			}
 			for _, seg := range f.AgentSegments {
-				data.agentLines[seg.Agent] += seg.LinesFromAgent
+				data.agentLines[seg.Agent] += float64(seg.LinesFromAgent)
 			}
 		}
 	}
@@ -94,31 +104,33 @@ func (s *Server) handleGetFileTypeCoverage(w http.ResponseWriter, r *http.Reques
 			TotalLines: data.totalLines,
 		}
 
-		var agentLinesSum int
-		for agent, lines := range data.agentLines {
+		roundedLinesByAgent := roundFloatAgentLines(data.agentLines, data.totalLines)
+		agentNames := make([]string, 0, len(data.agentLines))
+		for agent := range data.agentLines {
+			agentNames = append(agentNames, agent)
+		}
+		sort.Strings(agentNames)
+
+		agentLinesSum := 0.0
+		for _, agent := range agentNames {
+			lines := roundedLinesByAgent[agent]
 			pct := 0.0
 			if data.totalLines > 0 {
-				pct = float64(lines) / float64(data.totalLines) * 100
+				pct = data.agentLines[agent] / float64(data.totalLines) * 100
 			}
 			row.AgentSegments = append(row.AgentSegments, agentCoverageSegment{
 				Agent:          agent,
 				LinesFromAgent: lines,
 				LinePercent:    pct,
 			})
-			agentLinesSum += lines
-		}
-
-		// Sort agent segments alphabetically for consistent ordering across rows.
-		sort.Slice(row.AgentSegments, func(i, j int) bool {
-			return row.AgentSegments[i].Agent < row.AgentSegments[j].Agent
-		})
-
-		manualLines := data.totalLines - agentLinesSum
-		if manualLines < 0 {
-			manualLines = 0
+			agentLinesSum += data.agentLines[agent]
 		}
 		if data.totalLines > 0 {
-			row.ManualPercent = float64(manualLines) / float64(data.totalLines) * 100
+			manualPercent := 100 - (agentLinesSum/float64(data.totalLines))*100
+			if manualPercent < 0 {
+				manualPercent = 0
+			}
+			row.ManualPercent = manualPercent
 		}
 
 		rows = append(rows, row)
@@ -130,4 +142,71 @@ func (s *Server) handleGetFileTypeCoverage(w http.ResponseWriter, r *http.Reques
 	})
 
 	writeSuccess(w, http.StatusOK, rows)
+}
+
+func roundFloatAgentLines(agentLines map[string]float64, maxTotal int) map[string]int {
+	if len(agentLines) == 0 || maxTotal <= 0 {
+		return nil
+	}
+
+	type allocation struct {
+		agent     string
+		lines     int
+		remainder float64
+	}
+
+	agents := make([]string, 0, len(agentLines))
+	for agent, lines := range agentLines {
+		if lines > 0 {
+			agents = append(agents, agent)
+		}
+	}
+	if len(agents) == 0 {
+		return nil
+	}
+	sort.Strings(agents)
+
+	allocations := make([]allocation, 0, len(agents))
+	totalExact := 0.0
+	baseSum := 0
+	for _, agent := range agents {
+		exact := agentLines[agent]
+		lines := int(exact)
+		allocations = append(allocations, allocation{
+			agent:     agent,
+			lines:     lines,
+			remainder: exact - float64(lines),
+		})
+		totalExact += exact
+		baseSum += lines
+	}
+
+	target := int(totalExact + 0.5)
+	if target < 0 {
+		target = 0
+	}
+	if target > maxTotal {
+		target = maxTotal
+	}
+
+	sort.SliceStable(allocations, func(i, j int) bool {
+		if allocations[i].remainder != allocations[j].remainder {
+			return allocations[i].remainder > allocations[j].remainder
+		}
+		return allocations[i].agent < allocations[j].agent
+	})
+
+	for i := 0; i < target-baseSum && i < len(allocations); i++ {
+		allocations[i].lines++
+	}
+
+	sort.SliceStable(allocations, func(i, j int) bool {
+		return allocations[i].agent < allocations[j].agent
+	})
+
+	out := make(map[string]int, len(allocations))
+	for _, alloc := range allocations {
+		out[alloc.agent] = alloc.lines
+	}
+	return out
 }

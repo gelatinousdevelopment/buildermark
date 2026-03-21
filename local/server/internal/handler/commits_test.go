@@ -1854,6 +1854,170 @@ func TestBuildDailySummaryWindow_CustomWindow(t *testing.T) {
 	}
 }
 
+func TestBuildDailySummaryWindow_UsesOverrideAgentPercents(t *testing.T) {
+	loc := time.UTC
+	windowEnd := time.Date(2026, time.March, 21, 12, 0, 0, 0, loc)
+
+	overrideCommit := effectiveCommitCoverage(
+		projectCommitCoverage{
+			ProjectID:             "p1",
+			CommitHash:            "override",
+			Subject:               "override commit",
+			AuthoredAtUnixMs:      time.Date(2026, time.March, 21, 8, 0, 0, 0, loc).UnixMilli(),
+			LinesTotal:            961,
+			LinesFromAgent:        738,
+			LinePercent:           percentage(738, 961),
+			OverrideAgentPercents: map[string]int{"claude": 100},
+		},
+		[]agentCoverageSegment{{
+			Agent:          "claude",
+			LinesFromAgent: 738,
+			LinePercent:    percentage(738, 961),
+		}},
+	)
+	if got := overrideCommit.LinesFromAgent; got != 961 {
+		t.Fatalf("override linesFromAgent = %d, want 961", got)
+	}
+	if len(overrideCommit.AgentSegments) != 1 || overrideCommit.AgentSegments[0].LinesFromAgent != 961 {
+		t.Fatalf("override agent segments = %#v, want claude=961", overrideCommit.AgentSegments)
+	}
+
+	normalCommit := effectiveCommitCoverage(
+		projectCommitCoverage{
+			ProjectID:        "p1",
+			CommitHash:       "normal",
+			Subject:          "normal commit",
+			AuthoredAtUnixMs: time.Date(2026, time.March, 21, 9, 0, 0, 0, loc).UnixMilli(),
+			LinesTotal:       5,
+			LinesFromAgent:   4,
+			LinePercent:      percentage(4, 5),
+		},
+		[]agentCoverageSegment{{
+			Agent:          "claude",
+			LinesFromAgent: 4,
+			LinePercent:    percentage(4, 5),
+		}},
+	)
+
+	result := buildDailySummaryWindow([]projectCommitCoverage{overrideCommit, normalCommit}, 1, loc, &windowEnd, false)
+	if len(result) != 1 {
+		t.Fatalf("len = %d, want 1", len(result))
+	}
+
+	day := result[0]
+	if got := day.LinesTotal; got != 966 {
+		t.Fatalf("linesTotal = %d, want 966", got)
+	}
+	if got := day.LinesFromAgent; got != 965 {
+		t.Fatalf("linesFromAgent = %d, want 965", got)
+	}
+	if len(day.AgentSegments) != 1 {
+		t.Fatalf("agentSegments len = %d, want 1", len(day.AgentSegments))
+	}
+	if got := day.AgentSegments[0].Agent; got != "claude" {
+		t.Fatalf("agent = %q, want %q", got, "claude")
+	}
+	if got := day.AgentSegments[0].LinesFromAgent; got != 965 {
+		t.Fatalf("agent linesFromAgent = %d, want 965", got)
+	}
+}
+
+func TestGetFileTypeCoverage_UsesOverrideAgentPercents(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	detailFiles, err := json.Marshal([]commitFileCoverage{{
+		Path:       "cmd/app/main.go",
+		LinesTotal: 10,
+		AgentSegments: []agentCoverageSegment{{
+			Agent:          "claude",
+			LinesFromAgent: 7,
+			LinePercent:    70,
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("Marshal detail files: %v", err)
+	}
+
+	if err := db.UpsertCommit(ctx, s.DB, db.Commit{
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      "override-hash",
+		Subject:         "override commit",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
+		AuthoredAt:      time.Date(2026, time.March, 21, 8, 0, 0, 0, time.UTC).Unix(),
+		LinesTotal:      10,
+		LinesFromAgent:  7,
+		CoverageVersion: currentCommitCoverageVersion,
+		DetailFiles:     string(detailFiles),
+	}); err != nil {
+		t.Fatalf("UpsertCommit: %v", err)
+	}
+	if err := db.SetCommitOverrideAgentPercents(ctx, s.DB, projectID, "override-hash", map[string]int{"claude": 100}); err != nil {
+		t.Fatalf("SetCommitOverrideAgentPercents: %v", err)
+	}
+
+	startMs := time.Date(2026, time.March, 21, 0, 0, 0, 0, time.UTC).UnixMilli()
+	endMs := time.Date(2026, time.March, 22, 0, 0, 0, 0, time.UTC).UnixMilli()
+	req := httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/api/v1/projects/%s/file-type-coverage?start=%d&end=%d", projectID, startMs, endMs),
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	rows := env.Data.([]any)
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	row := rows[0].(map[string]any)
+	if got := row["extension"].(string); got != ".go" {
+		t.Fatalf("extension = %q, want %q", got, ".go")
+	}
+	if got := int(row["totalLines"].(float64)); got != 10 {
+		t.Fatalf("totalLines = %d, want 10", got)
+	}
+	if got := row["manualPercent"].(float64); got != 0 {
+		t.Fatalf("manualPercent = %v, want 0", got)
+	}
+
+	segments := row["agentSegments"].([]any)
+	if len(segments) != 1 {
+		t.Fatalf("agentSegments len = %d, want 1", len(segments))
+	}
+	segment := segments[0].(map[string]any)
+	if got := segment["agent"].(string); got != "claude" {
+		t.Fatalf("agent = %q, want %q", got, "claude")
+	}
+	if got := int(segment["linesFromAgent"].(float64)); got != 10 {
+		t.Fatalf("linesFromAgent = %d, want 10", got)
+	}
+	if got := segment["linePercent"].(float64); got != 100 {
+		t.Fatalf("linePercent = %v, want 100", got)
+	}
+}
+
 func TestListProjectCommitsForProject_DailyWindowDaysQuery(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()

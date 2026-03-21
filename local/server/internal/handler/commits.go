@@ -104,10 +104,7 @@ func (s *Server) handleListProjectCommits(w http.ResponseWriter, r *http.Request
 				rp = repoProject
 			}
 			cov := dbCommitToCoverage(c, rp)
-			if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
-				cov.AgentSegments = segs
-			}
-			all = append(all, cov)
+			all = append(all, effectiveCommitCoverage(cov, agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal)))
 		}
 	}
 
@@ -784,30 +781,14 @@ func (s *Server) writeCommitResponse(
 	paged := make([]projectCommitCoverage, 0, len(dbCommits))
 	for _, c := range dbCommits {
 		cov := dbCommitToCoverage(c, repoProject)
-		if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
-			cov.AgentSegments = segs
-		} else if c.LinesFromAgent > 0 {
-			cov.AgentSegments = []agentCoverageSegment{{
-				Agent: "unknown", LinesFromAgent: c.LinesFromAgent,
-				LinePercent: percentage(c.LinesFromAgent, c.LinesTotal),
-			}}
-		}
-		paged = append(paged, cov)
+		paged = append(paged, effectiveCommitCoverage(cov, agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal)))
 	}
 
 	// Compute summary from all branch commits.
 	allCoverage := make([]projectCommitCoverage, 0, len(branchCommits))
 	for _, c := range branchCommits {
 		cov := dbCommitToCoverage(c, repoProject)
-		if segs := agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal); len(segs) > 0 {
-			cov.AgentSegments = segs
-		} else if c.LinesFromAgent > 0 {
-			cov.AgentSegments = []agentCoverageSegment{{
-				Agent: "unknown", LinesFromAgent: c.LinesFromAgent,
-				LinePercent: percentage(c.LinesFromAgent, c.LinesTotal),
-			}}
-		}
-		allCoverage = append(allCoverage, cov)
+		allCoverage = append(allCoverage, effectiveCommitCoverage(cov, agentSegmentsFromDBCoverage(agentCovMap[c.ID], c.LinesTotal)))
 	}
 
 	// Build a set for fast user email lookup.
