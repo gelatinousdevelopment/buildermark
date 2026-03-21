@@ -24,7 +24,7 @@ sealed class SettingsForm : Form
 
         Text = "Buildermark Settings";
         Width = 400;
-        Height = 380;
+        Height = 320;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;

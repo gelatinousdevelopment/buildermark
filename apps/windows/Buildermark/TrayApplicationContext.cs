@@ -60,7 +60,11 @@ sealed class TrayApplicationContext : ApplicationContext
         };
 
         _trayIcon.ContextMenuStrip = menu;
-        _trayIcon.DoubleClick += (_, _) => OpenInBrowser($"http://localhost:{ServerManager.Port}");
+        _trayIcon.Click += (_, e) =>
+        {
+            if (e is MouseEventArgs me && me.Button == MouseButtons.Left)
+                OpenInBrowser($"http://localhost:{ServerManager.Port}");
+        };
 
         // Wire notifications
         _serverManager.NotificationReceived += OnServerNotification;
@@ -83,8 +87,16 @@ sealed class TrayApplicationContext : ApplicationContext
     private static Icon LoadEmbeddedIcon()
     {
         var stream = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream("Buildermark.Resources.tray-icon.png");
+        if (stream != null)
+        {
+            using var bitmap = new Bitmap(stream);
+            return Icon.FromHandle(bitmap.GetHicon());
+        }
+
+        var icoStream = Assembly.GetExecutingAssembly()
             .GetManifestResourceStream("Buildermark.Resources.buildermark.ico");
-        return stream != null ? new Icon(stream) : SystemIcons.Application;
+        return icoStream != null ? new Icon(icoStream) : SystemIcons.Application;
     }
 
     private void OnServerNotification(string title, string body, string? url)
