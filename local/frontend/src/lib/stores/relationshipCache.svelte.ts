@@ -82,18 +82,23 @@ export const relationshipCache = {
 		commitHashes: string[],
 		conversationIds: string[]
 	): Promise<void> {
-		if (commitHashes.length === 0) return;
+		if (commitHashes.length === 0 && conversationIds.length === 0) return;
 
-		// Filter out commit hashes already in cache.
 		const entry = getCacheEntry(projectId);
 		let hashesToFetch = commitHashes;
+		let conversationsToFetch = conversationIds;
 		if (entry) {
 			hashesToFetch = commitHashes.filter((h) => !(h in entry.commitToConversations));
+			conversationsToFetch = conversationIds.filter((id) => !(id in entry.conversationToCommits));
 		}
-		if (hashesToFetch.length === 0) return;
+		if (hashesToFetch.length === 0 && conversationsToFetch.length === 0) return;
 
 		try {
-			const links = await getCommitConversationLinks(projectId, hashesToFetch, conversationIds);
+			const links = await getCommitConversationLinks(
+				projectId,
+				hashesToFetch,
+				conversationsToFetch
+			);
 			mergeCacheEntry(projectId, {
 				commitToConversations: links.commitToConversations,
 				conversationToCommits: links.conversationToCommits,
