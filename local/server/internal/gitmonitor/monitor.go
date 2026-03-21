@@ -381,18 +381,14 @@ func discoverRepoState(ctx context.Context, cfg RepoConfig) (repoState, error) {
 	// Watch directories rather than individual files. Many programs
 	// (including git) update files atomically via write-to-temp-then-rename,
 	// which silently removes fsnotify watches on individual files.
-	// Additionally, on macOS/kqueue, directory watches only fire for
-	// structural changes (create/delete/rename), not for writes to existing
-	// files. Git updates refs/heads/<branch> atomically (creating a .lock
-	// file then renaming), which triggers directory events reliably.
-	watchDirs := make(map[string]struct{}, len(worktrees)+2)
+	// We watch the reflog directories since git appends to reflog files
+	// on every commit, and directory watches reliably fire for these writes.
+	watchDirs := make(map[string]struct{}, len(worktrees)+1)
 	for _, wt := range worktrees {
 		// Watch <gitDir>/logs/ for worktree HEAD reflog changes.
 		watchDirs[filepath.Join(wt.gitDir, "logs")] = struct{}{}
 	}
-	// Watch refs/heads/ for atomic ref updates (the primary signal).
-	watchDirs[filepath.Join(commonDir, "refs", "heads")] = struct{}{}
-	// Watch logs/refs/heads/ for reflog updates.
+	// Watch logs/refs/heads/ for branch reflog updates.
 	watchDirs[filepath.Join(commonDir, "logs", "refs", "heads")] = struct{}{}
 
 	watchPaths := make([]string, 0, len(watchDirs))

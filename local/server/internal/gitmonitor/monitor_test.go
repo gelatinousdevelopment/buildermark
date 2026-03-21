@@ -69,7 +69,6 @@ func TestDiscoverRepoStateIncludesDefaultAndWorktreeActiveBranches(t *testing.T)
 	wantDirs := []string{
 		filepath.Join(mainGitDir, "logs"),
 		filepath.Join(featureGitDir, "logs"),
-		filepath.Join(commonDir, "refs", "heads"),
 		filepath.Join(commonDir, "logs", "refs", "heads"),
 	}
 	for _, wantDir := range wantDirs {
