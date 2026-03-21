@@ -64,14 +64,16 @@ type repoMonitor struct {
 
 	mu sync.Mutex
 
-	lastHeads   map[string]string
-	watchedDirs map[string]struct{}
+	lastHeads       map[string]string
+	watchedDirs     map[string]struct{}
+	trackedBranches map[string]struct{} // branch names to filter ref events
 }
 
 type repoState struct {
 	commonDir   string
 	branchHeads map[string]string
 	watchPaths  []string
+	branches    map[string]struct{} // tracked branch names for event filtering
 }
 
 type worktreeState struct {
@@ -167,8 +169,9 @@ func newRepoMonitor(parent context.Context, cfg RepoConfig, debounce, reconcile 
 		config:            cfg,
 		debounceInterval:  debounce,
 		reconcileInterval: reconcile,
-		lastHeads:   make(map[string]string),
-		watchedDirs: make(map[string]struct{}),
+		lastHeads:       make(map[string]string),
+		watchedDirs:     make(map[string]struct{}),
+		trackedBranches: make(map[string]struct{}),
 	}
 }
 
@@ -228,6 +231,21 @@ func (r *repoMonitor) run() {
 			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
 				continue
 			}
+			// Filter events in refs/heads/: only trigger for tracked
+			// branch names, ignoring .lock files and untracked branches.
+			base := filepath.Base(event.Name)
+			if strings.HasSuffix(base, ".lock") {
+				continue
+			}
+			if filepath.Base(filepath.Dir(event.Name)) == "heads" &&
+				filepath.Base(filepath.Dir(filepath.Dir(event.Name))) == "refs" {
+				r.mu.Lock()
+				_, tracked := r.trackedBranches[base]
+				r.mu.Unlock()
+				if !tracked {
+					continue
+				}
+			}
 			resetDebounce()
 		case err, ok := <-watcher.Errors:
 			if ok && !errors.Is(err, os.ErrClosed) {
@@ -266,6 +284,7 @@ func (r *repoMonitor) refresh(watcher *fsnotify.Watcher, reason string) {
 		prev[branch] = hash
 	}
 	r.lastHeads = state.branchHeads
+	r.trackedBranches = state.branches
 	r.mu.Unlock()
 
 	for branch, head := range state.branchHeads {
@@ -306,6 +325,7 @@ func (r *repoMonitor) refreshSilent(watcher *fsnotify.Watcher) {
 
 	r.mu.Lock()
 	r.lastHeads = state.branchHeads
+	r.trackedBranches = state.branches
 	r.mu.Unlock()
 }
 
@@ -381,13 +401,15 @@ func discoverRepoState(ctx context.Context, cfg RepoConfig) (repoState, error) {
 	// Watch directories rather than individual files. Many programs
 	// (including git) update files atomically via write-to-temp-then-rename,
 	// which silently removes fsnotify watches on individual files.
-	// We watch the reflog directories since git appends to reflog files
-	// on every commit, and directory watches reliably fire for these writes.
-	watchDirs := make(map[string]struct{}, len(worktrees)+1)
+	watchDirs := make(map[string]struct{}, len(worktrees)+2)
 	for _, wt := range worktrees {
 		// Watch <gitDir>/logs/ for worktree HEAD reflog changes.
 		watchDirs[filepath.Join(wt.gitDir, "logs")] = struct{}{}
 	}
+	// Watch refs/heads/ for atomic ref updates — the most reliable signal,
+	// since git always creates a .lock file then renames it. Events are
+	// filtered in the run loop to only tracked branches (ignoring .lock files).
+	watchDirs[filepath.Join(commonDir, "refs", "heads")] = struct{}{}
 	// Watch logs/refs/heads/ for branch reflog updates.
 	watchDirs[filepath.Join(commonDir, "logs", "refs", "heads")] = struct{}{}
 
@@ -411,6 +433,7 @@ func discoverRepoState(ctx context.Context, cfg RepoConfig) (repoState, error) {
 		commonDir:   commonDir,
 		branchHeads: heads,
 		watchPaths:  dedupePaths(watchPaths),
+		branches:    branches,
 	}, nil
 }
 
