@@ -48,6 +48,7 @@
 
 	let projectId = $derived(page.params.project_id);
 	let showReadOnlyDialog = $state(READ_ONLY);
+	let pillButton = $state<HTMLButtonElement>();
 	let bigBrand = $derived(data.projects && data.projects.length == 0);
 	const projectTabs = [
 		{
@@ -192,8 +193,12 @@
 		{#if READ_ONLY}
 			<section>
 				<nav class="right pill">
-					<button class="read-only-pill" onclick={() => (showReadOnlyDialog = true)}>
-						Read-only mode
+					<button
+						class="read-only-pill"
+						bind:this={pillButton}
+						onclick={() => (showReadOnlyDialog = true)}
+					>
+						Demo Mode
 					</button>
 				</nav>
 			</section>
@@ -258,7 +263,11 @@
 		{@render children()}
 	</div>
 
-	<ReadOnlyDialog open={showReadOnlyDialog} onclose={() => (showReadOnlyDialog = false)} />
+	<ReadOnlyDialog
+		open={showReadOnlyDialog}
+		onclose={() => (showReadOnlyDialog = false)}
+		{pillButton}
+	/>
 
 	<footer>
 		<div class="content">
@@ -468,10 +477,11 @@
 	}
 
 	header nav.right .read-only-pill {
-		background: #727272;
+		background: light-dark(#727272, #888);
 		border-radius: 999px;
 		border: 0;
 		color: #eee;
+		color: var(--color-background-content);
 		cursor: pointer;
 		font-size: 0.8rem;
 		font-weight: 600;

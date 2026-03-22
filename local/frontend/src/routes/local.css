@@ -127,8 +127,8 @@
 
 	/* Popover */
 	--color-popover-bg: light-dark(rgba(255, 255, 255, 0.85), rgba(40, 40, 44, 0.92));
-	--color-popover-border: light-dark(rgba(0, 0, 0, 0.22), rgba(255, 255, 255, 0.1));
-	--color-popover-shadow: light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.4));
+	--color-popover-border: light-dark(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 1));
+	--color-popover-shadow: light-dark(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.8));
 
 	/* Modal */
 	--color-modal-backdrop: light-dark(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6));
@@ -527,6 +527,10 @@ table.data td a:hover {
 	padding: 0.7rem;
 }
 
+.info-box:hover {
+	filter: brightness(0.98);
+}
+
 .loading {
 	color: var(--color-text-tertiary);
 }
@@ -538,5 +542,8 @@ table.data td a:hover {
 @media (prefers-color-scheme: dark) {
 	.d2h-auto-color-scheme {
 		background-color: transparent !important;
+	}
+	.info-box:hover {
+		filter: brightness(1.1);
 	}
 }
