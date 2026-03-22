@@ -48,6 +48,7 @@ type processedFile struct {
 }
 
 const codexWatcherSourceKindSessionFile = "session_file"
+const codexWatcherSourceKindScanMarker = "scan_marker"
 
 type sessionFileInfo struct {
 	path    string
@@ -59,16 +60,14 @@ type sessionFileInfo struct {
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("codex watcher: starting, monitoring %s", a.sessionsDir)
 
-	scanWindow := agent.DefaultScanWindow
-	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.DB, a.Name()); err == nil {
-		scanWindow = agent.StartupScanWindow(latestMs)
-	}
+	scanWindow := a.startupScanWindow(ctx)
 	log.Printf("codex watcher: startup scan window %s", scanWindow)
 
 	scanCutoff := time.Now().Add(-scanWindow)
 	trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	start := time.Now()
 	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter)
+	a.persistStartupScanMarker(ctx)
 	log.Printf("codex watcher: startup scan duration %s", agent.FmtDuration(time.Since(start)))
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
@@ -133,11 +132,7 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	filter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	n := a.doScan(ctx, since, filter, false, progress)
-	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
-		Agent:      a.Name(),
-		SourceKind: "scan_marker",
-		SourceKey:  "reimport",
-	})
+	a.persistStartupScanMarker(ctx)
 	log.Printf("codex watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
@@ -145,13 +140,33 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 // ScanPathsSince scans only session files associated with matching working directories.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
 	n := a.doScan(ctx, since, agent.NewPathFilter(paths), false, progress)
-	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
-		Agent:      a.Name(),
-		SourceKind: "scan_marker",
-		SourceKey:  "reimport",
-	})
+	a.persistStartupScanMarker(ctx)
 	log.Printf("codex watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
+}
+
+func (a *Agent) startupScanWindow(ctx context.Context) time.Duration {
+	scanWindow := agent.DefaultScanWindow
+	latestMs, err := db.LatestWatcherScanTimestampForScopes(ctx, a.DB, a.Name(),
+		db.WatcherScanScope{SourceKind: codexWatcherSourceKindSessionFile, SourceKey: a.sessionsDir, MatchPrefix: true},
+		db.WatcherScanScope{SourceKind: codexWatcherSourceKindScanMarker, SourceKey: a.startupScanMarkerKey()},
+	)
+	if err == nil {
+		scanWindow = agent.StartupScanWindow(latestMs)
+	}
+	return scanWindow
+}
+
+func (a *Agent) startupScanMarkerKey() string {
+	return filepath.Clean(a.Home)
+}
+
+func (a *Agent) persistStartupScanMarker(ctx context.Context) {
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: codexWatcherSourceKindScanMarker,
+		SourceKey:  a.startupScanMarkerKey(),
+	})
 }
 
 // scanSince is the internal initial scan.

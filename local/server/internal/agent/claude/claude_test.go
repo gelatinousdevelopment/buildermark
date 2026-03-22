@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -64,6 +65,33 @@ func countRows(t *testing.T, database *sql.DB, table string) int {
 		t.Fatalf("count %s: %v", table, err)
 	}
 	return count
+}
+
+func runGitCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
+	}
+}
+
+func initGitRepo(t *testing.T, dir string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitCommand(t, "", "init", dir)
+	runGitCommand(t, dir, "config", "user.name", "Test User")
+	runGitCommand(t, dir, "config", "user.email", "test@example.com")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGitCommand(t, dir, "add", "README.md")
+	runGitCommand(t, dir, "commit", "-m", "initial")
+	return dir
 }
 
 // --- Watcher tests ---
@@ -138,7 +166,7 @@ func TestScanProjectFilesSinceIngestsOrphanSession(t *testing.T) {
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
-	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil, nil)
+	n := a.scanProjectFilesSince(ctx, time.Time{}, false, false, nil, nil)
 	if n != 1 {
 		t.Fatalf("scanProjectFilesSince = %d, want 1", n)
 	}
@@ -180,7 +208,7 @@ func TestScanProjectFilesSinceIngestsMinimalSummaryLine(t *testing.T) {
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
-	n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil, nil)
+	n := a.scanProjectFilesSince(ctx, time.Time{}, false, false, nil, nil)
 	if n != 2 {
 		t.Fatalf("scanProjectFilesSince = %d, want 2", n)
 	}
@@ -217,7 +245,7 @@ func TestScanProjectFilesDerivesDiffFromToolUseResult(t *testing.T) {
 
 	a := newAgent(database, histPath, tmpDir)
 	ctx := context.Background()
-	if n := a.scanProjectFilesSince(ctx, time.Time{}, false, nil, nil); n != 2 {
+	if n := a.scanProjectFilesSince(ctx, time.Time{}, false, false, nil, nil); n != 2 {
 		t.Fatalf("scanProjectFilesSince = %d, want 2", n)
 	}
 
@@ -2727,6 +2755,173 @@ func TestScanSinceSkipsUntrackedProjects(t *testing.T) {
 	}
 	if convCount != 0 {
 		t.Fatalf("untracked project conversation should not exist, got %d", convCount)
+	}
+}
+
+func TestStartupScanWindowIgnoresOtherClaudeHomes(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	primaryHome := filepath.Join(t.TempDir(), "primary")
+	debianHome := filepath.Join(t.TempDir(), "debian")
+
+	if err := db.UpsertWatcherScanState(ctx, database, db.WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  claudeWatcherSourceKindHistoryFile,
+		SourceKey:   filepath.Join(primaryHome, ".claude", "history.jsonl"),
+		UpdatedAtMs: time.Now().Add(-2 * time.Minute).UnixMilli(),
+	}); err != nil {
+		t.Fatalf("upsert primary history state: %v", err)
+	}
+
+	a := NewForHomeImportAll(database, debianHome)
+	got := a.startupScanWindow(ctx)
+	if got != agent.DefaultScanWindow {
+		t.Fatalf("startupScanWindow = %s, want %s for fresh extra home", got, agent.DefaultScanWindow)
+	}
+}
+
+func TestStartupScanWindowIgnoresLegacyExtraHomeCheckpointWithoutMarker(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	debianHome := t.TempDir()
+	if err := db.UpsertWatcherScanState(ctx, database, db.WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  claudeWatcherSourceKindProjectFile,
+		SourceKey:   filepath.Join(debianHome, ".claude", "projects", "-home-debian-github-buildermark", "011a10e8.jsonl"),
+		UpdatedAtMs: time.Now().Add(-2 * time.Minute).UnixMilli(),
+	}); err != nil {
+		t.Fatalf("upsert legacy project checkpoint: %v", err)
+	}
+
+	a := NewForHomeImportAll(database, debianHome)
+	got := a.startupScanWindow(ctx)
+	if got != agent.DefaultScanWindow {
+		t.Fatalf("startupScanWindow = %s, want %s when extra-home marker is missing", got, agent.DefaultScanWindow)
+	}
+}
+
+func TestStartupScanWindowIgnoresLegacyExtraHomeMarkerVersion(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	debianHome := t.TempDir()
+	if err := db.UpsertWatcherScanState(ctx, database, db.WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  claudeWatcherSourceKindScanMarker,
+		SourceKey:   filepath.Clean(debianHome),
+		UpdatedAtMs: time.Now().Add(-2 * time.Minute).UnixMilli(),
+	}); err != nil {
+		t.Fatalf("upsert legacy marker: %v", err)
+	}
+
+	a := NewForHomeImportAll(database, debianHome)
+	if a.hasStartupScanMarker(ctx) {
+		t.Fatal("hasStartupScanMarker = true, want false for legacy marker")
+	}
+	if got := a.startupScanWindow(ctx); got != agent.DefaultScanWindow {
+		t.Fatalf("startupScanWindow = %s, want %s when marker version is stale", got, agent.DefaultScanWindow)
+	}
+}
+
+func TestScanProjectFilesSinceImportsMountedExtraHomeConversationIntoExistingProject(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	origin := initGitRepo(t, filepath.Join(t.TempDir(), "origin"))
+	localRepo := filepath.Join(t.TempDir(), "local-buildermark")
+	runGitCommand(t, "", "clone", origin, localRepo)
+
+	mountedHome := t.TempDir()
+	mountedRepo := filepath.Join(mountedHome, "github", "buildermark")
+	if err := os.MkdirAll(filepath.Dir(mountedRepo), 0o755); err != nil {
+		t.Fatalf("mkdir mounted repo parent: %v", err)
+	}
+	runGitCommand(t, "", "clone", origin, mountedRepo)
+
+	projectID, err := db.EnsureProject(ctx, database, localRepo)
+	if err != nil {
+		t.Fatalf("EnsureProject local: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, database, projectID, agent.ResolveGitID(localRepo)); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	foreignProjectPath := "/home/debian/github/buildermark"
+	dirName := claudeProjectDirName(foreignProjectPath)
+	projDir := filepath.Join(mountedHome, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+
+	sessionID := "011a10e8-17d6-4cf6-9573-b4d4d82aef9b"
+	line := fmt.Sprintf(`{"type":"user","timestamp":"2026-03-01T12:46:06.451Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"Linux CLI bug"}}`, sessionID, foreignProjectPath)
+	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte(line+"\n"), 0o644); err != nil {
+		t.Fatalf("write project conversation: %v", err)
+	}
+
+	a := NewForHomeImportAll(database, mountedHome)
+	if n := a.scanProjectFilesSince(ctx, time.Time{}, false, false, nil, nil); n != 1 {
+		t.Fatalf("scanProjectFilesSince = %d, want 1", n)
+	}
+
+	var gotProjectID string
+	if err := database.QueryRow("SELECT project_id FROM conversations WHERE id = ?", sessionID).Scan(&gotProjectID); err != nil {
+		t.Fatalf("query conversation project_id: %v", err)
+	}
+	if gotProjectID != projectID {
+		t.Fatalf("conversation project_id = %q, want %q", gotProjectID, projectID)
+	}
+
+	var oldPaths string
+	if err := database.QueryRow("SELECT old_paths FROM projects WHERE id = ?", projectID).Scan(&oldPaths); err != nil {
+		t.Fatalf("query old_paths: %v", err)
+	}
+	if !strings.Contains(oldPaths, foreignProjectPath) {
+		t.Fatalf("old_paths missing transcript path %q: %q", foreignProjectPath, oldPaths)
+	}
+	if !strings.Contains(oldPaths, mountedRepo) {
+		t.Fatalf("old_paths missing mounted repo %q: %q", mountedRepo, oldPaths)
+	}
+}
+
+func TestScanProjectFilesSinceIgnoresLegacyCheckpointWhenExtraHomeMarkerMissing(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+	mountedHome := t.TempDir()
+	foreignProjectPath := "/home/debian/github/buildermark"
+	dirName := claudeProjectDirName(foreignProjectPath)
+	projDir := filepath.Join(mountedHome, ".claude", "projects", dirName)
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+
+	sessionID := "011a10e8-17d6-4cf6-9573-b4d4d82aef9b"
+	line := fmt.Sprintf(`{"type":"user","timestamp":"2026-03-01T12:46:06.451Z","sessionId":%q,"cwd":%q,"message":{"role":"user","content":"Linux CLI bug"}}`, sessionID, foreignProjectPath)
+	path := filepath.Join(projDir, sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(line+"\n"), 0o644); err != nil {
+		t.Fatalf("write project conversation: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat project conversation: %v", err)
+	}
+	if err := db.UpsertWatcherScanState(ctx, database, db.WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  claudeWatcherSourceKindProjectFile,
+		SourceKey:   path,
+		FileSize:    info.Size(),
+		FileMtimeMs: info.ModTime().UnixMilli(),
+		FileOffset:  info.Size(),
+		UpdatedAtMs: time.Now().Add(-2 * time.Minute).UnixMilli(),
+	}); err != nil {
+		t.Fatalf("upsert legacy project checkpoint: %v", err)
+	}
+
+	a := NewForHomeImportAll(database, mountedHome)
+	if n := a.scanProjectFilesSince(ctx, time.Time{}, true, false, nil, nil); n != 1 {
+		t.Fatalf("scanProjectFilesSince = %d, want 1", n)
 	}
 }
 

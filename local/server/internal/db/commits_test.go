@@ -272,3 +272,81 @@ func TestGetCachedConversationCommitLinks(t *testing.T) {
 		t.Fatalf("commitSubjects[hash-b] = %q, want %q", got, "b")
 	}
 }
+
+func TestReplaceRecomputedCommitDataClearsOldCoverageAndConversationLinks(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, database, "/tmp/buildermark-test-recompute")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, database, "conv-1", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation conv-1: %v", err)
+	}
+
+	original := Commit{
+		ID:              "commit-1",
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      "hash-1",
+		Subject:         "subject",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
+		AuthoredAt:      1700000000,
+		DiffContent:     "diff --git a/app.txt b/app.txt\n+hello",
+		LinesTotal:      1,
+		LinesFromAgent:  1,
+		CoverageVersion: 0,
+	}
+	if err := UpsertCommit(ctx, database, original); err != nil {
+		t.Fatalf("UpsertCommit: %v", err)
+	}
+	if err := UpsertCommitAgentCoverage(ctx, database, []CommitAgentCoverage{{
+		CommitID:       original.ID,
+		Agent:          "codex",
+		LinesFromAgent: 1,
+	}}); err != nil {
+		t.Fatalf("UpsertCommitAgentCoverage: %v", err)
+	}
+	if err := UpsertCommitConversationLinks(ctx, database, original.ID, []string{"conv-1"}); err != nil {
+		t.Fatalf("UpsertCommitConversationLinks: %v", err)
+	}
+
+	recomputed := original
+	recomputed.LinesFromAgent = 0
+	recomputed.CoverageVersion = 12
+
+	if err := ReplaceRecomputedCommitData(ctx, database, []Commit{recomputed}, []string{original.ID}, nil, map[string][]string{
+		original.ID: {},
+	}); err != nil {
+		t.Fatalf("ReplaceRecomputedCommitData: %v", err)
+	}
+
+	var linesFromAgent, coverageVersion int
+	if err := database.QueryRowContext(ctx, "SELECT lines_from_agent, coverage_version FROM commits WHERE id = ?", original.ID).Scan(&linesFromAgent, &coverageVersion); err != nil {
+		t.Fatalf("query recomputed commit: %v", err)
+	}
+	if linesFromAgent != 0 {
+		t.Fatalf("lines_from_agent = %d, want 0", linesFromAgent)
+	}
+	if coverageVersion != 12 {
+		t.Fatalf("coverage_version = %d, want 12", coverageVersion)
+	}
+
+	var agentCoverageCount int
+	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM commit_agent_coverage WHERE commit_id = ?", original.ID).Scan(&agentCoverageCount); err != nil {
+		t.Fatalf("count agent coverage: %v", err)
+	}
+	if agentCoverageCount != 0 {
+		t.Fatalf("commit_agent_coverage rows = %d, want 0", agentCoverageCount)
+	}
+
+	var linkCount int
+	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM commit_conversation_links WHERE commit_id = ?", original.ID).Scan(&linkCount); err != nil {
+		t.Fatalf("count commit conversation links: %v", err)
+	}
+	if linkCount != 0 {
+		t.Fatalf("commit_conversation_links rows = %d, want 0", linkCount)
+	}
+}

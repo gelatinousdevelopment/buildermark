@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -54,18 +56,37 @@ func RepoLabel(path string) string {
 
 // EnsureProject inserts a project if it doesn't already exist and returns its ID.
 func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error) {
+	return EnsureProjectWithAliases(ctx, db, path)
+}
+
+// EnsureProjectWithAliases inserts a project if it doesn't already exist and
+// returns its ID. Aliases are added to old_paths when the project resolves to
+// an existing canonical row.
+func EnsureProjectWithAliases(ctx context.Context, db *sql.DB, path string, aliases ...string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("project path is required")
+	}
+	path = filepath.Clean(path)
+
 	var id string
 	// Check aliases first so renamed/moved projects continue to map to the
 	// canonical project even if a legacy exact-path project row still exists.
 	if existingID, err := findProjectIDByOldPath(ctx, db, path); err != nil {
 		return "", fmt.Errorf("query project by old path: %w", err)
 	} else if existingID != "" {
+		if err := addProjectPathAliases(ctx, db, existingID, path, aliases...); err != nil {
+			return "", err
+		}
 		return existingID, nil
 	}
 
 	// Exact match on canonical path.
 	err := db.QueryRowContext(ctx, "SELECT id FROM projects WHERE path = ?", path).Scan(&id)
 	if err == nil {
+		if err := addProjectPathAliases(ctx, db, id, path, aliases...); err != nil {
+			return "", err
+		}
 		return id, nil
 	}
 	if err != sql.ErrNoRows {
@@ -76,6 +97,18 @@ func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error)
 	if existingID, err := findProjectIDByParentPath(ctx, db, path); err != nil {
 		return "", fmt.Errorf("query project by parent path: %w", err)
 	} else if existingID != "" {
+		if err := addProjectPathAliases(ctx, db, existingID, path, aliases...); err != nil {
+			return "", err
+		}
+		return existingID, nil
+	}
+
+	if existingID, err := findProjectIDByRepoIdentity(ctx, db, path); err != nil {
+		return "", fmt.Errorf("query project by repo identity: %w", err)
+	} else if existingID != "" {
+		if err := addProjectPathAliases(ctx, db, existingID, path, aliases...); err != nil {
+			return "", err
+		}
 		return existingID, nil
 	}
 
@@ -90,7 +123,70 @@ func EnsureProject(ctx context.Context, db *sql.DB, path string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("re-query project: %w", err)
 	}
+	if err := addProjectPathAliases(ctx, db, id, path, aliases...); err != nil {
+		return "", err
+	}
 	return id, nil
+}
+
+func addProjectPathAliases(ctx context.Context, db *sql.DB, projectID, canonicalPath string, aliases ...string) error {
+	var currentPath, oldPaths string
+	err := db.QueryRowContext(ctx, "SELECT path, old_paths FROM projects WHERE id = ?", projectID).Scan(&currentPath, &oldPaths)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("query project aliases: %w", err)
+	}
+
+	seen := make(map[string]struct{})
+	combined := make([]string, 0)
+	for _, candidate := range strings.Split(oldPaths, "\n") {
+		candidate = normalizeProjectAliasPath(candidate)
+		if candidate == "" {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		combined = append(combined, candidate)
+	}
+
+	allCandidates := append([]string{canonicalPath}, aliases...)
+	for _, candidate := range allCandidates {
+		candidate = normalizeProjectAliasPath(candidate)
+		if candidate == "" || candidate == currentPath {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		combined = append(combined, candidate)
+	}
+
+	sort.Strings(combined)
+	nextOldPaths := strings.Join(combined, "\n")
+	if nextOldPaths == oldPaths {
+		return nil
+	}
+	if err := SetProjectOldPaths(ctx, db, projectID, nextOldPaths); err != nil {
+		return fmt.Errorf("update project aliases: %w", err)
+	}
+	return nil
+}
+
+func normalizeProjectAliasPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	path = filepath.Clean(path)
+	if path == "." {
+		return ""
+	}
+	return path
 }
 
 func findProjectIDByOldPath(ctx context.Context, db *sql.DB, path string) (string, error) {
@@ -121,6 +217,103 @@ func findProjectIDByOldPath(ctx context.Context, db *sql.DB, path string) (strin
 		return "", err
 	}
 	return "", nil
+}
+
+type projectRepoIdentity struct {
+	GitID   string
+	RepoKey string
+}
+
+func findProjectIDByRepoIdentity(ctx context.Context, db *sql.DB, path string) (string, error) {
+	identity := resolveProjectRepoIdentity(path)
+	if identity.GitID == "" && identity.RepoKey == "" {
+		return "", nil
+	}
+
+	rows, err := db.QueryContext(ctx, "SELECT id, git_id, remote, alt_remotes FROM projects WHERE git_id <> '' OR remote <> '' OR alt_remotes <> ''")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id, gitID, remote, altRemotes string
+		if err := rows.Scan(&id, &gitID, &remote, &altRemotes); err != nil {
+			return "", err
+		}
+		if identity.GitID != "" && gitID == identity.GitID {
+			return id, nil
+		}
+		if identity.RepoKey == "" {
+			continue
+		}
+		if normalized := normalizeRemoteToRepoKey(remote); normalized != "" && normalized == identity.RepoKey {
+			return id, nil
+		}
+		for _, alt := range strings.Split(altRemotes, "\n") {
+			if normalized := normalizeRemoteToRepoKey(alt); normalized != "" && normalized == identity.RepoKey {
+				return id, nil
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
+func resolveProjectRepoIdentity(path string) projectRepoIdentity {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return projectRepoIdentity{}
+	}
+	if _, err := os.Stat(path); err != nil {
+		return projectRepoIdentity{}
+	}
+	return projectRepoIdentity{
+		GitID:   gitutil.ResolveRootID(path),
+		RepoKey: normalizeRemoteToRepoKey(resolveGitRemote(path)),
+	}
+}
+
+func resolveGitRemote(path string) string {
+	cmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func normalizeRemoteToRepoKey(remote string) string {
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return ""
+	}
+
+	if strings.Contains(remote, "@") && strings.Contains(remote, ":") {
+		parts := strings.SplitN(remote, "@", 2)
+		if len(parts) == 2 {
+			hostAndPath := strings.TrimSuffix(parts[1], ".git")
+			hostAndPath = strings.Replace(hostAndPath, ":", "/", 1)
+			segments := strings.Split(hostAndPath, "/")
+			if len(segments) >= 3 {
+				return strings.ToLower(segments[0] + "/" + segments[1] + "/" + segments[2])
+			}
+		}
+	}
+
+	remote = strings.TrimPrefix(remote, "git://")
+	remote = strings.TrimPrefix(remote, "https://")
+	remote = strings.TrimPrefix(remote, "http://")
+	remote = strings.TrimSuffix(remote, ".git")
+	remote = strings.TrimSuffix(remote, "/")
+
+	segments := strings.Split(remote, "/")
+	if len(segments) >= 3 {
+		return strings.ToLower(segments[0] + "/" + segments[1] + "/" + segments[2])
+	}
+	return ""
 }
 
 // findProjectIDByParentPath checks if the given path is a subdirectory of any

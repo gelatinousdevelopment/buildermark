@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -101,10 +102,23 @@ func (s *Server) handlePutLocalSettings(w http.ResponseWriter, r *http.Request) 
 	// Reload watchers for any newly added homes and trigger a scan.
 	if s.ReloadWatchers != nil {
 		if newHomes := s.ReloadWatchers(); len(newHomes) > 0 {
+			queuedHomes := append([]string(nil), newHomes...)
 			if s.importMu.TryLock() {
 				go s.runHistoryScanJob(time.Now().Add(-agent.DefaultScanWindow), historyScanRequest{
-					HomePaths: append([]string(nil), newHomes...),
+					HomePaths: queuedHomes,
 				}, nil)
+				log.Printf("settings: started history scan for %d new home(s)", len(queuedHomes))
+			} else if s.settingsScanPending.CompareAndSwap(false, true) {
+				go func() {
+					s.importMu.Lock()
+					s.settingsScanPending.Store(false)
+					s.runHistoryScanJob(time.Now().Add(-agent.DefaultScanWindow), historyScanRequest{
+						HomePaths: queuedHomes,
+					}, nil)
+				}()
+				log.Printf("settings: queued history scan for %d new home(s)", len(queuedHomes))
+			} else {
+				log.Printf("settings: history scan already queued, skipping for %d new home(s)", len(queuedHomes))
 			}
 		}
 	}

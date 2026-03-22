@@ -141,6 +141,61 @@ func TestPutLocalSettingsScopesRescanToNewHomes(t *testing.T) {
 	}
 }
 
+func TestPutLocalSettingsQueuesRescanWhenImportBusy(t *testing.T) {
+	t.Setenv("HOME", "/tmp/buildermark-home")
+	newWatcher := &mockWatcher{name: "claude", home: "/homes/new"}
+	newDiscoverer := &mockDiscoverer{name: "claude", home: "/homes/new", paths: []string{"/tmp/new-project"}}
+	s := setupTestServerWithAgents(t, newWatcher, newDiscoverer)
+	configDir := t.TempDir()
+	s.ConfigDir = configDir
+	s.ReloadWatchers = func() []string { return []string{"/homes/new"} }
+	handler := s.Routes()
+	done := make(chan struct{}, 1)
+	s.historyScanRecompute = func(ctx context.Context, since time.Time, paths []string, broadcast func(string, string)) {
+		_ = ctx
+		_ = since
+		_ = paths
+		_ = broadcast
+		done <- struct{}{}
+	}
+
+	locked := true
+	s.importMu.Lock()
+	defer func() {
+		if locked {
+			s.importMu.Unlock()
+		}
+	}()
+
+	body, _ := json.Marshal(map[string]any{"extraAgentHomes": []string{"/homes/new"}})
+	req := httptest.NewRequest("PUT", "/api/v1/settings", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	if scanCount, _, _, _ := newWatcher.snapshot(); scanCount != 0 {
+		t.Fatalf("scanCount while import lock held = %d, want 0", scanCount)
+	}
+
+	s.importMu.Unlock()
+	locked = false
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for queued history scan")
+	}
+	waitForImportUnlock(s)
+
+	scanCount, _, _, _ := newWatcher.snapshot()
+	if scanCount != 1 {
+		t.Fatalf("scanCount after releasing import lock = %d, want 1", scanCount)
+	}
+}
+
 func TestPutLocalSettingsSkipsRescanWithoutNewHomes(t *testing.T) {
 	t.Setenv("HOME", "/tmp/buildermark-home")
 	w := &mockWatcher{name: "claude", home: "/homes/existing"}

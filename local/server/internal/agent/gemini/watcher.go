@@ -17,24 +17,18 @@ type processedFile struct {
 	modTime time.Time
 }
 
+const geminiWatcherSourceKindScanMarker = "scan_marker"
+
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("gemini watcher: starting, monitoring %s", a.tmpDir)
 
-	scanWindow := agent.DefaultScanWindow
-	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.DB, a.Name()); err == nil {
-		scanWindow = agent.StartupScanWindow(latestMs)
-	}
+	scanWindow := a.startupScanWindow(ctx)
 	log.Printf("gemini watcher: startup scan window %s", scanWindow)
 
 	scanCutoff := time.Now().Add(-scanWindow)
 	trackedFilter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	a.scanSince(ctx, scanCutoff, trackedFilter)
-	// Write a scan marker so future restarts can compute a narrow window.
-	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
-		Agent:      a.Name(),
-		SourceKind: "scan_marker",
-		SourceKey:  "startup",
-	})
+	a.persistStartupScanMarker(ctx)
 	a.BackfillGitIDs(ctx)
 	a.BackfillLabels(ctx)
 
@@ -101,11 +95,7 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	filter := agent.TrackedProjectFilter(ctx, a.DB, nil)
 	n := a.doScan(ctx, since, filter, progress, false)
-	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
-		Agent:      a.Name(),
-		SourceKind: "scan_marker",
-		SourceKey:  "startup",
-	})
+	a.persistStartupScanMarker(ctx)
 	log.Printf("gemini watcher: manual scan processed %d files (since %s)", n, since.Format(time.RFC3339))
 	return n
 }
@@ -113,13 +103,32 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 // ScanPathsSince scans only session files that resolve to matching project paths.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
 	n := a.doScan(ctx, since, agent.NewPathFilter(paths), progress, false)
-	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
-		Agent:      a.Name(),
-		SourceKind: "scan_marker",
-		SourceKey:  "startup",
-	})
+	a.persistStartupScanMarker(ctx)
 	log.Printf("gemini watcher: manual path scan processed %d files (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
+}
+
+func (a *Agent) startupScanWindow(ctx context.Context) time.Duration {
+	scanWindow := agent.DefaultScanWindow
+	latestMs, err := db.LatestWatcherScanTimestampForScopes(ctx, a.DB, a.Name(),
+		db.WatcherScanScope{SourceKind: geminiWatcherSourceKindScanMarker, SourceKey: a.startupScanMarkerKey()},
+	)
+	if err == nil {
+		scanWindow = agent.StartupScanWindow(latestMs)
+	}
+	return scanWindow
+}
+
+func (a *Agent) startupScanMarkerKey() string {
+	return filepath.Clean(a.Home)
+}
+
+func (a *Agent) persistStartupScanMarker(ctx context.Context) {
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: geminiWatcherSourceKindScanMarker,
+		SourceKey:  a.startupScanMarkerKey(),
+	})
 }
 
 func (a *Agent) scanSince(ctx context.Context, since time.Time, filter agent.PathFilter) {

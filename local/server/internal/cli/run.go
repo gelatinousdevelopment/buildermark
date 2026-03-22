@@ -64,15 +64,19 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	}
 
 	watchedHomes := map[string]struct{}{home: {}}
-	registerHome := func(h string) {
-		registry.Register(claude.NewForHome(database, h))
+	registerHome := func(h string, importAllClaude bool) {
+		if importAllClaude {
+			registry.Register(claude.NewForHomeImportAll(database, h))
+		} else {
+			registry.Register(claude.NewForHome(database, h))
+		}
 		registry.Register(codex.NewForHome(database, h))
 		registry.Register(gemini.NewForHome(database, h))
 		registry.Register(cursor.NewForHome(database, h))
 	}
 
 	// Register the primary home and extra homes from config.
-	registerHome(home)
+	registerHome(home, false)
 	for _, candidate := range cfg.ExtraAgentHomes {
 		clean := normalizeHomePath(candidate)
 		if clean == "" {
@@ -82,7 +86,7 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 			continue
 		}
 		watchedHomes[clean] = struct{}{}
-		registerHome(clean)
+		registerHome(clean, true)
 	}
 
 	watchCtx, watchCancel := context.WithCancel(ctx)
@@ -139,7 +143,7 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 				continue
 			}
 			watchedHomes[clean] = struct{}{}
-			registerHome(clean)
+			registerHome(clean, true)
 			added = append(added, clean)
 		}
 		// Start the newly registered watchers.

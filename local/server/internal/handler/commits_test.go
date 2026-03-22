@@ -43,6 +43,99 @@ func waitForCommitRefresh(t *testing.T, s *Server) {
 	t.Fatal("timed out waiting for commit refresh to complete")
 }
 
+func TestCommitRefreshTimeout(t *testing.T) {
+	if got := commitRefreshTimeout(0); got != defaultCommitRefreshTimeout {
+		t.Fatalf("commitRefreshTimeout(0) = %s, want %s", got, defaultCommitRefreshTimeout)
+	}
+	if got := commitRefreshTimeout(7); got != extendedCommitRefreshTimeout {
+		t.Fatalf("commitRefreshTimeout(7) = %s, want %s", got, extendedCommitRefreshTimeout)
+	}
+}
+
+func TestHasReachableStaleCommitCoverageByBranchIgnoresOrphanedBranchRows(t *testing.T) {
+	s := setupTestServer(t)
+	ctx := context.Background()
+
+	repo := t.TempDir()
+	gitRun(t, repo, nil, "init", "-b", "main")
+	gitRun(t, repo, nil, "config", "user.name", "Test User")
+	gitRun(t, repo, nil, "config", "user.email", "test@example.com")
+
+	writeAndCommit := func(name, body, message string) string {
+		mustWriteFile(t, filepath.Join(repo, name), body)
+		gitRun(t, repo, nil, "add", name)
+		gitRun(t, repo, nil, "commit", "-m", message)
+		return strings.TrimSpace(gitRun(t, repo, nil, "rev-parse", "HEAD"))
+	}
+
+	reachableHash := writeAndCommit("app.txt", "one\n", "reachable")
+	orphanedHash := writeAndCommit("app.txt", "two\n", "orphaned")
+	gitRun(t, repo, nil, "reset", "--hard", reachableHash)
+
+	projectID, err := db.EnsureProject(ctx, s.DB, repo)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	repoProject := &db.Project{ID: projectID, Path: repo}
+
+	reachableCommit := db.Commit{
+		ID:              "commit-reachable",
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      reachableHash,
+		Subject:         "reachable",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
+		AuthoredAt:      1700000000,
+		DiffContent:     "diff --git a/app.txt b/app.txt\n+one",
+		LinesTotal:      1,
+		CoverageVersion: currentCommitCoverageVersion,
+	}
+	if err := db.UpsertCommit(ctx, s.DB, reachableCommit); err != nil {
+		t.Fatalf("UpsertCommit reachable: %v", err)
+	}
+	orphanedCommit := db.Commit{
+		ID:              "commit-orphaned",
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      orphanedHash,
+		Subject:         "orphaned",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
+		AuthoredAt:      1700000001,
+		DiffContent:     "diff --git a/app.txt b/app.txt\n+two",
+		LinesTotal:      1,
+		CoverageVersion: 0,
+	}
+	if err := db.UpsertCommit(ctx, s.DB, orphanedCommit); err != nil {
+		t.Fatalf("UpsertCommit orphaned: %v", err)
+	}
+
+	stale, err := db.HasStaleCommitCoverageByBranch(ctx, s.DB, projectID, "main", currentCommitCoverageVersion)
+	if err != nil {
+		t.Fatalf("HasStaleCommitCoverageByBranch: %v", err)
+	}
+	if !stale {
+		t.Fatal("expected DB-only stale check to see orphaned stale row")
+	}
+
+	hashes, err := listBranchCommitHashes(ctx, repo, "main")
+	if err != nil {
+		t.Fatalf("listBranchCommitHashes: %v", err)
+	}
+	if len(hashes) != 1 || hashes[0] != reachableHash {
+		t.Fatalf("reachable hashes = %v, want [%s]", hashes, reachableHash)
+	}
+
+	reachableStale, err := hasReachableStaleCommitCoverageByBranch(ctx, s.DB, repoProject, "main", currentCommitCoverageVersion)
+	if err != nil {
+		t.Fatalf("hasReachableStaleCommitCoverageByBranch: %v", err)
+	}
+	if reachableStale {
+		t.Fatal("expected reachable stale check to ignore orphaned branch row")
+	}
+}
+
 func TestCommitIngestionQueueDefersAndRestarts(t *testing.T) {
 	s := setupTestServer(t)
 

@@ -3,9 +3,12 @@ package db
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/gitutil"
 )
 
 func TestEnsureProject(t *testing.T) {
@@ -241,6 +244,83 @@ func TestEnsureProjectDifferentPaths(t *testing.T) {
 
 	if id1 == id2 {
 		t.Error("expected different IDs for different paths")
+	}
+}
+
+func TestEnsureProjectWithAliasesMatchesRepoIdentityAndStoresAlias(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	origin := initGitRepoForProjectIdentityTest(t, filepath.Join(t.TempDir(), "origin"))
+	localRepo := filepath.Join(t.TempDir(), "local")
+	runGitForProjectIdentityTest(t, "", "clone", origin, localRepo)
+
+	mountedRepo := filepath.Join(t.TempDir(), "mounted", "github", "buildermark")
+	if err := os.MkdirAll(filepath.Dir(mountedRepo), 0o755); err != nil {
+		t.Fatalf("mkdir mounted repo parent: %v", err)
+	}
+	runGitForProjectIdentityTest(t, "", "clone", origin, mountedRepo)
+
+	projectID, err := EnsureProject(ctx, db, localRepo)
+	if err != nil {
+		t.Fatalf("EnsureProject local: %v", err)
+	}
+	if err := UpdateProjectGitID(ctx, db, projectID, gitutil.ResolveRootID(localRepo)); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+
+	gotID, err := EnsureProjectWithAliases(ctx, db, mountedRepo, "/home/debian/github/buildermark")
+	if err != nil {
+		t.Fatalf("EnsureProjectWithAliases mounted: %v", err)
+	}
+	if gotID != projectID {
+		t.Fatalf("EnsureProjectWithAliases returned %q, want %q", gotID, projectID)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM projects").Scan(&count); err != nil {
+		t.Fatalf("count projects: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("project row count = %d, want 1", count)
+	}
+
+	var oldPaths string
+	if err := db.QueryRow("SELECT old_paths FROM projects WHERE id = ?", projectID).Scan(&oldPaths); err != nil {
+		t.Fatalf("query old_paths: %v", err)
+	}
+	if !strings.Contains(oldPaths, mountedRepo) {
+		t.Fatalf("old_paths missing mounted repo %q: %q", mountedRepo, oldPaths)
+	}
+	if !strings.Contains(oldPaths, "/home/debian/github/buildermark") {
+		t.Fatalf("old_paths missing transcript path: %q", oldPaths)
+	}
+}
+
+func initGitRepoForProjectIdentityTest(t *testing.T, dir string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	runGitForProjectIdentityTest(t, "", "init", dir)
+	runGitForProjectIdentityTest(t, dir, "config", "user.name", "Test User")
+	runGitForProjectIdentityTest(t, dir, "config", "user.email", "test@example.com")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGitForProjectIdentityTest(t, dir, "add", "README.md")
+	runGitForProjectIdentityTest(t, dir, "commit", "-m", "initial")
+	return dir
+}
+
+func runGitForProjectIdentityTest(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }
 

@@ -40,6 +40,11 @@ type Commit struct {
 	DetailFallbackLines   int     `json:"detailFallbackLines,omitempty"`
 }
 
+type sqlCommitPreparer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+}
+
 // UpsertCommit inserts or updates a commit row. On conflict (same project_id + commit_hash),
 // it updates branch metadata, diff_content, and coverage fields.
 func UpsertCommit(ctx context.Context, db *sql.DB, c Commit) error {
@@ -92,7 +97,20 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx,
+	if err := UpsertCommitsTx(ctx, tx, commits); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// UpsertCommitsTx inserts or updates multiple commits using an existing transaction.
+func UpsertCommitsTx(ctx context.Context, tx *sql.Tx, commits []Commit) error {
+	return upsertCommitsWithExecutor(ctx, tx, commits)
+}
+
+func upsertCommitsWithExecutor(ctx context.Context, exec sqlCommitPreparer, commits []Commit) error {
+	stmt, err := exec.PrepareContext(ctx,
 		`INSERT INTO commits (id, project_id, branch_name, commit_hash, subject, user_name, user_email, authored_at, diff_content, lines_total, lines_from_agent, lines_added, lines_removed, coverage_version, needs_parent, detail_files, detail_messages, detail_agent_segments, detail_exact_matched, detail_fallback_lines)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(project_id, commit_hash) DO UPDATE SET
@@ -134,8 +152,7 @@ func UpsertCommits(ctx context.Context, database *sql.DB, commits []Commit) erro
 			return fmt.Errorf("upsert commit %s: %w", c.CommitHash, err)
 		}
 	}
-
-	return tx.Commit()
+	return nil
 }
 
 // ListCommitsByProject returns commit metadata for a project, ordered newest first.
@@ -670,6 +687,15 @@ func UpsertCommitAgentCoverage(ctx context.Context, database *sql.DB, rows []Com
 	}
 	defer tx.Rollback()
 
+	if err := UpsertCommitAgentCoverageTx(ctx, tx, rows); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// UpsertCommitAgentCoverageTx batch-upserts per-agent coverage rows using an existing transaction.
+func UpsertCommitAgentCoverageTx(ctx context.Context, tx *sql.Tx, rows []CommitAgentCoverage) error {
 	stmt, err := tx.PrepareContext(ctx,
 		`INSERT INTO commit_agent_coverage (id, commit_id, agent, lines_from_agent)
 		 VALUES (?, ?, ?, ?)
@@ -689,8 +715,7 @@ func UpsertCommitAgentCoverage(ctx context.Context, database *sql.DB, rows []Com
 			return fmt.Errorf("upsert commit_agent_coverage: %w", err)
 		}
 	}
-
-	return tx.Commit()
+	return nil
 }
 
 // ListCommitAgentCoverageByCommitIDs bulk-fetches per-agent coverage keyed by commit ID.
@@ -872,6 +897,11 @@ func DeleteCommitAgentCoverageByCommitID(ctx context.Context, database *sql.DB, 
 		return err
 	}
 	return nil
+}
+
+// DeleteCommitAgentCoverageByCommitIDsTx removes all per-agent coverage rows for the given commits.
+func DeleteCommitAgentCoverageByCommitIDsTx(ctx context.Context, tx *sql.Tx, commitIDs []string) error {
+	return deleteCommitRowsByCommitIDsTx(ctx, tx, "commit_agent_coverage", commitIDs)
 }
 
 // ResetCoverageVersionByDateRange sets coverage_version = 0 for all commits
@@ -1379,28 +1409,97 @@ func UpsertCommitConversationLinks(ctx context.Context, database *sql.DB, commit
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, "DELETE FROM commit_conversation_links WHERE commit_id = ?", commitID); err != nil {
+	if err := ReplaceCommitConversationLinksTx(ctx, tx, map[string][]string{commitID: conversationIDs}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ReplaceCommitConversationLinksTx replaces commit-conversation link rows for the given commits.
+func ReplaceCommitConversationLinksTx(ctx context.Context, tx *sql.Tx, links map[string][]string) error {
+	commitIDs := make([]string, 0, len(links))
+	for commitID := range links {
+		commitID = strings.TrimSpace(commitID)
+		if commitID == "" {
+			continue
+		}
+		commitIDs = append(commitIDs, commitID)
+	}
+	if len(commitIDs) == 0 {
+		return nil
+	}
+	if err := deleteCommitRowsByCommitIDsTx(ctx, tx, "commit_conversation_links", commitIDs); err != nil {
 		return fmt.Errorf("delete old commit conversation links: %w", err)
 	}
 
-	if len(conversationIDs) == 0 {
-		return tx.Commit()
-	}
+	return insertCommitConversationLinksTx(ctx, tx, commitIDs, links)
+}
 
-	stmt, err := tx.PrepareContext(ctx,
-		`INSERT OR IGNORE INTO commit_conversation_links (commit_id, conversation_id) VALUES (?, ?)`,
-	)
+func insertCommitConversationLinksTx(ctx context.Context, tx *sql.Tx, commitIDs []string, links map[string][]string) error {
+	stmt, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO commit_conversation_links (commit_id, conversation_id) VALUES (?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare insert commit conversation link: %w", err)
 	}
 	defer stmt.Close()
 
-	for _, cid := range conversationIDs {
-		if _, err := stmt.ExecContext(ctx, commitID, cid); err != nil {
-			return fmt.Errorf("insert commit conversation link: %w", err)
+	for _, commitID := range commitIDs {
+		for _, cid := range links[commitID] {
+			if _, err := stmt.ExecContext(ctx, commitID, cid); err != nil {
+				return fmt.Errorf("insert commit conversation link: %w", err)
+			}
 		}
 	}
+	return nil
+}
+
+// ReplaceRecomputedCommitData atomically replaces recomputed commit rows,
+// per-agent coverage, and commit-conversation links for a recompute batch.
+func ReplaceRecomputedCommitData(ctx context.Context, database *sql.DB, commits []Commit, originalCommitIDs []string, agentRows []CommitAgentCoverage, conversationLinks map[string][]string) error {
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := UpsertCommitsTx(ctx, tx, commits); err != nil {
+		return err
+	}
+	if err := DeleteCommitAgentCoverageByCommitIDsTx(ctx, tx, originalCommitIDs); err != nil {
+		return fmt.Errorf("delete old commit agent coverage: %w", err)
+	}
+	if err := deleteCommitRowsByCommitIDsTx(ctx, tx, "commit_conversation_links", originalCommitIDs); err != nil {
+		return fmt.Errorf("delete old commit conversation links: %w", err)
+	}
+	if err := UpsertCommitAgentCoverageTx(ctx, tx, agentRows); err != nil {
+		return err
+	}
+	if err := insertCommitConversationLinksTx(ctx, tx, originalCommitIDs, conversationLinks); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+func deleteCommitRowsByCommitIDsTx(ctx context.Context, tx *sql.Tx, table string, commitIDs []string) error {
+	if len(commitIDs) == 0 {
+		return nil
+	}
+	for i := 0; i < len(commitIDs); i += sqliteBatchSize {
+		end := i + sqliteBatchSize
+		if end > len(commitIDs) {
+			end = len(commitIDs)
+		}
+		batch := commitIDs[i:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		query := fmt.Sprintf("DELETE FROM %s WHERE commit_id IN (%s)", table, placeholders)
+		args := make([]any, 0, len(batch))
+		for _, commitID := range batch {
+			args = append(args, commitID)
+		}
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetCachedCommitConversationLinks returns cached commit-to-conversation mappings

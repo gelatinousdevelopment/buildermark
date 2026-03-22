@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,11 @@ import (
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
+)
+
+const (
+	defaultCommitRefreshTimeout  = 10 * time.Minute
+	extendedCommitRefreshTimeout = 20 * time.Minute
 )
 
 // RefreshStaleProjects checks all projects for stale commit coverage and
@@ -38,7 +44,7 @@ func (s *Server) RefreshStaleProjects(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			stale, err := db.HasStaleCommitCoverageByBranch(ctx, s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
+			stale, err := hasReachableStaleCommitCoverageByBranch(ctx, s.DB, repoProject, branch, currentCommitCoverageVersion)
 			if err != nil {
 				log.Printf("startup refresh: stale check failed for project %s branch %s: %v", repoProject.ID, branch, err)
 				continue
@@ -47,7 +53,15 @@ func (s *Server) RefreshStaleProjects(ctx context.Context) {
 				continue
 			}
 			log.Printf("startup refresh: refreshing stale commits for project %s branch %s", repoProject.ID, branch)
+			key := strings.TrimSpace(repoProject.ID) + ":" + strings.TrimSpace(branch)
+			if s.refreshJobs != nil && !s.refreshJobs.tryStart(key) {
+				log.Printf("startup refresh: refresh already running for project %s branch %s, skipping duplicate", repoProject.ID, branch)
+				continue
+			}
 			s.runCommitRefresh(repoProject.ID, branch, 0, false)
+			if s.refreshJobs != nil {
+				s.refreshJobs.finish(key)
+			}
 		}
 	}
 }
@@ -110,10 +124,7 @@ func (s *Server) broadcastRefreshStatus(state, message, projectID, branch string
 
 func (s *Server) runCommitRefresh(projectID, branch string, days int, manual bool) {
 	startedAt := time.Now().UnixMilli()
-	timeout := 2 * time.Minute
-	if days > 0 {
-		timeout = 5 * time.Minute
-	}
+	timeout := commitRefreshTimeout(days)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -315,6 +326,27 @@ func (s *Server) runCommitRefresh(projectID, branch string, days int, manual boo
 	if upsertErr := db.UpsertCommitSyncState(context.Background(), s.DB, state); upsertErr != nil {
 		log.Printf("commit sync state upsert failed: %v", upsertErr)
 	}
+}
+
+func commitRefreshTimeout(days int) time.Duration {
+	if days > 0 {
+		return extendedCommitRefreshTimeout
+	}
+	return defaultCommitRefreshTimeout
+}
+
+func hasReachableStaleCommitCoverageByBranch(ctx context.Context, database *sql.DB, repoProject *db.Project, branch string, minVersion int) (bool, error) {
+	if repoProject == nil {
+		return false, nil
+	}
+	hashes, err := listBranchCommitHashes(ctx, repoProject.Path, branch)
+	if err != nil {
+		return db.HasStaleCommitCoverageByBranch(ctx, database, repoProject.ID, branch, minVersion)
+	}
+	if len(hashes) == 0 {
+		return false, nil
+	}
+	return db.HasStaleCommitCoverageByHashes(ctx, database, repoProject.ID, hashes, minVersion)
 }
 
 // deepenNeedsParentCommits finds all commits with needs_parent=1 for a project,

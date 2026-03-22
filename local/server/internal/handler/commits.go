@@ -805,7 +805,7 @@ func (s *Server) writeCommitResponse(
 	}
 
 	// Check stale coverage and refresh state.
-	staleCoverage, _ := db.HasStaleCommitCoverageByBranch(r.Context(), s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
+	staleCoverage, _ := hasReachableStaleCommitCoverageByBranch(r.Context(), s.DB, repoProject, branch, currentCommitCoverageVersion)
 	syncState, _ := db.GetCommitSyncState(r.Context(), s.DB, repoProject.ID, branch)
 
 	if shouldQueueCommitRefresh(r.Context(), s.DB, repoProject, identity, branch, total, syncState) {

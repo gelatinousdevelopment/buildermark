@@ -15,6 +15,7 @@ import (
 )
 
 const defaultIngestCount = 20
+const recomputeCommitChunkSize = 25
 
 // binaryFilePattern matches git's "Binary files ... differ" lines and
 // the GIT binary patch header.
@@ -538,15 +539,15 @@ func recomputeSingleCommit(
 		}, nil
 	}
 
-	// Single git call: --unified=0 output has all +/- lines (just no context),
-	// so countDiffAddedRemoved works identically on it.
 	cleanDiff := c.DiffContent
-	tokenDiff, err := runGit(ctx, repoPath, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
-	if err != nil {
-		tokenDiff = cleanDiff
-	}
-	if cleanDiff == "" && err == nil {
-		cleanDiff = stripBinaryDiffs(tokenDiff)
+	tokenDiff := cleanDiff
+	if tokenDiff == "" {
+		// Fallback to git only when the stored diff is missing.
+		gitDiff, err := runGit(ctx, repoPath, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
+		if err == nil {
+			tokenDiff = gitDiff
+			cleanDiff = stripBinaryDiffs(gitDiff)
+		}
 	}
 
 	parsed := parseUnifiedDiffTokensWithFiles(tokenDiff, ignorePatterns)
@@ -658,37 +659,106 @@ func persistRecomputedCommits(
 	perCommitAgent map[string]map[string]agentStats,
 	perCommitConvLinks map[string][]string,
 ) error {
-	if err := db.UpsertCommits(ctx, database, commits); err != nil {
-		return fmt.Errorf("upsert recomputed commits: %w", err)
-	}
+	originalCommitIDs := make([]string, 0, len(originals))
+	agentRows := make([]db.CommitAgentCoverage, 0)
+	conversationLinks := make(map[string][]string, len(originals))
 	for _, c := range originals {
-		if err := db.DeleteCommitAgentCoverageByCommitID(ctx, database, c.ID); err != nil {
-			return err
-		}
+		originalCommitIDs = append(originalCommitIDs, c.ID)
 		byAgent := perCommitAgent[c.ID]
-		if len(byAgent) == 0 && len(perCommitConvLinks[c.ID]) == 0 {
-			continue
-		}
 		if len(byAgent) > 0 {
-			rows := make([]db.CommitAgentCoverage, 0, len(byAgent))
 			for agentName, stats := range byAgent {
-				rows = append(rows, db.CommitAgentCoverage{
+				agentRows = append(agentRows, db.CommitAgentCoverage{
 					CommitID:       c.ID,
 					Agent:          agentName,
 					LinesFromAgent: stats.lines,
 				})
 			}
-			if err := db.UpsertCommitAgentCoverage(ctx, database, rows); err != nil {
-				return fmt.Errorf("upsert recomputed commit agent coverage: %w", err)
-			}
 		}
-		if convIDs, ok := perCommitConvLinks[c.ID]; ok {
-			if err := db.UpsertCommitConversationLinks(ctx, database, c.ID, convIDs); err != nil {
-				log.Printf("warning: failed to upsert commit conversation links for %s: %v", c.CommitHash, err)
-			}
-		}
+		conversationLinks[c.ID] = perCommitConvLinks[c.ID]
+	}
+	if err := db.ReplaceRecomputedCommitData(ctx, database, commits, originalCommitIDs, agentRows, conversationLinks); err != nil {
+		return fmt.Errorf("upsert recomputed commits: %w", err)
 	}
 	return nil
+}
+
+// recomputeCommitChunkCaches holds pre-computed data shared across chunks.
+type recomputeCommitChunkCaches struct {
+	messages      []messageDiff
+	shallowHashes map[string]bool
+	msgIdx        *messageIndex
+}
+
+func buildRecomputeChunkCaches(ctx context.Context, database *sql.DB, repoProject *db.Project, projectIDs []string, commits []db.Commit) (recomputeCommitChunkCaches, error) {
+	minTs := commits[0].AuthoredAt * 1000
+	maxTs := commits[0].AuthoredAt * 1000
+	for _, c := range commits {
+		ts := c.AuthoredAt * 1000
+		if ts < minTs {
+			minTs = ts
+		}
+		if ts > maxTs {
+			maxTs = ts
+		}
+	}
+	msgWindowStart := minTs - defaultMessageWindowMs
+	msgWindowEnd := maxTs + commitWindowLookaheadMs
+	messages, err := listDerivedDiffMessages(ctx, database, projectIDs, msgWindowStart, msgWindowEnd)
+	if err != nil {
+		return recomputeCommitChunkCaches{}, fmt.Errorf("list derived diff messages: %w", err)
+	}
+	return recomputeCommitChunkCaches{
+		messages:      messages,
+		shallowHashes: shallowBoundaryHashes(ctx, repoProject.Path),
+		msgIdx:        buildMessageIndex(messages, msgWindowStart, msgWindowEnd),
+	}, nil
+}
+
+func recomputeCommitChunk(
+	ctx context.Context,
+	repoProject *db.Project,
+	ignorePatterns []string,
+	commits []db.Commit,
+	identity *gitIdentity,
+	extraEmails []string,
+	caches recomputeCommitChunkCaches,
+	progress func(message string, processed int),
+	startIndex int,
+	totalCommits int,
+) ([]db.Commit, []db.Commit, map[string]map[string]agentStats, map[string][]string) {
+	if len(commits) == 0 {
+		return nil, nil, nil, nil
+	}
+
+	updatedCommits := make([]db.Commit, 0, len(commits))
+	perCommitAgent := make(map[string]map[string]agentStats, len(commits))
+	perCommitConvLinks := make(map[string][]string, len(commits))
+
+	for i, c := range commits {
+		if progress != nil {
+			hashPrefix := c.CommitHash
+			if len(hashPrefix) > 8 {
+				hashPrefix = hashPrefix[:8]
+			}
+			progress(fmt.Sprintf("Recomputing commit %s (%d/%d)...", hashPrefix, startIndex+i+1, totalCommits), startIndex+i)
+		}
+		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, caches.messages, identity, extraEmails, caches.shallowHashes, caches.msgIdx)
+		if err != nil {
+			continue
+		}
+		updatedCommits = append(updatedCommits, result.Commit)
+		if len(result.ByAgent) > 0 {
+			perCommitAgent[c.ID] = result.ByAgent
+		}
+		perCommitConvLinks[c.ID] = append([]string(nil), result.ConvIDs...)
+	}
+
+	return updatedCommits, commits, perCommitAgent, perCommitConvLinks
+}
+
+func logRecomputeChunkProgress(repoProject *db.Project, branch string, chunkIndex, chunkCount, chunkSize, total int) {
+	log.Printf("commit recompute: project=%s branch=%s stale=%d chunk=%d/%d size=%d",
+		repoProject.ID, branch, total, chunkIndex, chunkCount, chunkSize)
 }
 
 func recomputeCommitCoverageForProjectHashes(
@@ -712,54 +782,30 @@ func recomputeCommitCoverageForProjectHashes(
 		return 0, nil
 	}
 
-	minTs := commits[0].AuthoredAt * 1000
-	maxTs := commits[0].AuthoredAt * 1000
-	for _, c := range commits {
-		ts := c.AuthoredAt * 1000
-		if ts < minTs {
-			minTs = ts
-		}
-		if ts > maxTs {
-			maxTs = ts
-		}
-	}
-	msgWindowStart := minTs - defaultMessageWindowMs
-	msgWindowEnd := maxTs + commitWindowLookaheadMs
-	messages, err := listDerivedDiffMessages(ctx, database, projectIDs(group), msgWindowStart, msgWindowEnd)
-	if err != nil {
-		return 0, fmt.Errorf("list derived diff messages: %w", err)
-	}
 	ignorePatterns := groupIgnoreDiffPatterns(group)
+	pIDs := projectIDs(group)
 
-	// Pre-compute batch caches.
-	shallowHashes := shallowBoundaryHashes(ctx, repoProject.Path)
-	msgIdx := buildMessageIndex(messages, msgWindowStart, msgWindowEnd)
-
-	updatedCommits := make([]db.Commit, 0, len(commits))
-	perCommitAgent := make(map[string]map[string]agentStats)
-	perCommitConvLinks := make(map[string][]string)
-
-	for _, c := range commits {
-		if progress != nil {
-			progress(fmt.Sprintf("Recomputing commit %s...", c.CommitHash), len(updatedCommits))
-		}
-		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails, shallowHashes, msgIdx)
-		if err != nil {
-			continue
-		}
-		updatedCommits = append(updatedCommits, result.Commit)
-		if len(result.ByAgent) > 0 {
-			perCommitAgent[c.ID] = result.ByAgent
-		}
-		if len(result.ConvIDs) > 0 {
-			perCommitConvLinks[c.ID] = result.ConvIDs
-		}
-	}
-
-	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent, perCommitConvLinks); err != nil {
+	caches, err := buildRecomputeChunkCaches(ctx, database, repoProject, pIDs, commits)
+	if err != nil {
 		return 0, err
 	}
-	return len(updatedCommits), nil
+
+	totalRecomputed := 0
+	chunkCount := (len(commits) + recomputeCommitChunkSize - 1) / recomputeCommitChunkSize
+	for start := 0; start < len(commits); start += recomputeCommitChunkSize {
+		end := start + recomputeCommitChunkSize
+		if end > len(commits) {
+			end = len(commits)
+		}
+		chunkIndex := start/recomputeCommitChunkSize + 1
+		logRecomputeChunkProgress(repoProject, "", chunkIndex, chunkCount, end-start, len(commits))
+		updated, originals, perAgent, convLinks := recomputeCommitChunk(ctx, repoProject, ignorePatterns, commits[start:end], identity, extraEmails, caches, progress, start, len(commits))
+		if err := persistRecomputedCommits(ctx, database, updated, originals, perAgent, convLinks); err != nil {
+			return totalRecomputed, err
+		}
+		totalRecomputed += len(updated)
+	}
+	return totalRecomputed, nil
 }
 
 // isCommitStale mirrors the SQL conditions in HasStaleCommitCoverageByBranch.
@@ -888,58 +934,31 @@ func recomputeCommitCoverageForProjectWithChangedPatterns(
 		}
 	}
 
-	minTs := commits[0].AuthoredAt * 1000
-	maxTs := commits[0].AuthoredAt * 1000
-	for _, c := range commits {
-		ts := c.AuthoredAt * 1000
-		if ts < minTs {
-			minTs = ts
-		}
-		if ts > maxTs {
-			maxTs = ts
-		}
-	}
-	msgWindowStart := minTs - defaultMessageWindowMs
-	msgWindowEnd := maxTs + commitWindowLookaheadMs
-	messages, err := listDerivedDiffMessages(ctx, database, projectIDs(group), msgWindowStart, msgWindowEnd)
-	if err != nil {
-		return 0, fmt.Errorf("list derived diff messages: %w", err)
-	}
 	ignorePatterns := groupIgnoreDiffPatterns(group)
+	pIDs := projectIDs(group)
 
-	// Pre-compute batch caches.
-	shallowHashes := shallowBoundaryHashes(ctx, repoProject.Path)
-	msgIdx := buildMessageIndex(messages, msgWindowStart, msgWindowEnd)
-
-	updatedCommits := make([]db.Commit, 0, len(commits))
-	perCommitAgent := make(map[string]map[string]agentStats)
-	perCommitConvLinks := make(map[string][]string)
-
-	for i, c := range commits {
-		if commitProgress != nil {
-			hashPrefix := c.CommitHash
-			if len(hashPrefix) > 8 {
-				hashPrefix = hashPrefix[:8]
-			}
-			commitProgress(fmt.Sprintf("Recomputing commit %s (%d/%d)...", hashPrefix, i+1, len(commits)), i)
-		}
-		result, err := recomputeSingleCommit(ctx, repoProject.Path, c, ignorePatterns, messages, identity, extraEmails, shallowHashes, msgIdx)
-		if err != nil {
-			continue
-		}
-		updatedCommits = append(updatedCommits, result.Commit)
-		if len(result.ByAgent) > 0 {
-			perCommitAgent[c.ID] = result.ByAgent
-		}
-		if len(result.ConvIDs) > 0 {
-			perCommitConvLinks[c.ID] = result.ConvIDs
-		}
-	}
-
-	if err := persistRecomputedCommits(ctx, database, updatedCommits, commits, perCommitAgent, perCommitConvLinks); err != nil {
+	caches, err := buildRecomputeChunkCaches(ctx, database, repoProject, pIDs, commits)
+	if err != nil {
 		return 0, err
 	}
-	return len(updatedCommits), nil
+
+	log.Printf("commit recompute: project=%s branch=%s stale=%d", repoProject.ID, branch, len(commits))
+	totalRecomputed := 0
+	chunkCount := (len(commits) + recomputeCommitChunkSize - 1) / recomputeCommitChunkSize
+	for start := 0; start < len(commits); start += recomputeCommitChunkSize {
+		end := start + recomputeCommitChunkSize
+		if end > len(commits) {
+			end = len(commits)
+		}
+		chunkIndex := start/recomputeCommitChunkSize + 1
+		logRecomputeChunkProgress(repoProject, branch, chunkIndex, chunkCount, end-start, len(commits))
+		updated, originals, perAgent, convLinks := recomputeCommitChunk(ctx, repoProject, ignorePatterns, commits[start:end], identity, extraEmails, caches, commitProgress, start, len(commits))
+		if err := persistRecomputedCommits(ctx, database, updated, originals, perAgent, convLinks); err != nil {
+			return totalRecomputed, err
+		}
+		totalRecomputed += len(updated)
+	}
+	return totalRecomputed, nil
 }
 
 func commitDiffTouchesChangedPatterns(diffText string, patterns []string) bool {

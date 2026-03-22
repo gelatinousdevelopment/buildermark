@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
@@ -45,6 +46,8 @@ type Server struct {
 	ws       *wsHub
 	notifyWS *wsHub     // dedicated hub for native notification clients
 	importMu sync.Mutex // guards against concurrent imports
+
+	settingsScanPending atomic.Bool
 
 	updateState updateState
 	version     string // build version, set by CLI runner

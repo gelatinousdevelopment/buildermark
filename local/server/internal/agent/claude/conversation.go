@@ -72,6 +72,56 @@ func normalizeWorktreePath(path string) string {
 	return path
 }
 
+// mountedProjectPath translates a project path recorded inside a mounted home
+// back to the local filesystem when possible. For example, a transcript cwd of
+// "/home/debian/repo" can map to "/Volumes/debian/repo" when the mounted home
+// is "/Volumes/debian".
+func mountedProjectPath(home, projectPath string) string {
+	projectPath = strings.TrimSpace(filepath.Clean(projectPath))
+	if projectPath == "" || projectPath == "." {
+		return ""
+	}
+	if _, err := os.Stat(projectPath); err == nil {
+		return projectPath
+	}
+
+	rel, ok := relativePathWithinUserHome(projectPath)
+	if !ok || rel == "" {
+		return projectPath
+	}
+	candidate := filepath.Join(home, rel)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return projectPath
+}
+
+func relativePathWithinUserHome(projectPath string) (string, bool) {
+	if strings.TrimSpace(projectPath) == "" {
+		return "", false
+	}
+
+	slashPath := filepath.ToSlash(projectPath)
+	if strings.HasPrefix(slashPath, "/home/") || strings.HasPrefix(slashPath, "/Users/") {
+		parts := strings.Split(strings.TrimPrefix(slashPath, "/"), "/")
+		if len(parts) < 3 {
+			return "", false
+		}
+		return filepath.Join(parts[2:]...), true
+	}
+
+	volume := filepath.VolumeName(projectPath)
+	if volume != "" {
+		trimmed := strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(projectPath, volume)), "/")
+		parts := strings.Split(trimmed, "/")
+		if len(parts) >= 3 && strings.EqualFold(parts[0], "Users") {
+			return filepath.Join(parts[2:]...), true
+		}
+	}
+
+	return "", false
+}
+
 // claudeProjectDirName encodes a project path into a directory name matching
 // Claude Code's actual encoding: both "/" and "." are replaced with "-".
 func claudeProjectDirName(projectPath string) string {

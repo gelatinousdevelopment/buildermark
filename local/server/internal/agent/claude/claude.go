@@ -26,6 +26,7 @@ type Agent struct {
 
 	cachedProjectFiles     []string
 	cachedProjectFilesTime time.Time
+	allowUntrackedProjects bool
 }
 
 // New creates a Claude Code agent that monitors ~/.claude/history.jsonl.
@@ -43,6 +44,15 @@ func NewForHome(database *sql.DB, home string) *Agent {
 		Base: agent.NewBase(database, home, "claude"),
 		path: filepath.Join(home, ".claude", "history.jsonl"),
 	}
+}
+
+// NewForHomeImportAll creates a Claude Code agent for an extra mounted home.
+// These homes are additive import sources, so they should not be limited to
+// already-tracked project paths.
+func NewForHomeImportAll(database *sql.DB, home string) *Agent {
+	a := NewForHome(database, home)
+	a.allowUntrackedProjects = true
+	return a
 }
 
 // newAgent is an internal constructor for testing with custom paths.

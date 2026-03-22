@@ -72,6 +72,65 @@ func TestLatestWatcherScanTimestamp(t *testing.T) {
 	}
 }
 
+func TestLatestWatcherScanTimestampForScopes(t *testing.T) {
+	database := setupTestDB(t)
+	ctx := context.Background()
+
+	if err := UpsertWatcherScanState(ctx, database, WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  "history_file",
+		SourceKey:   "/Users/me/.claude/history.jsonl",
+		UpdatedAtMs: 1000,
+	}); err != nil {
+		t.Fatalf("insert main history row: %v", err)
+	}
+	if err := UpsertWatcherScanState(ctx, database, WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  "project_file",
+		SourceKey:   "/Users/me/.claude/projects/-Users-me-repo/session.jsonl",
+		UpdatedAtMs: 2000,
+	}); err != nil {
+		t.Fatalf("insert main project row: %v", err)
+	}
+	if err := UpsertWatcherScanState(ctx, database, WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  "history_file",
+		SourceKey:   "/Volumes/debian/.claude/history.jsonl",
+		UpdatedAtMs: 3000,
+	}); err != nil {
+		t.Fatalf("insert debian history row: %v", err)
+	}
+	if err := UpsertWatcherScanState(ctx, database, WatcherScanState{
+		Agent:       "claude",
+		SourceKind:  "project_file",
+		SourceKey:   "/Volumes/debian/.claude/projects/-home-debian-github-buildermark/011a10e8.jsonl",
+		UpdatedAtMs: 4000,
+	}); err != nil {
+		t.Fatalf("insert debian project row: %v", err)
+	}
+
+	ts, err := LatestWatcherScanTimestampForScopes(ctx, database, "claude",
+		WatcherScanScope{SourceKind: "history_file", SourceKey: "/Volumes/debian/.claude/history.jsonl"},
+		WatcherScanScope{SourceKind: "project_file", SourceKey: "/Volumes/debian/.claude/projects", MatchPrefix: true},
+	)
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestampForScopes: %v", err)
+	}
+	if ts != 4000 {
+		t.Fatalf("scoped timestamp = %d, want 4000", ts)
+	}
+
+	ts, err = LatestWatcherScanTimestampForScopes(ctx, database, "claude",
+		WatcherScanScope{SourceKind: "history_file", SourceKey: "/missing/.claude/history.jsonl"},
+	)
+	if err != nil {
+		t.Fatalf("LatestWatcherScanTimestampForScopes missing: %v", err)
+	}
+	if ts != 0 {
+		t.Fatalf("missing scoped timestamp = %d, want 0", ts)
+	}
+}
+
 func TestWatcherScanStateCRUD(t *testing.T) {
 	database := setupTestDB(t)
 	ctx := context.Background()

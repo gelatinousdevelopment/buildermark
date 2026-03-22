@@ -20,6 +20,8 @@ import (
 
 const claudeWatcherSourceKindHistoryFile = "history_file"
 const claudeWatcherSourceKindProjectFile = "project_file"
+const claudeWatcherSourceKindScanMarker = "scan_marker"
+const claudeStartupScanMarkerState = "startup_v2"
 
 var unresolvedPasteRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 
@@ -27,17 +29,17 @@ var unresolvedPasteRe = regexp.MustCompile(`\[Pasted text #\d+.*\]`)
 func (a *Agent) Run(ctx context.Context) {
 	log.Printf("claude watcher: starting, monitoring %s", a.path)
 
-	scanWindow := agent.DefaultScanWindow
-	if latestMs, err := db.LatestWatcherScanTimestamp(ctx, a.DB, a.Name()); err == nil {
-		scanWindow = agent.StartupScanWindow(latestMs)
-	}
+	hasMarker := a.hasStartupScanMarker(ctx)
+	scanWindow := a.startupScanWindowWith(ctx, hasMarker)
 	log.Printf("claude watcher: startup scan window %s", scanWindow)
 
 	trackedFilter := a.trackedProjectFilter(ctx)
+	useStartupCheckpoint := a.useStartupCheckpointWith(hasMarker)
 	scanCutoff := time.Now().Add(-scanWindow)
 	start := time.Now()
-	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter)
-	projectScanCount := a.scanProjectFilesSince(ctx, scanCutoff, true, trackedFilter, nil)
+	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter, useStartupCheckpoint)
+	projectScanCount := a.scanProjectFilesSince(ctx, scanCutoff, true, useStartupCheckpoint, trackedFilter, nil)
+	a.persistStartupScanMarker(ctx)
 	log.Printf("claude watcher: startup scan duration %s", agent.FmtDuration(time.Since(start)))
 	if projectScanCount > 0 {
 		log.Printf("claude watcher: startup project scan processed %d entries", projectScanCount)
@@ -83,6 +85,56 @@ func (a *Agent) Run(ctx context.Context) {
 			ticker.Reset(newInterval)
 		}
 	}
+}
+
+func (a *Agent) startupScanWindow(ctx context.Context) time.Duration {
+	return a.startupScanWindowWith(ctx, a.hasStartupScanMarker(ctx))
+}
+
+func (a *Agent) startupScanWindowWith(ctx context.Context, hasMarker bool) time.Duration {
+	if a.allowUntrackedProjects && !hasMarker {
+		return agent.DefaultScanWindow
+	}
+
+	scanWindow := agent.DefaultScanWindow
+	latestMs, err := db.LatestWatcherScanTimestampForScopes(ctx, a.DB, a.Name(),
+		db.WatcherScanScope{SourceKind: claudeWatcherSourceKindHistoryFile, SourceKey: a.path},
+		db.WatcherScanScope{SourceKind: claudeWatcherSourceKindProjectFile, SourceKey: filepath.Join(a.Home, ".claude", "projects"), MatchPrefix: true},
+		db.WatcherScanScope{SourceKind: claudeWatcherSourceKindScanMarker, SourceKey: a.startupScanMarkerKey()},
+	)
+	if err == nil {
+		scanWindow = agent.StartupScanWindow(latestMs)
+	}
+	return scanWindow
+}
+
+func (a *Agent) startupScanMarkerKey() string {
+	return filepath.Clean(a.Home)
+}
+
+func (a *Agent) hasStartupScanMarker(ctx context.Context) bool {
+	st, err := db.GetWatcherScanState(ctx, a.DB, a.Name(), claudeWatcherSourceKindScanMarker, a.startupScanMarkerKey())
+	return err == nil && st != nil && st.StateJSON == claudeStartupScanMarkerState
+}
+
+func (a *Agent) useStartupCheckpoint(ctx context.Context) bool {
+	return a.useStartupCheckpointWith(a.hasStartupScanMarker(ctx))
+}
+
+func (a *Agent) useStartupCheckpointWith(hasMarker bool) bool {
+	if !a.allowUntrackedProjects {
+		return true
+	}
+	return hasMarker
+}
+
+func (a *Agent) persistStartupScanMarker(ctx context.Context) {
+	_ = db.UpsertWatcherScanState(ctx, a.DB, db.WatcherScanState{
+		Agent:      a.Name(),
+		SourceKind: claudeWatcherSourceKindScanMarker,
+		SourceKey:  a.startupScanMarkerKey(),
+		StateJSON:  claudeStartupScanMarkerState,
+	})
 }
 
 // DiscoverProjectPathsSince returns project paths inferred from Claude project
@@ -135,9 +187,10 @@ func (a *Agent) DiscoverProjectPathsSince(_ context.Context, since time.Time) []
 // the given cutoff. This is used by the API to trigger a historical scan.
 func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
 	filter := a.trackedProjectFilter(ctx)
-	n := a.doScan(ctx, since, false, filter)
-	n += a.scanProjectFilesSince(ctx, since, false, filter, progress)
+	n := a.doScan(ctx, since, false, false, filter)
+	n += a.scanProjectFilesSince(ctx, since, false, false, filter, progress)
 	a.backfillParentConversations(ctx)
+	a.persistStartupScanMarker(ctx)
 	a.persistHistoryOffset(ctx, a.offset)
 	log.Printf("claude watcher: manual scan processed %d entries (since %s)", n, since.Format(time.RFC3339))
 	return n
@@ -146,9 +199,10 @@ func (a *Agent) ScanSince(ctx context.Context, since time.Time, progress agent.S
 // ScanPathsSince scans only entries for matching project paths.
 func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []string, progress agent.ScanProgressFunc) int {
 	filter := agent.NewPathFilter(paths)
-	n := a.doScan(ctx, since, false, filter)
-	n += a.scanProjectFilesSince(ctx, since, false, filter, progress)
+	n := a.doScan(ctx, since, false, false, filter)
+	n += a.scanProjectFilesSince(ctx, since, false, false, filter, progress)
 	a.backfillParentConversations(ctx)
+	a.persistStartupScanMarker(ctx)
 	a.persistHistoryOffset(ctx, a.offset)
 	log.Printf("claude watcher: manual path scan processed %d entries (since %s, paths=%d)", n, since.Format(time.RFC3339), len(paths))
 	return n
@@ -157,11 +211,11 @@ func (a *Agent) ScanPathsSince(ctx context.Context, since time.Time, paths []str
 // scanSince reads the entire file and processes only entries newer than the cutoff,
 // then updates the file offset so subsequent polls start from the end.
 func (a *Agent) scanSince(ctx context.Context, since time.Time) {
-	a.scanSinceFiltered(ctx, since, nil)
+	a.scanSinceFiltered(ctx, since, nil, true)
 }
 
-func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter agent.PathFilter) {
-	n := a.doScan(ctx, since, true, filter)
+func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter agent.PathFilter, useCheckpoint bool) {
+	n := a.doScan(ctx, since, true, useCheckpoint, filter)
 	if n > 0 {
 		log.Printf("claude watcher: initial scan processed %d entries", n)
 	}
@@ -170,9 +224,9 @@ func (a *Agent) scanSinceFiltered(ctx context.Context, since time.Time, filter a
 // doScan reads the entire file and processes entries newer than the cutoff.
 // If updateOffset is true, it advances the file offset so subsequent polls
 // start from the end of the file.
-func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, filter agent.PathFilter) int {
+func (a *Agent) doScan(ctx context.Context, since time.Time, persistOffset, useCheckpoint bool, filter agent.PathFilter) int {
 	startOffset := int64(0)
-	if updateOffset {
+	if useCheckpoint {
 		startOffset = a.restoreHistoryOffset(ctx)
 	}
 
@@ -190,7 +244,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, updateOffset bool, 
 	if len(filtered) > 0 {
 		a.processEntries(ctx, filtered)
 	}
-	if updateOffset {
+	if persistOffset {
 		a.offset = newOffset
 		a.persistHistoryOffset(ctx, newOffset)
 	}
@@ -241,10 +295,13 @@ func (a *Agent) pollFiltered(ctx context.Context, filter agent.PathFilter) int {
 }
 
 func (a *Agent) pollProjectFiles(ctx context.Context, filter agent.PathFilter) int {
-	return a.scanProjectFilesSince(ctx, time.Time{}, true, filter, nil)
+	return a.scanProjectFilesSince(ctx, time.Time{}, true, true, filter, nil)
 }
 
 func (a *Agent) trackedProjectFilter(ctx context.Context) agent.PathFilter {
+	if a.allowUntrackedProjects {
+		return nil
+	}
 	return agent.TrackedProjectFilter(ctx, a.DB, func(p db.Project) []string {
 		// Include worktree paths (populated at startup by backfillGitWorktreePaths)
 		// so conversations in external worktrees pass the filter during polling.
@@ -259,7 +316,7 @@ func (a *Agent) trackedProjectFilter(ctx context.Context) agent.PathFilter {
 	})
 }
 
-func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset bool, filter agent.PathFilter, progress agent.ScanProgressFunc) int {
+func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, updateOffset, useCheckpoint bool, filter agent.PathFilter, progress agent.ScanProgressFunc) int {
 	var paths []string
 	if updateOffset {
 		paths = a.listProjectConversationFilesCached()
@@ -277,7 +334,7 @@ func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, upda
 			progress(path)
 		}
 		startOffset := int64(0)
-		if updateOffset {
+		if useCheckpoint {
 			startOffset = a.restoreProjectFileOffset(ctx, path)
 		}
 
@@ -708,11 +765,12 @@ func (a *Agent) processEntries(ctx context.Context, entries []historyEntry) {
 			continue
 		}
 
-		normalizedProject := gitRootCache.Resolve(normalizeWorktreePath(g.project))
+		mountedProject := mountedProjectPath(a.Home, g.project)
+		normalizedProject := gitRootCache.Resolve(normalizeWorktreePath(mountedProject))
 		projectID := projectIDCache[normalizedProject]
 		if projectID == "" {
 			var err error
-			projectID, err = db.EnsureProject(ctx, a.DB, normalizedProject)
+			projectID, err = db.EnsureProjectWithAliases(ctx, a.DB, normalizedProject, g.project)
 			if err != nil {
 				log.Printf("claude watcher: ensure project %q: %v", normalizedProject, err)
 				continue
