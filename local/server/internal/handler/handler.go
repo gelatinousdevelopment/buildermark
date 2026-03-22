@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -58,6 +59,10 @@ type Server struct {
 	// finishes computing and writing, before the worker decides whether it must
 	// rerun with newer project diff settings.
 	afterCoverageStage func(projectID, stage string)
+
+	// historyScanRecompute overrides the default post-scan recompute stage in
+	// tests so they can assert the recompute scope without exercising git.
+	historyScanRecompute func(ctx context.Context, since time.Time, paths []string, broadcast func(string, string))
 }
 
 // Routes returns an http.Handler with all routes and middleware wired up.

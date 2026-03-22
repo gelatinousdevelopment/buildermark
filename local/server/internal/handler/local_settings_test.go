@@ -2,12 +2,15 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 )
 
 func TestGetLocalSettings(t *testing.T) {
@@ -89,6 +92,89 @@ func TestPutLocalSettings(t *testing.T) {
 	}
 	if len(cfg.ExtraAgentHomes) != 1 || cfg.ExtraAgentHomes[0] != "/mnt/vm/user" {
 		t.Fatalf("saved extraAgentHomes = %#v, want [/mnt/vm/user]", cfg.ExtraAgentHomes)
+	}
+}
+
+func TestPutLocalSettingsScopesRescanToNewHomes(t *testing.T) {
+	t.Setenv("HOME", "/tmp/buildermark-home")
+	oldWatcher := &mockWatcher{name: "claude", home: "/homes/old"}
+	newWatcher := &mockWatcher{name: "claude", home: "/homes/new"}
+	oldDiscoverer := &mockDiscoverer{name: "claude", home: "/homes/old", paths: []string{"/tmp/old-project"}}
+	newDiscoverer := &mockDiscoverer{name: "claude", home: "/homes/new", paths: []string{"/tmp/new-project"}}
+	s := setupTestServerWithAgents(t, oldWatcher, newWatcher, oldDiscoverer, newDiscoverer)
+	configDir := t.TempDir()
+	s.ConfigDir = configDir
+	s.ReloadWatchers = func() []string { return []string{"/homes/new"} }
+	handler := s.Routes()
+
+	var gotPaths []string
+	s.historyScanRecompute = func(ctx context.Context, since time.Time, paths []string, broadcast func(string, string)) {
+		_ = ctx
+		_ = since
+		_ = broadcast
+		gotPaths = append([]string(nil), paths...)
+	}
+
+	body, _ := json.Marshal(map[string]any{"extraAgentHomes": []string{"/homes/new"}})
+	req := httptest.NewRequest("PUT", "/api/v1/settings", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	waitForImportUnlock(s)
+
+	oldScanCount, _, _, _ := oldWatcher.snapshot()
+	newScanCount, _, _, _ := newWatcher.snapshot()
+	if oldScanCount != 0 {
+		t.Fatalf("old watcher scanCount = %d, want 0", oldScanCount)
+	}
+	if newScanCount != 1 {
+		t.Fatalf("new watcher scanCount = %d, want 1", newScanCount)
+	}
+
+	if !reflect.DeepEqual(gotPaths, []string{"/tmp/new-project"}) {
+		t.Fatalf("recompute paths = %#v, want [/tmp/new-project]", gotPaths)
+	}
+}
+
+func TestPutLocalSettingsSkipsRescanWithoutNewHomes(t *testing.T) {
+	t.Setenv("HOME", "/tmp/buildermark-home")
+	w := &mockWatcher{name: "claude", home: "/homes/existing"}
+	s := setupTestServerWithAgents(t, w)
+	configDir := t.TempDir()
+	s.ConfigDir = configDir
+	s.ReloadWatchers = func() []string { return nil }
+	handler := s.Routes()
+
+	recomputeCalls := 0
+	s.historyScanRecompute = func(ctx context.Context, since time.Time, paths []string, broadcast func(string, string)) {
+		_ = ctx
+		_ = since
+		_ = paths
+		_ = broadcast
+		recomputeCalls++
+	}
+
+	body, _ := json.Marshal(map[string]any{"extraAgentHomes": []string{"/homes/existing"}})
+	req := httptest.NewRequest("PUT", "/api/v1/settings", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	scanCount, _, _, _ := w.snapshot()
+	if scanCount != 0 {
+		t.Fatalf("watcher scanCount = %d, want 0", scanCount)
+	}
+	if recomputeCalls != 0 {
+		t.Fatalf("recomputeCalls = %d, want 0", recomputeCalls)
 	}
 }
 

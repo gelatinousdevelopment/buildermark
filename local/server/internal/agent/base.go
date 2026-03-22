@@ -81,6 +81,9 @@ func (b *Base) MarkActive() time.Duration {
 // Name returns the agent name (implements Agent interface).
 func (b *Base) Name() string { return b.agentName }
 
+// HomePath returns the agent home directory this instance is scoped to.
+func (b *Base) HomePath() string { return b.Home }
+
 // LastPollTime returns when this watcher last completed a poll cycle.
 func (b *Base) LastPollTime() time.Time { return b.lastPollTime }
 

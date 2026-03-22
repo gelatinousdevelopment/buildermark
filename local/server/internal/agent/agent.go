@@ -44,6 +44,14 @@ type Agent interface {
 	Name() string // e.g. "claude", "codex"
 }
 
+// HomeScopedAgent exposes the home directory a concrete agent instance
+// belongs to. Local watchers are registered per home, so callers can use
+// this to target only agents for newly added homes.
+type HomeScopedAgent interface {
+	Agent
+	HomePath() string
+}
+
 // ScanProgressFunc is called during scanning with the name of each file being
 // processed. Implementations may call it frequently; callers should rate-limit
 // if needed.

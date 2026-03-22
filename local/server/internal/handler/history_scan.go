@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,6 +27,9 @@ type historyScanRequest struct {
 	// ReplaceDerivedDiffs deletes old synthetic diff messages for the scoped
 	// project+agent before rescanning so regenerated diffs can replace them.
 	ReplaceDerivedDiffs bool `json:"replaceDerivedDiffs"`
+	// HomePaths scopes a scan to agent instances registered for these homes.
+	// This is used internally when extraAgentHomes are added.
+	HomePaths []string `json:"-"`
 }
 
 type historyScanStartedResponse struct {
@@ -33,24 +37,23 @@ type historyScanStartedResponse struct {
 }
 
 func (s *Server) scanWatchersSince(ctx context.Context, since time.Time, agentName string) int {
-	return s.scanWatchersSincePaths(ctx, since, agentName, nil, nil)
+	return s.scanWatchersSinceFilters(ctx, since, agentName, nil, nil, nil)
 }
 
 func (s *Server) scanWatchersSincePaths(ctx context.Context, since time.Time, agentName string, paths []string, progress agent.ScanProgressFunc) int {
-	var count int
-	if agentName != "" {
-		for _, w := range s.Agents.Watchers() {
-			if w.Name() == agentName {
-				if pw, ok := w.(agent.PathFilteredWatcher); ok && len(paths) > 0 {
-					count += pw.ScanPathsSince(ctx, since, paths, progress)
-				} else {
-					count += w.ScanSince(ctx, since, progress)
-				}
-			}
-		}
-		return count
+	return s.scanWatchersSinceFilters(ctx, since, agentName, paths, nil, progress)
+}
+
+func (s *Server) scanWatchersSinceFilters(ctx context.Context, since time.Time, agentName string, paths, homes []string, progress agent.ScanProgressFunc) int {
+	if s.Agents == nil {
+		return 0
 	}
+	homeSet := normalizeScopePaths(homes)
+	var count int
 	for _, w := range s.Agents.Watchers() {
+		if !matchesAgentHomeScope(w, agentName, homeSet) {
+			continue
+		}
 		if pw, ok := w.(agent.PathFilteredWatcher); ok && len(paths) > 0 {
 			count += pw.ScanPathsSince(ctx, since, paths, progress)
 		} else {
@@ -58,6 +61,64 @@ func (s *Server) scanWatchersSincePaths(ctx context.Context, since time.Time, ag
 		}
 	}
 	return count
+}
+
+func (s *Server) discoverProjectPathsSinceFilters(ctx context.Context, since time.Time, agentName string, homes []string) []string {
+	if s.Agents == nil {
+		return nil
+	}
+	homeSet := normalizeScopePaths(homes)
+	seen := make(map[string]struct{})
+	paths := make([]string, 0)
+	for _, d := range s.Agents.ProjectPathDiscoverers() {
+		if !matchesAgentHomeScope(d, agentName, homeSet) {
+			continue
+		}
+		for _, path := range d.DiscoverProjectPathsSince(ctx, since) {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+			path = filepath.Clean(path)
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func matchesAgentHomeScope(a agent.Agent, agentName string, homeSet map[string]struct{}) bool {
+	if agentName != "" && a.Name() != agentName {
+		return false
+	}
+	if len(homeSet) == 0 {
+		return true
+	}
+	ha, ok := a.(agent.HomeScopedAgent)
+	if !ok {
+		return false
+	}
+	_, ok = homeSet[filepath.Clean(ha.HomePath())]
+	return ok
+}
+
+func normalizeScopePaths(paths []string) map[string]struct{} {
+	if len(paths) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		out[filepath.Clean(path)] = struct{}{}
+	}
+	return out
 }
 
 func (s *Server) handleHistoryScan(w http.ResponseWriter, r *http.Request) {
@@ -157,18 +218,31 @@ func (s *Server) runHistoryScanJob(since time.Time, req historyScanRequest, path
 		broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)))
 	}
 
-	// Pass nil paths so the scan is unfiltered — a manual re-import should
-	// discover all conversations, not just those matching existing projects.
-	count := s.scanWatchersSincePaths(ctx, since, req.Agent, paths, progress)
+	// Project paths and home roots are both optional scopes. Manual scans pass
+	// only project paths; settings-triggered scans pass only newly added homes.
+	count := s.scanWatchersSinceFilters(ctx, since, req.Agent, paths, req.HomePaths, progress)
+
+	recomputePaths := paths
+	if len(req.HomePaths) > 0 {
+		recomputePaths = s.discoverProjectPathsSinceFilters(ctx, since, req.Agent, req.HomePaths)
+	}
 
 	// Recompute commit coverage for affected projects so newly imported
 	// messages are matched against existing commits.
 	broadcast("running", "Recomputing commit coverage...")
-	s.recomputeCommitCoverageAfterHistoryScan(ctx, since, paths, broadcast)
+	s.runHistoryScanRecompute(ctx, since, recomputePaths, broadcast)
 
 	msg := fmt.Sprintf("Imported %d conversation entries", count)
 	broadcast("complete", msg)
 	s.sendNotification("history_scan_complete", "History scan complete", msg, "")
+}
+
+func (s *Server) runHistoryScanRecompute(ctx context.Context, since time.Time, paths []string, broadcast func(string, string)) {
+	if s.historyScanRecompute != nil {
+		s.historyScanRecompute(ctx, since, paths, broadcast)
+		return
+	}
+	s.recomputeCommitCoverageAfterHistoryScan(ctx, since, paths, broadcast)
 }
 
 func (s *Server) historyScanPaths(ctx context.Context, projectID string) ([]string, error) {

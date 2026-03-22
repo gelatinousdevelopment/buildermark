@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -19,10 +20,20 @@ import (
 type mockWatcher struct {
 	mu             sync.Mutex
 	name           string
+	home           string
 	scanCount      int
 	scanPathsCount int
 	lastSince      time.Time
 	lastPaths      []string
+}
+
+type mockDiscoverer struct {
+	mu        sync.Mutex
+	name      string
+	home      string
+	paths     []string
+	callCount int
+	lastSince time.Time
 }
 
 type replacingWatcher struct {
@@ -47,6 +58,7 @@ func (w *replacingWatcher) ScanSince(ctx context.Context, since time.Time, progr
 }
 
 func (m *mockWatcher) Name() string            { return m.name }
+func (m *mockWatcher) HomePath() string        { return m.home }
 func (m *mockWatcher) Run(ctx context.Context) {}
 func (m *mockWatcher) LastPollTime() time.Time { return time.Time{} }
 func (m *mockWatcher) ScanSince(ctx context.Context, since time.Time, progress agent.ScanProgressFunc) int {
@@ -71,15 +83,40 @@ func (m *mockWatcher) snapshot() (scanCount, scanPathsCount int, lastSince time.
 	return m.scanCount, m.scanPathsCount, m.lastSince, append([]string(nil), m.lastPaths...)
 }
 
-func setupTestServerWithWatcher(t *testing.T, watchers ...agent.Watcher) *Server {
+func (m *mockDiscoverer) Name() string     { return m.name }
+func (m *mockDiscoverer) HomePath() string { return m.home }
+func (m *mockDiscoverer) DiscoverProjectPathsSince(ctx context.Context, since time.Time) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callCount++
+	m.lastSince = since
+	return append([]string(nil), m.paths...)
+}
+
+func (m *mockDiscoverer) snapshot() (callCount int, lastSince time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount, m.lastSince
+}
+
+func setupTestServerWithAgents(t *testing.T, agents ...agent.Agent) *Server {
 	t.Helper()
 	s := setupTestServer(t)
 	reg := agent.NewRegistry()
-	for _, w := range watchers {
-		reg.Register(w)
+	for _, a := range agents {
+		reg.Register(a)
 	}
 	s.Agents = reg
 	return s
+}
+
+func setupTestServerWithWatcher(t *testing.T, watchers ...agent.Watcher) *Server {
+	t.Helper()
+	agents := make([]agent.Agent, 0, len(watchers))
+	for _, w := range watchers {
+		agents = append(agents, w)
+	}
+	return setupTestServerWithAgents(t, agents...)
 }
 
 // addTestProject inserts a project into the test DB so that history scan has paths to scan.
@@ -385,6 +422,52 @@ func TestHistoryScanSpecificProjectUsesPathScan(t *testing.T) {
 	}
 	if len(lastPaths) != 1 || lastPaths[0] != "/tmp/test-project" {
 		t.Fatalf("lastPaths = %#v, want [/tmp/test-project]", lastPaths)
+	}
+}
+
+func TestRunHistoryScanJobScopesHomesAndRecomputePaths(t *testing.T) {
+	oldWatcher := &mockWatcher{name: "claude", home: "/homes/old"}
+	newWatcher := &mockWatcher{name: "claude", home: "/homes/new"}
+	oldDiscoverer := &mockDiscoverer{name: "claude", home: "/homes/old", paths: []string{"/tmp/old-project"}}
+	newDiscoverer := &mockDiscoverer{name: "claude", home: "/homes/new", paths: []string{"/tmp/new-project"}}
+
+	s := setupTestServerWithAgents(t, oldWatcher, newWatcher, oldDiscoverer, newDiscoverer)
+	s.Routes()
+
+	var gotPaths []string
+	s.historyScanRecompute = func(ctx context.Context, since time.Time, paths []string, broadcast func(string, string)) {
+		_ = ctx
+		_ = since
+		_ = broadcast
+		gotPaths = append([]string(nil), paths...)
+	}
+
+	s.importMu.Lock()
+	s.runHistoryScanJob(time.Now().Add(-24*time.Hour), historyScanRequest{
+		Agent:     "claude",
+		HomePaths: []string{"/homes/new"},
+	}, nil)
+
+	oldScanCount, _, _, _ := oldWatcher.snapshot()
+	newScanCount, _, _, _ := newWatcher.snapshot()
+	if oldScanCount != 0 {
+		t.Fatalf("old watcher scanCount = %d, want 0", oldScanCount)
+	}
+	if newScanCount != 1 {
+		t.Fatalf("new watcher scanCount = %d, want 1", newScanCount)
+	}
+
+	oldDiscoverCalls, _ := oldDiscoverer.snapshot()
+	newDiscoverCalls, _ := newDiscoverer.snapshot()
+	if oldDiscoverCalls != 0 {
+		t.Fatalf("old discoverer callCount = %d, want 0", oldDiscoverCalls)
+	}
+	if newDiscoverCalls != 1 {
+		t.Fatalf("new discoverer callCount = %d, want 1", newDiscoverCalls)
+	}
+
+	if !reflect.DeepEqual(gotPaths, []string{"/tmp/new-project"}) {
+		t.Fatalf("recompute paths = %#v, want [/tmp/new-project]", gotPaths)
 	}
 }
 
