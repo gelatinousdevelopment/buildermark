@@ -247,7 +247,7 @@
 		if (!stretchBars || columns.length <= 0) return false;
 		const totalGapWidth = Math.max(0, columns.length - 1) * DEFAULT_BAR_GAP_PX;
 		const widthWithDefaultGap = Math.max(0, (chartWidth - totalGapWidth) / columns.length);
-		return widthWithDefaultGap <= 12;
+		return widthWithDefaultGap <= 10;
 	});
 
 	const barGapPx = $derived(denseBars ? 0 : DEFAULT_BAR_GAP_PX);
