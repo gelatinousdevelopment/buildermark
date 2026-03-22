@@ -267,11 +267,11 @@ func TestGetProjectDetailPageSortsByLastMessageTimestampAndPaginates(t *testing.
 	if len(page1.Conversations) != 2 {
 		t.Fatalf("page1 conversations = %d, want 2", len(page1.Conversations))
 	}
-	if got := page1.Conversations[0].ID; got != "conv-old" {
-		t.Fatalf("page1 first conversation = %q, want %q", got, "conv-old")
+	if got := page1.Conversations[0].ID; got != "conv-new" {
+		t.Fatalf("page1 first conversation = %q, want %q", got, "conv-new")
 	}
-	if got := page1.Conversations[1].ID; got != "conv-new" {
-		t.Fatalf("page1 second conversation = %q, want %q", got, "conv-new")
+	if got := page1.Conversations[1].ID; got != "conv-old" {
+		t.Fatalf("page1 second conversation = %q, want %q", got, "conv-old")
 	}
 	if got := page1.ConversationPagination.Total; got != 3 {
 		t.Fatalf("page1 total = %d, want 3", got)

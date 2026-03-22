@@ -334,8 +334,18 @@ func ingestCommits(
 	ignorePatterns := groupIgnoreDiffPatterns(group)
 	pIDs := projectIDs(group)
 
-	firstTs := toIngest[0].TimestampUnix*1000 - defaultMessageWindowMs
-	lastTs := toIngest[len(toIngest)-1].TimestampUnix*1000 + commitWindowLookaheadMs
+	minTs := toIngest[0].TimestampUnix
+	maxTs := toIngest[0].TimestampUnix
+	for _, c := range toIngest[1:] {
+		if c.TimestampUnix < minTs {
+			minTs = c.TimestampUnix
+		}
+		if c.TimestampUnix > maxTs {
+			maxTs = c.TimestampUnix
+		}
+	}
+	firstTs := minTs*1000 - defaultMessageWindowMs
+	lastTs := maxTs*1000 + commitWindowLookaheadMs
 	messages, err := listDerivedDiffMessages(ctx, database, pIDs, firstTs, lastTs)
 	if err != nil {
 		return 0, fmt.Errorf("list derived diff messages: %w", err)

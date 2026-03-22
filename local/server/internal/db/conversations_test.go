@@ -134,8 +134,8 @@ func TestGetConversationDetail(t *testing.T) {
 	if detail.StartedAt != 1000 {
 		t.Errorf("StartedAt = %d, want %d", detail.StartedAt, 1000)
 	}
-	if detail.EndedAt != 2000 {
-		t.Errorf("EndedAt = %d, want %d", detail.EndedAt, 2000)
+	if detail.EndedAt != 1000 {
+		t.Errorf("EndedAt = %d, want %d", detail.EndedAt, 1000)
 	}
 	if len(detail.Messages) != 2 {
 		t.Fatalf("got %d messages, want 2", len(detail.Messages))

@@ -239,6 +239,8 @@ func TestMigration44DropsCharColumnsWithOrphanedCommits(t *testing.T) {
 		)`,
 		`CREATE TABLE messages (
 			id TEXT PRIMARY KEY,
+			timestamp INTEGER NOT NULL DEFAULT 0,
+			conversation_id TEXT NOT NULL DEFAULT '',
 			message_type TEXT NOT NULL DEFAULT 'log',
 			raw_json TEXT NOT NULL DEFAULT ''
 		)`,
@@ -345,8 +347,14 @@ func TestMigration49BackfillsDerivedDiffRowsToDiffType(t *testing.T) {
 			detail_fallback_lines INTEGER NOT NULL DEFAULT 0,
 			UNIQUE(project_id, commit_hash)
 		)`,
+		`CREATE TABLE conversations (
+			id TEXT PRIMARY KEY,
+			ended_at INTEGER NOT NULL DEFAULT 0
+		)`,
 		`CREATE TABLE messages (
 			id TEXT PRIMARY KEY,
+			timestamp INTEGER NOT NULL DEFAULT 0,
+			conversation_id TEXT NOT NULL DEFAULT '',
 			message_type TEXT NOT NULL DEFAULT 'log',
 			raw_json TEXT NOT NULL DEFAULT ''
 		)`,

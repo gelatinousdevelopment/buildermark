@@ -471,7 +471,7 @@ func (s *Server) upsertCloudConversation(ctx context.Context, url, projectID, ti
 }
 
 // resolveProjectForImport finds the best project match for an import by trying
-// repo URL, then cwd. Returns an error if no matching project is found.
+// repo URL, then cwd. Falls back to a "Web Imports" project when no match is found.
 func resolveProjectForImport(ctx context.Context, database *sql.DB, repoURL, cwd string) (projectID, matchMethod string, err error) {
 	if repoURL != "" {
 		repoURL = normalizeRemoteToRepoKey(repoURL)
@@ -490,7 +490,13 @@ func resolveProjectForImport(ctx context.Context, database *sql.DB, repoURL, cwd
 			return pid, "cwd", nil
 		}
 	}
-	return "", "", fmt.Errorf("no matching project found for repoURL=%q cwd=%q", repoURL, cwd)
+	// Fall back to a dedicated "Web Imports" project so imports without a
+	// matching project still succeed.
+	pid, ensureErr := db.EnsureProject(ctx, database, "web-imports")
+	if ensureErr != nil {
+		return "", "", fmt.Errorf("ensure web-imports fallback project: %w", ensureErr)
+	}
+	return pid, "web-imports-fallback", nil
 }
 
 // findProjectByCwd matches a working directory to a project by exact path,

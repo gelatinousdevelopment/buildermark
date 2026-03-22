@@ -14,7 +14,10 @@ import (
 )
 
 // RefreshStaleProjects checks all projects for stale commit coverage and
-// enqueues a refresh for each stale project/branch combination.
+// refreshes each stale project/branch combination sequentially.
+// Running them one at a time avoids SQLite write contention that causes
+// "context deadline exceeded" errors when multiple refresh jobs compete
+// for the single-writer lock.
 func (s *Server) RefreshStaleProjects(ctx context.Context) {
 	groups, err := listAllProjectGroups(ctx, s.DB)
 	if err != nil {
@@ -32,6 +35,9 @@ func (s *Server) RefreshStaleProjects(ctx context.Context) {
 			continue
 		}
 		for _, branch := range branches {
+			if ctx.Err() != nil {
+				return
+			}
 			stale, err := db.HasStaleCommitCoverageByBranch(ctx, s.DB, repoProject.ID, branch, currentCommitCoverageVersion)
 			if err != nil {
 				log.Printf("startup refresh: stale check failed for project %s branch %s: %v", repoProject.ID, branch, err)
@@ -40,9 +46,8 @@ func (s *Server) RefreshStaleProjects(ctx context.Context) {
 			if !stale {
 				continue
 			}
-			if queued, _ := s.enqueueCommitRefresh(repoProject.ID, branch); queued {
-				log.Printf("startup refresh: queued stale commit refresh for project %s branch %s", repoProject.ID, branch)
-			}
+			log.Printf("startup refresh: refreshing stale commits for project %s branch %s", repoProject.ID, branch)
+			s.runCommitRefresh(repoProject.ID, branch, 0, false)
 		}
 	}
 }
