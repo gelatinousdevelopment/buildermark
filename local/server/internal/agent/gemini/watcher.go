@@ -175,8 +175,10 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter 
 			continue
 		}
 		modTime := info.ModTime()
-		if prev, ok := seen[path]; ok && !modTime.After(prev.modTime) {
-			continue
+		if !a.SkipStatOptimization {
+			if prev, ok := seen[path]; ok && !modTime.After(prev.modTime) {
+				continue
+			}
 		}
 
 		if filter != nil {
@@ -195,11 +197,16 @@ func (a *Agent) poll(ctx context.Context, seen map[string]processedFile, filter 
 }
 
 const dirCacheTTL = 5 * time.Minute
+const dirCacheTTLNetwork = 30 * time.Second
 
 // listSessionFilesCached returns a cached listing of session files,
-// refreshing the cache every dirCacheTTL.
+// refreshing the cache every dirCacheTTL (or more frequently for network volumes).
 func (a *Agent) listSessionFilesCached() []string {
-	if a.cachedSessionFiles != nil && time.Since(a.cachedSessionFilesTime) < dirCacheTTL {
+	ttl := dirCacheTTL
+	if a.SkipStatOptimization {
+		ttl = dirCacheTTLNetwork
+	}
+	if a.cachedSessionFiles != nil && time.Since(a.cachedSessionFilesTime) < ttl {
 		return a.cachedSessionFiles
 	}
 	a.cachedSessionFiles = a.listSessionFiles(time.Time{})

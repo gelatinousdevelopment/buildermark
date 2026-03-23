@@ -15,6 +15,7 @@ import (
 )
 
 const workspaceMapCacheTTL = 5 * time.Minute
+const workspaceMapCacheTTLNetwork = 30 * time.Second
 
 type scanState struct {
 	Conversations map[string]int64 `json:"conversations"` // composerID -> lastUpdatedAt
@@ -493,7 +494,11 @@ func commonPathPrefix(a, b string) string {
 // --- Workspace map ---
 
 func (a *Agent) getWorkspaceMapCached() map[string]string {
-	if a.cachedWorkspaceMap != nil && time.Since(a.cachedWorkspaceMapTime) < workspaceMapCacheTTL {
+	ttl := workspaceMapCacheTTL
+	if a.SkipStatOptimization {
+		ttl = workspaceMapCacheTTLNetwork
+	}
+	if a.cachedWorkspaceMap != nil && time.Since(a.cachedWorkspaceMapTime) < ttl {
 		return a.cachedWorkspaceMap
 	}
 	a.cachedWorkspaceMap = a.buildWorkspaceMap()

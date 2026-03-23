@@ -64,15 +64,18 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	}
 
 	watchedHomes := map[string]struct{}{home: {}}
-	registerHome := func(h string, importAllClaude bool) {
-		if importAllClaude {
+	registerHome := func(h string, isExtraHome bool) {
+		if isExtraHome {
 			registry.Register(claude.NewForHomeImportAll(database, h))
+			registry.Register(codex.NewForHomeImportAll(database, h))
+			registry.Register(gemini.NewForHomeImportAll(database, h))
+			registry.Register(cursor.NewForHomeImportAll(database, h))
 		} else {
 			registry.Register(claude.NewForHome(database, h))
+			registry.Register(codex.NewForHome(database, h))
+			registry.Register(gemini.NewForHome(database, h))
+			registry.Register(cursor.NewForHome(database, h))
 		}
-		registry.Register(codex.NewForHome(database, h))
-		registry.Register(gemini.NewForHome(database, h))
-		registry.Register(cursor.NewForHome(database, h))
 	}
 
 	// Register the primary home and extra homes from config.

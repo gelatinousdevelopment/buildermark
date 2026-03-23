@@ -39,6 +39,7 @@ func (a *Agent) Run(ctx context.Context) {
 	start := time.Now()
 	a.scanSinceFiltered(ctx, scanCutoff, trackedFilter, useStartupCheckpoint)
 	projectScanCount := a.scanProjectFilesSince(ctx, scanCutoff, true, useStartupCheckpoint, trackedFilter, nil)
+	a.resetStaleProjectFileCheckpoints(ctx)
 	a.persistStartupScanMarker(ctx)
 	log.Printf("claude watcher: startup scan duration %s", agent.FmtDuration(time.Since(start)))
 	if projectScanCount > 0 {
@@ -245,8 +246,12 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, persistOffset, useC
 		a.processEntries(ctx, filtered)
 	}
 	if persistOffset {
-		a.offset = newOffset
-		a.persistHistoryOffset(ctx, newOffset)
+		// Don't persist offset if entries existed but were all filtered
+		// by timestamp — the next poll with cutoff=0 will re-process them.
+		if len(entries) == 0 || len(filtered) > 0 || cutoffMs == 0 {
+			a.offset = newOffset
+			a.persistHistoryOffset(ctx, newOffset)
+		}
 	}
 	return len(filtered)
 }
@@ -258,18 +263,20 @@ func (a *Agent) poll(ctx context.Context) {
 }
 
 func (a *Agent) pollFiltered(ctx context.Context, filter agent.PathFilter) int {
-	info, err := os.Stat(a.path)
-	if err != nil {
-		return 0
-	}
+	if !a.SkipStatOptimization {
+		info, err := os.Stat(a.path)
+		if err != nil {
+			return 0
+		}
 
-	size := info.Size()
-	if size < a.offset {
-		log.Println("claude watcher: file shrunk, rescanning")
-		a.offset = 0
-	}
-	if size == a.offset {
-		return 0
+		size := info.Size()
+		if size < a.offset {
+			log.Println("claude watcher: file shrunk, rescanning")
+			a.offset = 0
+		}
+		if size == a.offset {
+			return 0
+		}
 	}
 
 	entries, newOffset := a.readFrom(a.offset)
@@ -339,6 +346,7 @@ func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, upda
 		}
 
 		entries, newOffset := a.readProjectFileFrom(path, startOffset)
+		fileProcessed := 0
 		if len(entries) > 0 {
 			filtered := make([]historyEntry, 0, len(entries))
 			for _, e := range entries {
@@ -352,12 +360,17 @@ func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, upda
 			}
 			if len(filtered) > 0 {
 				a.processEntries(ctx, filtered)
-				processed += len(filtered)
+				fileProcessed = len(filtered)
+				processed += fileProcessed
 			}
 		}
 
 		if updateOffset {
-			a.persistProjectFileOffset(ctx, path, newOffset)
+			// Don't persist offset if entries existed but were all filtered
+			// by timestamp — the next poll with cutoff=0 will re-process them.
+			if len(entries) == 0 || fileProcessed > 0 || cutoffMs == 0 {
+				a.persistProjectFileOffset(ctx, path, newOffset)
+			}
 		}
 	}
 	return processed
@@ -370,25 +383,38 @@ func (a *Agent) readProjectFileFrom(path string, offset int64) ([]historyEntry, 
 	}
 	defer f.Close()
 
-	info, err := f.Stat()
-	if err != nil {
-		return nil, offset
+	var buf []byte
+	if a.SkipStatOptimization {
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return nil, offset
+		}
+		buf, err = io.ReadAll(f)
+		if err != nil {
+			return nil, offset
+		}
+	} else {
+		info, err := f.Stat()
+		if err != nil {
+			return nil, offset
+		}
+		size := info.Size()
+		if size < offset {
+			offset = 0
+		}
+		if size == offset {
+			return nil, offset
+		}
+		buf = make([]byte, size-offset)
+		n, err := f.ReadAt(buf, offset)
+		if err != nil && err != io.EOF {
+			return nil, offset
+		}
+		buf = buf[:n]
 	}
 
-	size := info.Size()
-	if size < offset {
-		offset = 0
-	}
-	if size == offset {
+	if len(buf) == 0 {
 		return nil, offset
 	}
-
-	buf := make([]byte, size-offset)
-	n, err := f.ReadAt(buf, offset)
-	if err != nil && err != io.EOF {
-		return nil, offset
-	}
-	buf = buf[:n]
 
 	entries := make([]historyEntry, 0, 64)
 	sessionHint := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
@@ -414,7 +440,7 @@ func (a *Agent) readProjectFileFrom(path string, offset int64) ([]historyEntry, 
 		entries = append(entries, entry)
 	}
 
-	return entries, offset + int64(n)
+	return entries, offset + int64(len(buf))
 }
 
 func parseSummaryConversationLine(line, sessionHint, projectHint string) (historyEntry, bool) {
@@ -475,6 +501,13 @@ func (a *Agent) restoreProjectFileOffset(ctx context.Context, path string) int64
 		return 0
 	}
 
+	if a.SkipStatOptimization {
+		if st.FileOffset > 0 {
+			return st.FileOffset
+		}
+		return 0
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return 0
@@ -506,6 +539,48 @@ func (a *Agent) persistProjectFileOffset(ctx context.Context, path string, offse
 	})
 }
 
+// resetStaleProjectFileCheckpoints detects project file checkpoints where the
+// file was fully read (offset == file_size) but no conversation was imported.
+// This can happen when a startup scan's narrow time window filters out all
+// entries from a newly discovered file. Resetting the offset to 0 allows the
+// next poll (which uses cutoff=0) to re-process the file.
+func (a *Agent) resetStaleProjectFileCheckpoints(ctx context.Context) {
+	states, err := db.ListWatcherScanStates(ctx, a.DB, a.Name(), claudeWatcherSourceKindProjectFile)
+	if err != nil {
+		return
+	}
+
+	projectsDir := filepath.Join(a.Home, ".claude", "projects")
+	reset := 0
+	for _, st := range states {
+		if st.FileOffset == 0 || st.FileOffset != st.FileSize {
+			continue
+		}
+		// Only check files under this agent's home.
+		if !strings.HasPrefix(st.SourceKey, projectsDir) {
+			continue
+		}
+		// Extract session ID from the file path (filename without .jsonl).
+		sessionID := strings.TrimSuffix(filepath.Base(st.SourceKey), ".jsonl")
+		if sessionID == "" {
+			continue
+		}
+		conv, err := db.GetConversation(ctx, a.DB, sessionID)
+		if err != nil || conv != nil {
+			continue // conversation exists or DB error — leave checkpoint alone
+		}
+		// Conversation doesn't exist despite file being fully read. Reset offset.
+		if err := db.DeleteWatcherScanState(ctx, a.DB, a.Name(), claudeWatcherSourceKindProjectFile, st.SourceKey); err != nil {
+			log.Printf("claude watcher: reset stale checkpoint %s: %v", st.SourceKey, err)
+			continue
+		}
+		reset++
+	}
+	if reset > 0 {
+		log.Printf("claude watcher: reset %d stale project file checkpoint(s)", reset)
+	}
+}
+
 // readFrom reads the file starting at the given byte offset and returns parsed
 // entries plus the new byte offset (end of file).
 func (a *Agent) readFrom(offset int64) ([]historyEntry, int64) {
@@ -515,22 +590,37 @@ func (a *Agent) readFrom(offset int64) ([]historyEntry, int64) {
 	}
 	defer f.Close()
 
-	info, err := f.Stat()
-	if err != nil {
-		return nil, offset
+	var buf []byte
+	if a.SkipStatOptimization {
+		// Network filesystems may report stale file sizes, so read all
+		// available data from the offset without relying on Stat.
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			return nil, offset
+		}
+		buf, err = io.ReadAll(f)
+		if err != nil {
+			return nil, offset
+		}
+	} else {
+		info, err := f.Stat()
+		if err != nil {
+			return nil, offset
+		}
+		size := info.Size()
+		if size <= offset {
+			return nil, offset
+		}
+		buf = make([]byte, size-offset)
+		n, err := f.ReadAt(buf, offset)
+		if err != nil && err != io.EOF {
+			return nil, offset
+		}
+		buf = buf[:n]
 	}
 
-	size := info.Size()
-	if size <= offset {
+	if len(buf) == 0 {
 		return nil, offset
 	}
-
-	buf := make([]byte, size-offset)
-	n, err := f.ReadAt(buf, offset)
-	if err != nil && err != io.EOF {
-		return nil, offset
-	}
-	buf = buf[:n]
 
 	var entries []historyEntry
 	lines := strings.Split(string(buf), "\n")
@@ -550,12 +640,21 @@ func (a *Agent) readFrom(offset int64) ([]historyEntry, int64) {
 		entries = append(entries, entry)
 	}
 
-	return entries, offset + int64(n)
+	return entries, offset + int64(len(buf))
 }
 
 func (a *Agent) restoreHistoryOffset(ctx context.Context) int64 {
 	st, err := db.GetWatcherScanState(ctx, a.DB, a.Name(), claudeWatcherSourceKindHistoryFile, a.path)
 	if err != nil || st == nil {
+		return 0
+	}
+
+	if a.SkipStatOptimization {
+		// Network filesystems may report stale metadata; trust the stored
+		// offset unconditionally so we always attempt to read from it.
+		if st.FileOffset > 0 {
+			return st.FileOffset
+		}
 		return 0
 	}
 

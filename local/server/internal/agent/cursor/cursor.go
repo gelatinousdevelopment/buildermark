@@ -42,6 +42,15 @@ func NewForHome(database *sql.DB, home string) *Agent {
 	return newAgent(database, home, userDataDir)
 }
 
+// NewForHomeImportAll creates a Cursor agent for an extra mounted home.
+// These homes may be on network filesystems (SMB, NFS) where os.Stat metadata
+// can be stale, so stat-based polling optimizations are disabled.
+func NewForHomeImportAll(database *sql.DB, home string) *Agent {
+	a := NewForHome(database, home)
+	a.SkipStatOptimization = true
+	return a
+}
+
 // newAgent is an internal constructor for testing with custom paths.
 func newAgent(database *sql.DB, home, userDataDir string) *Agent {
 	return &Agent{

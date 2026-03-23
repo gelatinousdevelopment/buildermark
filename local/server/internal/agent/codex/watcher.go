@@ -203,7 +203,7 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, filter agent.PathFi
 			}
 		}
 
-		if useCheckpoint {
+		if useCheckpoint && !a.SkipStatOptimization {
 			st, err := db.GetWatcherScanState(ctx, a.DB, a.Name(), codexWatcherSourceKindSessionFile, fi.path)
 			if err == nil && st != nil && st.FileSize == fi.size && st.FileMtimeMs == fi.modTime.UnixMilli() {
 				continue
@@ -238,8 +238,10 @@ func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile,
 	files := a.listSessionFilesCached()
 	for _, fi := range files {
 		modTime := fi.modTime
-		if prev, ok := seen[fi.path]; ok && !modTime.After(prev.modTime) {
-			continue
+		if !a.SkipStatOptimization {
+			if prev, ok := seen[fi.path]; ok && !modTime.After(prev.modTime) {
+				continue
+			}
 		}
 
 		if filter != nil {
@@ -274,11 +276,16 @@ func (a *Agent) pollFiltered(ctx context.Context, seen map[string]processedFile,
 }
 
 const dirCacheTTL = 5 * time.Minute
+const dirCacheTTLNetwork = 30 * time.Second
 
 // listSessionFilesCached returns a cached listing of all session files,
-// refreshing the cache every dirCacheTTL.
+// refreshing the cache every dirCacheTTL (or more frequently for network volumes).
 func (a *Agent) listSessionFilesCached() []sessionFileInfo {
-	if a.cachedSessionFiles != nil && time.Since(a.cachedSessionFilesTime) < dirCacheTTL {
+	ttl := dirCacheTTL
+	if a.SkipStatOptimization {
+		ttl = dirCacheTTLNetwork
+	}
+	if a.cachedSessionFiles != nil && time.Since(a.cachedSessionFilesTime) < ttl {
 		return a.cachedSessionFiles
 	}
 	a.cachedSessionFiles = a.listSessionFiles(time.Time{})

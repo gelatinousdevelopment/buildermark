@@ -42,6 +42,12 @@ type Base struct {
 	Interval  time.Duration
 	agentName string
 
+	// SkipStatOptimization disables os.Stat-based short-circuits (file size
+	// and mtime checks) used to skip unchanged files during polling. This
+	// should be set to true for agents monitoring network-mounted homes
+	// (SMB, NFS, etc.) where the OS may cache stale file metadata.
+	SkipStatOptimization bool
+
 	lastBackfillTime time.Time
 	lastPollTime     time.Time
 	idleTicks        int

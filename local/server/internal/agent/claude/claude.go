@@ -52,6 +52,7 @@ func NewForHome(database *sql.DB, home string) *Agent {
 func NewForHomeImportAll(database *sql.DB, home string) *Agent {
 	a := NewForHome(database, home)
 	a.allowUntrackedProjects = true
+	a.SkipStatOptimization = true
 	return a
 }
 

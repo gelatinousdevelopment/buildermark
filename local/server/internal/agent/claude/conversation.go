@@ -511,11 +511,16 @@ func IsSkillExpansion(content string) bool {
 }
 
 const projectFileCacheTTL = 5 * time.Minute
+const projectFileCacheTTLNetwork = 30 * time.Second
 
 // listProjectConversationFilesCached returns a cached listing of project conversation files,
-// refreshing the cache every projectFileCacheTTL.
+// refreshing the cache every projectFileCacheTTL (or more frequently for network volumes).
 func (a *Agent) listProjectConversationFilesCached() []string {
-	if a.cachedProjectFiles != nil && time.Since(a.cachedProjectFilesTime) < projectFileCacheTTL {
+	ttl := projectFileCacheTTL
+	if a.SkipStatOptimization {
+		ttl = projectFileCacheTTLNetwork
+	}
+	if a.cachedProjectFiles != nil && time.Since(a.cachedProjectFilesTime) < ttl {
 		return a.cachedProjectFiles
 	}
 	a.cachedProjectFiles = listProjectConversationFiles(a.Home)
