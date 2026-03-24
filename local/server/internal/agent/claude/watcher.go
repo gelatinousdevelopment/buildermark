@@ -234,8 +234,10 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, persistOffset, useC
 	entries, newOffset := a.readFrom(startOffset)
 	cutoffMs := since.UnixMilli()
 	var filtered []historyEntry
+	timestampPassed := 0
 	for _, e := range entries {
 		if e.Timestamp >= cutoffMs {
+			timestampPassed++
 			if filter != nil && !filter.Match(e.Project) {
 				continue
 			}
@@ -246,9 +248,12 @@ func (a *Agent) doScan(ctx context.Context, since time.Time, persistOffset, useC
 		a.processEntries(ctx, filtered)
 	}
 	if persistOffset {
-		// Don't persist offset if entries existed but were all filtered
-		// by timestamp — the next poll with cutoff=0 will re-process them.
-		if len(entries) == 0 || len(filtered) > 0 || cutoffMs == 0 {
+		// Don't persist offset when ALL entries were outside the timestamp
+		// window — the next poll with cutoff=0 will re-process them.
+		// If entries passed the timestamp check but were filtered by path,
+		// persist normally since those entries won't become processable later.
+		allFilteredByTimestamp := len(entries) > 0 && timestampPassed == 0 && cutoffMs > 0
+		if !allFilteredByTimestamp {
 			a.offset = newOffset
 			a.persistHistoryOffset(ctx, newOffset)
 		}
@@ -347,12 +352,14 @@ func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, upda
 
 		entries, newOffset := a.readProjectFileFrom(path, startOffset)
 		fileProcessed := 0
+		timestampPassed := 0
 		if len(entries) > 0 {
 			filtered := make([]historyEntry, 0, len(entries))
 			for _, e := range entries {
 				if e.Timestamp < cutoffMs {
 					continue
 				}
+				timestampPassed++
 				if filter != nil && !filter.Match(e.Project) {
 					continue
 				}
@@ -366,9 +373,12 @@ func (a *Agent) scanProjectFilesSince(ctx context.Context, since time.Time, upda
 		}
 
 		if updateOffset {
-			// Don't persist offset if entries existed but were all filtered
-			// by timestamp — the next poll with cutoff=0 will re-process them.
-			if len(entries) == 0 || fileProcessed > 0 || cutoffMs == 0 {
+			// Don't persist offset when ALL entries were outside the timestamp
+			// window — the next poll with cutoff=0 will re-process them.
+			// If entries passed the timestamp check but were filtered by path,
+			// persist normally since those entries won't become processable later.
+			allFilteredByTimestamp := len(entries) > 0 && timestampPassed == 0 && cutoffMs > 0
+			if !allFilteredByTimestamp {
 				a.persistProjectFileOffset(ctx, path, newOffset)
 			}
 		}
@@ -545,6 +555,12 @@ func (a *Agent) persistProjectFileOffset(ctx context.Context, path string, offse
 // entries from a newly discovered file. Resetting the offset to 0 allows the
 // next poll (which uses cutoff=0) to re-process the file.
 func (a *Agent) resetStaleProjectFileCheckpoints(ctx context.Context) {
+	// Only applicable to extra homes (allowUntrackedProjects). For the primary
+	// home, conversations may be legitimately absent due to the tracked-project
+	// path filter, so a missing conversation doesn't indicate a stale checkpoint.
+	if !a.allowUntrackedProjects {
+		return
+	}
 	states, err := db.ListWatcherScanStates(ctx, a.DB, a.Name(), claudeWatcherSourceKindProjectFile)
 	if err != nil {
 		return
