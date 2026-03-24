@@ -34,6 +34,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let base = "http://localhost:\(serverPort)"
             if let url = URL(string: base + urlPath) {
                 NSWorkspace.shared.open(url)
+                // macOS activates the app when a notification is clicked, which
+                // surfaces the Settings window. Revert to accessory policy and
+                // hide the app so only the browser opens.
+                DispatchQueue.main.async {
+                    NSApp.setActivationPolicy(.accessory)
+                    NSApp.hide(nil)
+                }
             }
         }
         completionHandler()
