@@ -9,6 +9,8 @@
 	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
 	import { projectLayoutData } from '$lib/stores/projectLayoutData.svelte';
 
+	const DAILY_WINDOW_OPTIONS = [14, 30, 45, 60, 90];
+
 	let { children, data } = $props();
 
 	let order = $derived(page.url.searchParams.get('order') ?? 'desc');
@@ -72,8 +74,13 @@
 						projectId={page.params.project_id}
 						compact={false}
 						selectedDate={projectDateFilterStore.selectedDate}
-						onDateSelect={(date) => {
+						windowDays={projectLayoutData.dailyWindowDays}
+						windowDayOptions={DAILY_WINDOW_OPTIONS}
+						onDateSelect={(date: string | null) => {
 							projectDateFilterStore.selectedDate = date;
+						}}
+						onWindowDaysChange={(days: number) => {
+							projectLayoutData.setDailyWindowDays(days);
 						}}
 					/>
 				{/if}
@@ -166,10 +173,11 @@
 	}
 
 	.inner {
+		align-items: flex-end;
 		display: flex;
 		gap: 1rem;
 		flex: 1;
-		flex-wrap: wrap;
+		flex-wrap: wrap-reverse;
 		margin-bottom: -0.5rem;
 		max-width: var(--content-width);
 	}
@@ -180,6 +188,7 @@
 
 	.chart-area {
 		min-width: 0;
+		width: 860px;
 	}
 
 	.project-header .details {
@@ -189,7 +198,7 @@
 		flex: 1;
 		gap: 0.5rem;
 		height: 108px;
-		min-width: 16rem;
+		min-width: 28rem;
 	}
 
 	h3 {

@@ -15,6 +15,7 @@
 	const projectId = $derived(page.params.project_id ?? '');
 	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.sortOrder);
 	const selectedDate = $derived(projectDateFilterStore.selectedDate);
+	const dailyWindowDays = $derived(projectLayoutData.dailyWindowDays);
 	const dateRange = $derived.by(() => {
 		if (!selectedDate) return null;
 		return dateStringToUnixMsRange(selectedDate);
@@ -137,6 +138,7 @@
 			{order}
 			start={dateRange?.from}
 			end={dateRange?.to}
+			{dailyWindowDays}
 		/>
 		<div class="more">
 			<a

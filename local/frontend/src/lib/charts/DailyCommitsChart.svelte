@@ -18,6 +18,10 @@
 		enableDateSelection?: boolean;
 		showMoreLink?: boolean;
 		height?: number;
+		windowDays?: number;
+		windowDayOptions?: number[];
+		onWindowDaysChange?: (days: number) => void;
+		maxWidth?: string;
 	}
 
 	let {
@@ -29,12 +33,16 @@
 		onDateSelect,
 		enableDateSelection = true,
 		showMoreLink = true,
-		height = 114
+		height = 114,
+		windowDays = undefined,
+		windowDayOptions = [],
+		onWindowDaysChange = undefined,
+		maxWidth = undefined
 	}: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
-	let stretchBars = $derived(settingsStore.commitsChartStretchBars);
+	const stretchBars = true;
 	const popoverId = `dc-menu-${Math.random().toString(36).slice(2, 8)}`;
-	const DEFAULT_BAR_GAP_PX = 1;
+	const DEFAULT_BAR_GAP_PX = $derived(window?.devicePixelRatio ? 1 / window?.devicePixelRatio : 1);
 	const FIXED_BAR_WIDTH_PX = 18;
 	let menuBtn: HTMLButtonElement | undefined;
 	let menuBody: HTMLDivElement | undefined;
@@ -244,7 +252,7 @@
 	}
 
 	const denseBars = $derived.by(() => {
-		if (!stretchBars || columns.length <= 0) return false;
+		if (columns.length <= 0) return false;
 		const totalGapWidth = Math.max(0, columns.length - 1) * DEFAULT_BAR_GAP_PX;
 		const widthWithDefaultGap = Math.max(0, (chartWidth - totalGapWidth) / columns.length);
 		return widthWithDefaultGap <= 10;
@@ -253,12 +261,13 @@
 	const barGapPx = $derived(denseBars ? 0 : DEFAULT_BAR_GAP_PX);
 
 	const effectiveBarWidth = $derived.by(() => {
-		if (!stretchBars || columns.length <= 0) return FIXED_BAR_WIDTH_PX;
+		if (columns.length <= 0) return FIXED_BAR_WIDTH_PX;
 		const totalGapWidth = Math.max(0, columns.length - 1) * barGapPx;
 		return Math.max(0, (chartWidth - totalGapWidth) / columns.length);
 	});
 
 	const showDayNumbers = $derived(!denseBars && effectiveBarWidth > 12);
+	const selectedWindowDays = $derived(windowDays ? String(windowDays) : '');
 
 	let endsToday = $derived.by(() => {
 		if (columns.length === 0) return true;
@@ -269,7 +278,7 @@
 	});
 
 	$effect(() => {
-		if (!stretchBars || !chartEl) return;
+		if (!chartEl) return;
 		const updateWidth = () => {
 			if (!chartEl) return;
 			chartWidth = chartEl.clientWidth;
@@ -282,7 +291,7 @@
 </script>
 
 <div class="dc-layout" class:compact>
-	<div class="dc-chart-area">
+	<div class="dc-chart-area" style:max-width={maxWidth}>
 		<button
 			class="dc-menu-btn"
 			bind:this={menuBtn}
@@ -317,15 +326,6 @@
 						).checked)}
 				/>
 				Scale bars by line count
-			</label>
-			<label class="dc-menu-option">
-				<input
-					type="checkbox"
-					checked={settingsStore.commitsChartStretchBars}
-					onchange={(e) =>
-						(settingsStore.commitsChartStretchBars = (e.currentTarget as HTMLInputElement).checked)}
-				/>
-				Stretch bars to fit width
 			</label>
 		</div>
 		<div class="dc-wrap" bind:this={scrollWrap}>
@@ -431,6 +431,21 @@
 			<div class="title" style:font-size="0.9rem" style:font-weight="normal">
 				{#if selectedDate}
 					{formatDateLong(selectedDate)}
+				{:else if windowDays && onWindowDaysChange && windowDayOptions.length > 0}
+					<label class="dc-window-select-wrap">
+						<span>last</span>
+						<select
+							name="dc-window-select"
+							class="dc-window-select"
+							onchange={(e) =>
+								onWindowDaysChange?.(Number((e.currentTarget as HTMLSelectElement).value))}
+						>
+							{#each windowDayOptions as days (days)}
+								<option value={days} selected={String(days) === selectedWindowDays}>{days}</option>
+							{/each}
+						</select>
+						<span>days</span>
+					</label>
 				{:else}
 					{endsToday ? 'last ' : ''}{columns.length} day{columns.length === 1 ? '' : 's'}
 				{/if}
@@ -455,9 +470,10 @@
 	}
 
 	.dc-chart-area {
-		flex: 1;
+		flex: 1 1 auto;
 		position: relative;
-		min-width: 569px;
+		min-width: 0;
+		width: 100%;
 	}
 
 	.dc-menu-btn {
@@ -613,6 +629,24 @@
 
 	.dc-more-link:hover {
 		text-decoration: underline;
+	}
+
+	.dc-window-select-wrap {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font: inherit;
+	}
+
+	.dc-window-select {
+		min-width: 3.8rem;
+		padding: 0.05rem 0.5rem 0.05rem 0.3rem;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 4px;
+		background: var(--color-background-elevated);
+		color: inherit;
+		font: inherit;
+		line-height: 1.2;
 	}
 
 	.dc-chart {

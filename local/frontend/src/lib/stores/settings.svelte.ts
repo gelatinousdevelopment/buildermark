@@ -10,6 +10,7 @@ export type Theme = 'system' | 'light' | 'dark';
 interface Settings {
 	commits_chart_scale_by_lines: boolean;
 	commits_chart_stretch_bars: boolean;
+	commits_chart_window_days: number;
 	activity_chart_count_answers: boolean;
 	activity_chart_count_child_conversations_separately: boolean;
 	content_width: ContentWidth;
@@ -25,6 +26,7 @@ interface Settings {
 const defaults: Settings = {
 	commits_chart_scale_by_lines: false,
 	commits_chart_stretch_bars: false,
+	commits_chart_window_days: 45,
 	activity_chart_count_answers: false,
 	activity_chart_count_child_conversations_separately: true,
 	content_width: 'default',
@@ -64,6 +66,7 @@ function currentSettings(): Settings {
 	return {
 		commits_chart_scale_by_lines: _commitsChartScaleByLines,
 		commits_chart_stretch_bars: _commitsChartStretchBars,
+		commits_chart_window_days: _commitsChartWindowDays,
 		activity_chart_count_answers: _activityChartCountAnswers,
 		activity_chart_count_child_conversations_separately:
 			_activityChartCountChildConversationsSeparately,
@@ -111,6 +114,7 @@ const initial = load();
 
 let _commitsChartScaleByLines = $state(initial.commits_chart_scale_by_lines);
 let _commitsChartStretchBars = $state(initial.commits_chart_stretch_bars);
+let _commitsChartWindowDays = $state(initial.commits_chart_window_days);
 let _activityChartCountAnswers = $state(initial.activity_chart_count_answers);
 let _activityChartCountChildConversationsSeparately = $state(
 	initial.activity_chart_count_child_conversations_separately
@@ -133,6 +137,7 @@ if (browser) {
 		const updated = load();
 		_commitsChartScaleByLines = updated.commits_chart_scale_by_lines;
 		_commitsChartStretchBars = updated.commits_chart_stretch_bars;
+		_commitsChartWindowDays = updated.commits_chart_window_days;
 		_activityChartCountAnswers = updated.activity_chart_count_answers;
 		_activityChartCountChildConversationsSeparately =
 			updated.activity_chart_count_child_conversations_separately;
@@ -162,6 +167,13 @@ export const settingsStore = {
 	},
 	set commitsChartStretchBars(v: boolean) {
 		_commitsChartStretchBars = v;
+		save();
+	},
+	get commitsChartWindowDays() {
+		return _commitsChartWindowDays;
+	},
+	set commitsChartWindowDays(v: number) {
+		_commitsChartWindowDays = v;
 		save();
 	},
 	get activityChartCountAnswers() {

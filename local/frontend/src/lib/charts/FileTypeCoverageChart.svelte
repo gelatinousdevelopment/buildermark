@@ -19,6 +19,7 @@
 	});
 	const filteredData = $derived(showAll ? data : shortList);
 	const hasHiddenItems = $derived(filteredData.length < data.length);
+	const barGap = $derived(window?.devicePixelRatio ? 1 / window?.devicePixelRatio + 'px' : '1px');
 
 	const agents = $derived.by(() => {
 		const names = new SvelteSet<string>();
@@ -39,7 +40,7 @@
 {#if data.length === 0}
 	<p class="empty">No file data in the selected range.</p>
 {:else}
-	<div class="coverage-table">
+	<div class="coverage-table" style:--bar-gap={barGap}>
 		{#each filteredData as row (row.extension)}
 			<div class="ext-row">
 				<div class="col-ext" title={row.extension}>{row.extension}</div>
@@ -138,7 +139,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		padding: 0 0 1px 0;
+		padding: 0 0 var(--bar-gap) 0;
 		font-size: 0.85rem;
 	}
 
@@ -181,7 +182,7 @@
 		border-radius: 2px;
 		overflow: hidden;
 		background: var(--color-background-surface);
-		gap: 1px;
+		gap: var(--bar-gap);
 	}
 
 	.segment {

@@ -33,7 +33,7 @@
 		layoutStore.hideContainer = false;
 	});
 
-	const PRESET_DAYS = [7, 14, 30, 60, 90, 180, 365] as const;
+	const PRESET_DAYS = [7, 14, 30, 45, 60, 90, 180, 365] as const;
 	const DAY_IN_MS = 24 * 60 * 60 * 1000;
 	const DEFAULT_PRESET_DAYS = 30;
 
@@ -174,6 +174,11 @@
 		updateUrl({ range: `${days}d`, from: null, to: null });
 	}
 
+	function presetLabel(days: PresetDays): string {
+		if (days === 365) return 'last 1 year';
+		return `last ${days} days`;
+	}
+
 	function setCustomRange(nextFrom: string, nextTo: string) {
 		const fromDate = parseYMD(nextFrom);
 		const toDate = parseYMD(nextTo);
@@ -190,6 +195,9 @@
 	}
 
 	const selectedRange = $derived.by(() => deriveRangeFromSearch(page.url.searchParams));
+	const selectedPresetValue = $derived.by(() =>
+		selectedRange.mode === 'custom' ? 'custom' : String(selectedRange.presetDays)
+	);
 	const requestRange = $derived.by(() => {
 		const startMs = localDayStartMs(selectedRange.startDate);
 		const endInclusiveMs = localDayStartMs(selectedRange.endDate);
@@ -347,15 +355,27 @@
 				</label>
 			</div>
 
-			<div class="preset-range">
-				{#each PRESET_DAYS as days (days)}
-					<button
-						type="button"
-						class:active={selectedRange.mode === 'preset' && selectedRange.presetDays === days}
-						onclick={() => selectPreset(days)}>{days}d</button
-					>
-				{/each}
-			</div>
+			<label class="preset-range">
+				<select
+					aria-label="Preset date range"
+					onchange={(e) => {
+						const value = (e.currentTarget as HTMLSelectElement).value;
+						const days = Number(value);
+						if (isPresetDays(days)) {
+							selectPreset(days);
+						}
+					}}
+				>
+					{#if selectedRange.mode === 'custom'}
+						<option value="custom" selected={selectedPresetValue === 'custom'}>custom range</option>
+					{/if}
+					{#each PRESET_DAYS as days (days)}
+						<option value={days} selected={String(days) === selectedPresetValue}>
+							{presetLabel(days)}
+						</option>
+					{/each}
+				</select>
+			</label>
 		</div>
 
 		<div class="charts">
@@ -456,8 +476,8 @@
 		min-height: 66px;
 	}
 
-	.filters > div {
-		flex: 1;
+	.filters > * {
+		flex: 1 1 0;
 	}
 
 	.filters h1 {
@@ -497,39 +517,20 @@
 
 	.preset-range {
 		display: flex;
-		gap: 0rem;
 		margin-left: auto;
 		justify-content: flex-end;
 	}
 
-	.preset-range button {
+	.preset-range select {
 		font-size: 1rem;
 		font-weight: 600;
-		padding: 0.35rem 0.6rem;
-		border: none;
-		border-radius: 0px;
+		padding: 0.45rem 2.2rem 0.45rem 0.8rem;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 6px;
 		background: var(--color-background-surface);
 		color: var(--color-text-secondary);
 		cursor: pointer;
 		line-height: 1.2;
-	}
-
-	.preset-range button:first-of-type {
-		border-radius: 4px 0 0 4px;
-	}
-
-	.preset-range button:last-of-type {
-		border-radius: 0 4px 4px 0;
-	}
-
-	.preset-range button:hover {
-		background: var(--color-background-elevated);
-		color: var(--color-text);
-	}
-
-	.preset-range button.active {
-		background: var(--accent-color-ultralight);
-		color: var(--accent-color);
 	}
 
 	.charts {
