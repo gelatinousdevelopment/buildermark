@@ -35,7 +35,7 @@
 
 	const PRESET_DAYS = [7, 14, 30, 45, 60, 90, 180, 365] as const;
 	const DAY_IN_MS = 24 * 60 * 60 * 1000;
-	const DEFAULT_PRESET_DAYS = 30;
+	const DEFAULT_PRESET_DAYS = 45;
 
 	type PresetDays = (typeof PRESET_DAYS)[number];
 

@@ -210,7 +210,7 @@
 						height={CHART_HEIGHT}
 						viewBox={`0 0 ${svgWidth} ${CHART_HEIGHT}`}
 					>
-						<!-- Grid lines -->
+						<!-- Grid lines + tick labels -->
 						{#each [0.25, 0.5, 0.75, 1] as frac (frac)}
 							<line
 								x1="0"
@@ -219,6 +219,9 @@
 								y2={yPos(maxValue * frac)}
 								class="da-grid-line"
 							/>
+							<text x="2" y={yPos(maxValue * frac) + 11} class="da-tick-label"
+								>{Math.round(maxValue * frac)}</text
+							>
 						{/each}
 
 						<!-- Fill areas -->
@@ -444,6 +447,13 @@
 	.da-grid-line {
 		stroke: var(--color-divider);
 		stroke-width: 0.5;
+	}
+
+	.da-tick-label {
+		font-size: 9px;
+		fill: var(--color-text-faded);
+		user-select: none;
+		pointer-events: none;
 	}
 
 	.da-hit-targets {
