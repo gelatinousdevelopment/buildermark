@@ -4,6 +4,7 @@ import UserNotifications
 
 /// Port constant accessible from any isolation context.
 private let serverPort = 55022
+private let showSettingsWindowSelector = Selector(("showSettingsWindow:"))
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -23,6 +24,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             UserDefaults.standard.set(lastKnownVersion, forKey: "previousVersion")
         }
         UserDefaults.standard.set(currentVersion, forKey: "lastKnownVersion")
+
+        SettingsController.shared.show()
     }
 
     nonisolated func userNotificationCenter(
@@ -34,12 +37,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let base = "http://localhost:\(serverPort)"
             if let url = URL(string: base + urlPath) {
                 NSWorkspace.shared.open(url)
-                // macOS activates the app when a notification is clicked, which
-                // surfaces the Settings window. Revert to accessory policy and
-                // hide the app so only the browser opens.
                 DispatchQueue.main.async {
-                    NSApp.setActivationPolicy(.accessory)
-                    NSApp.hide(nil)
+                    SettingsController.shared.suppressForNotificationClick()
                 }
             }
         }
@@ -53,6 +52,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     ) {
         completionHandler([.banner, .sound])
     }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        Task { @MainActor in
+            for url in urls {
+                SettingsController.shared.handle(url: url)
+            }
+        }
+    }
+}
+
+extension Scene {
+    func backport_disableRestoration() -> some Scene {
+        if #available(macOS 15.0, *) {
+            return self.restorationBehavior(.disabled)
+        } else {
+            return self
+        }
+    }
 }
 
 @main
@@ -60,22 +77,12 @@ struct BuildermarkApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var serverManager = ServerManager()
     @StateObject private var updaterViewModel = UpdaterViewModel()
+    @StateObject private var settingsController = SettingsController.shared
 
     @AppStorage("hideMenuBarIcon") private var hideMenuBarIcon = false
-    @State private var selectedSettingsTab = "general"
     @State private var updateCancellable: AnyCancellable?
 
     var body: some Scene {
-        // Invisible helper window — provides the SwiftUI environment
-        // needed to call openSettings() on launch. Must be declared
-        // before the Settings scene.
-        Window("", id: "launcher") {
-            SettingsLauncher()
-        }
-        .windowResizability(.contentSize)
-        .defaultSize(width: 1, height: 1)
-        .windowStyle(.hiddenTitleBar)
-
         MenuBarExtra(
             isInserted: Binding(
                 get: { !hideMenuBarIcon },
@@ -100,11 +107,8 @@ struct BuildermarkApp: App {
             SettingsView(
                 serverManager: serverManager,
                 updaterViewModel: updaterViewModel,
-                selectedTab: $selectedSettingsTab
+                selectedTab: $settingsController.selectedTab
             )
-            .onOpenURL { url in
-                handleURL(url)
-            }
             .task {
                 // When Sparkle finds an available update, notify the server via WS.
                 updateCancellable = updaterViewModel.$availableVersion
@@ -116,66 +120,7 @@ struct BuildermarkApp: App {
                     }
             }
         }
-    }
-
-    @MainActor
-    private func handleURL(_ url: URL) {
-        if url.absoluteString.contains("settings/update") {
-            selectedSettingsTab = "updates"
-            if let w = NSApp.windows.first(where: {
-                $0.identifier?.rawValue.contains("Settings") == true
-            }) {
-                w.orderFrontRegardless()
-            }
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-        }
-    }
-}
-
-/// Opens the Settings window once on launch, then closes itself.
-private struct SettingsLauncher: View {
-    @Environment(\.openSettings) private var openSettings
-
-    var body: some View {
-        Color.clear
-            .frame(width: 1, height: 1)
-            .task {
-                // Menu-bar apps use .accessory policy which blocks window activation.
-                // Temporarily switch to .regular so the settings window can appear.
-                NSApp.setActivationPolicy(.regular)
-                try? await Task.sleep(for: .milliseconds(200))
-
-                openSettings()
-                NSApp.activate(ignoringOtherApps: true)
-
-                // Bring the settings window to front
-                try? await Task.sleep(for: .milliseconds(300))
-                if let w = NSApp.windows.first(where: {
-                    $0.identifier?.rawValue.contains("Settings") == true
-                }) {
-                    w.orderFrontRegardless()
-                }
-
-                // Revert to menu-bar-only and close this helper window
-                try? await Task.sleep(for: .milliseconds(300))
-                NSApp.setActivationPolicy(.accessory)
-
-                // Switching to .accessory resigns active status. Re-activate
-                // and bring the settings window forward again.
-                try? await Task.sleep(for: .milliseconds(100))
-                NSApp.activate(ignoringOtherApps: true)
-                if let w = NSApp.windows.first(where: {
-                    $0.identifier?.rawValue.contains("Settings") == true
-                }) {
-                    w.orderFrontRegardless()
-                }
-
-                for w in NSApp.windows where w.title.isEmpty && w.identifier?.rawValue == "launcher"
-                {
-                    w.close()
-                }
-            }
+        .backport_disableRestoration()
     }
 }
 
@@ -209,5 +154,77 @@ struct MenuBarMenu: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+}
+
+@MainActor
+final class SettingsController: ObservableObject {
+    static let shared = SettingsController()
+
+    @Published var selectedTab = "general"
+
+    private var showTask: Task<Void, Never>?
+
+    private init() {}
+
+    func show(selecting tab: String? = nil) {
+        if let tab {
+            selectedTab = tab
+        }
+
+        showTask?.cancel()
+        showTask = Task { @MainActor in
+            NSApp.setActivationPolicy(.regular)
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+
+            NSApp.sendAction(showSettingsWindowSelector, to: nil, from: nil)
+            NSApp.activate(ignoringOtherApps: true)
+
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+
+            settingsWindow()?.orderFrontRegardless()
+
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+
+            NSApp.setActivationPolicy(.accessory)
+
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+
+            NSApp.activate(ignoringOtherApps: true)
+            settingsWindow()?.orderFrontRegardless()
+        }
+    }
+
+    func handle(url: URL) {
+        if url.absoluteString.contains("settings/update") {
+            show(selecting: "updates")
+        }
+    }
+
+    func suppressForNotificationClick() {
+        showTask?.cancel()
+        hideSettingsWindows()
+        NSApp.setActivationPolicy(.accessory)
+        NSApp.hide(nil)
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            hideSettingsWindows()
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    private func settingsWindow() -> NSWindow? {
+        NSApp.windows.first(where: { $0.identifier?.rawValue.contains("Settings") == true })
+    }
+
+    private func hideSettingsWindows() {
+        for window in NSApp.windows where window.identifier?.rawValue.contains("Settings") == true {
+            window.orderOut(nil)
+        }
     }
 }
