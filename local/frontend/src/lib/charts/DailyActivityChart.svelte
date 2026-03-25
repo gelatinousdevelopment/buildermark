@@ -219,7 +219,7 @@
 								y2={yPos(maxValue * frac)}
 								class="da-grid-line"
 							/>
-							<text x="2" y={yPos(maxValue * frac) + 11} class="da-tick-label"
+							<text x="0" y={yPos(maxValue * frac) + 11} class="da-tick-label"
 								>{Math.round(maxValue * frac)}</text
 							>
 						{/each}

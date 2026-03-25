@@ -216,6 +216,11 @@
 		return String(d);
 	}
 
+	function dateIsOdd(dateStr: string): boolean {
+		const [, , d] = dateStr.split('-').map(Number);
+		return d % 2 === 1;
+	}
+
 	function isMonthBoundary(dateStr: string): boolean {
 		const [, , d] = dateStr.split('-').map(Number);
 		return d === 1;
@@ -267,6 +272,7 @@
 	});
 
 	const showDayNumbers = $derived(!denseBars && effectiveBarWidth > 12);
+	const showOddDayNumbers = $derived(!showDayNumbers && effectiveBarWidth > 9);
 	const selectedWindowDays = $derived(windowDays ? String(windowDays) : '');
 
 	let endsToday = $derived.by(() => {
@@ -404,7 +410,7 @@
 							{/if}
 						</div>
 						<div class="dc-date">
-							{#if isMonthBoundary(col.date) || showDayNumbers}
+							{#if isMonthBoundary(col.date) || showDayNumbers || (showOddDayNumbers && dateIsOdd(col.date))}
 								{formatDateLabel(col.date)}
 							{/if}
 						</div>
@@ -552,7 +558,7 @@
 	.dc-wrap {
 		margin-top: -1px;
 		max-width: 100%;
-		overflow-x: auto;
+		overflow-x: hidden;
 		overflow-y: hidden;
 		padding-bottom: 0.25rem;
 		padding-top: 1px;
@@ -647,6 +653,10 @@
 		color: inherit;
 		font: inherit;
 		line-height: 1.2;
+	}
+
+	.dc-window-select:hover {
+		background: var(--color-background-content);
 	}
 
 	.dc-chart {

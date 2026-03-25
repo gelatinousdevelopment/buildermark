@@ -82,6 +82,7 @@
 						onWindowDaysChange={(days: number) => {
 							projectLayoutData.setDailyWindowDays(days);
 						}}
+						height={116}
 					/>
 				{/if}
 			</div>

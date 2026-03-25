@@ -25,10 +25,10 @@ interface Settings {
 
 const defaults: Settings = {
 	commits_chart_scale_by_lines: false,
-	commits_chart_stretch_bars: false,
+	commits_chart_stretch_bars: true,
 	commits_chart_window_days: 45,
 	activity_chart_count_answers: false,
-	activity_chart_count_child_conversations_separately: true,
+	activity_chart_count_child_conversations_separately: false,
 	content_width: 'default',
 	sort_order: 'desc',
 	theme: 'system' as Theme,
