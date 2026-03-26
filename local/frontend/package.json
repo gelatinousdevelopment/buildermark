@@ -47,6 +47,7 @@
 	"dependencies": {
 		"d3-scale": "^4.0.2",
 		"diff": "^8.0.3",
+		"html-to-image": "^1.11.13",
 		"layercake": "^10.0.2"
 	}
 }

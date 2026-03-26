@@ -25,6 +25,7 @@
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { navStore } from '$lib/stores/nav.svelte';
 	import { layoutStore } from '$lib/stores/layout.svelte';
+	import { toPng } from 'html-to-image';
 
 	onMount(() => {
 		layoutStore.hideContainer = true;
@@ -325,9 +326,127 @@
 				fileTypeCoverageLoading = false;
 			});
 	});
+
+	let showAgentAttribution = $state(true);
+	let showConversations = $state(true);
+	let showRatings = $state(true);
+	let showFileTypeCoverage = $state(true);
+
+	const sharePopoverId = `share-menu-${Math.random().toString(36).slice(2, 8)}`;
+	let shareBtn: HTMLButtonElement | undefined = $state();
+	let shareMenuBody: HTMLDivElement | undefined = $state();
+	let outerEl: HTMLDivElement | undefined = $state();
+	let capturing = $state(false);
+
+	const hasRatingsData = $derived(
+		ratingsByAgent.length > 0 && ratingsByAgent.some((a) => a.totalConversations > 0)
+	);
+
+	function positionShareMenu() {
+		if (!shareBtn || !shareMenuBody) return;
+		const rect = shareBtn.getBoundingClientRect();
+		shareMenuBody.style.top = `${rect.bottom + 4}px`;
+		shareMenuBody.style.right = `${window.innerWidth - rect.right}px`;
+		shareMenuBody.style.left = 'unset';
+	}
+
+	function formatDateRange(): string {
+		const start = parseYMD(selectedRange.startDate);
+		const end = parseYMD(selectedRange.endDate);
+		if (!start || !end) return `${selectedRange.startDate} \u2013 ${selectedRange.endDate}`;
+		const fmt = (d: Date) =>
+			d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+		return `${fmt(start)} \u2013 ${fmt(end)}`;
+	}
+
+	function fixSvgForCapture(root: HTMLElement) {
+		const gridLines = root.querySelectorAll('.da-grid-line');
+		const tickLabels = root.querySelectorAll('.da-tick-label');
+		gridLines.forEach((el) => {
+			const computed = getComputedStyle(el);
+			el.setAttribute('stroke', computed.stroke || '#ccc');
+			el.setAttribute('stroke-width', '1');
+		});
+		tickLabels.forEach((el) => {
+			const computed = getComputedStyle(el);
+			el.setAttribute('fill', computed.fill || '#999');
+			el.setAttribute('font-size', '9');
+		});
+	}
+
+	function restoreSvgAfterCapture(root: HTMLElement) {
+		const gridLines = root.querySelectorAll('.da-grid-line');
+		const tickLabels = root.querySelectorAll('.da-tick-label');
+		gridLines.forEach((el) => {
+			el.removeAttribute('stroke');
+			el.removeAttribute('stroke-width');
+		});
+		tickLabels.forEach((el) => {
+			el.removeAttribute('fill');
+			el.removeAttribute('font-size');
+		});
+	}
+
+	async function captureScreenshot(mode: 'download' | 'copy') {
+		if (!outerEl || capturing) return;
+		capturing = true;
+
+		outerEl.classList.add('screenshot-mode');
+		fixSvgForCapture(outerEl);
+
+		try {
+			await new Promise((r) => setTimeout(r, 150));
+
+			const rect = outerEl.getBoundingClientRect();
+
+			// Capture at 2× CSS resolution with integer pixel gaps.
+			// 1px CSS gaps become 2px in the output — correct for 2× scale.
+			const dataUrl = await toPng(outerEl, {
+				width: rect.width,
+				height: rect.height,
+				pixelRatio: 2
+			});
+
+			if (mode === 'download') {
+				const link = document.createElement('a');
+				link.download = `insights-${navStore.projectName}-${selectedRange.startDate}-to-${selectedRange.endDate}.png`;
+				link.href = dataUrl;
+				link.click();
+			} else {
+				const img = new Image();
+				img.src = dataUrl;
+				await new Promise<void>((resolve, reject) => {
+					img.onload = () => resolve();
+					img.onerror = reject;
+				});
+				const canvas = document.createElement('canvas');
+				canvas.width = img.width;
+				canvas.height = img.height;
+				const ctx = canvas.getContext('2d')!;
+				ctx.drawImage(img, 0, 0);
+				const blob = await new Promise<Blob | null>((resolve) =>
+					canvas.toBlob(resolve, 'image/png')
+				);
+				if (blob) {
+					await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+				}
+			}
+		} finally {
+			restoreSvgAfterCapture(outerEl);
+			outerEl.classList.remove('screenshot-mode');
+			capturing = false;
+		}
+	}
+
+	function downloadPng() {
+		void captureScreenshot('download');
+	}
+	function copyToClipboard() {
+		void captureScreenshot('copy');
+	}
 </script>
 
-<div class="outer">
+<div class="outer" bind:this={outerEl}>
 	<div class="insights-page">
 		<div class="filters">
 			<div>
@@ -353,86 +472,155 @@
 							setCustomRange(selectedRange.startDate, (e.currentTarget as HTMLInputElement).value)}
 					/>
 				</label>
+				<span class="date-range-text">{formatDateRange()}</span>
 			</div>
 
-			<label class="preset-range">
-				<select
-					aria-label="Preset date range"
-					onchange={(e) => {
-						const value = (e.currentTarget as HTMLSelectElement).value;
-						const days = Number(value);
-						if (isPresetDays(days)) {
-							selectPreset(days);
-						}
+			<div class="right-section">
+				<label class="preset-range">
+					<select
+						aria-label="Preset date range"
+						onchange={(e) => {
+							const value = (e.currentTarget as HTMLSelectElement).value;
+							const days = Number(value);
+							if (isPresetDays(days)) {
+								selectPreset(days);
+							}
+						}}
+					>
+						{#if selectedRange.mode === 'custom'}
+							<option value="custom" selected={selectedPresetValue === 'custom'}
+								>custom range</option
+							>
+						{/if}
+						{#each PRESET_DAYS as days (days)}
+							<option value={days} selected={String(days) === selectedPresetValue}>
+								{presetLabel(days)}
+							</option>
+						{/each}
+					</select>
+				</label>
+
+				<div class="screenshot-branding">
+					<span class="screenshot-branding-label">Calculated by</span>
+					<span class="screenshot-branding-name">Buildermark</span>
+				</div>
+
+				<button
+					class="share-btn"
+					bind:this={shareBtn}
+					popovertarget={sharePopoverId}
+					aria-label="Share insights"
+				>
+					<Icon name="share" width="15px" />
+				</button>
+
+				<div
+					id={sharePopoverId}
+					class="share-menu-body"
+					bind:this={shareMenuBody}
+					popover="auto"
+					onbeforetoggle={(e: ToggleEvent) => {
+						if (e.newState === 'open') positionShareMenu();
 					}}
 				>
-					{#if selectedRange.mode === 'custom'}
-						<option value="custom" selected={selectedPresetValue === 'custom'}>custom range</option>
-					{/if}
-					{#each PRESET_DAYS as days (days)}
-						<option value={days} selected={String(days) === selectedPresetValue}>
-							{presetLabel(days)}
-						</option>
-					{/each}
-				</select>
-			</label>
+					<div class="share-menu-section">
+						<div class="share-menu-heading">Show Charts</div>
+						<label class="share-menu-option">
+							<input type="checkbox" bind:checked={showAgentAttribution} />
+							Agent Attribution
+						</label>
+						<label class="share-menu-option">
+							<input type="checkbox" bind:checked={showConversations} />
+							Conversations
+						</label>
+						<label class="share-menu-option" class:disabled={!hasRatingsData}>
+							<input type="checkbox" bind:checked={showRatings} disabled={!hasRatingsData} />
+							Ratings by Agent
+						</label>
+						<label class="share-menu-option">
+							<input type="checkbox" bind:checked={showFileTypeCoverage} />
+							Agent Attribution by File Type
+						</label>
+					</div>
+					<div class="share-menu-divider"></div>
+					<div class="share-menu-section">
+						<div class="share-menu-heading">Screenshot</div>
+						<div class="share-menu-actions">
+							<button class="share-action-btn" onclick={downloadPng} disabled={capturing}>
+								{capturing ? 'Capturing...' : 'Download PNG'}
+							</button>
+							<button class="share-action-btn" onclick={copyToClipboard} disabled={capturing}>
+								Copy
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 
 		<div class="charts">
-			<div class="chart-panel" style:min-height="174px">
-				<h2 class="chart-heading">Agent Attribution</h2>
-				{#if loading}
-					<p class="status">Loading insights...</p>
-				{:else if error}
-					<p class="status error">{error}</p>
-				{:else if dailySummary.length === 0}
-					<p class="status">No commit data in the selected range.</p>
-				{:else}
-					<DailyCommitsChart
-						{dailySummary}
-						{branch}
-						{projectId}
-						enableDateSelection={false}
-						showMoreLink={false}
-						height={130}
-					/>
-				{/if}
-			</div>
+			{#if showAgentAttribution}
+				<div class="chart-panel" style:min-height="174px">
+					<h2 class="chart-heading">Agent Attribution</h2>
+					{#if loading}
+						<p class="status">Loading insights...</p>
+					{:else if error}
+						<p class="status error">{error}</p>
+					{:else if dailySummary.length === 0}
+						<p class="status">No commit data in the selected range.</p>
+					{:else}
+						<DailyCommitsChart
+							{dailySummary}
+							{branch}
+							{projectId}
+							enableDateSelection={false}
+							showMoreLink={false}
+							height={130}
+						/>
+					{/if}
+				</div>
+			{/if}
 
-			<div class="chart-panel" style:min-height="171px">
-				<h2 class="chart-heading">Conversations</h2>
-				{#if activityLoading}
-					<p class="status">Loading activity...</p>
-				{:else if activityError}
-					<p class="status error">{activityError}</p>
-				{:else if dailyActivity.length === 0}
-					<p class="status">No activity data in the selected range.</p>
-				{:else}
-					<DailyActivityChart {dailyActivity} height={130} />
-				{/if}
-			</div>
+			{#if showConversations}
+				<div class="chart-panel" style:min-height="171px">
+					<h2 class="chart-heading">Conversations</h2>
+					{#if activityLoading}
+						<p class="status">Loading activity...</p>
+					{:else if activityError}
+						<p class="status error">{activityError}</p>
+					{:else if dailyActivity.length === 0}
+						<p class="status">No activity data in the selected range.</p>
+					{:else}
+						<DailyActivityChart {dailyActivity} height={130} />
+					{/if}
+				</div>
+			{/if}
 
-			<div class="chart-panel">
-				<h2 class="chart-heading">Ratings by Agent</h2>
-				{#if ratingsLoading}
-					<p class="status">Loading ratings...</p>
-				{:else if ratingsError}
-					<p class="status error">{ratingsError}</p>
-				{:else}
-					<RatingsByAgentChart agents={ratingsByAgent} />
-				{/if}
-			</div>
+			{#if showRatings && hasRatingsData}
+				<div class="chart-panel">
+					<h2 class="chart-heading">Ratings by Agent</h2>
+					{#if ratingsLoading}
+						<p class="status">Loading ratings...</p>
+					{:else if ratingsError}
+						<p class="status error">{ratingsError}</p>
+					{:else}
+						<RatingsByAgentChart agents={ratingsByAgent} />
+					{/if}
+				</div>
+			{/if}
 
-			<div class="chart-panel">
-				<h2 class="chart-heading">Agent Attribution by File Type</h2>
-				{#if fileTypeCoverageLoading}
-					<p class="status">Loading file type coverage...</p>
-				{:else if fileTypeCoverageError}
-					<p class="status error">{fileTypeCoverageError}</p>
-				{:else}
-					<FileTypeCoverageChart data={fileTypeCoverage} />
-				{/if}
-			</div>
+			{#if showFileTypeCoverage}
+				<div class="chart-panel">
+					<h2 class="chart-heading">Agent Attribution by File Type</h2>
+					{#if fileTypeCoverageLoading}
+						<p class="status">Loading file type coverage...</p>
+					{:else if fileTypeCoverageError}
+						<p class="status error">{fileTypeCoverageError}</p>
+					{:else}
+						<FileTypeCoverageChart data={fileTypeCoverage} />
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 </div>
@@ -493,6 +681,7 @@
 		font-size: 1rem;
 		color: var(--color-text-secondary);
 		margin-top: 0.15rem;
+		flex: 1;
 	}
 
 	.filters .date-range {
@@ -500,6 +689,7 @@
 		align-items: center;
 		gap: 0.8rem;
 		justify-content: center;
+		flex: 1;
 	}
 
 	.filters .date-picker {
@@ -513,6 +703,15 @@
 	.filters .date-picker input[type='date'] {
 		font-size: 1.2rem;
 		padding: 0.5rem 1rem;
+	}
+
+	.filters .right-section {
+		align-items: center;
+		display: flex;
+		flex-direction: row;
+		flex: 1;
+		gap: 0.5rem;
+		justify-content: flex-end;
 	}
 
 	.preset-range {
@@ -558,6 +757,193 @@
 
 	.status.error {
 		color: var(--color-danger, #b00020);
+	}
+
+	.share-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 28px;
+		padding: 0;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 6px;
+		background: var(--color-background-surface);
+		cursor: pointer;
+		flex: 0 0 auto;
+		margin-left: 0.5rem;
+	}
+
+	.share-btn:hover {
+		background: var(--color-background-elevated);
+	}
+
+	.share-menu-body {
+		position: fixed;
+		inset: unset;
+		margin: 0;
+		background: var(--color-background-surface);
+		border: 0.5px solid var(--color-divider);
+		border-radius: 5px;
+		box-shadow: 0 2px 8px var(--color-popover-shadow);
+		padding: 0.75rem 1rem;
+		white-space: nowrap;
+		min-width: 220px;
+	}
+
+	.share-menu-heading {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-text-tertiary);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		margin-bottom: 0.4rem;
+	}
+
+	.share-menu-option {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		color: var(--color-text);
+		cursor: pointer;
+		user-select: none;
+		padding: 0.15rem 0;
+	}
+
+	.share-menu-option.disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.share-menu-divider {
+		border-top: 0.5px solid var(--color-divider);
+		margin: 0.5rem 0;
+	}
+
+	.share-menu-actions {
+		display: flex;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+
+	.share-action-btn {
+		flex: 1;
+		padding: 0.4rem 0.8rem;
+		font-size: 0.85rem;
+		font-weight: 600;
+		border: 0.5px solid var(--color-divider);
+		border-radius: 5px;
+		background: var(--color-background-elevated);
+		color: var(--color-text);
+		cursor: pointer;
+	}
+
+	.share-action-btn:hover:not(:disabled) {
+		background: var(--color-background-surface);
+	}
+
+	.share-action-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.date-range-text {
+		display: none;
+		font-size: 1.6rem;
+		font-weight: 600;
+		color: var(--color-text);
+		white-space: nowrap;
+	}
+
+	.screenshot-branding {
+		display: none;
+		flex-direction: column;
+		align-items: flex-end;
+		justify-content: center;
+		line-height: 1.2;
+	}
+
+	.screenshot-branding-label {
+		font-size: 0.8rem;
+		color: var(--color-text-tertiary);
+	}
+
+	.screenshot-branding-name {
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--color-text-secondary);
+	}
+
+	/* Screenshot mode: padding/background on .outer, layout untouched on .insights-page */
+	:global(.outer.screenshot-mode) {
+		padding: 60px;
+		background: var(--color-background-content);
+		width: fit-content;
+	}
+
+	:global(.outer.screenshot-mode) .insights-page {
+		border: none !important;
+		border-radius: 0 !important;
+		margin: 0 !important;
+	}
+
+	:global(.outer.screenshot-mode) .date-picker {
+		display: none !important;
+	}
+
+	:global(.outer.screenshot-mode) .date-range-text {
+		display: inline !important;
+	}
+
+	:global(.outer.screenshot-mode) .preset-range {
+		display: none !important;
+	}
+
+	:global(.outer.screenshot-mode) .share-btn {
+		display: none !important;
+	}
+
+	:global(.outer.screenshot-mode) .share-menu-body {
+		display: none !important;
+	}
+
+	:global(.outer.screenshot-mode) .screenshot-branding {
+		display: flex !important;
+		flex: 1 1 0;
+	}
+
+	:global(.outer.screenshot-mode) .filters {
+		border-bottom: none !important;
+		padding: 1rem 0 !important;
+		margin: 0 1rem !important;
+		border-bottom: 0.5px solid var(--color-divider) !important;
+	}
+
+	:global(.outer.screenshot-mode) .chart-panel {
+		min-height: 0 !important;
+	}
+
+	/* Hide non-interactive elements in screenshot */
+	:global(.outer.screenshot-mode .da-details-icon) {
+		display: none !important;
+	}
+
+	:global(.outer.screenshot-mode .toggle-btn) {
+		display: none !important;
+	}
+
+	/* Force integer pixel gaps for clean screenshot rendering */
+	:global(.outer.screenshot-mode .dc-chart) {
+		column-gap: 1px !important;
+	}
+
+	:global(.outer.screenshot-mode .dc-bar) {
+		gap: 1px !important;
+	}
+
+	:global(.outer.screenshot-mode .coverage-table) {
+		--bar-gap: 1px !important;
 	}
 
 	@media (max-width: 980px) {

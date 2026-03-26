@@ -24,5 +24,6 @@ declare global {
 		| 'cloud'
 		| 'commit'
 		| 'star'
-		| 'delete';
+		| 'delete'
+		| 'share';
 }

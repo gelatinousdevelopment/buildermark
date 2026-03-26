@@ -128,7 +128,7 @@
 	/* Popover */
 	--color-popover-bg: light-dark(rgba(255, 255, 255, 0.85), rgba(40, 40, 44, 0.92));
 	--color-popover-border: light-dark(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 1));
-	--color-popover-shadow: light-dark(rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0.8));
+	--color-popover-shadow: light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.8));
 
 	/* Modal */
 	--color-modal-backdrop: light-dark(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.6));
