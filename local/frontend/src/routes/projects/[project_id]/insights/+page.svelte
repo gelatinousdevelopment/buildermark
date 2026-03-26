@@ -327,10 +327,10 @@
 			});
 	});
 
-	let showAgentAttribution = $state(true);
-	let showConversations = $state(true);
-	let showRatings = $state(true);
-	let showFileTypeCoverage = $state(true);
+	let showAgentAttribution = $derived(settingsStore.insightsShowAgentAttribution);
+	let showConversations = $derived(settingsStore.insightsShowConversations);
+	let showRatings = $derived(settingsStore.insightsShowRatings);
+	let showFileTypeCoverage = $derived(settingsStore.insightsShowFileTypeCoverage);
 
 	const sharePopoverId = `share-menu-${Math.random().toString(36).slice(2, 8)}`;
 	let shareBtn: HTMLButtonElement | undefined = $state();
@@ -526,19 +526,48 @@
 					<div class="share-menu-section">
 						<div class="share-menu-heading">Show Charts</div>
 						<label class="share-menu-option">
-							<input type="checkbox" bind:checked={showAgentAttribution} />
+							<input
+								type="checkbox"
+								checked={showAgentAttribution}
+								onchange={(e) =>
+									(settingsStore.insightsShowAgentAttribution = (
+										e.currentTarget as HTMLInputElement
+									).checked)}
+							/>
 							Agent Attribution
 						</label>
 						<label class="share-menu-option">
-							<input type="checkbox" bind:checked={showConversations} />
+							<input
+								type="checkbox"
+								checked={showConversations}
+								onchange={(e) =>
+									(settingsStore.insightsShowConversations = (
+										e.currentTarget as HTMLInputElement
+									).checked)}
+							/>
 							Conversations
 						</label>
 						<label class="share-menu-option" class:disabled={!hasRatingsData}>
-							<input type="checkbox" bind:checked={showRatings} disabled={!hasRatingsData} />
+							<input
+								type="checkbox"
+								checked={showRatings}
+								disabled={!hasRatingsData}
+								onchange={(e) =>
+									(settingsStore.insightsShowRatings = (
+										e.currentTarget as HTMLInputElement
+									).checked)}
+							/>
 							Ratings by Agent
 						</label>
 						<label class="share-menu-option">
-							<input type="checkbox" bind:checked={showFileTypeCoverage} />
+							<input
+								type="checkbox"
+								checked={showFileTypeCoverage}
+								onchange={(e) =>
+									(settingsStore.insightsShowFileTypeCoverage = (
+										e.currentTarget as HTMLInputElement
+									).checked)}
+							/>
 							Agent Attribution by File Type
 						</label>
 					</div>

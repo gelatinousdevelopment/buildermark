@@ -21,6 +21,10 @@ interface Settings {
 	export_preset_days: number | null;
 	export_sort_order: ExportSortOrder;
 	file_type_coverage_show_all: boolean;
+	insights_show_agent_attribution: boolean;
+	insights_show_conversations: boolean;
+	insights_show_ratings: boolean;
+	insights_show_file_type_coverage: boolean;
 }
 
 const defaults: Settings = {
@@ -36,7 +40,11 @@ const defaults: Settings = {
 	export_format: 'markdown',
 	export_preset_days: 30,
 	export_sort_order: 'newest' as ExportSortOrder,
-	file_type_coverage_show_all: false
+	file_type_coverage_show_all: false,
+	insights_show_agent_attribution: true,
+	insights_show_conversations: true,
+	insights_show_ratings: true,
+	insights_show_file_type_coverage: true
 };
 
 function load(): Settings {
@@ -77,7 +85,11 @@ function currentSettings(): Settings {
 		export_format: _exportFormat,
 		export_preset_days: _exportPresetDays,
 		export_sort_order: _exportSortOrder,
-		file_type_coverage_show_all: _fileTypeCoverageShowAll
+		file_type_coverage_show_all: _fileTypeCoverageShowAll,
+		insights_show_agent_attribution: _insightsShowAgentAttribution,
+		insights_show_conversations: _insightsShowConversations,
+		insights_show_ratings: _insightsShowRatings,
+		insights_show_file_type_coverage: _insightsShowFileTypeCoverage
 	};
 }
 
@@ -127,6 +139,10 @@ let _exportFormat: ExportFormat = $state(initial.export_format);
 let _exportPresetDays: number | null = $state(initial.export_preset_days);
 let _exportSortOrder: ExportSortOrder = $state(initial.export_sort_order);
 let _fileTypeCoverageShowAll = $state(initial.file_type_coverage_show_all);
+let _insightsShowAgentAttribution = $state(initial.insights_show_agent_attribution);
+let _insightsShowConversations = $state(initial.insights_show_conversations);
+let _insightsShowRatings = $state(initial.insights_show_ratings);
+let _insightsShowFileTypeCoverage = $state(initial.insights_show_file_type_coverage);
 
 applyContentWidth(initial.content_width);
 applyTheme(initial.theme);
@@ -149,6 +165,10 @@ if (browser) {
 		_exportPresetDays = updated.export_preset_days;
 		_exportSortOrder = updated.export_sort_order;
 		_fileTypeCoverageShowAll = updated.file_type_coverage_show_all;
+		_insightsShowAgentAttribution = updated.insights_show_agent_attribution;
+		_insightsShowConversations = updated.insights_show_conversations;
+		_insightsShowRatings = updated.insights_show_ratings;
+		_insightsShowFileTypeCoverage = updated.insights_show_file_type_coverage;
 		applyContentWidth(updated.content_width);
 		applyTheme(updated.theme);
 	});
@@ -246,6 +266,34 @@ export const settingsStore = {
 	},
 	set fileTypeCoverageShowAll(v: boolean) {
 		_fileTypeCoverageShowAll = v;
+		save();
+	},
+	get insightsShowAgentAttribution() {
+		return _insightsShowAgentAttribution;
+	},
+	set insightsShowAgentAttribution(v: boolean) {
+		_insightsShowAgentAttribution = v;
+		save();
+	},
+	get insightsShowConversations() {
+		return _insightsShowConversations;
+	},
+	set insightsShowConversations(v: boolean) {
+		_insightsShowConversations = v;
+		save();
+	},
+	get insightsShowRatings() {
+		return _insightsShowRatings;
+	},
+	set insightsShowRatings(v: boolean) {
+		_insightsShowRatings = v;
+		save();
+	},
+	get insightsShowFileTypeCoverage() {
+		return _insightsShowFileTypeCoverage;
+	},
+	set insightsShowFileTypeCoverage(v: boolean) {
+		_insightsShowFileTypeCoverage = v;
 		save();
 	}
 };
