@@ -225,7 +225,7 @@
 	.legend {
 		display: flex;
 		gap: 1.5rem;
-		margin-top: 0.6rem;
+		margin: 0.3rem 0;
 		margin-left: calc(90px + 0.75rem);
 		flex-wrap: wrap;
 	}

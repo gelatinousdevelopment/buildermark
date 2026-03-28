@@ -255,7 +255,7 @@
 		if (key === lastActivityLoadKey) return;
 		lastActivityLoadKey = key;
 		const myToken = ++activityRequestToken;
-		// activityLoading = true;
+		activityLoading = true;
 		activityError = null;
 		void getProjectDailyActivity(
 			projectId,
@@ -365,46 +365,149 @@
 		gridLines.forEach((el) => {
 			const computed = getComputedStyle(el);
 			el.setAttribute('stroke', computed.stroke || '#ccc');
-			el.setAttribute('stroke-width', '1');
+			el.setAttribute('stroke-width', computed.strokeWidth || '0.5');
 		});
 		tickLabels.forEach((el) => {
 			const computed = getComputedStyle(el);
 			el.setAttribute('fill', computed.fill || '#999');
-			el.setAttribute('font-size', '9');
+			el.setAttribute('font-size', computed.fontSize || '9px');
 		});
 	}
 
-	function restoreSvgAfterCapture(root: HTMLElement) {
-		const gridLines = root.querySelectorAll('.da-grid-line');
-		const tickLabels = root.querySelectorAll('.da-tick-label');
-		gridLines.forEach((el) => {
-			el.removeAttribute('stroke');
-			el.removeAttribute('stroke-width');
-		});
-		tickLabels.forEach((el) => {
-			el.removeAttribute('fill');
-			el.removeAttribute('font-size');
-		});
+	function nextAnimationFrame(): Promise<void> {
+		return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+	}
+
+	async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+		const response = await fetch(dataUrl);
+		return await response.blob();
+	}
+
+	function scalePxTokens(value: string, factor: number): string {
+		return value.replace(/(-?\d*\.?\d+)px/g, (_, raw) => `${Number(raw) * factor}px`);
+	}
+
+	function scaleCaptureClone(sourceRoot: HTMLElement, captureRoot: HTMLElement, factor: number) {
+		const sourceElements = [sourceRoot, ...Array.from(sourceRoot.querySelectorAll('*'))];
+		const captureElements = [captureRoot, ...Array.from(captureRoot.querySelectorAll('*'))];
+		const scaledProperties = [
+			'width',
+			'height',
+			'minWidth',
+			'minHeight',
+			'maxWidth',
+			'maxHeight',
+			'top',
+			'left',
+			'right',
+			'bottom',
+			'marginTop',
+			'marginRight',
+			'marginBottom',
+			'marginLeft',
+			'paddingTop',
+			'paddingRight',
+			'paddingBottom',
+			'paddingLeft',
+			'gap',
+			'rowGap',
+			'columnGap',
+			'fontSize',
+			'lineHeight',
+			'letterSpacing',
+			'borderTopWidth',
+			'borderRightWidth',
+			'borderBottomWidth',
+			'borderLeftWidth',
+			'borderTopLeftRadius',
+			'borderTopRightRadius',
+			'borderBottomRightRadius',
+			'borderBottomLeftRadius',
+			'outlineWidth',
+			'outlineOffset',
+			'gridAutoColumns',
+			'gridAutoRows',
+			'gridTemplateColumns',
+			'gridTemplateRows',
+			'backgroundSize',
+			'backgroundPosition',
+			'boxShadow'
+		] as const;
+		const scaledCustomProperties = ['--dc-gap', '--dc-seg-gap', '--bar-gap'];
+
+		for (let i = 0; i < sourceElements.length; i += 1) {
+			const sourceEl = sourceElements[i];
+			const captureEl = captureElements[i];
+			if (!(captureEl instanceof HTMLElement || captureEl instanceof SVGElement)) continue;
+
+			const computed = getComputedStyle(sourceEl);
+			for (const property of scaledProperties) {
+				if (
+					captureEl instanceof SVGElement &&
+					(property === 'fontSize' || property === 'lineHeight' || property === 'letterSpacing')
+				) {
+					continue;
+				}
+				const value = computed[property];
+				if (!value) continue;
+				const scaled = scalePxTokens(value, factor);
+				if (scaled !== value) {
+					captureEl.style[property] = scaled;
+				}
+			}
+
+			for (const property of scaledCustomProperties) {
+				const value = computed.getPropertyValue(property).trim();
+				if (!value) continue;
+				const scaled = scalePxTokens(value, factor);
+				if (scaled !== value) {
+					captureEl.style.setProperty(property, scaled);
+				}
+			}
+		}
 	}
 
 	async function captureScreenshot(mode: 'download' | 'copy') {
 		if (!outerEl || capturing) return;
 		capturing = true;
 
-		outerEl.classList.add('screenshot-mode');
-		fixSvgForCapture(outerEl);
+		let captureHost: HTMLDivElement | null = null;
 
 		try {
-			await new Promise((r) => setTimeout(r, 150));
+			captureHost = document.createElement('div');
+			captureHost.className = 'screenshot-capture-host';
+			const captureEl = outerEl.cloneNode(true) as HTMLDivElement;
+			captureEl.classList.add('screenshot-mode');
+			captureHost.appendChild(captureEl);
+			document.body.appendChild(captureHost);
 
-			const rect = outerEl.getBoundingClientRect();
+			await nextAnimationFrame();
+			scaleCaptureClone(outerEl, captureEl, 2);
+			fixSvgForCapture(captureEl);
 
-			// Capture at 2× CSS resolution with integer pixel gaps.
-			// 1px CSS gaps become 2px in the output — correct for 2× scale.
-			const dataUrl = await toPng(outerEl, {
-				width: rect.width,
-				height: rect.height,
-				pixelRatio: 2
+			captureEl.style.width = 'fit-content';
+			captureEl.style.height = 'auto';
+			captureEl.style.maxWidth = 'none';
+			const capturePage = captureEl.querySelector('.insights-page');
+			if (capturePage instanceof HTMLElement) {
+				capturePage.style.width = 'fit-content';
+				capturePage.style.maxWidth = 'none';
+			}
+
+			await nextAnimationFrame();
+			const captureRect = captureEl.getBoundingClientRect();
+			const outputWidth = Math.max(1, Math.round(captureRect.width));
+			const outputHeight = Math.max(1, Math.round(captureRect.height));
+
+			captureHost.style.width = `${outputWidth}px`;
+			captureHost.style.height = `${outputHeight}px`;
+
+			// Render a true 2× output by explicitly doubling the cloned layout dimensions before capture.
+			// 0.5px CSS gaps become 1px in the enlarged clone, which stays 1px in the final PNG output.
+			const dataUrl = await toPng(captureHost, {
+				width: outputWidth,
+				height: outputHeight,
+				pixelRatio: 1
 			});
 
 			if (mode === 'download') {
@@ -413,27 +516,11 @@
 				link.href = dataUrl;
 				link.click();
 			} else {
-				const img = new Image();
-				img.src = dataUrl;
-				await new Promise<void>((resolve, reject) => {
-					img.onload = () => resolve();
-					img.onerror = reject;
-				});
-				const canvas = document.createElement('canvas');
-				canvas.width = img.width;
-				canvas.height = img.height;
-				const ctx = canvas.getContext('2d')!;
-				ctx.drawImage(img, 0, 0);
-				const blob = await new Promise<Blob | null>((resolve) =>
-					canvas.toBlob(resolve, 'image/png')
-				);
-				if (blob) {
-					await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-				}
+				const blob = await dataUrlToBlob(dataUrl);
+				await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
 			}
 		} finally {
-			restoreSvgAfterCapture(outerEl);
-			outerEl.classList.remove('screenshot-mode');
+			captureHost?.remove();
 			capturing = false;
 		}
 	}
@@ -501,8 +588,10 @@
 				</label>
 
 				<div class="screenshot-branding">
-					<span class="screenshot-branding-label">Calculated by</span>
-					<span class="screenshot-branding-name">Buildermark</span>
+					<div class="screenshot-branding-border">
+						<span class="screenshot-branding-label">Calculated by</span>
+						<span class="screenshot-branding-name">Buildermark</span>
+					</div>
 				</div>
 
 				<button
@@ -571,15 +660,13 @@
 							Agent Attribution by File Type
 						</label>
 					</div>
-					<div class="share-menu-divider"></div>
 					<div class="share-menu-section">
-						<div class="share-menu-heading">Screenshot</div>
 						<div class="share-menu-actions">
 							<button class="share-action-btn" onclick={downloadPng} disabled={capturing}>
 								{capturing ? 'Capturing...' : 'Download PNG'}
 							</button>
 							<button class="share-action-btn" onclick={copyToClipboard} disabled={capturing}>
-								Copy
+								Copy PNG
 							</button>
 						</div>
 					</div>
@@ -751,12 +838,11 @@
 
 	.preset-range select {
 		font-size: 1rem;
-		font-weight: 600;
 		padding: 0.45rem 2.2rem 0.45rem 0.8rem;
 		border: 0.5px solid var(--color-divider);
 		border-radius: 6px;
 		background: var(--color-background-surface);
-		color: var(--color-text-secondary);
+		color: var(--color-text);
 		cursor: pointer;
 		line-height: 1.2;
 	}
@@ -812,7 +898,7 @@
 		inset: unset;
 		margin: 0;
 		background: var(--color-background-surface);
-		border: 0.5px solid var(--color-divider);
+		border: 0.5px solid var(--color-popover-border);
 		border-radius: 5px;
 		box-shadow: 0 2px 8px var(--color-popover-shadow);
 		padding: 0.75rem 1rem;
@@ -843,11 +929,6 @@
 	.share-menu-option.disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
-	}
-
-	.share-menu-divider {
-		border-top: 0.5px solid var(--color-divider);
-		margin: 0.5rem 0;
 	}
 
 	.share-menu-actions {
@@ -886,11 +967,20 @@
 	}
 
 	.screenshot-branding {
+		align-items: flex-end;
 		display: none;
 		flex-direction: column;
-		align-items: flex-end;
 		justify-content: center;
-		line-height: 1.2;
+		line-height: 1.1;
+	}
+
+	.screenshot-branding-border {
+		border-radius: 4px;
+		border: 0.5px solid var(--color-divider);
+		padding: 0.4rem 0.8rem;
+		flex-direction: column;
+		justify-content: center;
+		display: flex;
 	}
 
 	.screenshot-branding-label {
@@ -899,7 +989,7 @@
 	}
 
 	.screenshot-branding-name {
-		font-size: 1.1rem;
+		font-size: 1rem;
 		font-weight: 600;
 		color: var(--color-text-secondary);
 	}
@@ -909,6 +999,15 @@
 		padding: 60px;
 		background: var(--color-background-content);
 		width: fit-content;
+	}
+
+	:global(.screenshot-capture-host) {
+		position: fixed;
+		left: 0;
+		top: 0;
+		z-index: -1;
+		overflow: hidden;
+		pointer-events: none;
 	}
 
 	:global(.outer.screenshot-mode) .insights-page {
@@ -953,6 +1052,10 @@
 		min-height: 0 !important;
 	}
 
+	:global(.outer.screenshot-mode .info-box) {
+		background: none !important;
+	}
+
 	/* Hide non-interactive elements in screenshot */
 	:global(.outer.screenshot-mode .da-details-icon) {
 		display: none !important;
@@ -960,19 +1063,6 @@
 
 	:global(.outer.screenshot-mode .toggle-btn) {
 		display: none !important;
-	}
-
-	/* Force integer pixel gaps for clean screenshot rendering */
-	:global(.outer.screenshot-mode .dc-chart) {
-		column-gap: 1px !important;
-	}
-
-	:global(.outer.screenshot-mode .dc-bar) {
-		gap: 1px !important;
-	}
-
-	:global(.outer.screenshot-mode .coverage-table) {
-		--bar-gap: 1px !important;
 	}
 
 	@media (max-width: 980px) {

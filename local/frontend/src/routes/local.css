@@ -12,7 +12,7 @@
 	--color-text-secondary: light-dark(#666, #999);
 	--color-text-tertiary: light-dark(#888, #777);
 	--color-text-strong: light-dark(#333, #e0e0e0);
-	--color-divider: light-dark(#bbb, #555555);
+	--color-divider: light-dark(#d5d5d5, #555555);
 	--color-border-light: light-dark(#eee, #333);
 	--color-border-medium: light-dark(#ccc, #444);
 	--color-border-input: light-dark(#aaa, #666);
@@ -127,7 +127,7 @@
 
 	/* Popover */
 	--color-popover-bg: light-dark(rgba(255, 255, 255, 0.85), rgba(40, 40, 44, 0.92));
-	--color-popover-border: light-dark(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 1));
+	--color-popover-border: light-dark(#bbb, #000);
 	--color-popover-shadow: light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.8));
 
 	/* Modal */
