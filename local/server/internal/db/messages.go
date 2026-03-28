@@ -382,6 +382,9 @@ func shouldReplaceDerivedDiffs(ctx context.Context) bool {
 func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	for i := range messages {
 		messages[i].MessageType = canonicalMessageType(messages[i].Role, messages[i].MessageType, messages[i].Content)
+		if isMetaConversationMessageRawJSON(messages[i].RawJSON) {
+			messages[i].MessageType = MessageTypeLog
+		}
 	}
 	messages = filterMessagesForIngest(messages)
 	messages = deduplicateMessages(messages)
@@ -484,6 +487,9 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	// Track ended_at from USER messages only (max timestamp).
 	conversationEndBounds := make(map[string]int64, len(messages))
 	for _, m := range messages {
+		if shouldIgnoreMessageForConversationBounds(m.Content, m.RawJSON) {
+			continue
+		}
 		if prev, ok := conversationStartBounds[m.ConversationID]; !ok || m.Timestamp < prev {
 			conversationStartBounds[m.ConversationID] = m.Timestamp
 		}
@@ -531,6 +537,10 @@ func InsertMessages(ctx context.Context, db *sql.DB, messages []Message) error {
 	}
 
 	return tx.Commit()
+}
+
+func shouldIgnoreMessageForConversationBounds(content, rawJSON string) bool {
+	return isBuildermarkRatingWorkflowContent(content) || isMetaConversationMessageRawJSON(rawJSON)
 }
 
 // DeleteDerivedDiffMessages removes synthetic diff messages matching the

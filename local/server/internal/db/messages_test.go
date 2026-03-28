@@ -966,6 +966,130 @@ func TestInsertMessagesSlashCommandDoesNotAdvanceEndedAt(t *testing.T) {
 	}
 }
 
+func TestInsertMessagesBuildermarkRatingWorkflowDoesNotChangeBounds(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-1", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "first assistant reply", RawJSON: `{}`},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real prompt", RawJSON: `{}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages initial: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 5000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "$rate-buildermark 5 still great", RawJSON: `{}`},
+		{Timestamp: 6000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "[$bb](/tmp/skills/bb/SKILL.md) 4 nice", RawJSON: `{}`},
+		{Timestamp: 7000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "Base directory for this skill: /tmp/skills/rate-buildermark\n\nThe user wants to rate this conversation.", RawJSON: `{}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages rating workflow: %v", err)
+	}
+
+	var startedAt, endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	if endedAt != 2000 {
+		t.Errorf("ended_at = %d, want 2000", endedAt)
+	}
+}
+
+func TestInsertMessagesMetaResumePromptDoesNotAdvanceEndedAt(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-meta", projectID, "claude"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-meta", Role: "user", Content: "real prompt", RawJSON: `{}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages initial: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{
+			Timestamp:      5000,
+			ProjectID:      projectID,
+			ConversationID: "conv-meta",
+			Role:           "user",
+			Content:        "Continue from where you left off.",
+			RawJSON:        `{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Continue from where you left off."}]}}`,
+		},
+	}); err != nil {
+		t.Fatalf("InsertMessages meta resume: %v", err)
+	}
+
+	var startedAt, endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-meta").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	if endedAt != 1000 {
+		t.Errorf("ended_at = %d, want 1000", endedAt)
+	}
+}
+
+func TestBackfillConversationBoundsIgnoresRatingWorkflowMessages(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	projectID, err := EnsureProject(ctx, db, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := EnsureConversation(ctx, db, "conv-repair", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	if _, err := db.ExecContext(ctx, "UPDATE conversations SET started_at = ?, ended_at = ? WHERE id = ?", 999999, 999999, "conv-repair"); err != nil {
+		t.Fatalf("seed corrupt bounds: %v", err)
+	}
+
+	if err := InsertMessages(ctx, db, []Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-repair", Role: "agent", Content: "real assistant context", RawJSON: `{}`},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-repair", Role: "user", Content: "real prompt", RawJSON: `{}`},
+		{Timestamp: 9000, ProjectID: projectID, ConversationID: "conv-repair", Role: "user", Content: "$rate-buildermark 5", RawJSON: `{}`},
+		{Timestamp: 9500, ProjectID: projectID, ConversationID: "conv-repair", Role: "agent", Content: "Base directory for this skill: /tmp/skills/rate-buildermark\n\nThe user wants to rate this conversation.", RawJSON: `{}`},
+		{Timestamp: 9800, ProjectID: projectID, ConversationID: "conv-repair", Role: "user", Content: "Continue from where you left off.", RawJSON: `{"type":"user","isMeta":true}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	if err := backfillConversationBounds(ctx, db); err != nil {
+		t.Fatalf("backfillConversationBounds: %v", err)
+	}
+
+	var startedAt, endedAt int64
+	if err := db.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-repair").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	if endedAt != 2000 {
+		t.Errorf("ended_at = %d, want 2000", endedAt)
+	}
+}
+
 func TestInsertMessagesExcludesBbCommandsFromPromptCount(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()

@@ -2,14 +2,27 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gelatinousdevelopment/buildermark/local/server/internal/agent"
 	"github.com/gelatinousdevelopment/buildermark/local/server/internal/db"
 )
+
+type stubResolverAgent struct {
+	name   string
+	result *agent.SessionResult
+}
+
+func (s *stubResolverAgent) Name() string { return s.name }
+
+func (s *stubResolverAgent) ResolveSession(rating int, note string, fallbackID string) *agent.SessionResult {
+	return s.result
+}
 
 // setupTestServer creates a Server backed by a temporary SQLite database.
 func setupTestServer(t *testing.T) *Server {
@@ -213,5 +226,78 @@ func TestListRatings(t *testing.T) {
 				t.Errorf("got %d ratings, want %d", len(data), tt.wantCount)
 			}
 		})
+	}
+}
+
+func TestCreateRatingResolvedSessionDoesNotChangeConversationBounds(t *testing.T) {
+	s := setupTestServer(t)
+	registry := agent.NewRegistry()
+	registry.Register(&stubResolverAgent{
+		name: "codex",
+		result: &agent.SessionResult{
+			SessionID: "conv-1",
+			Project:   "/test/project",
+			Entries: []agent.Entry{
+				{Timestamp: 5000, SessionID: "conv-1", Project: "/test/project", Role: "user", Display: "$rate-buildermark 5 still great", RawJSON: `{}`},
+				{Timestamp: 6000, SessionID: "conv-1", Project: "/test/project", Role: "agent", Display: "Base directory for this skill: /tmp/skills/rate-buildermark\n\nThe user wants to rate this conversation.", RawJSON: `{}`},
+			},
+		},
+	})
+	s.Agents = registry
+
+	ctx := context.Background()
+	projectID, err := db.EnsureProject(ctx, s.DB, "/test/project")
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.EnsureConversation(ctx, s.DB, "conv-1", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{
+		{Timestamp: 1000, ProjectID: projectID, ConversationID: "conv-1", Role: "agent", Content: "first assistant reply", RawJSON: `{}`},
+		{Timestamp: 2000, ProjectID: projectID, ConversationID: "conv-1", Role: "user", Content: "real prompt", RawJSON: `{}`},
+	}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"conversationId": "temp-1",
+		"rating":         5,
+		"note":           "still great",
+		"agent":          "codex",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/rating", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	s.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+
+	insertedResolvedMessages := false
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var count int
+		if err := s.DB.QueryRow("SELECT COUNT(*) FROM messages WHERE conversation_id = ?", "conv-1").Scan(&count); err == nil && count >= 4 {
+			insertedResolvedMessages = true
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if !insertedResolvedMessages {
+		t.Fatal("timed out waiting for resolved rating messages to be inserted")
+	}
+
+	var startedAt, endedAt int64
+	if err := s.DB.QueryRow("SELECT started_at, ended_at FROM conversations WHERE id = ?", "conv-1").Scan(&startedAt, &endedAt); err != nil {
+		t.Fatalf("query bounds: %v", err)
+	}
+	if startedAt != 1000 {
+		t.Errorf("started_at = %d, want 1000", startedAt)
+	}
+	if endedAt != 2000 {
+		t.Errorf("ended_at = %d, want 2000", endedAt)
 	}
 }

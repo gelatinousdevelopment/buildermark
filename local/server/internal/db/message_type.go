@@ -1,6 +1,9 @@
 package db
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 const (
 	MessageTypePrompt      = "prompt"
@@ -29,6 +32,10 @@ func normalizeMessageType(messageType string) string {
 }
 
 func canonicalMessageType(role, messageType, content string) string {
+	if isBuildermarkRatingWorkflowContent(content) {
+		return MessageTypeLog
+	}
+
 	switch normalizeMessageType(messageType) {
 	case MessageTypePrompt:
 		if strings.TrimSpace(role) == "user" {
@@ -58,6 +65,10 @@ func canonicalMessageType(role, messageType, content string) string {
 }
 
 func inferMessageType(role, content string) string {
+	if isBuildermarkRatingWorkflowContent(content) {
+		return MessageTypeLog
+	}
+
 	if strings.TrimSpace(role) != "user" {
 		return MessageTypeLog
 	}
@@ -69,4 +80,79 @@ func inferMessageType(role, content string) string {
 		return MessageTypeLog
 	}
 	return MessageTypePrompt
+}
+
+func isBuildermarkRatingWorkflowContent(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return false
+	}
+
+	if isBuildermarkRatingCommand(trimmed) {
+		return true
+	}
+
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "base directory for this skill:") &&
+		(strings.Contains(lower, "rate-buildermark") || strings.Contains(lower, "the user wants to rate this conversation.")) {
+		return true
+	}
+
+	return false
+}
+
+func isBuildermarkRatingCommand(content string) bool {
+	normalized := normalizeMarkdownCommand(content)
+	for _, prefix := range []string{
+		"/bb",
+		"/bb:rate",
+		"/brate",
+		"/rate-buildermark",
+		"$bb",
+		"$rate-buildermark",
+	} {
+		if hasCommandPrefix(normalized, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeMarkdownCommand(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if !strings.HasPrefix(trimmed, "[") {
+		return trimmed
+	}
+
+	labelEnd := strings.Index(trimmed, "](")
+	if labelEnd <= 1 {
+		return trimmed
+	}
+	linkEnd := strings.Index(trimmed[labelEnd+2:], ")")
+	if linkEnd < 0 {
+		return trimmed
+	}
+
+	label := trimmed[1:labelEnd]
+	rest := trimmed[labelEnd+2+linkEnd+1:]
+	return strings.TrimSpace(label + rest)
+}
+
+func hasCommandPrefix(content, prefix string) bool {
+	return content == prefix || strings.HasPrefix(content, prefix+" ")
+}
+
+func isMetaConversationMessageRawJSON(rawJSON string) bool {
+	rawJSON = strings.TrimSpace(rawJSON)
+	if rawJSON == "" {
+		return false
+	}
+
+	var payload struct {
+		IsMeta bool `json:"isMeta"`
+	}
+	if err := json.Unmarshal([]byte(rawJSON), &payload); err != nil {
+		return false
+	}
+	return payload.IsMeta
 }
