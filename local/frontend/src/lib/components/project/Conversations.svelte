@@ -475,7 +475,12 @@
 									{/each}
 								</div>
 							{:else}
-								<RatingStars ratings={conv.ratings} />
+								<RatingStars
+									ratings={conv.ratings}
+									conversationId={conv.id}
+									agent={conv.agent}
+									projectPath={project?.path ?? ''}
+								/>
 							{/if}
 						</td>
 					{/if}

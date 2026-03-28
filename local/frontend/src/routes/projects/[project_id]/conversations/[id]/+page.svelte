@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { createRating, deleteRating, setConversationHidden } from '$lib/api';
+	import { deleteRating, setConversationHidden } from '$lib/api';
 	import { layoutStore } from '$lib/stores/layout.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { websocketStore } from '$lib/stores/websocket.svelte';
@@ -24,8 +24,8 @@
 	import RatingMessageCard from '$lib/components/RatingMessageCard.svelte';
 	import LogGroupCard from '$lib/components/LogGroupCard.svelte';
 	import AgentTag from '$lib/components/AgentTag.svelte';
+	import AddRatingForm from '$lib/components/AddRatingForm.svelte';
 	import { singleLineTitle, shortId } from '$lib/utils';
-	import { buildResumeCommand } from '$lib/agents';
 	import { resolve } from '$app/paths';
 	import Icon from '$lib/Icon.svelte';
 	import type { Project } from '$lib/types';
@@ -52,12 +52,6 @@
 	let matchedCommitBranches: Record<string, string> = $derived(data.commitBranches ?? {});
 	let matchedCommitSubjects: Record<string, string> = $derived(data.commitSubjects ?? {});
 
-	let bottomRatingValue: number = $state(0);
-	let bottomNote: string = $state('');
-	let bottomSubmitting: boolean = $state(false);
-	let bottomError: string | null = $state(null);
-	let resumeCommandCopied: boolean = $state(false);
-	let resumeCommandError: string | null = $state(null);
 	let hiddenSubmitting: boolean = $state(false);
 	let hiddenError: string | null = $state(null);
 	let localHidden: boolean = $state(false);
@@ -77,11 +71,6 @@
 	$effect(() => {
 		if (conversation.id !== lastConversationId) {
 			lastConversationId = conversation.id;
-			bottomRatingValue = 0;
-			bottomNote = '';
-			bottomError = null;
-			resumeCommandCopied = false;
-			resumeCommandError = null;
 			hiddenError = null;
 			hiddenSubmitting = false;
 			localHidden = conversation.hidden;
@@ -101,10 +90,6 @@
 	let projectPath = $derived(
 		projects.find((project) => project.id === conversation.projectId)?.path ?? ''
 	);
-	let resumeCommand = $derived(
-		buildResumeCommand(conversation.agent, conversation.id, projectPath)
-	);
-
 	function selectMessage(message: MessageRead) {
 		if (selectedMessage?.id === message.id) {
 			selectedMessage = null;
@@ -178,40 +163,12 @@
 		return matchedCommitSubjects[commitHash] || commitHash;
 	}
 
-	async function submitBottomRating() {
-		if (bottomRatingValue < 1) return;
-		bottomSubmitting = true;
-		bottomError = null;
-		try {
-			const newRating = await createRating(conversation.id, bottomRatingValue, bottomNote);
-			localRatings = [...localRatings, newRating];
-			bottomRatingValue = 0;
-			bottomNote = '';
-		} catch (e) {
-			bottomError = e instanceof Error ? e.message : 'Failed to submit rating';
-		} finally {
-			bottomSubmitting = false;
-		}
-	}
-
 	async function handleDeleteRating(id: string) {
 		try {
 			await deleteRating(id);
 			localRatings = localRatings.filter((r) => r.id !== id);
 		} catch (e) {
 			console.error('Failed to delete rating', e);
-		}
-	}
-
-	async function copyResumeCommand() {
-		if (!resumeCommand) return;
-		resumeCommandError = null;
-		try {
-			await navigator.clipboard.writeText(resumeCommand);
-			resumeCommandCopied = true;
-			setTimeout(() => (resumeCommandCopied = false), 2000);
-		} catch (e) {
-			resumeCommandError = e instanceof Error ? e.message : 'Failed to copy the resume command';
 		}
 	}
 
@@ -502,63 +459,12 @@
 
 		{#if !hasRatingAfterLastUser}
 			<div class="rating-card rating-input">
-				<div class="rating-input-header">
-					<strong>Add rating</strong>
-				</div>
-				<div class="inline-stars">
-					{#each [1, 2, 3, 4, 5] as star (star)}
-						<button
-							class="star-btn"
-							class:active={star <= bottomRatingValue}
-							onclick={() => (bottomRatingValue = star)}
-						>
-							{star <= bottomRatingValue ? '★' : '☆'}
-						</button>
-					{/each}
-				</div>
-				<input
-					type="text"
-					class="inline-note"
-					placeholder="Optional note..."
-					bind:value={bottomNote}
+				<AddRatingForm
+					conversationId={conversation.id}
+					agent={conversation.agent}
+					{projectPath}
+					onrating={(r) => (localRatings = [...localRatings, r])}
 				/>
-				<div class="inline-actions">
-					<button
-						class="bordered small"
-						disabled={bottomSubmitting || bottomRatingValue < 1}
-						onclick={submitBottomRating}
-					>
-						{bottomSubmitting ? 'Submitting...' : 'Submit'}
-					</button>
-				</div>
-				{#if bottomError}
-					<p class="inline-error">{bottomError}</p>
-				{/if}
-				{#if resumeCommand}
-					<div class="resume-command-section">
-						<div class="resume-command-header">
-							<strong>Ask agent to rate in terminal</strong>
-						</div>
-						<p class="resume-command-copy">
-							Copy this command and paste it into your terminal to resume this
-							<AgentTag agent={conversation.agent} subtle={true} />
-							conversation and run <code>rate-buildermark</code>.
-						</p>
-						<div class="resume-command-block">
-							<code>{resumeCommand}</code>
-							<button class="bordered tiny" onclick={copyResumeCommand}>
-								{resumeCommandCopied ? 'Copied!' : 'Copy'}
-							</button>
-						</div>
-						<p class="resume-command-note">
-							Requires the matching <a href={resolve('/plugins')}>Buildermark plugin or skill</a> to already
-							be installed.
-						</p>
-						{#if resumeCommandError}
-							<p class="inline-error">{resumeCommandError}</p>
-						{/if}
-					</div>
-				{/if}
 			</div>
 		{/if}
 		{#if !localHidden}
@@ -831,11 +737,6 @@
 		gap: 0.5rem;
 	}
 
-	.rating-input-header {
-		font-size: 0.85rem;
-		color: var(--color-text-secondary);
-	}
-
 	.log-group {
 		background: none;
 		border: 1px solid transparent;
@@ -852,90 +753,6 @@
 
 	.log-group.message-collapsed:hover :global(.log-group-header strong) {
 		color: var(--accent-color);
-	}
-
-	.star-btn {
-		background: none;
-		border: none;
-		cursor: pointer;
-		font-size: 1.1rem;
-		padding: 0;
-		line-height: 1;
-		color: var(--color-border-medium);
-	}
-
-	.star-btn:hover,
-	.star-btn.active {
-		color: var(--color-rating-border);
-	}
-
-	.inline-stars {
-		display: flex;
-		gap: 2px;
-	}
-
-	.inline-note {
-		padding: 0.25rem 0.5rem;
-		border: 1px solid var(--color-border-input);
-		background: var(--color-background-surface);
-		color: var(--color-text);
-		border-radius: 4px;
-		font-size: 0.85rem;
-	}
-
-	.inline-actions {
-		display: flex;
-		gap: 0.5rem;
-	}
-
-	.inline-error {
-		color: var(--color-error);
-		font-size: 0.85rem;
-		margin: 0;
-	}
-
-	.resume-command-section {
-		border-top: 1px solid var(--color-rating-border);
-		margin-top: 0.25rem;
-		padding-top: 0.75rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.resume-command-header {
-		font-size: 0.85rem;
-		color: var(--color-text-secondary);
-	}
-
-	.resume-command-copy,
-	.resume-command-note {
-		color: var(--color-text-secondary);
-		font-size: 0.85rem;
-		line-height: 1.4;
-		margin: 0;
-	}
-
-	.resume-command-block {
-		align-items: flex-start;
-		background: var(--color-background-surface);
-		border: 1px solid var(--color-border-medium);
-		border-radius: 6px;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.65rem;
-		justify-content: space-between;
-		padding: 0.65rem 0.75rem;
-	}
-
-	.resume-command-block code {
-		color: var(--color-text);
-		flex: 1;
-		font-family: var(--font-family-monospace);
-		font-size: 0.8rem;
-		line-height: 1.5;
-		overflow-wrap: anywhere;
-		white-space: pre-wrap;
 	}
 
 	.conversation-visibility {
