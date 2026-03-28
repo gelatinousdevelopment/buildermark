@@ -79,13 +79,17 @@ func (s *Server) handleGetFileTypeCoverage(w http.ResponseWriter, r *http.Reques
 				byExt[ext] = data
 			}
 			data.uniqueFiles[f.Path] = struct{}{}
-			data.totalLines += f.LinesTotal
+			effective := f.AttributableLines
+			if effective == 0 {
+				effective = f.LinesTotal // backward compat with old data
+			}
+			data.totalLines += effective
 			if len(override) > 0 {
 				for agent, pct := range override {
 					if pct <= 0 {
 						continue
 					}
-					data.agentLines[agent] += float64(f.LinesTotal) * float64(pct) / 100
+					data.agentLines[agent] += float64(effective) * float64(pct) / 100
 				}
 				continue
 			}

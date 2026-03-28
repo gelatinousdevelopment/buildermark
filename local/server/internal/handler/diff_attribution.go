@@ -772,6 +772,9 @@ func summarizeDiffFiles(
 	for _, filePath := range filePaths {
 		c := coverageByPath[filePath]
 		c.LinesTotal = c.Added + c.Removed
+		if agent, ok := fileAgent[filePath]; ok {
+			c.AttributableLines = agent.Added
+		}
 		if !c.Ignored {
 			if agent, ok := fileAgent[filePath]; ok {
 				c.LinesFromAgent = agent.Removed
@@ -891,6 +894,9 @@ func applyFallbackFileCoverage(
 			attributableTotal = c.LinesTotal
 		}
 		c.LinesFromAgent += fallbackMatched
+		if c.AttributableLines == 0 {
+			c.AttributableLines = attributableTotal
+		}
 		c.CopiedFromAgent = true
 		c.LinePercent = percentage(c.LinesFromAgent, attributableTotal)
 		c.AgentSegments = mergeFileAgentSegments(c.AgentSegments, agentLines, attributableTotal)

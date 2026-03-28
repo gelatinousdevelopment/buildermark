@@ -15,7 +15,7 @@ const (
 	commitWindowLookaheadMs      = int64(5 * 60 * 1000)
 	maxCommitsPerProject         = 200
 	commitsPageSize              = 20
-	currentCommitCoverageVersion = 12
+	currentCommitCoverageVersion = 13
 	maxFormattingWindowLines     = 5
 )
 
@@ -174,8 +174,9 @@ type commitFileCoverage struct {
 	CopiedFromAgent bool                   `json:"copiedFromAgent"`
 	LinesTotal      int                    `json:"linesTotal"`
 	LinesFromAgent  int                    `json:"linesFromAgent"`
-	LinePercent     float64                `json:"linePercent"`
-	AgentSegments   []agentCoverageSegment `json:"agentSegments,omitempty"`
+	LinePercent       float64                `json:"linePercent"`
+	AttributableLines int                    `json:"attributableLines,omitempty"`
+	AgentSegments     []agentCoverageSegment `json:"agentSegments,omitempty"`
 }
 
 type gitIdentity struct {

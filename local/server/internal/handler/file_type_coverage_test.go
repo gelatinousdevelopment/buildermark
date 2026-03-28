@@ -192,6 +192,93 @@ func TestFileTypeCoverage(t *testing.T) {
 	}
 }
 
+func TestFileTypeCoverageAttributableLines(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	projectID := "attr-project"
+	if _, err := s.DB.Exec("INSERT INTO projects (id, path, label) VALUES (?, ?, ?)", projectID, "/tmp/attr", "attr"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	// Files where AttributableLines < LinesTotal (non-attributable lines like {, }, etc.)
+	files := []commitFileCoverage{
+		{
+			Path:              "src/main.go",
+			LinesTotal:        200, // raw added+removed
+			AttributableLines: 150, // only lines with letters/digits
+			AgentSegments: []agentCoverageSegment{
+				{Agent: "claude", LinesFromAgent: 120, LinePercent: 80},
+			},
+		},
+		{
+			Path:              "src/app.ts",
+			LinesTotal:        100,
+			AttributableLines: 80,
+			AgentSegments: []agentCoverageSegment{
+				{Agent: "claude", LinesFromAgent: 60, LinePercent: 75},
+			},
+		},
+	}
+	filesJSON, _ := json.Marshal(files)
+
+	c := db.Commit{
+		ID:          "attr-c1",
+		ProjectID:   projectID,
+		BranchName:  "main",
+		CommitHash:  "attr-aaa",
+		AuthoredAt:  1000,
+		LinesTotal:  230, // = 150 + 80 attributable
+		DetailFiles: string(filesJSON),
+	}
+	if err := db.UpsertCommit(context.Background(), s.DB, c); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/projects/"+projectID+"/file-type-coverage?start=500000&end=1500000", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; body = %s", rec.Code, rec.Body.String())
+	}
+
+	var env struct {
+		OK   bool                  `json:"ok"`
+		Data []fileTypeCoverageRow `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(env.Data) != 2 {
+		t.Fatalf("expected 2 extensions, got %d", len(env.Data))
+	}
+
+	for _, row := range env.Data {
+		switch row.Extension {
+		case ".go":
+			// Should use AttributableLines (150) not LinesTotal (200)
+			if row.TotalLines != 150 {
+				t.Errorf(".go totalLines = %d, want 150 (attributable)", row.TotalLines)
+			}
+			// claude: 120/150 = 80%
+			if len(row.AgentSegments) != 1 || row.AgentSegments[0].LinesFromAgent != 120 {
+				t.Errorf(".go claude lines unexpected: %+v", row.AgentSegments)
+			}
+			expectedManual := (1 - 120.0/150.0) * 100
+			if diff := row.ManualPercent - expectedManual; diff > 0.1 || diff < -0.1 {
+				t.Errorf(".go manualPercent = %f, want ~%f", row.ManualPercent, expectedManual)
+			}
+		case ".ts":
+			// Should use AttributableLines (80) not LinesTotal (100)
+			if row.TotalLines != 80 {
+				t.Errorf(".ts totalLines = %d, want 80 (attributable)", row.TotalLines)
+			}
+		}
+	}
+}
+
 func TestFileTypeCoverageEmpty(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
