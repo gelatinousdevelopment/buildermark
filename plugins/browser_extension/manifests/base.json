@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Buildermark Importer",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Import coding agent conversations from Claude Cloud and Codex Cloud into Buildermark.",
   "permissions": ["storage"],
   "host_permissions": ["http://localhost:55022/*"],

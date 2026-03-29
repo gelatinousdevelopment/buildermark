@@ -133,16 +133,9 @@ update_remote_checkout() {
     repo_e="$(pwsh_escape "$repo")"
     branch_e="$(pwsh_escape "$branch")"
 
-    local remote_url
-    remote_url="$(git -C "$ROOT_DIR" remote get-url origin)"
-    local remote_url_e
-    remote_url_e="$(pwsh_escape "$remote_url")"
-
     script="\$ErrorActionPreference='Stop'; \
 if (-not (Test-Path -LiteralPath '$repo_e')) { \
-  \$parent = Split-Path -LiteralPath '$repo_e'; \
-  New-Item -ItemType Directory -Force -Path \$parent | Out-Null; \
-  git clone '$remote_url_e' '$repo_e'; \
+  throw ('Remote repo not found at $repo_e. Clone it manually first.') \
 }; \
 Set-Location -LiteralPath '$repo_e'; \
 git reset --hard HEAD; \

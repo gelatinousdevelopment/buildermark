@@ -12,6 +12,7 @@ dist
 .claude
 .gomodcache
 .gopath
+/release/
 
 // Xcode
 build/
@@ -20,3 +21,5 @@ xcuserdata/
 DerivedData/
 .swiftpm/
 .derivedData/
+
+claude-cloud-websocket-*

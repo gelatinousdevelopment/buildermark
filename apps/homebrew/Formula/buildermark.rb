@@ -6,25 +6,25 @@ class Buildermark < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/buildermark-macos-arm64.dmg"
-      sha256 "REPLACE_WITH_ARM64_DMG_SHA256"
+      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/Buildermark-#{version}-macos-arm64.dmg"
+      sha256 "3a6c48c4e00f11dba2d86621e57759326668730ee2a8e8e37aa5a57d7c96cd12"
     end
 
     on_intel do
-      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/buildermark-macos-amd64.dmg"
-      sha256 "REPLACE_WITH_AMD64_DMG_SHA256"
+      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/Buildermark-#{version}-macos-amd64.dmg"
+      sha256 "a1189a68367cf767e8540d5109b5e54f2d74c57dedd5c56d62930d960e29627b"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/buildermark-linux-arm64.tar.gz"
-      sha256 "REPLACE_WITH_ARM64_TAR_SHA256"
+      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/buildermark-#{version}-linux-arm64.tar.gz"
+      sha256 "0dbccd2c85d19cc73f5d8180b23b7f9cd6e5e619d83b670a27e9f1239c0e4eee"
     end
 
     on_intel do
-      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/buildermark-linux-amd64.tar.gz"
-      sha256 "REPLACE_WITH_AMD64_TAR_SHA256"
+      url "https://github.com/buildermark/buildermark/releases/download/v#{version}/buildermark-#{version}-linux-amd64.tar.gz"
+      sha256 "1d8623ccd4a68e7b7dab5dd711bc5dd5cb8845321acfffa5059a3852c005a9ab"
     end
   end
 

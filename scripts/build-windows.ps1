@@ -77,6 +77,8 @@ Check-Tool "dotnet" "Install .NET SDK: https://dotnet.microsoft.com/download"
 Step "Building Svelte frontend"
 Push-Location $FrontendDir
 try {
+    npm ci
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed (exit code $LASTEXITCODE)" }
     npm run build
     if ($LASTEXITCODE -ne 0) { throw "npm run build failed (exit code $LASTEXITCODE)" }
 } finally {

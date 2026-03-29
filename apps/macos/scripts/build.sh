@@ -8,6 +8,8 @@
 #
 # Usage:
 #   ./scripts/build.sh
+#   ./scripts/build.sh --arch arm64
+#   ./scripts/build.sh --arch amd64
 #
 # Environment variables (override defaults):
 #   TEAM_ID              - Apple Developer Team ID
@@ -20,8 +22,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
-ARCHIVE_PATH="$BUILD_DIR/Buildermark.xcarchive"
-EXPORT_DIR="$BUILD_DIR/export"
 
 SCHEME="${SCHEME:-Buildermark}"
 CONFIGURATION="${CONFIGURATION:-Release}"
@@ -29,6 +29,41 @@ DEVELOPER_ID="${DEVELOPER_ID:-Developer ID Application}"
 TEAM_ID="${TEAM_ID:-}"
 
 APP_NAME="Buildermark"
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+
+ARCH=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --arch) ARCH="$2"; shift 2 ;;
+        *) echo "Unknown argument: $1" >&2; exit 1 ;;
+    esac
+done
+
+# Map arch names to Xcode architecture identifiers.
+XCODE_ARCH=""
+if [[ -n "$ARCH" ]]; then
+    case "$ARCH" in
+        arm64) XCODE_ARCH="arm64" ;;
+        amd64) XCODE_ARCH="x86_64" ;;
+        *)
+            echo "Error: unsupported architecture '$ARCH'. Use arm64 or amd64." >&2
+            exit 1
+            ;;
+    esac
+fi
+
+# Use arch-specific paths when an architecture is specified so multiple
+# builds can coexist without clobbering each other.
+if [[ -n "$ARCH" ]]; then
+    ARCHIVE_PATH="$BUILD_DIR/Buildermark-$ARCH.xcarchive"
+    EXPORT_DIR="$BUILD_DIR/export-$ARCH"
+else
+    ARCHIVE_PATH="$BUILD_DIR/Buildermark.xcarchive"
+    EXPORT_DIR="$BUILD_DIR/export"
+fi
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -56,32 +91,31 @@ step "Checking prerequisites"
 check_tool xcodebuild "Install Xcode Command Line Tools: xcode-select --install"
 
 # ---------------------------------------------------------------------------
-# Clean
+# Clean (preserve SourcePackages for multi-arch builds)
 # ---------------------------------------------------------------------------
 
 step "Cleaning previous build"
-if [ -d "$BUILD_DIR" ]; then
-    TRASH="$BUILD_DIR.$$"
-    mv "$BUILD_DIR" "$TRASH"
-    rm -rf "$TRASH" &
-fi
+rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR"
 mkdir -p "$BUILD_DIR"
 
 # ---------------------------------------------------------------------------
-# Resolve packages
+# Resolve packages (only if not already present)
 # ---------------------------------------------------------------------------
 
-step "Resolving Swift package dependencies"
-xcodebuild -project "$PROJECT_DIR/Buildermark.xcodeproj" \
-    -scheme "$SCHEME" \
-    -resolvePackageDependencies \
-    -clonedSourcePackagesDirPath "$BUILD_DIR/SourcePackages"
+if [[ ! -d "$BUILD_DIR/SourcePackages" ]]; then
+    step "Resolving Swift package dependencies"
+    xcodebuild -project "$PROJECT_DIR/Buildermark.xcodeproj" \
+        -scheme "$SCHEME" \
+        -resolvePackageDependencies \
+        -clonedSourcePackagesDirPath "$BUILD_DIR/SourcePackages"
+fi
 
 # ---------------------------------------------------------------------------
 # Archive
 # ---------------------------------------------------------------------------
 
-step "Archiving $SCHEME ($CONFIGURATION)"
+ARCH_LABEL="${ARCH:-native}"
+step "Archiving $SCHEME ($CONFIGURATION, $ARCH_LABEL)"
 
 ARCHIVE_ARGS=(
     -project "$PROJECT_DIR/Buildermark.xcodeproj"
@@ -95,6 +129,11 @@ ARCHIVE_ARGS=(
 
 if [ -n "$TEAM_ID" ]; then
     ARCHIVE_ARGS+=("DEVELOPMENT_TEAM=$TEAM_ID")
+fi
+
+if [[ -n "$XCODE_ARCH" ]]; then
+    ARCHIVE_ARGS+=("ARCHS=$XCODE_ARCH")
+    ARCHIVE_ARGS+=("ONLY_ACTIVE_ARCH=NO")
 fi
 
 xcodebuild "${ARCHIVE_ARGS[@]}"

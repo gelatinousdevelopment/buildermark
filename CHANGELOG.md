@@ -7,10 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-03-20
+## [1.0.0] - 2026-03-30
 
 ### Added
 
-- Initial release with macOS, Windows, Linux, and browser extension builds
-- Versioned release build script (`scripts/build-release.sh`)
-- GitHub release publish script (`scripts/publish-release.sh`)
+- Initial release
