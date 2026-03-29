@@ -296,8 +296,8 @@
 
 	header {
 		align-items: stretch;
-		border-bottom: 0.5px solid var(--color-divider);
-		border-top: 0.5px solid var(--color-divider);
+		border-bottom: var(--divider-width) solid var(--color-divider);
+		border-top: var(--divider-width) solid var(--color-divider);
 		display: flex;
 		font-size: 1rem;
 		padding: 0;
@@ -332,8 +332,8 @@
 		background: var(--color-divider);
 		border: 0;
 		margin: 0;
-		min-width: 0.5px;
-		width: 0.5px;
+		min-width: var(--divider-width);
+		width: var(--divider-width);
 
 		/*display: none;*/
 	}

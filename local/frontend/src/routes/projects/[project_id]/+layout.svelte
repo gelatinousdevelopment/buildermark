@@ -164,7 +164,7 @@
 	.project-header {
 		align-items: stretch;
 		background: var(--color-background-project-header);
-		border-bottom: 0.5px solid var(--color-divider);
+		border-bottom: var(--divider-width) solid var(--color-divider);
 		display: flex;
 		flex-direction: row;
 		gap: 1rem;
@@ -253,7 +253,7 @@
 		cursor: pointer;
 		font-size: 0.85rem;
 		padding: 0.2rem 0.5rem;
-		border: 0.5px solid var(--color-border-input);
+		border: var(--divider-width) solid var(--color-border-input);
 		background: var(--color-background-elevated);
 	}
 

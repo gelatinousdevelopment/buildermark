@@ -164,6 +164,14 @@
 	--color-visibility-btn-bg: light-dark(#e8e8e8, #333);
 
 	--content-section-border-radius: 8px;
+
+	--divider-width: 1px;
+}
+
+@media (min-resolution: 2dppx) {
+	body {
+		--divider-width: 0.5px;
+	}
 }
 
 /* Theme overrides - these force a specific color scheme */
@@ -271,7 +279,7 @@ a:active {
 .inset-when-limited-content-width {
 	background: var(--color-background-content);
 	border-radius: var(--content-section-border-radius);
-	border: 0.5px solid var(--color-divider);
+	border: var(--divider-width) solid var(--color-divider);
 	box-sizing: border-box;
 	margin: 1.5rem auto;
 	width: 100%;
@@ -280,7 +288,7 @@ a:active {
 @media (max-width: 1540px) {
 	:root:not([data-content-width]) .inset-when-limited-content-width,
 	:root[data-content-width='default'] .inset-when-limited-content-width {
-		border-width: 0 0 0.5px 0;
+		border-width: 0 0 var(--divider-width) 0;
 		margin: 0 auto;
 		border-radius: 0;
 	}
@@ -288,14 +296,14 @@ a:active {
 
 @media (max-width: 1800px) {
 	:root[data-content-width='wider'] .inset-when-limited-content-width {
-		border-width: 0 0 0.5px 0;
+		border-width: 0 0 var(--divider-width) 0;
 		margin: 0 auto;
 		border-radius: 0;
 	}
 }
 
 :root[data-content-width='full'] .inset-when-limited-content-width {
-	border-width: 0 0 0.5px 0;
+	border-width: 0 0 var(--divider-width) 0;
 	margin: 0 auto;
 	border-radius: 0;
 }
@@ -311,7 +319,7 @@ table.data a.bordered:visited,
 button.bordered {
 	background: var(--color-button-bg);
 	border-radius: 4px;
-	border: 0.5px solid var(--color-divider);
+	border: var(--divider-width) solid var(--color-divider);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 	color: var(--color-text);
 	cursor: pointer;
@@ -470,7 +478,7 @@ table.data td a:hover {
 	font-size: 0.85rem;
 	padding: 0.2rem 0.4rem;
 	background: var(--color-background-elevated);
-	border: 0.5px solid var(--color-border-input);
+	border: var(--divider-width) solid var(--color-border-input);
 	border-radius: 4px;
 	min-width: 100px;
 }
@@ -494,7 +502,7 @@ table.data td a:hover {
 .filters .date-picker input[type='date'] {
 	font-size: 0.85rem;
 	padding: 0.2rem 0.4rem;
-	border: 0.5px solid var(--color-border-input);
+	border: var(--divider-width) solid var(--color-border-input);
 	border-radius: 4px;
 	background: var(--color-background-elevated);
 	color: var(--color-text);
@@ -507,7 +515,7 @@ table.data td a:hover {
 	width: 20px;
 	height: 20px;
 	padding: 0;
-	border: 0.5px solid var(--color-border-input);
+	border: var(--divider-width) solid var(--color-border-input);
 	border-radius: 4px;
 	background: var(--color-background-elevated);
 	cursor: pointer;
@@ -525,7 +533,7 @@ table.data td a:hover {
 .info-box {
 	background: var(--color-background-elevated);
 	border-radius: 5px;
-	border: 0.5px solid var(--color-divider);
+	border: var(--divider-width) solid var(--color-divider);
 	display: flex;
 	flex-direction: column;
 	flex-shrink: 0;

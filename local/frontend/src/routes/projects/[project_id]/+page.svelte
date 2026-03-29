@@ -164,25 +164,11 @@
 <style>
 	.project-content {
 		align-items: stretch;
-		/*background: var(--color-background-content);*/
-		/*border-radius: 10px;*/
-		/*border: 0.5px solid var(--color-divider);*/
-		/*box-sizing: border-box;*/
 		display: flex;
 		flex-direction: row;
 		flex-wrap: wrap;
 		justify-content: space-between;
-		/*margin: 2rem auto;*/
-		/*transition: all 200ms;*/
 	}
-
-	/*@media (max-width: 1600px) {
-		.project-content {
-			border-width: 0 0 0.5px 0;
-			margin: 0 auto;
-			border-radius: 0;
-		}
-	}*/
 
 	.column {
 		flex: 1;
@@ -209,7 +195,7 @@
 	}
 
 	.commits {
-		border-left: 0.5px solid var(--color-divider);
+		border-left: var(--divider-width) solid var(--color-divider);
 	}
 
 	.more {
@@ -219,7 +205,7 @@
 	}
 
 	.load-more-row {
-		border-top: 0.5px solid var(--color-divider);
+		border-top: var(--divider-width) solid var(--color-divider);
 		box-sizing: border-box;
 		display: flex;
 		flex: 0 0 100%;
@@ -234,7 +220,7 @@
 
 		.commits {
 			border-left: 0;
-			border-top: 0.5px solid var(--color-divider);
+			border-top: var(--divider-width) solid var(--color-divider);
 		}
 	}
 </style>

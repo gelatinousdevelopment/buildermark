@@ -572,7 +572,7 @@
 	.content .divider {
 		display: block;
 		background: var(--color-divider);
-		width: 0.5px;
+		width: var(--divider-width);
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -623,7 +623,7 @@
 	.column .divider {
 		display: block;
 		background: var(--color-divider);
-		height: 0.5px;
+		height: var(--divider-width);
 		width: 100%;
 		margin: 0;
 		padding: 0;

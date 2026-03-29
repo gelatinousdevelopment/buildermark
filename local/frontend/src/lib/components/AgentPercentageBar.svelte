@@ -203,7 +203,7 @@
 		background: var(--color-background-empty, #f0f0f0);
 		border-radius: 2px;
 		display: flex;
-		gap: 0.5px;
+		gap: var(--divider-width);
 		height: var(--bar-height, 10px);
 		overflow: hidden;
 		width: 100%;

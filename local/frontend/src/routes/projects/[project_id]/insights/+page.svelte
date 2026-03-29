@@ -757,7 +757,7 @@
 
 		background: var(--color-background-content);
 		border-radius: var(--content-section-border-radius);
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		box-sizing: border-box;
 		margin: 1.5rem auto;
 		width: 100%;
@@ -765,7 +765,7 @@
 
 	@media (max-width: 1100px) {
 		.insights-page {
-			border-width: 0 0 0.5px 0;
+			border-width: 0 0 var(--divider-width) 0;
 			margin: 0 auto;
 			border-radius: 0;
 		}
@@ -775,7 +775,7 @@
 		box-sizing: border-box;
 		gap: 1.5rem;
 		padding: 1rem;
-		border-bottom: 0.5px solid var(--color-divider);
+		border-bottom: var(--divider-width) solid var(--color-divider);
 		justify-content: space-between;
 		min-height: 66px;
 	}
@@ -839,7 +839,7 @@
 	.preset-range select {
 		font-size: 1rem;
 		padding: 0.45rem 2.2rem 0.45rem 0.8rem;
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		border-radius: 6px;
 		background: var(--color-background-surface);
 		color: var(--color-text);
@@ -881,7 +881,7 @@
 		width: 34px;
 		height: 28px;
 		padding: 0;
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		border-radius: 6px;
 		background: var(--color-background-surface);
 		cursor: pointer;
@@ -898,7 +898,7 @@
 		inset: unset;
 		margin: 0;
 		background: var(--color-background-surface);
-		border: 0.5px solid var(--color-popover-border);
+		border: var(--divider-width) solid var(--color-popover-border);
 		border-radius: 5px;
 		box-shadow: 0 2px 8px var(--color-popover-shadow);
 		padding: 0.75rem 1rem;
@@ -942,7 +942,7 @@
 		padding: 0.4rem 0.8rem;
 		font-size: 0.85rem;
 		font-weight: 600;
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		border-radius: 5px;
 		background: var(--color-background-elevated);
 		color: var(--color-text);
@@ -976,7 +976,7 @@
 
 	.screenshot-branding-border {
 		border-radius: 4px;
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		padding: 0.4rem 0.8rem;
 		flex-direction: column;
 		justify-content: center;
@@ -1045,7 +1045,7 @@
 		border-bottom: none !important;
 		padding: 1rem 0 !important;
 		margin: 0 1rem !important;
-		border-bottom: 0.5px solid var(--color-divider) !important;
+		border-bottom: var(--divider-width) solid var(--color-divider) !important;
 	}
 
 	:global(.outer.screenshot-mode) .chart-panel {

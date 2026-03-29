@@ -108,7 +108,7 @@
 
 	pre.json {
 		background: var(--color-code-block-json-background);
-		border: 0.5px solid var(--color-code-block-json-border);
+		border: var(--divider-width) solid var(--color-code-block-json-border);
 		border-radius: 5px;
 		padding: 0.5rem;
 		font-family: var(--font-family-monospace);

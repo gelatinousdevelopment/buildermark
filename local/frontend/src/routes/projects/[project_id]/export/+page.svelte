@@ -532,7 +532,7 @@
 	.content .divider {
 		display: block;
 		background: var(--color-divider);
-		width: 0.5px;
+		width: var(--divider-width);
 		margin: 0;
 		padding: 0;
 		border: 0;
@@ -629,7 +629,7 @@
 		cursor: pointer;
 		font-size: 0.95rem;
 		padding: 0.35rem 0.7rem;
-		border: 0.5px solid var(--color-border-input);
+		border: var(--divider-width) solid var(--color-border-input);
 		background: var(--color-background-elevated);
 	}
 
@@ -670,7 +670,7 @@
 		cursor: pointer;
 		font-size: 0.95rem;
 		padding: 0.35rem 0.7rem;
-		border: 0.5px solid var(--color-border-input);
+		border: var(--divider-width) solid var(--color-border-input);
 		background: var(--color-background-elevated);
 	}
 
@@ -755,7 +755,7 @@
 
 	.html-preview {
 		background: var(--color-background-content);
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		border-radius: 5px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 		flex: 1;
@@ -764,7 +764,7 @@
 
 	.markdown-preview {
 		background: var(--color-background-content);
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		border-radius: 5px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 		font-family: var(--font-mono, monospace);
@@ -779,7 +779,7 @@
 	}
 
 	.db-note {
-		border-top: 0.5px solid var(--color-divider);
+		border-top: var(--divider-width) solid var(--color-divider);
 		padding-top: 1rem;
 		margin-top: auto;
 	}
@@ -837,7 +837,7 @@
 
 		.content .divider {
 			width: 100%;
-			height: 0.5px;
+			height: var(--divider-width);
 		}
 	}
 </style>

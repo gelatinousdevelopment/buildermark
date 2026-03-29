@@ -414,7 +414,7 @@
 
 		background: var(--color-background-content);
 		border-radius: var(--content-section-border-radius);
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		box-sizing: border-box;
 		margin: 1.5rem auto;
 		width: 100%;
@@ -437,7 +437,7 @@
 		flex-direction: row;
 		gap: 0rem;
 		flex: 1;
-		border-top: 0.5px solid var(--color-divider);
+		border-top: var(--divider-width) solid var(--color-divider);
 	}
 
 	.column {
@@ -457,8 +457,8 @@
 		background: var(--color-divider);
 		border: 0;
 		margin: 0;
-		min-width: 0.5px;
-		width: 0.5px;
+		min-width: var(--divider-width);
+		width: var(--divider-width);
 	}
 
 	.section {

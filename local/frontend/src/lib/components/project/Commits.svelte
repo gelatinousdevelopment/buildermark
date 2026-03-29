@@ -723,7 +723,7 @@
 
 	.top-row {
 		align-items: flex-start;
-		border-bottom: 0.5px solid var(--color-divider);
+		border-bottom: var(--divider-width) solid var(--color-divider);
 		display: flex;
 		flex-direction: row;
 		gap: 1rem;
@@ -1031,7 +1031,7 @@
 	.user-tag {
 		display: inline-flex;
 		align-items: center;
-		padding: calc(0.2rem - 0.5px) calc(0.6rem - 0.5px);
+		padding: calc(0.2rem - var(--divider-width)) calc(0.6rem - var(--divider-width));
 		border-radius: 999px;
 		background: var(--color-tag-background, #e8e8e8);
 		color: var(--color-tag-text, #555);
@@ -1041,7 +1041,7 @@
 		text-overflow: ellipsis;
 		max-width: 100%;
 		cursor: default;
-		border: 0.5px solid var(--color-tag-border, #888);
+		border: var(--divider-width) solid var(--color-tag-border, #888);
 		box-sizing: border-box;
 	}
 

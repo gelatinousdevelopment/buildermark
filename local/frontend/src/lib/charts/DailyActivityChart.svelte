@@ -386,7 +386,7 @@
 		width: 18px;
 		height: 18px;
 		padding: 0;
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		border-radius: 4px;
 		background: var(--color-background-elevated);
 		cursor: pointer;
@@ -408,7 +408,7 @@
 		inset: unset;
 		margin: 0;
 		background: var(--color-background-surface);
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		border-radius: 5px;
 		box-shadow: 0 2px 8px var(--color-popover-shadow);
 		padding: 0.5rem 1rem 0.5rem 0.7rem;

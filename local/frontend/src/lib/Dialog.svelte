@@ -60,7 +60,7 @@
 	}
 
 	.dialog-panel {
-		border: 0.5px solid var(--color-popover-border);
+		border: var(--divider-width) solid var(--color-popover-border);
 		position: relative;
 		background: var(--color-modal-bg);
 		border-radius: 8px;

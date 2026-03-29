@@ -120,7 +120,7 @@
 
 		background: var(--color-background-content);
 		border-radius: var(--content-section-border-radius);
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		box-sizing: border-box;
 		margin: 1.5rem auto;
 		width: 100%;
@@ -130,7 +130,7 @@
 
 	@media (max-width: 900px) {
 		.onboarding {
-			border-width: 0 0 0.5px 0;
+			border-width: 0 0 var(--divider-width) 0;
 			margin: 0 auto;
 			border-radius: 0;
 		}

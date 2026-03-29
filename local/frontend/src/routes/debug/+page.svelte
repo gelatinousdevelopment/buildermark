@@ -232,7 +232,7 @@
 		flex-direction: column;
 		gap: 2rem;
 		padding: 0 1.5rem 1.5rem 1.5rem;
-		border-top: 0.5px solid var(--color-divider);
+		border-top: var(--divider-width) solid var(--color-divider);
 	}
 
 	.section {
@@ -240,7 +240,7 @@
 	}
 
 	.section + .section {
-		border-top: 0.5px solid var(--color-divider);
+		border-top: var(--divider-width) solid var(--color-divider);
 	}
 
 	.muted {

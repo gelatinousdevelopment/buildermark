@@ -122,7 +122,7 @@
 		align-items: stretch;
 		background: var(--color-background-content);
 		border-radius: 12px;
-		border: 0.5px solid var(--color-divider);
+		border: var(--divider-width) solid var(--color-divider);
 		display: flex;
 		flex-direction: row;
 		justify-content: space-between;
@@ -245,13 +245,13 @@
 	}
 
 	.commits {
-		border-left: 0.5px solid var(--color-divider);
+		border-left: var(--divider-width) solid var(--color-divider);
 	}
 
 	@media (max-width: 1023px) {
 		.commits {
 			border-left: 0;
-			border-top: 0.5px solid var(--color-divider);
+			border-top: var(--divider-width) solid var(--color-divider);
 		}
 	}
 </style>

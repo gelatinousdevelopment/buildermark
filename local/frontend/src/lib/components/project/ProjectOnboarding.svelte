@@ -155,8 +155,8 @@
 		background: var(--color-divider);
 		border: 0;
 		margin: 0;
-		min-width: 0.5px;
-		width: 0.5px;
+		min-width: var(--divider-width);
+		width: var(--divider-width);
 	}
 
 	.onboarding .right {

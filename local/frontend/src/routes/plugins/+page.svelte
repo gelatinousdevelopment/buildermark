@@ -245,7 +245,7 @@
 
 <style>
 	.hero {
-		border-bottom: 0.5px solid var(--color-divider);
+		border-bottom: var(--divider-width) solid var(--color-divider);
 	}
 
 	.content {
@@ -436,7 +436,7 @@
 	}
 
 	.browser-extensions {
-		border-top: 0.5px solid var(--color-divider);
+		border-top: var(--divider-width) solid var(--color-divider);
 		margin-top: 1.5rem;
 		padding-top: 1.5rem;
 	}

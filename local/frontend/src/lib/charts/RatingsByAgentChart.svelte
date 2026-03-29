@@ -150,7 +150,7 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 		color: var(--color-text-secondary);
-		border-bottom: 0.5px solid var(--color-divider);
+		border-bottom: var(--divider-width) solid var(--color-divider);
 		padding-bottom: 0.4rem;
 		margin-bottom: 0.2rem;
 	}
