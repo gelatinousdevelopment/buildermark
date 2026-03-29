@@ -31,7 +31,7 @@ type RunOptions struct {
 
 // RunServer starts the buildermark server and blocks until ctx is cancelled.
 func RunServer(ctx context.Context, opts RunOptions) error {
-	readOnly, _ := strconv.ParseBool(os.Getenv("READ_ONLY"))
+	readOnly, _ := strconv.ParseBool(os.Getenv("PUBLIC_READ_ONLY"))
 
 	database, err := db.InitDB(opts.DBPath)
 	if err != nil {
@@ -199,7 +199,7 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	go func() {
 		fmt.Printf("Buildermark Local server listening on %s\n", opts.Addr)
 		if readOnly {
-			fmt.Println("READ_ONLY mode enabled: mutating API endpoints are disabled")
+			fmt.Println("PUBLIC_READ_ONLY mode enabled: mutating API endpoints are disabled")
 		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err

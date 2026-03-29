@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Handle } from '@sveltejs/kit';
+import { env } from '$env/dynamic/public';
 
 const scriptOpenTagRe = /<script\b([^>]*)>/gi;
 const scriptNonceAttrRe = /\bnonce\s*=/i;
@@ -17,7 +18,9 @@ function buildCSPHeader(nonce: string): string {
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data:",
 		"font-src 'self'",
-		"connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* wss://localhost:* wss://127.0.0.1:*",
+		env.PUBLIC_READ_ONLY === 'true'
+			? "connect-src 'self'"
+			: "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* wss://localhost:* wss://127.0.0.1:*",
 		"manifest-src 'self'",
 		"frame-src 'none'",
 		"worker-src 'none'"
