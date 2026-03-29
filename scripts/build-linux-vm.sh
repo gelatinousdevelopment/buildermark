@@ -139,6 +139,7 @@ sync_changed_files_to_remote() {
             --from0 \
             --files-from="$CHANGED_FILES_LIST" \
             --rsync-path="$REMOTE_RSYNC" \
+            --info=name \
             "$ROOT_DIR/" \
             "$SSH_HOST:$REMOTE_REPO_DIR/"
     fi
