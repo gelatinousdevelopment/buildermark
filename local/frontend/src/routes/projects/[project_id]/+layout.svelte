@@ -9,7 +9,7 @@
 	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
 	import { projectLayoutData } from '$lib/stores/projectLayoutData.svelte';
 
-	const DAILY_WINDOW_OPTIONS = [14, 30, 45, 60, 90];
+	const DAILY_WINDOW_OPTIONS = [7, 14, 30, 45, 60, 90];
 
 	let { children, data } = $props();
 

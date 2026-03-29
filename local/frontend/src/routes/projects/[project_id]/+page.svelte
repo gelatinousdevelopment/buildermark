@@ -7,7 +7,7 @@
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import { projectDateFilterStore } from '$lib/stores/projectDateFilter.svelte';
 	import { projectLayoutData } from '$lib/stores/projectLayoutData.svelte';
-	import { dateStringToUnixMsRange } from '$lib/utils';
+	import { dateStringToUnixMsRange, referenceNowDate } from '$lib/utils';
 	import type { ProjectDetail, DailyCommitSummary } from '$lib/types';
 
 	const PAGE_SIZE = 100;
@@ -16,6 +16,10 @@
 	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.sortOrder);
 	const selectedDate = $derived(projectDateFilterStore.selectedDate);
 	const dailyWindowDays = $derived(projectLayoutData.dailyWindowDays);
+	const dailyWindowEnd = $derived.by(() => {
+		const now = referenceNowDate();
+		return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+	});
 	const dateRange = $derived.by(() => {
 		if (!selectedDate) return null;
 		return dateStringToUnixMsRange(selectedDate);
@@ -139,6 +143,7 @@
 			start={dateRange?.from}
 			end={dateRange?.to}
 			{dailyWindowDays}
+			{dailyWindowEnd}
 		/>
 		<div class="more">
 			<a

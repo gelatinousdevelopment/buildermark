@@ -72,6 +72,7 @@
 		showDateFilter?: boolean;
 		onDateChange?: (start: string | null, end: string | null) => void;
 		dailyWindowDays?: number;
+		dailyWindowEnd?: number;
 	}
 
 	let {
@@ -113,7 +114,8 @@
 		end = undefined,
 		showDateFilter = false,
 		onDateChange = undefined,
-		dailyWindowDays = undefined
+		dailyWindowDays = undefined,
+		dailyWindowEnd = undefined
 	}: Props = $props();
 
 	let data: ProjectCommitPageResponse | null = $state(null);
@@ -276,7 +278,7 @@
 						effectiveStart,
 						effectiveEnd,
 						dailyWindowDays,
-						undefined,
+						dailyWindowEnd,
 						selectedOrder
 					),
 				useLoadQueue,
@@ -309,7 +311,7 @@
 	$effect(() => {
 		if (!autoload) return;
 		const resolved = resolveUserFilter(selectedUser);
-		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${selectedOrder}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${dailyWindowDays}:${loadSignal}`;
+		const loadKey = `${projectId}:${currentPage}:${pageSize}:${selectedBranch}:${selectedUser}:${resolved}:${selectedAgent}:${selectedOrder}:${searchTerm}:${effectiveStart}:${effectiveEnd}:${dailyWindowDays}:${dailyWindowEnd}:${loadSignal}`;
 		if (loadKey === lastLoadKey) return;
 		lastLoadKey = loadKey;
 		void loadCommitsData();

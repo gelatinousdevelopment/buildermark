@@ -6,6 +6,7 @@
 	import Popover from '$lib/components/Popover.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { referenceNowDate } from '$lib/utils';
 	import type { DailyCommitSummary } from '$lib/types';
 
 	interface Props {
@@ -278,7 +279,7 @@
 	let endsToday = $derived.by(() => {
 		if (columns.length === 0) return true;
 		const lastDate = columns[columns.length - 1].date;
-		const now = new Date();
+		const now = referenceNowDate();
 		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 		return lastDate === today;
 	});

@@ -29,6 +29,7 @@ DELETED_FILES_LIST=""
 ARCH="${ARCH:-all}"
 VERSION="${VERSION:-dev}"
 PUBLIC_READ_ONLY="${PUBLIC_READ_ONLY:-}"
+PUBLIC_FROZEN_DATE="${PUBLIC_FROZEN_DATE:-}"
 VM_NAME="${VM_NAME:-Debian Desktop}"
 SSH_HOST="${SSH_HOST:-debianvm}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-/home/debian/github/buildermark}"
@@ -40,6 +41,7 @@ while [[ $# -gt 0 ]]; do
         --arch)    ARCH="$2";    shift 2 ;;
         --version) VERSION="$2"; shift 2 ;;
         --read-only) PUBLIC_READ_ONLY="true"; shift ;;
+        --frozen-date) PUBLIC_FROZEN_DATE="$2"; shift 2 ;;
         *)
             echo "Unknown argument: $1" >&2
             exit 1
@@ -165,9 +167,10 @@ build_remote_cli() {
     arch_q="$(printf '%q' "$ARCH")"
     version_q="$(printf '%q' "$VERSION")"
     read_only_q="$(printf '%q' "$PUBLIC_READ_ONLY")"
+    frozen_date_q="$(printf '%q' "$PUBLIC_FROZEN_DATE")"
     preamble="$(remote_shell_preamble)"
 
-    ssh_cmd "bash -lc '$preamble"$'\n'"cd $repo_q && ARCH=$arch_q VERSION=$version_q PUBLIC_READ_ONLY=$read_only_q ./scripts/build-linux.sh'"
+    ssh_cmd "bash -lc '$preamble"$'\n'"cd $repo_q && ARCH=$arch_q VERSION=$version_q PUBLIC_READ_ONLY=$read_only_q PUBLIC_FROZEN_DATE=$frozen_date_q ./scripts/build-linux.sh'"
 }
 
 copy_artifacts_back() {
