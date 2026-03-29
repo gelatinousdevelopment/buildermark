@@ -123,10 +123,12 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 	// Detect "just installed" update from marker file.
 	detectPostUpdate(hsrv, configDir)
 
-	hsrv.RepoMonitor = gitmonitor.New(ctx, gitmonitor.Options{
-		OnBranchChange: hsrv.HandleGitBranchChange,
-	})
-	hsrv.ReconcileGitRepoMonitor(ctx)
+	if !readOnly {
+		hsrv.RepoMonitor = gitmonitor.New(ctx, gitmonitor.Options{
+			OnBranchChange: hsrv.HandleGitBranchChange,
+		})
+		hsrv.ReconcileGitRepoMonitor(ctx)
+	}
 
 	// ReloadWatchers reads the current config and starts watchers for any
 	// homes that aren't already being watched. Returns the new home paths.
@@ -173,14 +175,16 @@ func RunServer(ctx context.Context, opts RunOptions) error {
 
 	mux := hsrv.Routes()
 
-	go func() {
-		select {
-		case <-time.After(3 * time.Second):
-		case <-ctx.Done():
-			return
-		}
-		hsrv.RefreshStaleProjects(ctx)
-	}()
+	if !readOnly {
+		go func() {
+			select {
+			case <-time.After(3 * time.Second):
+			case <-ctx.Done():
+				return
+			}
+			hsrv.RefreshStaleProjects(ctx)
+		}()
+	}
 
 	// Periodic update check for Linux CLI.
 	if cfg.UpdateMode != "off" {

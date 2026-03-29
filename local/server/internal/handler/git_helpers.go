@@ -401,7 +401,7 @@ func findProjectGroupByProjectID(groups []projectGroup, projectID string) (proje
 
 func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*db.Project, error) {
 	var p db.Project
-	err := database.QueryRowContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, ignored, ignore_diff_paths, ignore_default_diff_paths, team_server_id, git_worktree_paths, alt_remotes FROM projects WHERE id = ?", projectID).Scan(
+	err := database.QueryRowContext(ctx, "SELECT id, path, old_paths, label, git_id, default_branch, remote, local_user, local_email, ignored, ignore_diff_paths, ignore_default_diff_paths, team_server_id, git_worktree_paths, alt_remotes FROM projects WHERE id = ?", projectID).Scan(
 		&p.ID,
 		&p.Path,
 		&p.OldPaths,
@@ -409,6 +409,8 @@ func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*d
 		&p.GitID,
 		&p.DefaultBranch,
 		&p.Remote,
+		&p.LocalUser,
+		&p.LocalEmail,
 		&p.Ignored,
 		&p.IgnoreDiffPaths,
 		&p.IgnoreDefaultDiffPaths,
@@ -423,6 +425,101 @@ func getProjectByID(ctx context.Context, database *sql.DB, projectID string) (*d
 		return nil, fmt.Errorf("query project: %w", err)
 	}
 	return &p, nil
+}
+
+func projectGroupOrSingle(groups []projectGroup, project *db.Project) projectGroup {
+	if project == nil {
+		return projectGroup{}
+	}
+	if group, ok := findProjectGroupByProjectID(groups, project.ID); ok {
+		return group
+	}
+	return projectGroup{
+		GitID:    strings.TrimSpace(project.GitID),
+		Projects: []db.Project{*project},
+	}
+}
+
+func projectHasCommits(ctx context.Context, database *sql.DB, projectID string) bool {
+	if strings.TrimSpace(projectID) == "" {
+		return false
+	}
+	var count int
+	if err := database.QueryRowContext(ctx, "SELECT COUNT(*) FROM commits WHERE project_id = ?", projectID).Scan(&count); err != nil {
+		return false
+	}
+	return count > 0
+}
+
+func dbRepoProjectForGroup(ctx context.Context, database *sql.DB, group projectGroup, preferred *db.Project) *db.Project {
+	candidates := make([]db.Project, 0, len(group.Projects)+1)
+	if preferred != nil {
+		candidates = append(candidates, *preferred)
+	}
+	for _, project := range group.Projects {
+		if preferred != nil && project.ID == preferred.ID {
+			continue
+		}
+		candidates = append(candidates, project)
+	}
+	for _, candidate := range candidates {
+		if projectHasCommits(ctx, database, candidate.ID) {
+			project := candidate
+			return &project
+		}
+	}
+	if preferred != nil {
+		project := *preferred
+		return &project
+	}
+	if len(group.Projects) == 0 {
+		return nil
+	}
+	project := group.Projects[0]
+	return &project
+}
+
+func storedGitIdentity(project *db.Project) gitIdentity {
+	if project == nil {
+		return gitIdentity{}
+	}
+	return gitIdentity{
+		Name:  strings.TrimSpace(project.LocalUser),
+		Email: strings.TrimSpace(project.LocalEmail),
+	}
+}
+
+func listProjectBranchesFromDB(ctx context.Context, database *sql.DB, project *db.Project) ([]string, error) {
+	if project == nil {
+		return nil, nil
+	}
+	branches, err := db.ListDistinctBranches(ctx, database, project.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{}, len(branches)+1)
+	out := make([]string, 0, len(branches)+1)
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+
+	add(project.DefaultBranch)
+	for _, branch := range branches {
+		add(branch)
+	}
+	if len(out) == 0 {
+		add("main")
+	}
+	return out, nil
 }
 
 func ensureProjectRemote(ctx context.Context, database *sql.DB, project *db.Project) string {

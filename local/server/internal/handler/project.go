@@ -359,7 +359,9 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 
 	// If watchers haven't scanned in the last 15s, trigger a quick scan for
 	// this project's paths so the response includes the latest data.
-	s.maybeScanStaleProject(r.Context(), id)
+	if !s.ReadOnly {
+		s.maybeScanStaleProject(r.Context(), id)
+	}
 
 	page := 1
 	pageSize := 0
@@ -404,9 +406,11 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ensureProjectLocalUser(r.Context(), s.DB, project)
-
-	currentBranch := detectCurrentBranch(r.Context(), project.Path)
+	currentBranch := strings.TrimSpace(project.DefaultBranch)
+	if !s.ReadOnly {
+		ensureProjectLocalUser(r.Context(), s.DB, project)
+		currentBranch = detectCurrentBranch(r.Context(), project.Path)
+	}
 
 	writeSuccess(w, http.StatusOK, projectDetailResponse{
 		ProjectDetail: project,
@@ -422,6 +426,9 @@ const staleScanThreshold = 15 * time.Second
 // scans for the same project are coalesced so a page load that fires several
 // API requests doesn't queue redundant work.
 func (s *Server) maybeScanStaleProject(ctx context.Context, projectID string) {
+	if s == nil || s.ReadOnly {
+		return
+	}
 	if s.Agents == nil || len(s.Agents.Watchers()) == 0 {
 		return
 	}

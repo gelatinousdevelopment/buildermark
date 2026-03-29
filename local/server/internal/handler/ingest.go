@@ -519,7 +519,7 @@ func recomputeSingleCommit(
 	msgIdx *messageIndex,
 ) (*CommitDetailResult, error) {
 	// If this commit is at a shallow boundary, keep it as a stub.
-	if shallowHashes == nil {
+	if shallowHashes == nil && strings.TrimSpace(repoPath) != "" {
 		shallowHashes = shallowBoundaryHashes(ctx, repoPath)
 	}
 	if shallowHashes[c.CommitHash] {
@@ -541,7 +541,7 @@ func recomputeSingleCommit(
 
 	cleanDiff := c.DiffContent
 	tokenDiff := cleanDiff
-	if tokenDiff == "" {
+	if tokenDiff == "" && strings.TrimSpace(repoPath) != "" {
 		// Fallback to git only when the stored diff is missing.
 		gitDiff, err := runGit(ctx, repoPath, "show", "--pretty=format:", "--unified=0", "-M", "-w", "--ignore-blank-lines", c.CommitHash)
 		if err == nil {
@@ -1118,25 +1118,44 @@ func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// Use git hash list as source of truth for branch membership.
-	branchHashes, hashErr := listBranchCommitHashes(r.Context(), project.Path, branch)
-	if hashErr != nil {
-		log.Printf("error listing branch hashes for %s: %v", projectID, hashErr)
+	groups, err := listAllProjectGroups(r.Context(), s.DB)
+	if err != nil {
+		log.Printf("error listing project groups: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to list projects")
+		return
+	}
+	group := projectGroupOrSingle(groups, project)
+	repoProject := dbRepoProjectForGroup(r.Context(), s.DB, group, project)
+	if repoProject == nil {
+		repoProject = project
 	}
 
 	ingestedCount := 0
-	if len(branchHashes) > 0 {
-		ingestedCount, err = db.CountCommitsByHashes(r.Context(), s.DB, project.ID, branchHashes)
-		if err != nil {
-			log.Printf("error counting commits for %s: %v", projectID, err)
-			writeError(w, http.StatusInternalServerError, "failed to count commits")
-			return
+	ingestedCount, err = db.CountCommitsByBranchAndUsers(r.Context(), s.DB, repoProject.ID, branch, nil, 0, 0)
+	if err != nil {
+		log.Printf("error counting commits for %s: %v", projectID, err)
+		writeError(w, http.StatusInternalServerError, "failed to count commits")
+		return
+	}
+
+	totalGit := ingestedCount
+	if !s.ReadOnly {
+		// Use git hash list as source of truth for branch membership.
+		branchHashes, hashErr := listBranchCommitHashes(r.Context(), repoProject.Path, branch)
+		if hashErr != nil {
+			log.Printf("error listing branch hashes for %s: %v", projectID, hashErr)
+		} else if len(branchHashes) > 0 {
+			totalGit = len(branchHashes)
+			ingestedCount, err = db.CountCommitsByHashes(r.Context(), s.DB, repoProject.ID, branchHashes)
+			if err != nil {
+				log.Printf("error counting commits for %s: %v", projectID, err)
+				writeError(w, http.StatusInternalServerError, "failed to count commits")
+				return
+			}
 		}
 	}
 
-	totalGit := len(branchHashes)
-
-	syncState, err := db.GetCommitSyncState(r.Context(), s.DB, project.ID, branch)
+	syncState, err := db.GetCommitSyncState(r.Context(), s.DB, repoProject.ID, branch)
 	if err != nil {
 		log.Printf("error loading commit sync state for %s: %v", projectID, err)
 	}
@@ -1156,7 +1175,9 @@ func (s *Server) handleCommitIngestionStatus(w http.ResponseWriter, r *http.Requ
 	}
 
 	reachedRoot := false
-	if totalGit > 0 {
+	if s.ReadOnly {
+		reachedRoot = true
+	} else if totalGit > 0 {
 		reachedRoot = ingestedCount >= totalGit
 	} else if ingestedCount == 0 {
 		reachedRoot = true

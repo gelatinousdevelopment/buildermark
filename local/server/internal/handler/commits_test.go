@@ -2160,6 +2160,144 @@ func TestListProjectCommitsForProject_DailyWindowDaysQuery(t *testing.T) {
 	}
 }
 
+func TestReadOnlyCommitEndpointsUseDatabaseWhenRepoMissing(t *testing.T) {
+	s := setupTestServer(t)
+	s.ReadOnly = true
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectPath := filepath.Join(t.TempDir(), "missing-project")
+	projectID, err := db.EnsureProject(ctx, s.DB, projectPath)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, "git-readonly"); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.UpdateProjectDefaultBranch(ctx, s.DB, projectID, "main"); err != nil {
+		t.Fatalf("UpdateProjectDefaultBranch: %v", err)
+	}
+	if err := db.UpdateProjectLocalUser(ctx, s.DB, projectID, "Test User", "test@example.com"); err != nil {
+		t.Fatalf("UpdateProjectLocalUser: %v", err)
+	}
+
+	if err := db.EnsureConversation(ctx, s.DB, "conv-readonly", projectID, "codex"); err != nil {
+		t.Fatalf("EnsureConversation: %v", err)
+	}
+
+	agentTs := mustUnixMilli(t, "2026-01-01T00:59:00Z")
+	agentDiff := "```diff\n" +
+		"diff --git a/app.txt b/app.txt\n" +
+		"--- a/app.txt\n" +
+		"+++ b/app.txt\n" +
+		"@@ -1 +1,2 @@\n" +
+		" start\n" +
+		"+hello world\n" +
+		"```"
+	if err := db.InsertMessages(ctx, s.DB, []db.Message{{
+		Timestamp:      agentTs,
+		ProjectID:      projectID,
+		ConversationID: "conv-readonly",
+		Role:           "agent",
+		Content:        agentDiff,
+		RawJSON:        agent.DerivedDiffRawJSON,
+	}}); err != nil {
+		t.Fatalf("InsertMessages: %v", err)
+	}
+
+	commitHash := "readonly-hash"
+	commitDiff := strings.Join([]string{
+		"diff --git a/app.txt b/app.txt",
+		"--- a/app.txt",
+		"+++ b/app.txt",
+		"@@ -1 +1,2 @@",
+		" start",
+		"+hello world",
+		"",
+	}, "\n")
+	if err := db.UpsertCommit(ctx, s.DB, db.Commit{
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      commitHash,
+		Subject:         "readonly commit",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
+		AuthoredAt:      mustUnixMilli(t, "2026-01-01T01:00:00Z") / 1000,
+		DiffContent:     commitDiff,
+		LinesTotal:      1,
+		LinesFromAgent:  1,
+		CoverageVersion: currentCommitCoverageVersion,
+	}); err != nil {
+		t.Fatalf("UpsertCommit: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/projects/commits", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("global commits status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode global commits response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("global commits ok=false, error=%v", env.Error)
+	}
+	globalData := env.Data.(map[string]any)
+	globalCommits := globalData["commits"].([]any)
+	if len(globalCommits) != 1 {
+		t.Fatalf("global commits len = %d, want 1", len(globalCommits))
+	}
+
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/commits", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("project commits status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	env = jsonEnvelope{}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode project commits response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("project commits ok=false, error=%v", env.Error)
+	}
+	pageData := env.Data.(map[string]any)
+	if got := pageData["currentEmail"].(string); got != "test@example.com" {
+		t.Fatalf("currentEmail = %q, want %q", got, "test@example.com")
+	}
+	pageCommits := pageData["commits"].([]any)
+	if len(pageCommits) != 1 {
+		t.Fatalf("project commits len = %d, want 1", len(pageCommits))
+	}
+	if got := pageCommits[0].(map[string]any)["workingCopy"].(bool); got {
+		t.Fatal("workingCopy = true, want false in read-only mode")
+	}
+
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/commits/"+commitHash, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("commit detail status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	env = jsonEnvelope{}
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode commit detail response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("commit detail ok=false, error=%v", env.Error)
+	}
+	detail := env.Data.(map[string]any)
+	if got := detail["diff"].(string); !strings.Contains(got, "hello world") {
+		t.Fatalf("diff = %q, want stored diff content", got)
+	}
+	if got := len(detail["files"].([]any)); got == 0 {
+		t.Fatal("files len = 0, want recomputed file detail from stored diff")
+	}
+	if got := len(detail["messages"].([]any)); got == 0 {
+		t.Fatal("messages len = 0, want recomputed message attribution from database")
+	}
+}
+
 func testToken(path string, sign byte, norm string, _ int) diffToken {
 	styleNorm := normalizeStyleEquivalentLine(path, norm, norm)
 	return diffToken{

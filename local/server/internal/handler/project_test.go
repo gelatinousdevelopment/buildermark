@@ -833,6 +833,52 @@ func TestProjectGroupFingerprintChangesWhenIgnoreSettingsChange(t *testing.T) {
 	}
 }
 
+func TestGetProjectReadOnlyUsesStoredFieldsWhenRepoMissing(t *testing.T) {
+	s := setupTestServer(t)
+	s.ReadOnly = true
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectPath := filepath.Join(t.TempDir(), "missing-project")
+	projectID, err := db.EnsureProject(ctx, s.DB, projectPath)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectDefaultBranch(ctx, s.DB, projectID, "main"); err != nil {
+		t.Fatalf("UpdateProjectDefaultBranch: %v", err)
+	}
+	if err := db.UpdateProjectLocalUser(ctx, s.DB, projectID, "Stored User", "stored@example.com"); err != nil {
+		t.Fatalf("UpdateProjectLocalUser: %v", err)
+	}
+	if err := db.UpdateProjectRemote(ctx, s.DB, projectID, "git@github.com:example/repo.git"); err != nil {
+		t.Fatalf("UpdateProjectRemote: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	if got := data["currentBranch"].(string); got != "main" {
+		t.Fatalf("currentBranch = %q, want %q", got, "main")
+	}
+	if got := data["localEmail"].(string); got != "stored@example.com" {
+		t.Fatalf("localEmail = %q, want %q", got, "stored@example.com")
+	}
+}
+
 func TestCommitRefreshRerunsWithLatestIgnoreDiffPaths(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()

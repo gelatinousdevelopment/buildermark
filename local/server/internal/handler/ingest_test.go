@@ -230,3 +230,64 @@ func TestRefreshCommitsEndpoint(t *testing.T) {
 		t.Fatalf("missing jobId in refresh response")
 	}
 }
+
+func TestCommitIngestionStatusReadOnlyUsesDatabaseWhenRepoMissing(t *testing.T) {
+	s := setupTestServer(t)
+	s.ReadOnly = true
+	handler := s.Routes()
+	ctx := context.Background()
+
+	projectPath := filepath.Join(t.TempDir(), "missing-project")
+	projectID, err := db.EnsureProject(ctx, s.DB, projectPath)
+	if err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+	if err := db.UpdateProjectGitID(ctx, s.DB, projectID, "git-readonly"); err != nil {
+		t.Fatalf("UpdateProjectGitID: %v", err)
+	}
+	if err := db.UpdateProjectDefaultBranch(ctx, s.DB, projectID, "main"); err != nil {
+		t.Fatalf("UpdateProjectDefaultBranch: %v", err)
+	}
+	if err := db.UpsertCommit(ctx, s.DB, db.Commit{
+		ProjectID:       projectID,
+		BranchName:      "main",
+		CommitHash:      "readonly-hash",
+		Subject:         "readonly commit",
+		UserName:        "Test User",
+		UserEmail:       "test@example.com",
+		AuthoredAt:      1704067200,
+		DiffContent:     "diff --git a/app.txt b/app.txt\n+hello",
+		LinesTotal:      1,
+		LinesFromAgent:  0,
+		CoverageVersion: currentCommitCoverageVersion,
+	}); err != nil {
+		t.Fatalf("UpsertCommit: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/commit-ingestion-status", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var env jsonEnvelope
+	if err := json.NewDecoder(rec.Body).Decode(&env); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !env.OK {
+		t.Fatalf("ok=false, error=%v", env.Error)
+	}
+
+	data := env.Data.(map[string]any)
+	if got := int(data["ingestedCount"].(float64)); got != 1 {
+		t.Fatalf("ingestedCount = %d, want 1", got)
+	}
+	if got := int(data["totalGitCommits"].(float64)); got != 1 {
+		t.Fatalf("totalGitCommits = %d, want 1", got)
+	}
+	if got := data["reachedRoot"].(bool); !got {
+		t.Fatalf("reachedRoot = %v, want true", got)
+	}
+}
