@@ -26,8 +26,9 @@ UTMCTL="/Applications/UTM.app/Contents/MacOS/utmctl"
 CHANGED_FILES_LIST=""
 DELETED_FILES_LIST=""
 
-ARCH="${ARCH:-}"
+ARCH="${ARCH:-all}"
 VERSION="${VERSION:-dev}"
+PUBLIC_READ_ONLY="${PUBLIC_READ_ONLY:-}"
 VM_NAME="${VM_NAME:-Debian Desktop}"
 SSH_HOST="${SSH_HOST:-debianvm}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-/home/debian/github/buildermark}"
@@ -38,6 +39,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)    ARCH="$2";    shift 2 ;;
         --version) VERSION="$2"; shift 2 ;;
+        --read-only) PUBLIC_READ_ONLY="true"; shift ;;
         *)
             echo "Unknown argument: $1" >&2
             exit 1
@@ -161,9 +163,10 @@ build_remote_cli() {
     repo_q="$(printf '%q' "$REMOTE_REPO_DIR")"
     arch_q="$(printf '%q' "$ARCH")"
     version_q="$(printf '%q' "$VERSION")"
+    read_only_q="$(printf '%q' "$PUBLIC_READ_ONLY")"
     preamble="$(remote_shell_preamble)"
 
-    ssh_cmd "bash -lc '$preamble"$'\n'"cd $repo_q && ARCH=$arch_q VERSION=$version_q ./scripts/build-linux.sh'"
+    ssh_cmd "bash -lc '$preamble"$'\n'"cd $repo_q && ARCH=$arch_q VERSION=$version_q PUBLIC_READ_ONLY=$read_only_q ./scripts/build-linux.sh'"
 }
 
 copy_artifacts_back() {

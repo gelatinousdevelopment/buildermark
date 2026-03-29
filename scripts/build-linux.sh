@@ -25,6 +25,7 @@ BUILD_DIR="$ROOT_DIR/apps/linux-cli/build"
 # Defaults from env, overridable by flags.
 ARCH="${ARCH:-}"
 VERSION="${VERSION:-dev}"
+PUBLIC_READ_ONLY="${PUBLIC_READ_ONLY:-}"
 
 # ---------------------------------------------------------------------------
 # Parse flags
@@ -34,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch)    ARCH="$2";    shift 2 ;;
         --version) VERSION="$2"; shift 2 ;;
+        --read-only) PUBLIC_READ_ONLY="true"; shift ;;
         *)
             # Positional fallback: first arg is version (backwards compat).
             VERSION="$1"; shift ;;
@@ -110,7 +112,7 @@ done
 step "Building Svelte frontend"
 cd "$FRONTEND_DIR"
 npm ci
-npm run build
+PUBLIC_READ_ONLY="${PUBLIC_READ_ONLY}" npm run build
 
 # Copy the full build output into the Go server's embed path so it gets compiled
 # into the binary (//go:embed frontend in dashboard.go).

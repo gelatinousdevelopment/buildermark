@@ -14,11 +14,11 @@ import (
 type cspNonceKey struct{}
 
 var (
-	scriptOpenTagRe    = regexp.MustCompile(`(?i)<script\b([^>]*)>`)
-	scriptNonceAttr    = regexp.MustCompile(`(?i)\bnonce\s*=\s*["'][^"']*["']`)
-	cspNonceMetaRe     = regexp.MustCompile(`(?i)<meta[^>]+property\s*=\s*["']csp-nonce["'][^>]*>`)
+	scriptOpenTagRe     = regexp.MustCompile(`(?i)<script\b([^>]*)>`)
+	scriptNonceAttr     = regexp.MustCompile(`(?i)\bnonce\s*=\s*["'][^"']*["']`)
+	cspNonceMetaRe      = regexp.MustCompile(`(?i)<meta[^>]+property\s*=\s*["']csp-nonce["'][^>]*>`)
 	cspNonceMetaNonceRe = regexp.MustCompile(`(?i)\bnonce\s*=\s*["'][^"']*["']`)
-	headOpenTagRe      = regexp.MustCompile(`(?i)<head\b[^>]*>`)
+	headOpenTagRe       = regexp.MustCompile(`(?i)<head\b[^>]*>`)
 )
 
 func newCSPNonce() (string, error) {
@@ -73,7 +73,7 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 
 func buildCSPHeader(nonce string) string {
 	return fmt.Sprintf(
-		"default-src 'none'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:* wss://localhost:* wss://127.0.0.1:*; manifest-src 'self'; frame-src 'none'; worker-src 'none'",
+		"default-src 'none'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; script-src 'self' 'nonce-%s'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; frame-src 'none'; worker-src 'none'",
 		nonce,
 	)
 }
