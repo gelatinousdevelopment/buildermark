@@ -352,9 +352,11 @@ button.bordered:disabled {
 }
 
 a.bordered:not(:disabled):hover,
-button.bordered:not(:disabled):hover,
 a.bordered.small:not(:disabled):hover,
 a.bordered.tiny:not(:disabled):hover,
+button.bordered:not(:disabled):hover,
+button.bordered.small:not(:disabled):hover,
+button.bordered.tiny:not(:disabled):hover,
 table.data a.bordered.small:not(:disabled):hover,
 table.data a.bordered.tiny:not(:disabled):hover {
 	background: var(--accent-color-ultralight);
@@ -378,11 +380,16 @@ button.bordered.prominent {
 	font-weight: bold;
 }
 
-a.bordered.prominent:hover,
-button.bordered.prominent:hover {
+a.bordered.prominent:not(:disabled):hover,
+a.bordered.prominent.small:not(:disabled):hover,
+a.bordered.prominent.tiny:not(:disabled):hover,
+button.bordered.prominent:not(:disabled):hover,
+button.bordered.prominent.small:not(:disabled):hover,
+button.bordered.prominent.tiny:not(:disabled):hover {
 	background: var(--accent-color-darker);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-	color: white;
+	color: var(--accent-color-ultralight);
+	filter: brightness(1.3);
 }
 
 a.bordered.prominent:active,

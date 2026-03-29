@@ -139,12 +139,13 @@
 			<hr style:height="2px" style:background="var(--color-text)" />
 			<h2>Rate, measure, and benchmark your AI coding sessions.</h2>
 			<p>
-				This website is a read-only demo of Buildermark Local. You can browse all of the prompts
-				that I wrote to create it in less than a month.
+				This website is a read-only demo of Buildermark. You can browse all of the AI agent
+				conversations and prompts that I wrote to create it. By running Buildermark on your system,
+				you can see your work in the same way.
 			</p>
 			<h2>Open source, local-first, and free.</h2>
 			<p>
-				Buildermark Local runs on your dev computer (macOS, Linux, and Windows) with a very light
+				Buildermark runs on your dev computer (macOS, Linux, and Windows) with a very light
 				footprint (written in Go), a UI on localhost, and is <a
 					href="https://github.com/gelatinousdevelopment/buildermark"
 					target="_blank">open source on github</a
@@ -155,14 +156,14 @@
 				<a
 					href="https://buildermark.dev"
 					target="_blank"
-					class="bordered prominent small"
+					class="bordered small"
 					style:width="fit-content">buildermark.dev</a
 				>
 				<span>or</span>
 				<a
 					href="https://github.com/gelatinousdevelopment/buildermark/releases"
 					target="_blank"
-					class="bordered prominent small"
+					class="bordered small"
 					style:width="fit-content">GitHub</a
 				>
 			</p>
@@ -229,16 +230,12 @@
 
 	@keyframes pill-flash {
 		0% {
-			filter: brightness(1);
-		}
-		25% {
 			filter: brightness(0.7);
+			transform: scale(0.9);
 		}
 		50% {
-			filter: brightness(1);
-		}
-		75% {
-			filter: brightness(0.7);
+			/*filter: brightness(0.7);*/
+			transform: scale(1);
 		}
 		100% {
 			filter: brightness(1);
