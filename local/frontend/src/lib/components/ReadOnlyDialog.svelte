@@ -55,7 +55,7 @@
 	// Cancel closing animation if dialog re-opens after parent set open=false
 	let prevOpen = $state(open);
 	$effect(() => {
-		if (open && !prevOpen && closing) {
+		if (open && !prevOpen) {
 			closing = false;
 			wrapper?.classList.remove('closing-animation');
 		}
@@ -101,7 +101,6 @@
 		panel.addEventListener(
 			'animationend',
 			() => {
-				wrapper.classList.remove('closing-animation');
 				closing = false;
 				onclose();
 

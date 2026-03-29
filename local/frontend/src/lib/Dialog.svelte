@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fade, fly } from 'svelte/transition';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -17,8 +18,18 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="dialog-overlay" onkeydown={(e) => e.key === 'Escape' && onclose()}>
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<div class="dialog-backdrop" onclick={onclose}></div>
-		<div class="dialog-panel" style:max-width={width ?? '440px'}>
+		<div
+			class="dialog-backdrop"
+			in:fade={{ duration: 100 }}
+			out:fade={{ duration: 250 }}
+			onclick={onclose}
+		></div>
+		<div
+			class="dialog-panel"
+			style:max-width={width ?? '440px'}
+			in:fly={{ duration: 100, y: -60 }}
+			out:fly={{ duration: 100, y: -60 }}
+		>
 			{#if title}
 				<h3>{title}</h3>
 			{/if}
