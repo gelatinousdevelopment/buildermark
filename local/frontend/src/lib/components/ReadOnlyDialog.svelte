@@ -177,7 +177,7 @@
 	.read-only-dialog h2 {
 		font-size: 1rem;
 		font-weight: bold;
-		margin: 1.2rem 0 0.8rem 0;
+		margin: 1.2rem 0 0.4rem 0;
 		line-height: 1.3;
 	}
 

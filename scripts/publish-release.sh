@@ -10,8 +10,11 @@
 #   ./scripts/publish-release.sh 1.2.0
 #   ./scripts/publish-release.sh 1.2.0 --draft
 #
+# By default, releases are created as drafts. Pass --publish to create a
+# public release.
+#
 # Options:
-#   --draft       Create the release as a draft (default: false)
+#   --publish     Create a public (non-draft) release
 #   --prerelease  Mark the release as a prerelease
 #
 
@@ -19,7 +22,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-DRAFT=""
+DRAFT="--draft"
 PRERELEASE=""
 
 # ---------------------------------------------------------------------------
@@ -27,7 +30,7 @@ PRERELEASE=""
 # ---------------------------------------------------------------------------
 
 if [[ $# -lt 1 ]]; then
-    echo "Usage: $0 <version> [--draft] [--prerelease]" >&2
+    echo "Usage: $0 <version> [--publish] [--prerelease]" >&2
     exit 1
 fi
 
@@ -36,7 +39,7 @@ shift
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --draft)      DRAFT="--draft"; shift ;;
+        --publish)    DRAFT=""; shift ;;
         --prerelease) PRERELEASE="--prerelease"; shift ;;
         *)
             echo "Unknown argument: $1" >&2
@@ -127,6 +130,12 @@ done
 # ---------------------------------------------------------------------------
 # Create GitHub release
 # ---------------------------------------------------------------------------
+
+if [[ -n "$DRAFT" ]]; then
+    echo "  Mode: DRAFT (pass --publish to create a public release)"
+else
+    echo "  Mode: PUBLIC"
+fi
 
 step "Creating GitHub release: $TAG"
 

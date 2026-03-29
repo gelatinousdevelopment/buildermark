@@ -497,6 +497,14 @@ if [[ -f "$CHECKSUMS" ]]; then
     brew_replace "$BREW_CASK" "REPLACE_WITH_ARM64_DMG_SHA256" "$SHA_MACOS_ARM64"
     brew_replace "$BREW_CASK" "REPLACE_WITH_AMD64_DMG_SHA256" "$SHA_MACOS_AMD64"
     echo "  Updated: apps/homebrew/Casks/buildermark-app.rb"
+
+    # Copy the updated Homebrew files into the release directory.
+    BREW_RELEASE_DIR="$RELEASE_DIR/homebrew"
+    mkdir -p "$BREW_RELEASE_DIR/Formula" "$BREW_RELEASE_DIR/Casks"
+    cp "$BREW_FORMULA" "$BREW_RELEASE_DIR/Formula/"
+    cp "$BREW_LINUX"   "$BREW_RELEASE_DIR/Formula/"
+    cp "$BREW_CASK"    "$BREW_RELEASE_DIR/Casks/"
+    echo "  Copied Homebrew files to: release/$VERSION/homebrew/"
 else
     echo "  Warning: checksums file not found, skipping Homebrew SHA256 updates" >&2
 fi
