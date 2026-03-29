@@ -188,7 +188,7 @@ func (s *Server) readOnlyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
-			if r.URL.Path == "/api/v1/ws" {
+			if r.URL.Path == "/api/v1/ws" || isAllowedReadOnlyMutation(r) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -198,6 +198,15 @@ func (s *Server) readOnlyMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		}
 	})
+}
+
+func isAllowedReadOnlyMutation(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	return r.Method == http.MethodPost &&
+		strings.HasPrefix(r.URL.Path, "/api/v1/projects/") &&
+		strings.HasSuffix(r.URL.Path, "/commit-conversation-links")
 }
 
 type jsonEnvelope struct {

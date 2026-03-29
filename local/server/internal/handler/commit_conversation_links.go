@@ -30,6 +30,17 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 		return
 	}
 
+	project, err := getProjectByID(r.Context(), s.DB, projectID)
+	if err != nil {
+		log.Printf("error loading project %s: %v", projectID, err)
+		writeError(w, http.StatusInternalServerError, "failed to load project")
+		return
+	}
+	if project == nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
 	var commitHashes []string
 	var conversationIDFilter map[string]bool
 
@@ -83,12 +94,7 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 				return
 			}
 
-			group, ok := findProjectGroupByProjectID(groups, projectID)
-			if !ok {
-				writeError(w, http.StatusNotFound, "project not found")
-				return
-			}
-
+			group := projectGroupOrSingle(groups, project)
 			pIDs := projectIDs(group)
 
 			conversationToCommits, commitBranches, commitSubjects, err = db.GetCachedConversationCommitLinks(r.Context(), s.DB, pIDs, conversationIDs)
@@ -116,12 +122,7 @@ func (s *Server) handleGetCommitConversationLinks(w http.ResponseWriter, r *http
 		return
 	}
 
-	group, ok := findProjectGroupByProjectID(groups, projectID)
-	if !ok {
-		writeError(w, http.StatusNotFound, "project not found")
-		return
-	}
-
+	group := projectGroupOrSingle(groups, project)
 	pIDs := projectIDs(group)
 
 	// Use cached commit-conversation links from the database.
