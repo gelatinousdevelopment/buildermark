@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { fade, fly } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
+	import { quadInOut } from 'svelte/easing';
 	import type { Snippet } from 'svelte';
 
 	interface Props {
@@ -12,6 +13,28 @@
 	}
 
 	let { open, title, onclose, children, actions, width }: Props = $props();
+
+	function flyScale(
+		node: HTMLElement,
+		{ delay = 0, duration = 400, easing = quadInOut, x = 0, y = 0, scale = 0.9 } = {}
+	) {
+		const style = getComputedStyle(node);
+		const o = +style.opacity;
+		const transform = style.transform === 'none' ? '' : style.transform;
+
+		return {
+			delay,
+			duration,
+			easing,
+			css: (t: number) => {
+				const u = 1 - t;
+				return `
+					transform: ${transform} translate(${u * x}px, ${u * y}px) scale(${scale + (1 - scale) * t});
+					opacity: ${t * o};
+				`;
+			}
+		};
+	}
 </script>
 
 {#if open}
@@ -27,8 +50,8 @@
 		<div
 			class="dialog-panel"
 			style:max-width={width ?? '440px'}
-			in:fly={{ duration: 100, y: -60 }}
-			out:fly={{ duration: 100, y: -60 }}
+			in:flyScale={{ duration: 100, y: -60, scale: 0.95 }}
+			out:flyScale={{ duration: 100, y: -60, scale: 0.9 }}
 		>
 			{#if title}
 				<h3>{title}</h3>
