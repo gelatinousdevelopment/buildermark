@@ -478,16 +478,23 @@
 
 	header nav.right .read-only-pill {
 		background: light-dark(#727272, #888);
-		border-radius: 999px;
+		border-radius: 5px;
 		border: 0;
-		color: #eee;
-		color: var(--color-background-content);
+		color: var(--color-background-empty);
 		cursor: pointer;
-		font-size: 0.8rem;
-		font-weight: 600;
+		font-family: var(--font-family-monospace);
+		font-size: 0.9rem;
+		font-weight: bold;
 		height: 20px;
-		padding: 0 0.8rem;
+		padding: 1px 0.7rem 0 0.7rem;
 		text-transform: uppercase;
+	}
+
+	@supports (corner-shape: squircle) {
+		header nav.right .read-only-pill {
+			border-radius: 10px;
+			corner-shape: squircle;
+		}
 	}
 
 	header nav.right .read-only-pill:hover {

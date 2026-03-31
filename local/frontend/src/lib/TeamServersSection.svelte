@@ -191,7 +191,7 @@
 	{/if}
 	{#snippet actions()}
 		<button class="bordered small" onclick={closeDeleteDialog}>Cancel</button>
-		<button class="btn-danger" disabled={deletingLoading} onclick={confirmDelete}>
+		<button class="bordered small btn-danger" disabled={deletingLoading} onclick={confirmDelete}>
 			{deletingLoading ? 'Deleting...' : 'Delete'}
 		</button>
 	{/snippet}

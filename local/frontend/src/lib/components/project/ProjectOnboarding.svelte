@@ -63,7 +63,7 @@
 			with git commits.
 		</p>
 		<p>
-			<a href={resolve('/plugins')} target="_blank">Install the plugins</a>
+			<a href={resolve('/plugins')}>Install the plugins</a>
 			for your agents, so you can rate and log analysis about each AI coding session by running the
 			<code>rate-buildermark</code> skill.
 		</p>

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import Icon from '$lib/Icon.svelte';
 	import Dialog from '$lib/Dialog.svelte';
 
 	interface Props {
@@ -81,7 +80,7 @@
 
 		const pillCenterX = pillRect.left + pillRect.width / 2;
 		const pillCenterY = pillRect.top + pillRect.height / 2;
-		const targetScale = pillRect.width / panelRect.width / 2;
+		const targetScale = pillRect.width / panelRect.width / 4;
 
 		// transform-origin at pill center relative to panel
 		const originX = pillCenterX - panelRect.left;
@@ -130,51 +129,78 @@
 		width={isMobileDevice ? mobileDialogWidth : '500px'}
 	>
 		<div class="read-only-dialog">
-			<a
-				href="https://buildermark.dev"
-				target="_blank"
-				class="logo-wordmark"
-				style:color="var(--color-text)"><Icon name="buildermarkWordmark" width="140px" /></a
-			>
-			<hr style:height="2px" style:background="var(--color-text)" />
-			<h2>Rate, measure, and benchmark your AI coding sessions.</h2>
-			<p>
-				This website is a read-only demo of Buildermark. You can browse all of the AI agent
-				conversations and prompts that I wrote to create it. By running Buildermark on your system,
-				you can see your work in the same way.
-			</p>
-			<h2>Open source, local-first, and free.</h2>
-			<p>
-				Buildermark runs on your dev computer (macOS, Linux, and Windows) with a very light
-				footprint (written in Go), a UI on localhost, and is <a
-					href="https://github.com/gelatinousdevelopment/buildermark"
-					target="_blank">open source on github</a
-				>. Nothing leaves your machine, not even usage data.
-			</p>
-			<p style:display="flex" style:gap="0.5rem" style:align-items="center">
-				<span>Download at</span>
-				<a
-					href="https://buildermark.dev"
-					target="_blank"
-					class="bordered small"
-					style:width="fit-content">buildermark.dev</a
-				>
-				<span>or</span>
-				<a
-					href="https://github.com/gelatinousdevelopment/buildermark/releases"
-					target="_blank"
-					class="bordered small"
-					style:width="fit-content">GitHub</a
-				>
-			</p>
+			<div class="header">
+				<img src="/buildermark-app-icon-128.png" width="36" height="36" alt="app icon" />
+				<span>Buildermark</span>
+			</div>
+			<div class="content">
+				<h2>Rate and measure your coding agent workflow.</h2>
+				<p>
+					This website is a read-only demo of Buildermark. You can browse a snapshot of my AI agent
+					conversations that wrote 94% of the code in the project, as of March 30, 2026.
+				</p>
+				<p>See your work in the same way by running Buildermark on your system.</p>
+				<h2>Open source, local-first, and private.</h2>
+				<p>
+					Buildermark runs on your dev computer (macOS, Linux, and Windows) with a very light
+					footprint (written in Go) and a UI on localhost. Nothing leaves your machine, not even
+					usage data.
+				</p>
+				<p>
+					Download at
+					<a href="https://buildermark.dev" target="_blank" style:width="fit-content"
+						>buildermark.dev</a
+					>
+					or
+					<a
+						href="https://github.com/gelatinousdevelopment/buildermark/releases"
+						target="_blank"
+						style:width="fit-content">GitHub</a
+					>
+				</p>
+			</div>
 		</div>
 		{#snippet actions()}
-			<button class="bordered prominent" onclick={handleClose}>Close</button>
+			<a class="bordered" style:font-weight="bold" href="https://buildermark.dev"
+				>Back to homepage</a
+			>
+			<button class="bordered prominent" style:min-width="7rem" onclick={handleClose}
+				>Dismiss</button
+			>
 		{/snippet}
 	</Dialog>
 </div>
 
 <style>
+	.header {
+		align-items: center;
+		display: flex;
+		font-weight: 600;
+		gap: 0.7rem;
+		justify-content: center;
+		margin: 0.2rem 0 1.8rem 0;
+	}
+
+	.header img {
+		filter: drop-shadow(0 0.5px 1px rgb(0, 0, 0, 0.3));
+	}
+
+	.header span {
+		background: linear-gradient(
+			0deg,
+			color-mix(in hsl, var(--accent-color), black 20%),
+			color-mix(in hsl, var(--accent-color), white 20%)
+		);
+		background-clip: text;
+		font-size: 1.8rem;
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+	}
+
+	.content {
+		margin-bottom: 1.7rem;
+	}
+
 	.read-only-dialog h2 {
 		font-size: 1rem;
 		font-weight: bold;
@@ -184,12 +210,11 @@
 
 	.read-only-dialog p {
 		font-size: 1rem;
-		line-height: 1.3;
+		line-height: 1.4;
 	}
 
 	:global(.closing-animation .dialog-panel) {
-		/*animation: close-to-pill 300ms cubic-bezier(0.4, 0, 0.7, 1) forwards;*/
-		animation: close-to-pill 250ms ease-in forwards;
+		animation: close-to-pill 200ms ease-out forwards;
 		transform-origin: var(--close-origin);
 	}
 
@@ -199,7 +224,7 @@
 
 	@keyframes close-to-pill {
 		0% {
-			transform: perspective(400px) rotateX(0deg) scale(1);
+			transform: perspective(600px) rotateX(0deg) scale(1);
 			opacity: 1;
 		}
 		90% {

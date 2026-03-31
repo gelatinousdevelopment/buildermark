@@ -318,14 +318,14 @@ table.data a.bordered:hover,
 table.data a.bordered:visited,
 button.bordered {
 	background: var(--color-button-bg);
-	border-radius: 4px;
+	border-radius: 5px;
 	border: var(--divider-width) solid var(--color-divider);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 	color: var(--color-text);
 	cursor: pointer;
 	font-size: 0.9rem;
 	line-height: 1.4;
-	padding: 0.5rem 1em;
+	padding: 0.5rem 1.4em;
 	text-decoration: none;
 	display: flex;
 	align-items: center;
@@ -352,6 +352,41 @@ table.data a.bordered.tiny:hover,
 table.data a.bordered.tiny:visited {
 	font-size: 0.8rem;
 	padding: 0.15rem 0.6em;
+}
+
+@supports (corner-shape: squircle) {
+	a.bordered.prominent,
+	a.bordered.prominent:hover,
+	a.bordered.prominent:visited,
+	table.data a.bordered.prominent,
+	table.data a.bordered.prominent:hover,
+	table.data a.bordered.prominent:visited,
+	button.bordered.prominent {
+		border-radius: 12px;
+		corner-shape: squircle;
+	}
+
+	a.bordered.prominent.small,
+	button.bordered.prominent.small,
+	a.bordered.prominent.small:hover,
+	a.bordered.prominent.small:visited,
+	table.data a.bordered.prominent.small,
+	table.data a.bordered.prominent.small:hover,
+	table.data a.bordered.prominent.small:visited {
+		border-radius: 8px;
+		corner-shape: squircle;
+	}
+
+	a.bordered.prominent.tiny,
+	button.bordered.prominent.tiny,
+	a.bordered.prominent.tiny:hover,
+	a.bordered.prominent.tiny:visited,
+	table.data a.bordered.prominent.tiny,
+	table.data a.bordered.prominent.tiny:hover,
+	table.data a.bordered.prominent.tiny:visited {
+		border-radius: 6px;
+		corner-shape: squircle;
+	}
 }
 
 a.bordered:disabled,
@@ -403,6 +438,27 @@ button.bordered.prominent.tiny:not(:disabled):hover {
 a.bordered.prominent:active,
 button.bordered.prominent:active {
 	background: var(--accent-color);
+}
+
+a.bordered.btn-danger,
+button.bordered.btn-danger {
+	border: 1px solid var(--color-danger);
+	background: var(--color-danger);
+	color: var(--color-background-content);
+	cursor: pointer;
+}
+
+a.bordered.prominent.btn-danger:not(:disabled):hover,
+button.bordered.prominent.btn-danger:not(:disabled):hover {
+	background: var(--color-danger-hover);
+	border-color: var(--color-danger-hover);
+	color: var(--color-background-content);
+}
+
+a.bordered.btn-danger:disabled,
+button.bordered.btn-danger:disabled {
+	opacity: 0.5;
+	cursor: default;
 }
 
 /* Data Table */

@@ -37,10 +37,12 @@
 	}
 </script>
 
+<svelte:window onkeydown={(e) => open && e.key === 'Escape' && onclose()} />
+
 {#if open}
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="dialog-overlay" onkeydown={(e) => e.key === 'Escape' && onclose()}>
+	<div class="dialog-overlay">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="dialog-backdrop"
 			in:fade={{ duration: 100 }}
@@ -50,7 +52,7 @@
 		<div
 			class="dialog-panel"
 			style:max-width={width ?? '440px'}
-			in:flyScale={{ duration: 100, y: -60, scale: 0.95 }}
+			in:flyScale={{ duration: 100, y: -100, scale: 0.8 }}
 			out:flyScale={{ duration: 100, y: -60, scale: 0.9 }}
 		>
 			{#if title}
@@ -83,13 +85,26 @@
 	}
 
 	.dialog-panel {
+		background: linear-gradient(
+			180deg,
+			var(--color-modal-bg),
+			color-mix(in hsl, var(--color-modal-bg), transparent 10%)
+		);
+		backdrop-filter: blur(10px);
 		border: var(--divider-width) solid var(--color-popover-border);
+		border-radius: 12px;
+		box-shadow: 0 4px 24px light-dark(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.8));
+		overflow: hidden;
+		padding: 1.8rem 2rem 1.8rem 2rem;
 		position: relative;
-		background: var(--color-modal-bg);
-		border-radius: 8px;
-		padding: 1.5rem;
 		width: 90%;
-		box-shadow: 0 4px 24px var(--color-popover-shadow);
+	}
+
+	@supports (corner-shape: squircle) {
+		.dialog-panel {
+			border-radius: 22px;
+			corner-shape: squircle;
+		}
 	}
 
 	.dialog-panel h3 {
@@ -122,9 +137,23 @@
 	}
 
 	.dialog-actions {
+		border-top: 0.5px solid light-dark(rgb(0, 0, 0, 0.2), black);
 		display: flex;
 		justify-content: flex-end;
-		gap: 0.5rem;
-		margin-top: 1rem;
+		gap: 1rem;
+		margin: 1rem -2rem -2rem -2rem;
+		padding: 1.5rem 2rem 1.5rem 2rem;
+		/*background: white;*/
+		position: relative;
+	}
+
+	.dialog-actions::after {
+		content: '';
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 1px;
+		background: light-dark(white, rgb(255, 255, 255, 0.1));
 	}
 </style>

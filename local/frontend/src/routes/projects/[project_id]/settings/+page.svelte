@@ -336,7 +336,8 @@
 						Permanently delete this project and all its data, including conversations, messages,
 						ratings, and commits.
 					</p>
-					<button class="btn-danger" onclick={() => (showDeleteModal = true)}>Delete Project</button
+					<button class="bordered prominent btn-danger" onclick={() => (showDeleteModal = true)}
+						>Delete Project</button
 					>
 				</div>
 			</div>
@@ -365,7 +366,7 @@
 	{#snippet actions()}
 		<button class="bordered small" onclick={() => (showDeleteModal = false)}>Cancel</button>
 		<button
-			class="btn-danger"
+			class="bordered prominent small btn-danger"
 			disabled={deleteConfirmName !== projectDisplayName || deleting}
 			onclick={confirmDeleteProject}
 		>
@@ -604,28 +605,6 @@
 		margin: 0 0 0.75rem;
 		font-size: 0.85rem;
 		color: var(--color-text-faded);
-	}
-
-	.btn-danger {
-		padding: 0.35rem 0.8rem;
-		font-size: 0.9rem;
-		font-weight: bold;
-		line-height: 1.4;
-		border: 1px solid var(--color-danger);
-		border-radius: 3px;
-		background: var(--color-danger);
-		color: #fff;
-		cursor: pointer;
-	}
-
-	.btn-danger:hover {
-		background: var(--color-danger-hover);
-		border-color: var(--color-danger-hover);
-	}
-
-	.btn-danger:disabled {
-		opacity: 0.5;
-		cursor: default;
 	}
 
 	.refresh-days-select {
