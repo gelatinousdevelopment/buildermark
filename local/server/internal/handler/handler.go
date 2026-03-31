@@ -294,22 +294,24 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Require Content-Type: application/json on all API requests that
-		// carry a body. This forces browsers to issue a preflight for any
-		// cross-origin request with a payload.
-		if origin != "" && r.Method != http.MethodOptions && r.Method != http.MethodGet {
-			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-			if mt != "application/json" {
-				writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
-				return
-			}
-		}
-
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			w.Header().Set("Access-Control-Allow-Private-Network", "true")
+		}
+
+		// Require Content-Type: application/json on POST/PUT/PATCH from
+		// cross-origin requests. This forces browsers to issue a CORS
+		// preflight (application/json is not a "simple" content type).
+		// DELETE is exempt because it is already a non-simple method that
+		// always triggers a preflight regardless of headers.
+		if origin != "" && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
+			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if mt != "application/json" {
+				writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+				return
+			}
 		}
 
 		if r.Method == http.MethodOptions {

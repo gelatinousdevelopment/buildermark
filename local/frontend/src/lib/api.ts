@@ -226,7 +226,7 @@ export function deepenCommit(
 ): Promise<{ needsParent: boolean; success: boolean }> {
 	return api(
 		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/deepen?branch=${encodeURIComponent(branch)}`,
-		{ method: 'POST' }
+		{ method: 'POST', headers: { 'Content-Type': 'application/json' } }
 	);
 }
 
@@ -251,7 +251,7 @@ export function recalculateCommitDiffMatch(
 ): Promise<{ recomputed: number }> {
 	return api(
 		`/api/v1/projects/${encodeURIComponent(projectId)}/commits/${encodeURIComponent(commitHash)}/recalculate`,
-		{ method: 'POST' }
+		{ method: 'POST', headers: { 'Content-Type': 'application/json' } }
 	);
 }
 
@@ -363,7 +363,8 @@ export function refreshProjectCommits(
 	if (days && days > 0) params.set('days', String(days));
 	const q = params.size > 0 ? `?${params.toString()}` : '';
 	return api(`/api/v1/projects/${projectId}/refresh-commits${q}`, {
-		method: 'POST'
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' }
 	});
 }
 

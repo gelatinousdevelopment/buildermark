@@ -25,7 +25,10 @@
 			const url = API_URL
 				? `${API_URL}/api/v1/update-apply`
 				: `${window.location.origin}/api/v1/update-apply`;
-			const resp = await fetch(url, { method: 'POST' });
+			const resp = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
 			const data = await resp.json();
 			if (!data.ok) {
 				applyError = data.error || 'Update failed';

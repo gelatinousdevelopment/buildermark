@@ -156,6 +156,22 @@ func TestCORSRequiresJSONContentType(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsDeleteWithoutContentType(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	// DELETE is a non-simple CORS method that always triggers a preflight,
+	// so we don't require Content-Type: application/json on it.
+	req := httptest.NewRequest("DELETE", "/api/v1/ratings/fake-id", nil)
+	req.Header.Set("Origin", "chrome-extension://abc123")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusUnsupportedMediaType {
+		t.Errorf("DELETE without Content-Type should not return 415")
+	}
+}
+
 func TestWriteErrorFormat(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
