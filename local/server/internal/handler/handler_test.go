@@ -11,45 +11,148 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func TestCORSHeaders(t *testing.T) {
+func TestCORSNoOriginAllowed(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
 
+	// Requests with no Origin header (native/desktop clients) should pass
+	// through without CORS headers.
 	req := httptest.NewRequest("GET", "/api/v1/ratings", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "*")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if got := rec.Header().Get("Access-Control-Allow-Methods"); got != "GET, POST, PUT, PATCH, DELETE, OPTIONS" {
-		t.Errorf("Access-Control-Allow-Methods = %q, want %q", got, "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-	}
-	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "Content-Type" {
-		t.Errorf("Access-Control-Allow-Headers = %q, want %q", got, "Content-Type")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want empty (no Origin sent)", got)
 	}
 }
 
-func TestCORSPreflight(t *testing.T) {
+func TestCORSExtensionOriginAllowed(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	for _, origin := range []string{
+		"chrome-extension://abcdef1234567890",
+		"moz-extension://abcdef-1234-5678",
+		"safari-web-extension://abcdef1234567890",
+	} {
+		req := httptest.NewRequest("GET", "/api/v1/ratings", nil)
+		req.Header.Set("Origin", origin)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("[%s] status = %d, want %d", origin, rec.Code, http.StatusOK)
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != origin {
+			t.Errorf("[%s] Access-Control-Allow-Origin = %q, want %q", origin, got, origin)
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+			t.Errorf("[%s] Access-Control-Allow-Private-Network = %q, want %q", origin, got, "true")
+		}
+	}
+}
+
+func TestCORSPreflightExtensionOrigin(t *testing.T) {
 	s := setupTestServer(t)
 	handler := s.Routes()
 
 	req := httptest.NewRequest("OPTIONS", "/api/v1/rating", nil)
+	req.Header.Set("Origin", "chrome-extension://abcdef1234567890")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
-
-	// Should still have CORS headers.
-	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "*")
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "chrome-extension://abcdef1234567890" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want extension origin", got)
 	}
-
-	// Body should be empty for preflight.
+	if got := rec.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+		t.Errorf("Access-Control-Allow-Private-Network = %q, want %q", got, "true")
+	}
 	if rec.Body.Len() != 0 {
 		t.Errorf("expected empty body for OPTIONS, got %d bytes", rec.Body.Len())
+	}
+}
+
+func TestCORSBlocksWebOrigin(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	// GET from a web origin: should proceed but without CORS headers so the
+	// browser rejects the response.
+	req := httptest.NewRequest("GET", "/api/v1/ratings", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want empty for blocked origin", got)
+	}
+}
+
+func TestCORSPreflightBlocksWebOrigin(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	req := httptest.NewRequest("OPTIONS", "/api/v1/rating", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestCORSExtraOriginsAllowed(t *testing.T) {
+	s := setupTestServer(t)
+	configDir := t.TempDir()
+	s.ConfigDir = configDir
+
+	cfg := localConfigFile{ExtraCORSOrigins: []string{"http://localhost:5173"}}
+	if err := saveLocalConfigFile(configDir, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	handler := s.Routes()
+
+	// GET from the configured extra origin should receive CORS headers.
+	req := httptest.NewRequest("GET", "/api/v1/ratings", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want %q", got, "http://localhost:5173")
+	}
+
+	// An origin NOT in the list should still be blocked.
+	req2 := httptest.NewRequest("GET", "/api/v1/ratings", nil)
+	req2.Header.Set("Origin", "http://localhost:9999")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	if got := rec2.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want empty for unlisted origin", got)
+	}
+}
+
+func TestCORSRequiresJSONContentType(t *testing.T) {
+	s := setupTestServer(t)
+	handler := s.Routes()
+
+	// POST from extension origin without application/json should be rejected.
+	req := httptest.NewRequest("POST", "/api/v1/rating", strings.NewReader("{}"))
+	req.Header.Set("Origin", "chrome-extension://abc123")
+	req.Header.Set("Content-Type", "text/plain")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnsupportedMediaType)
 	}
 }
 

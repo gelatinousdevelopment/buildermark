@@ -177,7 +177,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/debug/update-status", s.handleDebugClearUpdateStatus)
 	mux.Handle("GET /_app/", staticFrontendHandler())
 	mux.HandleFunc("GET /", s.handleDashboard)
-	return corsMiddleware(requestLogMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux))))
+	return s.corsMiddleware(requestLogMiddleware(securityHeadersMiddleware(s.readOnlyMiddleware(mux))))
 }
 
 func (s *Server) readOnlyMiddleware(next http.Handler) http.Handler {
@@ -259,11 +259,58 @@ func requestLogMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+// isAllowedOrigin returns true for requests with no Origin header (native/desktop
+// clients), origins using browser-extension schemes, or origins that appear in
+// the extraCORSOrigins list.
+func isAllowedOrigin(origin string, extraOrigins []string) bool {
+	if origin == "" {
+		return true
+	}
+	if strings.HasPrefix(origin, "chrome-extension://") ||
+		strings.HasPrefix(origin, "moz-extension://") ||
+		strings.HasPrefix(origin, "safari-web-extension://") {
+		return true
+	}
+	for _, allowed := range extraOrigins {
+		if origin == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origin := r.Header.Get("Origin")
+
+		if !isAllowedOrigin(origin, s.loadExtraCORSOrigins()) {
+			if r.Method == http.MethodOptions {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+			// Non-preflight from a disallowed origin: proceed without
+			// CORS headers so the browser will block the response.
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Require Content-Type: application/json on all API requests that
+		// carry a body. This forces browsers to issue a preflight for any
+		// cross-origin request with a payload.
+		if origin != "" && r.Method != http.MethodOptions && r.Method != http.MethodGet {
+			mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if mt != "application/json" {
+				writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+				return
+			}
+		}
+
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Private-Network", "true")
+		}
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

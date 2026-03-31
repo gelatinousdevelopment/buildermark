@@ -30,6 +30,7 @@ type localConfigFile struct {
 	UpdateMode           string   `json:"updateMode"`
 	ExtraAgentHomes      []string `json:"extraAgentHomes,omitempty"`
 	ExtraLocalUserEmails []string `json:"extraLocalUserEmails,omitempty"`
+	ExtraCORSOrigins     []string `json:"extraCORSOrigins,omitempty"`
 	NotificationsEnabled *bool    `json:"notificationsEnabled,omitempty"`
 }
 
@@ -224,6 +225,17 @@ func normalizeEmailEntries(raw []string) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+func (s *Server) loadExtraCORSOrigins() []string {
+	if s.ConfigDir == "" {
+		return nil
+	}
+	cfg, err := loadLocalConfigFile(s.ConfigDir)
+	if err != nil {
+		return nil
+	}
+	return cfg.ExtraCORSOrigins
 }
 
 func (s *Server) loadExtraLocalUserEmails() []string {

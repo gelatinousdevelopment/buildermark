@@ -9,7 +9,8 @@ Buildermark stores persistent settings in `~/.buildermark/config.json`.
 ```json
 {
   "updateMode": "check",
-  "extraAgentHomes": ["/home/alice", "/home/bob/.codex"]
+  "extraAgentHomes": ["/home/alice", "/home/bob/.codex"],
+  "extraCORSOrigins": ["http://localhost:5173"]
 }
 ```
 
@@ -19,6 +20,7 @@ Buildermark stores persistent settings in `~/.buildermark/config.json`.
 |------|------|---------|-------------|
 | `updateMode` | string | `"check"` | Update behavior for CLI updates. Allowed values: `"auto"`, `"check"`, `"off"`. |
 | `extraAgentHomes` | string[] | `[]` | Additional user home directories to watch for agent activity. |
+| `extraCORSOrigins` | string[] | `[]` | Additional origins allowed to make cross-origin requests to the API (e.g. `"http://localhost:5173"` for a dev frontend). |
 
 ### `extraAgentHomes` behavior
 
