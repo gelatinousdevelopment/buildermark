@@ -316,6 +316,11 @@
 		font-weight: 400;
 		height: 40px;
 		padding: 0 1rem;
+		transform: scale(1);
+		transition:
+			transform 150ms ease-out,
+			filter 150ms ease-out,
+			border-radius 150ms ease-out;
 		white-space: nowrap;
 	}
 
@@ -326,6 +331,13 @@
 
 	header section .item:hover {
 		background: var(--accent-color-ultralight);
+	}
+
+	header section .item:not(.selected):active {
+		border-radius: 4px;
+		filter: brightness(0.95) saturate(1.5);
+		transform: scale(0.93);
+		transition: none;
 	}
 
 	header hr.divider {

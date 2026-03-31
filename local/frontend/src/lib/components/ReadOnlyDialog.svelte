@@ -130,7 +130,7 @@
 	>
 		<div class="read-only-dialog">
 			<div class="header">
-				<img src="/buildermark-app-icon-128.png" width="36" height="36" alt="app icon" />
+				<img src="/buildermark-app-icon.png" width="36" height="36" alt="app icon" />
 				<span>Buildermark</span>
 			</div>
 			<div class="content">
