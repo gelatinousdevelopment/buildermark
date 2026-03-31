@@ -178,7 +178,7 @@
 		font-weight: 600;
 		gap: 0.7rem;
 		justify-content: center;
-		margin: 0.2rem 0 1.8rem 0;
+		margin: 0 0 1.8rem 0;
 	}
 
 	.header img {

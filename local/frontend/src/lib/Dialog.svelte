@@ -55,10 +55,10 @@
 			in:flyScale={{ duration: 100, y: -100, scale: 0.8 }}
 			out:flyScale={{ duration: 100, y: -60, scale: 0.9 }}
 		>
-			{#if title}
-				<h3>{title}</h3>
-			{/if}
 			<div class="dialog-body">
+				{#if title}
+					<h3>{title}</h3>
+				{/if}
 				{@render children()}
 			</div>
 			<div class="dialog-actions">
@@ -93,9 +93,13 @@
 		backdrop-filter: blur(10px);
 		border: var(--divider-width) solid var(--color-popover-border);
 		border-radius: 12px;
+		box-sizing: border-box;
 		box-shadow: 0 4px 24px light-dark(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.8));
+		display: flex;
+		flex-direction: column;
+		max-height: 90vh;
 		overflow: hidden;
-		padding: 1.8rem 2rem 1.8rem 2rem;
+		padding: 0;
 		position: relative;
 		width: 90%;
 	}
@@ -108,8 +112,16 @@
 	}
 
 	.dialog-panel h3 {
-		margin: 0 0 0.75rem;
 		font-size: 1.1rem;
+		margin: 0 0 1rem 0;
+		padding: 0;
+	}
+
+	.dialog-body {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 2.2rem 2rem 0 2rem;
 	}
 
 	.dialog-body :global(p) {
@@ -141,7 +153,7 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 1rem;
-		margin: 1rem -2rem -2rem -2rem;
+		margin: 0;
 		padding: 1.5rem 2rem 1.5rem 2rem;
 		/*background: white;*/
 		position: relative;
