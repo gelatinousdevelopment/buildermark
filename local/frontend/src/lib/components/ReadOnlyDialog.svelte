@@ -259,7 +259,6 @@
 			transform: scale(0.9);
 		}
 		50% {
-			/*filter: brightness(0.7);*/
 			transform: scale(1);
 		}
 		100% {
@@ -267,46 +266,49 @@
 		}
 	}
 
-	.mobile-read-only-dialog :global(.dialog-panel) {
-		transform: scale(var(--mobile-dialog-scale));
-		padding: 2.5rem;
+	.mobile-read-only-dialog :global(.dialog-panel .header) {
+		gap: 1rem;
 	}
 
-	.mobile-read-only-dialog :global(.dialog-panel .logo-wordmark .icon) {
-		color: var(--color-text);
-		width: 220px !important;
+	.mobile-read-only-dialog :global(.dialog-panel .header img) {
+		width: 50px;
+		height: 50px;
+	}
+
+	.mobile-read-only-dialog :global(.dialog-panel .header span) {
+		font-size: 2.6rem;
+	}
+
+	.mobile-read-only-dialog :global(.dialog-panel) {
+		transform: scale(var(--mobile-dialog-scale));
+		padding: 0.5rem;
 	}
 
 	.mobile-read-only-dialog :global(.dialog-panel h3) {
 		font-size: 1.6rem;
 	}
 
-	.mobile-read-only-dialog :global(.icon) {
-		width: 220px;
-	}
-
 	.mobile-read-only-dialog .read-only-dialog h2 {
-		font-size: 1.5rem;
-		margin: 1.8rem 0 1rem 0;
+		font-size: 1.6rem;
 	}
 
 	.mobile-read-only-dialog .read-only-dialog p,
-	.mobile-read-only-dialog .read-only-dialog span {
-		font-size: 1.5rem;
-	}
-
+	.mobile-read-only-dialog .read-only-dialog span,
 	.mobile-read-only-dialog .read-only-dialog a {
 		font-size: 1.5rem;
 	}
 
 	.mobile-read-only-dialog :global(.dialog-body p) {
 		font-size: 1.5rem;
-		margin: 1rem 0 1rem 0;
+		margin: 0.5rem 0 1.5rem 0;
 	}
 
 	.mobile-read-only-dialog :global(.bordered) {
-		font-size: 1.4rem;
-		padding: 0.5rem 1.2rem;
+		font-size: 1.5rem;
+	}
+
+	.mobile-read-only-dialog :global(.dialog-actions) {
+		flex-direction: column;
 	}
 
 	.mobile-read-only-dialog :global(.dialog-actions button) {
