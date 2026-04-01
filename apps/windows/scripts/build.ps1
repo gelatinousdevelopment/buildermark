@@ -52,7 +52,8 @@ function Check-Tool($name, $installHint) {
 }
 
 function Build-Runtime($rid) {
-    $PublishDir = Join-Path $BuildDir $rid
+    $RuntimeDir = Join-Path $BuildDir $rid
+    $PublishDir = Join-Path $RuntimeDir "publish"
 
     Step "Restoring NuGet packages"
     dotnet restore $CsprojPath
@@ -240,7 +241,7 @@ foreach ($rid in $Runtimes) {
 
 Step "Build complete"
 foreach ($rid in $Runtimes) {
-    $ExePath = Join-Path (Join-Path $BuildDir $rid) "Buildermark.exe"
+    $ExePath = Join-Path (Join-Path (Join-Path $BuildDir $rid) "publish") "Buildermark.exe"
     Write-Host "  $rid : $ExePath"
 }
 Write-Host ""

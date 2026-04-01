@@ -216,9 +216,14 @@ if [[ "${SKIP_WINDOWS:-}" != "1" ]]; then
     WINDOWS_BUILD="$ROOT_DIR/apps/windows/build"
     for runtime_dir in "$WINDOWS_BUILD"/*/; do
         runtime="$(basename "$runtime_dir")"
-        WINDOWS_ZIP="$RELEASE_DIR/Buildermark-$VERSION-windows-$runtime.zip"
-        (cd "$runtime_dir" && zip -r -q "$WINDOWS_ZIP" .)
-        echo "  OK: $(basename "$WINDOWS_ZIP")"
+        WINDOWS_INSTALLER="$runtime_dir/installer/Buildermark-$VERSION-windows-$runtime-Setup.exe"
+        if [[ ! -f "$WINDOWS_INSTALLER" ]]; then
+            echo "  Error: Windows installer not found at $WINDOWS_INSTALLER" >&2
+            exit 1
+        fi
+
+        cp "$WINDOWS_INSTALLER" "$RELEASE_DIR/"
+        echo "  OK: $(basename "$WINDOWS_INSTALLER")"
     done
 else
     echo "Skipping Windows build (SKIP_WINDOWS=1)"
@@ -290,7 +295,7 @@ echo "  OK: RELEASE_NOTES.md"
 step "Generating checksums"
 
 CHECKSUMS="$RELEASE_DIR/checksums-sha256.txt"
-(cd "$RELEASE_DIR" && shasum -a 256 *.zip *.tar.gz *.dmg 2>/dev/null | sort) > "$CHECKSUMS" || true
+(cd "$RELEASE_DIR" && shasum -a 256 *.zip *.tar.gz *.dmg *.exe 2>/dev/null | sort) > "$CHECKSUMS" || true
 echo "  OK: checksums-sha256.txt"
 
 # ---------------------------------------------------------------------------
@@ -377,17 +382,17 @@ XMLITEM
 
         # --- Windows items ---
         for runtime in win-x64 win-arm64; do
-            zip_file="$ver_dir/Buildermark-$ver-windows-$runtime.zip"
-            if [[ -f "$zip_file" ]]; then
-                ZIP_LENGTH="$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")"
+            installer_file="$ver_dir/Buildermark-$ver-windows-$runtime-Setup.exe"
+            if [[ -f "$installer_file" ]]; then
+                INSTALLER_LENGTH="$(stat -f%z "$installer_file" 2>/dev/null || stat -c%s "$installer_file" 2>/dev/null || echo "0")"
 
-                SIG_OUTPUT="$("$SIGN_UPDATE" "$zip_file" 2>/dev/null || echo "")"
+                SIG_OUTPUT="$("$SIGN_UPDATE" "$installer_file" 2>/dev/null || echo "")"
                 EDDSA_SIG="$(echo "$SIG_OUTPUT" | grep -oE 'sparkle:edSignature="[^"]*"' | sed 's/sparkle:edSignature="//;s/"$//' || echo "")"
                 if [[ -z "$EDDSA_SIG" && -n "$SIG_OUTPUT" ]]; then
                     EDDSA_SIG="$(echo "$SIG_OUTPUT" | head -1 | awk '{print $1}')"
                 fi
 
-                DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$ver/Buildermark-$ver-windows-$runtime.zip"
+                DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$ver/Buildermark-$ver-windows-$runtime-Setup.exe"
 
                 cat >> "$APPCAST" <<XMLITEM
     <item>
@@ -398,13 +403,13 @@ XMLITEM
       <description><![CDATA[$NOTES_CONTENT]]></description>
       <enclosure
         url="$DOWNLOAD_URL"
-        length="$ZIP_LENGTH"
+        length="$INSTALLER_LENGTH"
         type="application/octet-stream"
         sparkle:edSignature="$EDDSA_SIG"
         sparkle:os="windows" />
     </item>
 XMLITEM
-                echo "  Signed: Buildermark-$ver-windows-$runtime.zip"
+                echo "  Signed: Buildermark-$ver-windows-$runtime-Setup.exe"
             fi
         done
     done

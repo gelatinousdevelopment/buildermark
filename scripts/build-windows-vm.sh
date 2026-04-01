@@ -6,9 +6,11 @@
 #   ./scripts/build-windows-vm.sh
 #   ./scripts/build-windows-vm.sh --arch amd64
 #   ./scripts/build-windows-vm.sh --arch arm64
+#   ./scripts/build-windows-vm.sh --self-sign
 #
 # Environment variables:
 #   ARCH             - "amd64", "arm64", or "all" (default: "all")
+#   SELF_SIGN        - set to "1" to pass the self-sign flag into the VM build
 #   VM_NAME          - UTM VM name (default: "Windows Desktop")
 #   SSH_HOST         - SSH host alias for the VM (default: "windowsvm")
 #   REMOTE_REPO_DIR  - repo checkout inside Windows (cloned automatically if missing)
@@ -25,6 +27,7 @@ CHANGED_FILES_LIST=""
 DELETED_FILES_LIST=""
 
 ARCH="${ARCH:-all}"
+SELF_SIGN="${SELF_SIGN:-0}"
 VM_NAME="${VM_NAME:-Windows Desktop}"
 SSH_HOST="${SSH_HOST:-windowsvm}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-C:/Users/Test/github/buildermark}"
@@ -33,6 +36,7 @@ SSH_WAIT_SECONDS="${SSH_WAIT_SECONDS:-180}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --arch) ARCH="$2"; shift 2 ;;
+        --self-sign) SELF_SIGN=1; shift ;;
         *)
             echo "Unknown argument: $1" >&2
             exit 1
@@ -200,12 +204,17 @@ resolve_runtimes() {
 }
 
 build_remote_windows_app() {
-    local runtime repo_e runtime_e script
+    local runtime repo_e runtime_e self_sign_e self_sign_arg script
 
     for runtime in "${RUNTIMES[@]}"; do
         repo_e="$(pwsh_escape "$REMOTE_REPO_DIR")"
         runtime_e="$(pwsh_escape "$runtime")"
-        script="\$ErrorActionPreference='Stop'; Set-Location -LiteralPath '$repo_e'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Runtime '$runtime_e'"
+        self_sign_e="$(pwsh_escape "$SELF_SIGN")"
+        self_sign_arg=""
+        if [[ "$SELF_SIGN" == "1" ]]; then
+            self_sign_arg="-SelfSign"
+        fi
+        script="\$ErrorActionPreference='Stop'; Set-Location -LiteralPath '$repo_e'; \$env:SELF_SIGN='$self_sign_e'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Runtime '$runtime_e' $self_sign_arg"
         run_remote_powershell "$script"
     done
 }
@@ -265,7 +274,7 @@ copy_artifacts_back
 
 step "Build complete"
 for runtime in "${RUNTIMES[@]}"; do
-    echo "  $runtime : $LOCAL_BUILD_DIR/$runtime"
+    echo "  $runtime : $LOCAL_BUILD_DIR/$runtime/installer"
 done
 echo ""
 echo "Windows VM left running."
