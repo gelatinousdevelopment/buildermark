@@ -372,6 +372,20 @@
 			el.setAttribute('fill', computed.fill || '#999');
 			el.setAttribute('font-size', computed.fontSize || '9px');
 		});
+		// Resolve CSS variables in SVG path/circle fill and stroke attributes
+		// so html-to-image renders the correct colors (especially in dark mode)
+		root.querySelectorAll('svg path, svg circle').forEach((el) => {
+			const fill = el.getAttribute('fill');
+			if (fill && fill.startsWith('var(')) {
+				const computed = getComputedStyle(el);
+				el.setAttribute('fill', computed.fill || fill);
+			}
+			const stroke = el.getAttribute('stroke');
+			if (stroke && stroke.startsWith('var(')) {
+				const computed = getComputedStyle(el);
+				el.setAttribute('stroke', computed.stroke || stroke);
+			}
+		});
 	}
 
 	function nextAnimationFrame(): Promise<void> {
