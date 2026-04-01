@@ -11,6 +11,22 @@
 # Environment variables:
 #   ARCH             - "amd64", "arm64", or "all" (default: "all")
 #   SELF_SIGN        - set to "1" to pass the self-sign flag into the VM build
+#   Azure signing env vars are forwarded into the VM build when present:
+#     AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME
+#     AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME
+#     AZURE_ARTIFACT_SIGNING_ENDPOINT
+#     AZURE_ARTIFACT_SIGNING_CORRELATION_ID
+#     AZURE_ARTIFACT_SIGNING_EXCLUDE_CREDENTIALS
+#     AZURE_TENANT_ID
+#     AZURE_CLIENT_ID
+#     AZURE_CLIENT_SECRET
+#     AZURE_CLIENT_CERTIFICATE_PATH
+#     AZURE_CLIENT_CERTIFICATE_PASSWORD
+#     AZURE_AUTHORITY_HOST
+#     AZURE_FEDERATED_TOKEN_FILE
+#     WINDOWS_SIGNTOOL_PATH
+#     WINDOWS_INNO_COMPILER_PATH
+#     WINDOWS_SKIP_SIGNING
 #   VM_NAME          - UTM VM name (default: "Windows Desktop")
 #   SSH_HOST         - SSH host alias for the VM (default: "windowsvm")
 #   REMOTE_REPO_DIR  - repo checkout inside Windows (cloned automatically if missing)
@@ -28,6 +44,9 @@ DELETED_FILES_LIST=""
 
 ARCH="${ARCH:-all}"
 SELF_SIGN="${SELF_SIGN:-0}"
+AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME="${AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME:-gelatinousdevelopment}"
+AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME="${AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME:-gelatinous-certificate-profile}"
+AZURE_ARTIFACT_SIGNING_ENDPOINT="${AZURE_ARTIFACT_SIGNING_ENDPOINT:-https://wus.codesigning.azure.net}"
 VM_NAME="${VM_NAME:-Windows Desktop}"
 SSH_HOST="${SSH_HOST:-windowsvm}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-C:/Users/Test/github/buildermark}"
@@ -204,7 +223,32 @@ resolve_runtimes() {
 }
 
 build_remote_windows_app() {
-    local runtime repo_e runtime_e self_sign_e self_sign_arg script
+    local runtime repo_e runtime_e self_sign_e self_sign_arg env_exports script
+    local -a forwarded_env_vars
+
+    forwarded_env_vars=(
+        SELF_SIGN
+        WINDOWS_SKIP_SIGNING
+        WINDOWS_SIGNTOOL_PATH
+        WINDOWS_INNO_COMPILER_PATH
+        WINDOWS_SIGN_TIMESTAMP_URL
+        AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME
+        AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME
+        AZURE_ARTIFACT_SIGNING_ENDPOINT
+        AZURE_ARTIFACT_SIGNING_CORRELATION_ID
+        AZURE_ARTIFACT_SIGNING_EXCLUDE_CREDENTIALS
+        AZURE_ARTIFACT_SIGNING_METADATA_PATH
+        AZURE_ARTIFACT_SIGNING_DLIB_PATH
+        AZURE_ARTIFACT_SIGNING_ALLOW_NUGET_DLIB
+        AZURE_TENANT_ID
+        AZURE_CLIENT_ID
+        AZURE_CLIENT_SECRET
+        AZURE_CLIENT_CERTIFICATE_PATH
+        AZURE_CLIENT_CERTIFICATE_PASSWORD
+        AZURE_AUTHORITY_HOST
+        AZURE_FEDERATED_TOKEN_FILE
+        NUGET_EXE_PATH
+    )
 
     for runtime in "${RUNTIMES[@]}"; do
         repo_e="$(pwsh_escape "$REMOTE_REPO_DIR")"
@@ -214,7 +258,13 @@ build_remote_windows_app() {
         if [[ "$SELF_SIGN" == "1" ]]; then
             self_sign_arg="-SelfSign"
         fi
-        script="\$ErrorActionPreference='Stop'; Set-Location -LiteralPath '$repo_e'; \$env:SELF_SIGN='$self_sign_e'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Runtime '$runtime_e' $self_sign_arg"
+        env_exports="\$env:SELF_SIGN='$self_sign_e'; "
+        for var_name in "${forwarded_env_vars[@]}"; do
+            if [[ -n "${!var_name:-}" ]]; then
+                env_exports+="\$env:${var_name}='$(pwsh_escape "${!var_name}")'; "
+            fi
+        done
+        script="\$ErrorActionPreference='Stop'; Set-Location -LiteralPath '$repo_e'; ${env_exports}powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Runtime '$runtime_e' $self_sign_arg"
         run_remote_powershell "$script"
     done
 }
