@@ -662,10 +662,10 @@
 					</div>
 					<div class="share-menu-section">
 						<div class="share-menu-actions">
-							<button class="share-action-btn" onclick={downloadPng} disabled={capturing}>
+							<button class="bordered prominent small" onclick={downloadPng} disabled={capturing}>
 								{capturing ? 'Capturing...' : 'Download PNG'}
 							</button>
-							<button class="share-action-btn" onclick={copyToClipboard} disabled={capturing}>
+							<button class="bordered small" onclick={copyToClipboard} disabled={capturing}>
 								Copy PNG
 							</button>
 						</div>
@@ -937,25 +937,8 @@
 		margin-top: 0.5rem;
 	}
 
-	.share-action-btn {
+	.share-menu-actions button {
 		flex: 1;
-		padding: 0.4rem 0.8rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-		border: var(--divider-width) solid var(--color-divider);
-		border-radius: 5px;
-		background: var(--color-background-elevated);
-		color: var(--color-text);
-		cursor: pointer;
-	}
-
-	.share-action-btn:hover:not(:disabled) {
-		background: var(--color-background-surface);
-	}
-
-	.share-action-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 
 	.date-range-text {

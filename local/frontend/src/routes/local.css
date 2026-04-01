@@ -413,11 +413,13 @@ button.bordered:not(:disabled):active {
 	background: var(--accent-color);
 	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 	color: var(--accent-color-ultralight);
+	transform: scale(0.97);
 }
 
 a.bordered.prominent,
 button.bordered.prominent {
 	background: var(--accent-color);
+	background: linear-gradient(180deg, var(--accent-color), var(--accent-color-darker));
 	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 	color: var(--accent-color-ultralight);
 	font-weight: bold;
@@ -430,20 +432,38 @@ button.bordered.prominent:not(:disabled):hover,
 button.bordered.prominent.small:not(:disabled):hover,
 button.bordered.prominent.tiny:not(:disabled):hover {
 	background: var(--accent-color-darker);
+	background: linear-gradient(
+		0deg,
+		var(--accent-color-darker),
+		color-mix(in srgb, var(--accent-color-darker), white 10%)
+	);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 	color: var(--accent-color-ultralight);
 	filter: brightness(1.3);
 }
 
-a.bordered.prominent:active,
-button.bordered.prominent:active {
+a.bordered.prominent:not(:disabled):active,
+a.bordered.prominent.small:not(:disabled):active,
+a.bordered.prominent.tiny:not(:disabled):active,
+button.bordered.prominent:not(:disabled):active,
+button.bordered.prominent.small:not(:disabled):active,
+button.bordered.prominent.tiny:not(:disabled):active {
 	background: var(--accent-color);
+	background: linear-gradient(
+		180deg,
+		var(--accent-color-darker),
+		color-mix(in srgb, var(--accent-color-darker), black 10%)
+	);
 }
 
 a.bordered.btn-danger,
 button.bordered.btn-danger {
 	border: 1px solid var(--color-danger);
-	background: var(--color-danger);
+	background: linear-gradient(
+		180deg,
+		var(--color-danger),
+		color-mix(in srgb, var(--color-danger), black 10%)
+	);
 	color: var(--color-background-content);
 	cursor: pointer;
 }

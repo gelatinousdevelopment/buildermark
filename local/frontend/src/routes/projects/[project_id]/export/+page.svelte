@@ -435,7 +435,12 @@
 			</div>
 
 			<div class="control-group">
-				<button class="generate-btn" onclick={generate} disabled={loading}>
+				<button
+					class="bordered prominent"
+					style:width="fit-content"
+					onclick={generate}
+					disabled={loading}
+				>
 					{loading ? 'Generating...' : 'Generate'}
 				</button>
 			</div>
@@ -699,27 +704,6 @@
 
 	.radio-list input {
 		display: none;
-	}
-
-	.generate-btn {
-		align-self: flex-start;
-		background: var(--accent-color);
-		border: none;
-		border-radius: 4px;
-		color: white;
-		cursor: pointer;
-		font-size: 1rem;
-		font-weight: 600;
-		padding: 0.5rem 1.5rem;
-	}
-
-	.generate-btn:hover:not(:disabled) {
-		opacity: 0.9;
-	}
-
-	.generate-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 
 	.error {

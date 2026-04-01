@@ -514,6 +514,10 @@
 		color: var(--accent-color-ultralight);
 	}
 
+	header nav.right .read-only-pill:active {
+		transform: scale(0.97);
+	}
+
 	header nav a {
 		color: var(--color-text-secondary);
 		text-decoration: none;
