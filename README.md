@@ -10,7 +10,11 @@
 - **Rate conversations** - Rate conversations manually or have the agent rate itself with the `/rate-buildermark` skill.
 - **Native notifications** - See agent attribution for each commit in your system notification center.
 
-![Buildermark project view](https://buildermark.dev/images/screenshot-project-transparent.avif)
+### Online Demo
+
+[Browse all 364 agent conversations that wrote 94% of Buildermark's code](https://demo.buildermark.dev/projects/u020uhEFtuWwPei6z6nbN)
+
+[![Buildermark project view](https://buildermark.dev/images/screenshot-project-transparent.avif)](https://demo.buildermark.dev/projects/u020uhEFtuWwPei6z6nbN)
 
 ### Install
 
