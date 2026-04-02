@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-GITHUB_REPO="buildermark/buildermark"
+RELEASES_BASE_URL="https://buildermark.dev/release"
 INSTALL_DIR="${BUILDERMARK_INSTALL_DIR:-$HOME/.local/bin}"
 BIN_PATH="$INSTALL_DIR/buildermark"
 VERSION_OVERRIDE="${BUILDERMARK_VERSION:-}"
@@ -64,9 +64,9 @@ main() {
         local normalized_version
         normalized_version="$(normalize_version "$VERSION_OVERRIDE")"
         version_label="v$normalized_version"
-        download_url="https://github.com/$GITHUB_REPO/releases/download/v$normalized_version/buildermark-$normalized_version-linux-$arch.tar.gz"
+        download_url="$RELEASES_BASE_URL/$normalized_version/buildermark-$normalized_version-linux-$arch.tar.gz"
     else
-        download_url="https://github.com/$GITHUB_REPO/releases/latest/download/buildermark-linux-$arch.tar.gz"
+        download_url="$RELEASES_BASE_URL/latest/buildermark-linux-$arch.tar.gz"
     fi
 
     step "Resolving Buildermark release"
