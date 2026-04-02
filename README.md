@@ -4,8 +4,8 @@
 
 [Buildermark](https://buildermark.dev) matches your coding agent diffs with commits. It runs locally in the background archiving your agent conversations and serves a frontend on localhost. Your data never leaves your machine. No accounts, no cloud, no analytics.
 
-- **Coding agent tracking** - Get per-commit percentages of code written by your agents.
-- **Archive coding agent conversations** - Import conversations from Claude Code, Codex, Gemini, Cursor, Claude Code Cloud, and Codex Cloud. It can import your conversation history that's still on your machine. [Request more agents](https://github.com/gelatinousdevelopment/buildermark/issues)
+- **Coding agent tracking** - Measure how much of your code is written by agents.
+- **Archive coding agent conversations** - Imports conversations from Claude Code, Codex, Gemini, Cursor, Claude Code Cloud, and Codex Cloud... including any history that's still on your machine. [Request more agents](https://github.com/gelatinousdevelopment/buildermark/issues)
 - **Formatting-agnostic diff matching** - Buildermark matches agent output to your commits even when formatting differs or code is moved/copied. It analyzes the content of conversations without relying on hooks for each agent. 
 - **Rate conversations** - Rate conversations manually or have the agent rate itself with the `/rate-buildermark` skill.
 - **Native notifications** - See agent attribution for each commit in your system notification center.
@@ -14,7 +14,7 @@
 
 [Browse all 364 agent conversations that wrote 94% of Buildermark's code](https://demo.buildermark.dev/projects/u020uhEFtuWwPei6z6nbN)
 
-[![Buildermark project view](https://buildermark.dev/images/screenshot-project-transparent.avif)](https://demo.buildermark.dev/projects/u020uhEFtuWwPei6z6nbN)
+[![Buildermark project view](https://buildermark.dev/images/screenshot-project-transparent.avif?v=2)](https://demo.buildermark.dev/projects/u020uhEFtuWwPei6z6nbN)
 
 ### Install
 
