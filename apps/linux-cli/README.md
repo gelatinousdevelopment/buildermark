@@ -48,11 +48,29 @@ the macOS checkout, runs the Linux build in Debian, copies the binaries back to
 ## Install
 
 ```bash
-cp apps/linux-cli/build/amd64/buildermark ~/.local/bin/buildermark
-buildermark service install
+curl -fsSL https://github.com/buildermark/buildermark/releases/latest/download/buildermark-install.sh | bash
 ```
 
-This installs a systemd user service that starts automatically on login.
+The installer:
+
+- detects `amd64` vs `arm64`
+- downloads the matching GitHub release tarball
+- installs `buildermark` to `~/.local/bin/buildermark` by default
+- prints PATH help and the next commands to run
+
+After install:
+
+```bash
+buildermark service install
+buildermark open
+```
+
+To install somewhere else:
+
+```bash
+curl -fsSL https://github.com/buildermark/buildermark/releases/latest/download/buildermark-install.sh | \
+  env BUILDERMARK_INSTALL_DIR=/usr/local/bin bash
+```
 
 ## Usage
 
