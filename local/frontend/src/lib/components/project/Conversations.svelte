@@ -20,6 +20,7 @@
 	import Icon from '$lib/Icon.svelte';
 	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
 	import { settingsStore, type SortOrder } from '$lib/stores/settings.svelte';
+	import { FROZEN_NOW_MS } from '$lib/utils';
 
 	type FilterChangeHandler = (value: string) => void | Promise<void>;
 	type HiddenChangeHandler = (value: boolean) => void | Promise<void>;
@@ -156,7 +157,12 @@
 	const currentShowHidden = $derived(showHidden ?? internalShowHidden);
 	const selectedOrder = $derived(order ?? internalOrder);
 	const effectiveStart = $derived(start ?? internalStart);
-	const effectiveEnd = $derived(end ?? internalEnd);
+	const effectiveEnd = $derived.by(() => {
+		const raw = end ?? internalEnd;
+		if (FROZEN_NOW_MS == null) return raw;
+		if (raw == null) return FROZEN_NOW_MS;
+		return Math.min(raw, FROZEN_NOW_MS);
+	});
 
 	// Reset to page 1 when date filter changes.
 	let lastDateKey = '';
@@ -731,7 +737,7 @@
 	.prompt-count {
 		color: var(--color-text-secondary);
 		font-size: 0.75rem;
-		margin-left: 0.4rem;
+		margin: -2px 0 -2px 0.4rem;
 		white-space: nowrap;
 
 		aspect-ratio: 1 / 1;

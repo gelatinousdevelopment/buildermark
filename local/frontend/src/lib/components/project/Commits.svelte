@@ -16,7 +16,12 @@
 	import DateFilterPicker from '$lib/components/DateFilterPicker.svelte';
 	import { relationshipCache } from '$lib/stores/relationshipCache.svelte';
 	import { settingsStore, type SortOrder } from '$lib/stores/settings.svelte';
-	import { formatRelativeOrShortDate, formatFullDateTitle, commitUrl } from '$lib/utils';
+	import {
+		formatRelativeOrShortDate,
+		formatFullDateTitle,
+		commitUrl,
+		FROZEN_NOW_MS
+	} from '$lib/utils';
 
 	const USER_AND_AGENTS = '@me+agents';
 
@@ -207,7 +212,12 @@
 	const selectedAgent = $derived(agent ?? internalAgent);
 	const selectedOrder = $derived(order ?? internalOrder);
 	const effectiveStart = $derived(start ?? internalStart);
-	const effectiveEnd = $derived(end ?? internalEnd);
+	const effectiveEnd = $derived.by(() => {
+		const raw = end ?? internalEnd;
+		if (FROZEN_NOW_MS == null) return raw;
+		if (raw == null) return FROZEN_NOW_MS;
+		return Math.min(raw, FROZEN_NOW_MS);
+	});
 
 	const selectedUserDisplay = $derived.by(() => {
 		if (!selectedUser) return '';

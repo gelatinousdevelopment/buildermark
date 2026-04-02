@@ -35,7 +35,7 @@ function parseFrozenNowMs(raw: string | undefined): number | null {
 	return null;
 }
 
-const FROZEN_NOW_MS = parseFrozenNowMs(env.PUBLIC_FROZEN_DATE);
+export const FROZEN_NOW_MS = parseFrozenNowMs(env.PUBLIC_FROZEN_DATE);
 
 export function referenceNowMs(): number {
 	return FROZEN_NOW_MS ?? Date.now();
