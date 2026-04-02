@@ -1,45 +1,74 @@
-# Buildermark Local
+# Buildermark
 
-## Linux CLI install
+How much of your code is written by agents?
 
-```bash
-curl -fsSL https://github.com/buildermark/buildermark/releases/latest/download/buildermark-install.sh | bash
-```
+[Buildermark](https://buildermark.dev) matches your coding agent diffs with commits. It runs locally in the background archiving your agent conversations and serves a frontend on localhost. Your data never leaves your machine. No accounts, no cloud, no analytics.
 
-The installer places `buildermark` in `~/.local/bin` by default, then prints PATH help plus the next commands to run, including `buildermark service install`.
+- **Coding agent tracking** -- Get per-commit percentages of code written by AI coding agents.
+- **Archive coding agent conversations** -- Import conversations from Claude Code, Codex, Gemini, Cursor, Claude Code Cloud, and Codex Cloud. [Request more](https://github.com/gelatinousdevelopment/buildermark/issues)
+- **Formatting-agnostic diff matching** -- Buildermark matches agent output to your commits even when formatting differs or code is moved/copied. It analyzes the content of conversations without relying on hooks for each agent.
+- **Rate conversations** -- Rate conversations manually or have the agent rate itself with the `/rate-buildermark` skill.
+- **Native notifications** -- See agent attribution for each commit in your system notification center.
 
-## `config.json`
+## Install
+
+Download from [buildermark.dev](https://buildermark.dev/download) or [GitHub Releases](https://gelatinousdevelopment/buildermark/releases).
+
+- macOS 15 (Sequoia) or later
+- Windows 10 or later
+- Linux CLI
+
+![Buildermark project view](https://buildermark.dev/images/screenshot-project-transparent.avif)
+
+## How it works
+
+1. Imports conversation history from your coding agents.
+2. Imports git commit history from your local repository.
+3. Buildermark matches conversation diffs to commit diffs and calculates agent percentages.
+
+A local app container manages a Go server on `localhost:55022`. Everything runs on your machine.
+
+## Browser Extensions
+
+Browser extensions let you view Buildermark data alongside your workflow.
+
+- **Chrome** (and Chrome-based browsers: Edge, Brave, Helium)
+- **Firefox**
+- **Safari**
+
+## Support
+
+- GitHub Issues: <https://github.com/gelatinousdevelopment/buildermark/issues>
+- GitHub Discussions: <https://github.com/gelatinousdevelopment/buildermark/discussions>
+- Email: support@buildermark.dev
+- Security: security@buildermark.dev
+
+## Documentation
+
+### Database
+
+The local sqlite database is stored in `~/.buildermark/local.db`.
+
+### Configuration
 
 Buildermark stores persistent settings in `~/.buildermark/config.json`.
 
-### Schema
+Schema:
 
 ```json
 {
   "updateMode": "check",
-  "extraAgentHomes": ["/home/alice", "/home/bob/.codex"],
+  "extraAgentHomes": ["/home/alice", "/volumes/debianvm/home/user"],
   "extraCORSOrigins": ["http://localhost:5173"]
 }
 ```
 
-### Fields
-
 | Field | Type | Default | Description |
 |------|------|---------|-------------|
-| `updateMode` | string | `"check"` | Update behavior for CLI updates. Allowed values: `"auto"`, `"check"`, `"off"`. |
 | `extraAgentHomes` | string[] | `[]` | Additional user home directories to watch for agent activity. |
 | `extraCORSOrigins` | string[] | `[]` | Additional origins allowed to make cross-origin requests to the API (e.g. `"http://localhost:5173"` for a dev frontend). |
+| `updateMode` | string | `"check"` | Linux CLI only. Update behavior for updates. Allowed values: `"auto"`, `"check"`, `"off"`. |
 
-### `extraAgentHomes` behavior
+## License
 
-- Paths are cleaned before use.
-- If a path ends with `.claude`, `.codex`, or `.gemini`, Buildermark uses the parent directory as the home.
-- Duplicate homes are ignored.
-
-### How to set update mode
-
-```bash
-buildermark update mode auto
-buildermark update mode check
-buildermark update mode off
-```
+MIT
