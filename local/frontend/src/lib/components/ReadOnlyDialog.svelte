@@ -137,7 +137,7 @@
 				<h2>Rate and measure your coding agent workflow.</h2>
 				<p>
 					This website is a read-only demo of Buildermark. You can browse a snapshot of my AI agent
-					conversations that wrote 94% of the code in the project, as of March 30, 2026.
+					conversations that wrote 94% of the code in the project, as of March 29, 2026.
 				</p>
 				<p>See your work in the same way by running Buildermark on your system.</p>
 				<h2>Open source, local-first, and private.</h2>
