@@ -1,5 +1,13 @@
 # Buildermark Local
 
+## Linux CLI install
+
+```bash
+curl -fsSL https://github.com/buildermark/buildermark/releases/latest/download/buildermark-install.sh | bash
+```
+
+The installer places `buildermark` in `~/.local/bin` by default, then prints PATH help plus the next commands to run, including `buildermark service install`.
+
 ## `config.json`
 
 Buildermark stores persistent settings in `~/.buildermark/config.json`.
