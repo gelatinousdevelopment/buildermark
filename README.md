@@ -1,16 +1,18 @@
 # Buildermark
 
-How much of your code is written by agents?
+**How much of your code is written by agents?**
 
 [Buildermark](https://buildermark.dev) matches your coding agent diffs with commits. It runs locally in the background archiving your agent conversations and serves a frontend on localhost. Your data never leaves your machine. No accounts, no cloud, no analytics.
 
-- **Coding agent tracking** -- Get per-commit percentages of code written by AI coding agents.
-- **Archive coding agent conversations** -- Import conversations from Claude Code, Codex, Gemini, Cursor, Claude Code Cloud, and Codex Cloud. [Request more](https://github.com/gelatinousdevelopment/buildermark/issues)
-- **Formatting-agnostic diff matching** -- Buildermark matches agent output to your commits even when formatting differs or code is moved/copied. It analyzes the content of conversations without relying on hooks for each agent.
-- **Rate conversations** -- Rate conversations manually or have the agent rate itself with the `/rate-buildermark` skill.
-- **Native notifications** -- See agent attribution for each commit in your system notification center.
+- **Coding agent tracking** - Get per-commit percentages of code written by your agents.
+- **Archive coding agent conversations** - Import conversations from Claude Code, Codex, Gemini, Cursor, Claude Code Cloud, and Codex Cloud. It can import your conversation history that's still on your machine. [Request more agents](https://github.com/gelatinousdevelopment/buildermark/issues)
+- **Formatting-agnostic diff matching** - Buildermark matches agent output to your commits even when formatting differs or code is moved/copied. It analyzes the content of conversations without relying on hooks for each agent. 
+- **Rate conversations** - Rate conversations manually or have the agent rate itself with the `/rate-buildermark` skill.
+- **Native notifications** - See agent attribution for each commit in your system notification center.
 
-## Install
+![Buildermark project view](https://buildermark.dev/images/screenshot-project-transparent.avif)
+
+### Install
 
 Download from [buildermark.dev](https://buildermark.dev/download) or [GitHub Releases](https://gelatinousdevelopment/buildermark/releases).
 
@@ -18,9 +20,7 @@ Download from [buildermark.dev](https://buildermark.dev/download) or [GitHub Rel
 - Windows 10 or later
 - Linux CLI
 
-![Buildermark project view](https://buildermark.dev/images/screenshot-project-transparent.avif)
-
-## How it works
+### How it works
 
 1. Imports conversation history from your coding agents.
 2. Imports git commit history from your local repository.
@@ -28,7 +28,7 @@ Download from [buildermark.dev](https://buildermark.dev/download) or [GitHub Rel
 
 A local app container manages a Go server on `localhost:55022`. Everything runs on your machine.
 
-## Browser Extensions
+### Browser Extensions
 
 Browser extensions let you view Buildermark data alongside your workflow.
 
@@ -36,12 +36,19 @@ Browser extensions let you view Buildermark data alongside your workflow.
 - **Firefox**
 - **Safari**
 
-## Support
+### Support
 
 - GitHub Issues: <https://github.com/gelatinousdevelopment/buildermark/issues>
 - GitHub Discussions: <https://github.com/gelatinousdevelopment/buildermark/discussions>
 - Email: support@buildermark.dev
 - Security: security@buildermark.dev
+
+### Future Work
+
+- Add support for more agents
+- More charts and advanced insights
+- Skill for an agent to search conversation history in the sqlite database
+- Team Server (coming soon, with a revenue model to sustain this project)
 
 ## Documentation
 
