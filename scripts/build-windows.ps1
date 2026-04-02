@@ -8,16 +8,6 @@
 
 $ErrorActionPreference = "Stop"
 
-if (-not $env:AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME) {
-    $env:AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME = "gelatinousdevelopment"
-}
-if (-not $env:AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME) {
-    $env:AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME = "gelatinous-certificate-profile"
-}
-if (-not $env:AZURE_ARTIFACT_SIGNING_ENDPOINT) {
-    $env:AZURE_ARTIFACT_SIGNING_ENDPOINT = "https://wus.codesigning.azure.net"
-}
-
 $RootDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $FrontendDir = Join-Path (Join-Path $RootDir "local") "frontend"
 $ServerDir = Join-Path (Join-Path $RootDir "local") "server"
