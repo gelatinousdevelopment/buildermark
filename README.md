@@ -5,9 +5,9 @@
 [Buildermark](https://buildermark.dev) matches your coding agent diffs with commits. It runs locally in the background archiving your agent conversations and serves a frontend on localhost. Your data never leaves your machine. No accounts, no cloud, no analytics.
 
 - **Coding agent tracking** - Measure how much of your code is written by agents.
-- **Archive coding agent conversations** - Imports conversations from Claude Code, Codex, Gemini, Cursor, Claude Code Cloud, and Codex Cloud... including any history that's still on your machine. [Request more agents](https://github.com/gelatinousdevelopment/buildermark/issues)
-- **Formatting-agnostic diff matching** - Buildermark matches agent output to your commits even when formatting differs or code is moved/copied. It analyzes the content of conversations without relying on hooks for each agent. 
-- **Rate conversations** - Rate conversations manually or have the agent rate itself with the `/rate-buildermark` skill.
+- **Archive coding agent conversations** - Imports conversations from Claude Code, Codex, Gemini, Cursor, Claude Code Cloud, and Codex Cloud... including any history that's still on your machine.
+- **Formatting-agnostic diff matching** - Buildermark matches agent output to your commits even when formatting differs or code is moved/copied. It analyzes the content of conversations without relying on hooks for each agent.
+- **Rate conversations** - Rate conversations manually or have the agent do it with the `/rate-buildermark` skill.
 - **Native notifications** - See agent attribution for each commit in your system notification center.
 
 ### Online Demo
@@ -49,10 +49,10 @@ Browser extensions let you view Buildermark data alongside your workflow.
 
 ### Future Work
 
-- Add support for more agents
+- Add support for more agents [Request more agents](https://github.com/gelatinousdevelopment/buildermark/issues)
 - More charts and advanced insights
 - Skill for an agent to search conversation history in the sqlite database
-- Team Server (coming soon, with a revenue model to sustain this project)
+- [Team Server](https://buildermark.dev/team) (coming soon, with a revenue model to sustain this project)
 
 ## Documentation
 
