@@ -2,9 +2,8 @@
 #
 # Prepare a versioned release of Buildermark for all platforms.
 #
-# Updates version numbers, builds all apps and browser extensions, generates
-# release notes, Sparkle appcast, Linux update manifest, and fills Homebrew
-# SHA256 checksums.
+# Updates version numbers, builds all apps and browser extensions, and generates
+# release notes, Sparkle appcast, and the Linux update manifest.
 #
 # All artifacts are collected into:
 #   release/<version>/
@@ -136,15 +135,6 @@ sed -i '' "s|<FileVersion>[^<]*</FileVersion>|<FileVersion>$VERSION.0</FileVersi
     "$ROOT_DIR/apps/windows/Buildermark/Buildermark.csproj"
 echo "  Updated: apps/windows/Buildermark/Buildermark.csproj"
 
-# Homebrew formulas and cask
-for rb in \
-    "$ROOT_DIR/apps/homebrew/Formula/buildermark.rb" \
-    "$ROOT_DIR/apps/homebrew/Formula/buildermark-linux.rb" \
-    "$ROOT_DIR/apps/homebrew/Casks/buildermark-app.rb"; do
-    sed -i '' "s/version \"[^\"]*\"/version \"$VERSION\"/" "$rb"
-    echo "  Updated: ${rb#$ROOT_DIR/}"
-done
-
 # Frontend package.json
 sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" \
     "$ROOT_DIR/local/frontend/package.json"
@@ -174,7 +164,7 @@ if [[ "${SKIP_MACOS:-}" != "1" ]]; then
         (cd "$(dirname "$MACOS_APP")" && zip -r -q "$MACOS_ZIP" "$(basename "$MACOS_APP")")
         echo "  OK: $(basename "$MACOS_ZIP")"
 
-        # --- DMG (for Homebrew / direct download) ---
+        # --- DMG (for direct download) ---
         MACOS_DMG="$RELEASE_DIR/Buildermark-$VERSION-macos-$ARCH.dmg"
         create-dmg --overwrite "$MACOS_APP" "$RELEASE_DIR"
 
@@ -476,63 +466,6 @@ for arch in amd64 arm64; do
         echo "  OK: $(basename "$LATEST_TAR")"
     fi
 done
-
-# ---------------------------------------------------------------------------
-# Fill Homebrew SHA256 checksums
-# ---------------------------------------------------------------------------
-
-step "Updating Homebrew SHA256 checksums"
-
-if [[ -f "$CHECKSUMS" ]]; then
-    # Extract checksums from the checksums file.
-    SHA_MACOS_ARM64="$(grep "Buildermark-$VERSION-macos-arm64.dmg" "$CHECKSUMS" | awk '{print $1}' || echo "")"
-    SHA_MACOS_AMD64="$(grep "Buildermark-$VERSION-macos-amd64.dmg" "$CHECKSUMS" | awk '{print $1}' || echo "")"
-    SHA_LINUX_AMD64="$LINUX_AMD64_SHA"
-    SHA_LINUX_ARM64="$LINUX_ARM64_SHA"
-
-    BREW_FORMULA="$ROOT_DIR/apps/homebrew/Formula/buildermark.rb"
-    BREW_LINUX="$ROOT_DIR/apps/homebrew/Formula/buildermark-linux.rb"
-    BREW_CASK="$ROOT_DIR/apps/homebrew/Casks/buildermark-app.rb"
-
-    # Replace REPLACE_WITH_* placeholders (or previous SHA256 hex values)
-    # with the actual checksums from this build.
-    brew_replace() {
-        local file="$1" placeholder="$2" sha="$3"
-        if [[ -z "$sha" ]]; then return; fi
-        # Replace the named placeholder.
-        sed -i '' "s/$placeholder/$sha/g" "$file"
-        # Also handle re-runs where a previous real SHA is present:
-        # the placeholder won't exist, but the version bump in step 2c
-        # keeps the file structure stable.
-    }
-
-    # buildermark.rb — macOS DMGs + Linux tarballs
-    brew_replace "$BREW_FORMULA" "REPLACE_WITH_ARM64_DMG_SHA256" "$SHA_MACOS_ARM64"
-    brew_replace "$BREW_FORMULA" "REPLACE_WITH_AMD64_DMG_SHA256" "$SHA_MACOS_AMD64"
-    brew_replace "$BREW_FORMULA" "REPLACE_WITH_ARM64_TAR_SHA256" "$SHA_LINUX_ARM64"
-    brew_replace "$BREW_FORMULA" "REPLACE_WITH_AMD64_TAR_SHA256" "$SHA_LINUX_AMD64"
-    echo "  Updated: apps/homebrew/Formula/buildermark.rb"
-
-    # buildermark-linux.rb — Linux tarballs only
-    brew_replace "$BREW_LINUX" "REPLACE_WITH_AMD64_TAR_SHA256" "$SHA_LINUX_AMD64"
-    brew_replace "$BREW_LINUX" "REPLACE_WITH_ARM64_TAR_SHA256" "$SHA_LINUX_ARM64"
-    echo "  Updated: apps/homebrew/Formula/buildermark-linux.rb"
-
-    # buildermark-app.rb (cask) — macOS DMGs only
-    brew_replace "$BREW_CASK" "REPLACE_WITH_ARM64_DMG_SHA256" "$SHA_MACOS_ARM64"
-    brew_replace "$BREW_CASK" "REPLACE_WITH_AMD64_DMG_SHA256" "$SHA_MACOS_AMD64"
-    echo "  Updated: apps/homebrew/Casks/buildermark-app.rb"
-
-    # Copy the updated Homebrew files into the release directory.
-    BREW_RELEASE_DIR="$RELEASE_DIR/homebrew"
-    mkdir -p "$BREW_RELEASE_DIR/Formula" "$BREW_RELEASE_DIR/Casks"
-    cp "$BREW_FORMULA" "$BREW_RELEASE_DIR/Formula/"
-    cp "$BREW_LINUX"   "$BREW_RELEASE_DIR/Formula/"
-    cp "$BREW_CASK"    "$BREW_RELEASE_DIR/Casks/"
-    echo "  Copied Homebrew files to: release/$VERSION/homebrew/"
-else
-    echo "  Warning: checksums file not found, skipping Homebrew SHA256 updates" >&2
-fi
 
 # ---------------------------------------------------------------------------
 # Summary
