@@ -34,11 +34,13 @@ A local app container manages a Go server on `localhost:55022`. Everything runs 
 
 ### Browser Extensions
 
-Browser extensions let you view Buildermark data alongside your workflow.
+Browser extensions import your conversations from Claude Code Cloud (https://claude.ai/code) and Codex Cloud (https://chatgpt.com/codex).
 
 - **Chrome** (and Chrome-based browsers: Edge, Brave, Helium)
 - **Firefox**
 - **Safari**
+
+To import, click through to each conversation's page and wait a few seconds... the extension's icon will show a checkmark when the import is complete.
 
 ### Support
 
