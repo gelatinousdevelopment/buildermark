@@ -1446,10 +1446,13 @@ func computeCoverageForRepo(
 		windowEnd := c.TimestampUnix*1000 + commitWindowLookaheadMs
 
 		totalLines := tokenTotals(commitTokens)
-		_, matchedLines, fileAgent, exactConversationByPath, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
+		contribs, matchedLines, fileAgent, exactConversationByPath, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 		files := summarizeDiffFiles(parsed.Files, fileAgent)
-		_, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
+		msgIdx := buildMessageIndex(messages, windowStart, windowEnd)
+		_, fallbackLines, fallbackConvIDs := applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, remainingNorms, msgIdx)
 		matchedLines += fallbackLines
+		_, deletionLines, _ := attributeUnmatchedDeletions(files, contribs, fallbackConvIDs, msgIdx)
+		matchedLines += deletionLines
 
 		cAdded, cRemoved := countDiffAddedRemoved(commitDiff)
 		coverage = append(coverage, projectCommitCoverage{
@@ -1589,8 +1592,12 @@ func computeWorkingCopyDetail(
 	contribMessages, matchedLines, fileAgent, exactConversationByPath, remainingNorms, unmatchedNormsByPath := attributeCommitToMessages(commitTokens, messages, windowStart, windowEnd)
 	exactMatchedLines := matchedLines
 	files := summarizeDiffFiles(parsed.Files, fileAgent)
-	files, fallbackLines, _ := applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, remainingNorms, buildMessageIndex(messages, windowStart, windowEnd))
+	wcMsgIdx := buildMessageIndex(messages, windowStart, windowEnd)
+	files, fallbackLines, fallbackConvIDs := applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, remainingNorms, wcMsgIdx)
 	matchedLines += fallbackLines
+	var deletionLines int
+	files, deletionLines, _ = attributeUnmatchedDeletions(files, contribMessages, fallbackConvIDs, wcMsgIdx)
+	matchedLines += deletionLines
 	wcAdded, wcRemoved := countDiffAddedRemoved(diffText)
 
 	agentSegments := summarizeCommitAgentSegments(files, totalLines)

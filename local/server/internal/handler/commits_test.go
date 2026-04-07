@@ -2556,3 +2556,249 @@ func TestSummarizeDiffFiles_FallbackTotalsReturnedForLargeDiff(t *testing.T) {
 		t.Fatalf("fallback lines = %d, want 10", fbLines)
 	}
 }
+
+func TestAttributeUnmatchedDeletions_PureDeletionAttributedToDominantConversation(t *testing.T) {
+	files := []commitFileCoverage{
+		{
+			Path: "src/app.rb", Added: 10, Removed: 0,
+			LinesTotal: 10, LinesFromAgent: 10, LinePercent: 100,
+			AttributableLines: 10,
+			AgentSegments:     []agentCoverageSegment{{Agent: "codex", LinesFromAgent: 10, LinePercent: 100}},
+		},
+		{
+			Path: "src/README.md", Added: 0, Removed: 20,
+			LinesTotal: 20, LinesFromAgent: 0, LinePercent: 0,
+		},
+	}
+	contribs := []commitContributionMessage{
+		{ID: "m1", ConversationID: "conv-A", Agent: "codex", LinesMatched: 10},
+	}
+	idx := &messageIndex{
+		conversationMeta: map[string]fallbackConversationMeta{
+			"conv-A": {Title: "Remove homebrew support", Agent: "codex", Model: "o3"},
+		},
+	}
+
+	files, extraLines, extraConvIDs := attributeUnmatchedDeletions(files, contribs, nil, idx)
+
+	readme := files[1]
+	if readme.LinesFromAgent != 20 {
+		t.Fatalf("LinesFromAgent = %d, want 20", readme.LinesFromAgent)
+	}
+	if readme.LinePercent != 100 {
+		t.Fatalf("LinePercent = %f, want 100", readme.LinePercent)
+	}
+	if !readme.CopiedFromAgent {
+		t.Fatal("CopiedFromAgent = false, want true")
+	}
+	if readme.AttributableLines != 20 {
+		t.Fatalf("AttributableLines = %d, want 20", readme.AttributableLines)
+	}
+	if extraLines != 20 {
+		t.Fatalf("extraLines = %d, want 20", extraLines)
+	}
+	if len(readme.AgentSegments) != 1 || readme.AgentSegments[0].Agent != "codex" {
+		t.Fatalf("AgentSegments = %+v, want single codex segment", readme.AgentSegments)
+	}
+	if len(extraConvIDs) != 1 || extraConvIDs[0] != "conv-A" {
+		t.Fatalf("extraConvIDs = %v, want [conv-A]", extraConvIDs)
+	}
+	// Ensure the already-matched file was not modified.
+	if files[0].LinesFromAgent != 10 {
+		t.Fatalf("matched file LinesFromAgent changed to %d", files[0].LinesFromAgent)
+	}
+}
+
+func TestAttributeUnmatchedDeletions_NoAttributionWhenNoExistingMatches(t *testing.T) {
+	files := []commitFileCoverage{
+		{
+			Path: "src/README.md", Added: 0, Removed: 20,
+			LinesTotal: 20, LinesFromAgent: 0,
+		},
+	}
+	idx := &messageIndex{
+		conversationMeta: map[string]fallbackConversationMeta{},
+	}
+
+	files, extraLines, _ := attributeUnmatchedDeletions(files, nil, nil, idx)
+
+	if files[0].LinesFromAgent != 0 {
+		t.Fatalf("LinesFromAgent = %d, want 0 (no existing attributions)", files[0].LinesFromAgent)
+	}
+	if extraLines != 0 {
+		t.Fatalf("extraLines = %d, want 0", extraLines)
+	}
+}
+
+func TestAttributeUnmatchedDeletions_SkipsPartialDeletion(t *testing.T) {
+	files := []commitFileCoverage{
+		{
+			Path: "src/app.rb", Added: 10, Removed: 0,
+			LinesTotal: 10, LinesFromAgent: 10, LinePercent: 100,
+			AgentSegments: []agentCoverageSegment{{Agent: "codex", LinesFromAgent: 10, LinePercent: 100}},
+		},
+		{
+			Path: "src/mixed.rb", Added: 5, Removed: 10,
+			LinesTotal: 15, LinesFromAgent: 0,
+		},
+	}
+	contribs := []commitContributionMessage{
+		{ID: "m1", ConversationID: "conv-A", Agent: "codex", LinesMatched: 10},
+	}
+	idx := &messageIndex{
+		conversationMeta: map[string]fallbackConversationMeta{
+			"conv-A": {Agent: "codex"},
+		},
+	}
+
+	files, extraLines, _ := attributeUnmatchedDeletions(files, contribs, nil, idx)
+
+	if files[1].LinesFromAgent != 0 {
+		t.Fatalf("partial deletion LinesFromAgent = %d, want 0", files[1].LinesFromAgent)
+	}
+	if extraLines != 0 {
+		t.Fatalf("extraLines = %d, want 0", extraLines)
+	}
+}
+
+func TestAttributeUnmatchedDeletions_SkipsAlreadyMatchedDeletion(t *testing.T) {
+	files := []commitFileCoverage{
+		{
+			Path: "src/app.rb", Added: 10, Removed: 0,
+			LinesTotal: 10, LinesFromAgent: 10, LinePercent: 100,
+			AgentSegments: []agentCoverageSegment{{Agent: "codex", LinesFromAgent: 10, LinePercent: 100}},
+		},
+		{
+			Path: "src/already.md", Added: 0, Removed: 15,
+			LinesTotal: 15, LinesFromAgent: 15, LinePercent: 100,
+			AgentSegments: []agentCoverageSegment{{Agent: "codex", LinesFromAgent: 15, LinePercent: 100}},
+		},
+	}
+	contribs := []commitContributionMessage{
+		{ID: "m1", ConversationID: "conv-A", Agent: "codex", LinesMatched: 25},
+	}
+	idx := &messageIndex{
+		conversationMeta: map[string]fallbackConversationMeta{
+			"conv-A": {Agent: "codex"},
+		},
+	}
+
+	files, extraLines, _ := attributeUnmatchedDeletions(files, contribs, nil, idx)
+
+	if files[1].LinesFromAgent != 15 {
+		t.Fatalf("already-matched deletion LinesFromAgent changed to %d, want 15", files[1].LinesFromAgent)
+	}
+	if extraLines != 0 {
+		t.Fatalf("extraLines = %d, want 0", extraLines)
+	}
+}
+
+func TestAttributeUnmatchedDeletions_SkipsIgnoredAndMovedFiles(t *testing.T) {
+	files := []commitFileCoverage{
+		{
+			Path: "src/app.rb", Added: 10, Removed: 0,
+			LinesTotal: 10, LinesFromAgent: 10, LinePercent: 100,
+			AgentSegments: []agentCoverageSegment{{Agent: "codex", LinesFromAgent: 10, LinePercent: 100}},
+		},
+		{
+			Path: "vendor/ignored.md", Added: 0, Removed: 5,
+			LinesTotal: 5, LinesFromAgent: 0, Ignored: true,
+		},
+		{
+			Path: "src/moved.md", Added: 0, Removed: 8,
+			LinesTotal: 8, LinesFromAgent: 0, Moved: true,
+		},
+	}
+	contribs := []commitContributionMessage{
+		{ID: "m1", ConversationID: "conv-A", Agent: "codex", LinesMatched: 10},
+	}
+	idx := &messageIndex{
+		conversationMeta: map[string]fallbackConversationMeta{
+			"conv-A": {Agent: "codex"},
+		},
+	}
+
+	files, extraLines, _ := attributeUnmatchedDeletions(files, contribs, nil, idx)
+
+	if files[1].LinesFromAgent != 0 {
+		t.Fatalf("ignored file LinesFromAgent = %d, want 0", files[1].LinesFromAgent)
+	}
+	if files[2].LinesFromAgent != 0 {
+		t.Fatalf("moved file LinesFromAgent = %d, want 0", files[2].LinesFromAgent)
+	}
+	if extraLines != 0 {
+		t.Fatalf("extraLines = %d, want 0", extraLines)
+	}
+}
+
+func TestAttributeUnmatchedDeletions_MultipleConversations(t *testing.T) {
+	files := []commitFileCoverage{
+		{
+			Path: "src/app.rb", Added: 30, Removed: 0,
+			LinesTotal: 30, LinesFromAgent: 30, LinePercent: 100,
+			AgentSegments: []agentCoverageSegment{{Agent: "codex", LinesFromAgent: 30, LinePercent: 100}},
+		},
+		{
+			Path: "src/README.md", Added: 0, Removed: 10,
+			LinesTotal: 10, LinesFromAgent: 0,
+		},
+	}
+	contribs := []commitContributionMessage{
+		{ID: "m1", ConversationID: "conv-A", Agent: "codex", LinesMatched: 25},
+		{ID: "m2", ConversationID: "conv-B", Agent: "claude", LinesMatched: 5},
+	}
+	idx := &messageIndex{
+		conversationMeta: map[string]fallbackConversationMeta{
+			"conv-A": {Agent: "codex"},
+			"conv-B": {Agent: "claude"},
+		},
+	}
+
+	files, extraLines, _ := attributeUnmatchedDeletions(files, contribs, nil, idx)
+
+	readme := files[1]
+	if readme.LinesFromAgent != 10 {
+		t.Fatalf("LinesFromAgent = %d, want 10", readme.LinesFromAgent)
+	}
+	if len(readme.AgentSegments) != 1 || readme.AgentSegments[0].Agent != "codex" {
+		t.Fatalf("AgentSegments = %+v, want single codex segment (dominant conv)", readme.AgentSegments)
+	}
+	if extraLines != 10 {
+		t.Fatalf("extraLines = %d, want 10", extraLines)
+	}
+}
+
+func TestAttributeUnmatchedDeletions_EmptyAgentFallback(t *testing.T) {
+	files := []commitFileCoverage{
+		{
+			Path: "src/app.rb", Added: 10, Removed: 0,
+			LinesTotal: 10, LinesFromAgent: 10, LinePercent: 100,
+			AgentSegments: []agentCoverageSegment{{Agent: "unknown", LinesFromAgent: 10, LinePercent: 100}},
+		},
+		{
+			Path: "src/README.md", Added: 0, Removed: 5,
+			LinesTotal: 5, LinesFromAgent: 0,
+		},
+	}
+	contribs := []commitContributionMessage{
+		{ID: "m1", ConversationID: "conv-A", Agent: "", LinesMatched: 10},
+	}
+	idx := &messageIndex{
+		conversationMeta: map[string]fallbackConversationMeta{
+			"conv-A": {Agent: ""},
+		},
+	}
+
+	files, extraLines, _ := attributeUnmatchedDeletions(files, contribs, nil, idx)
+
+	readme := files[1]
+	if readme.LinesFromAgent != 5 {
+		t.Fatalf("LinesFromAgent = %d, want 5", readme.LinesFromAgent)
+	}
+	if len(readme.AgentSegments) != 1 || readme.AgentSegments[0].Agent != "unknown" {
+		t.Fatalf("AgentSegments = %+v, want single 'unknown' segment", readme.AgentSegments)
+	}
+	if extraLines != 5 {
+		t.Fatalf("extraLines = %d, want 5", extraLines)
+	}
+}

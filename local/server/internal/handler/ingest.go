@@ -584,6 +584,14 @@ func recomputeSingleCommit(
 		}
 		files, fallbackLines, fallbackConvIDs = applyFallbackFileCoverage(files, fileAgent, exactConversationByPath, unmatchedNormsByPath, fallbackNorms, fallbackIdx)
 		matchedLines += fallbackLines
+
+		// Attribute unmatched pure-deletion files to the dominant conversation
+		// when the commit already has attributed lines from exact or fallback matching.
+		var deletionLines int
+		var deletionConvIDs []string
+		files, deletionLines, deletionConvIDs = attributeUnmatchedDeletions(files, contribs, fallbackConvIDs, fallbackIdx)
+		matchedLines += deletionLines
+		fallbackConvIDs = append(fallbackConvIDs, deletionConvIDs...)
 	}
 
 	recompAdded, recompRemoved := countDiffAddedRemoved(cleanDiff)

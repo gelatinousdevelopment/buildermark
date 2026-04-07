@@ -915,6 +915,96 @@ func applyFallbackFileCoverage(
 	return files, extraLines, convIDs
 }
 
+// attributeUnmatchedDeletions attributes pure-deletion files (Added=0, Removed>0)
+// that have no coverage from exact or fallback matching to the dominant conversation.
+// This handles the case where an agent deletes a file via a shell command (rm, rmdir)
+// without producing a diff message, so the normal token matching has nothing to match against.
+// It only applies when the commit already has established attributions from other files.
+func attributeUnmatchedDeletions(
+	files []commitFileCoverage,
+	contribs []commitContributionMessage,
+	fallbackConvIDs []string,
+	idx *messageIndex,
+) ([]commitFileCoverage, int, []string) {
+	if len(files) == 0 || idx == nil {
+		return files, 0, nil
+	}
+
+	// Check that the commit already has some attribution.
+	convLineCount := make(map[string]int)
+	for _, c := range contribs {
+		if c.ConversationID != "" && c.LinesMatched > 0 {
+			convLineCount[c.ConversationID] += c.LinesMatched
+		}
+	}
+	for _, convID := range fallbackConvIDs {
+		if convID != "" {
+			if _, ok := convLineCount[convID]; !ok {
+				convLineCount[convID] = 1
+			}
+		}
+	}
+	if len(convLineCount) == 0 {
+		return files, 0, nil
+	}
+
+	// Find the dominant conversation (highest matched line count).
+	var dominantConvID string
+	dominantLines := 0
+	for convID, lines := range convLineCount {
+		if lines > dominantLines {
+			dominantLines = lines
+			dominantConvID = convID
+		}
+	}
+	if dominantConvID == "" {
+		return files, 0, nil
+	}
+
+	agent := "unknown"
+	if meta, ok := idx.conversationMeta[dominantConvID]; ok {
+		a := strings.TrimSpace(meta.Agent)
+		if a != "" {
+			agent = a
+		}
+	}
+
+	convSeen := make(map[string]bool)
+	var extraConvIDs []string
+	extraLines := 0
+
+	for i := range files {
+		c := &files[i]
+		if c.Ignored || c.Moved {
+			continue
+		}
+		if c.Added > 0 || c.Removed == 0 {
+			continue
+		}
+		if c.LinesFromAgent > 0 {
+			continue
+		}
+
+		linesToAttribute := c.LinesTotal
+		c.LinesFromAgent = linesToAttribute
+		if c.AttributableLines == 0 {
+			c.AttributableLines = linesToAttribute
+		}
+		c.LinePercent = 100.0
+		c.CopiedFromAgent = true
+		c.AgentSegments = mergeFileAgentSegments(c.AgentSegments, map[string]int{agent: linesToAttribute}, linesToAttribute)
+		extraLines += linesToAttribute
+
+		if !convSeen[dominantConvID] {
+			convSeen[dominantConvID] = true
+			extraConvIDs = append(extraConvIDs, dominantConvID)
+		}
+	}
+
+	sort.Strings(extraConvIDs)
+	return files, extraLines, extraConvIDs
+}
+
 func summarizeCommitAgentSegments(files []commitFileCoverage, linesTotal int) []agentCoverageSegment {
 	overallAgentLines := make(map[string]int)
 	for _, f := range files {
