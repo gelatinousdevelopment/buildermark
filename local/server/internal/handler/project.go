@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -159,26 +160,75 @@ func (s *Server) handleSetProjectOldPaths(w http.ResponseWriter, r *http.Request
 	currentPaths := splitLines(body.OldPaths)
 	if changed || movedConversations > 0 || len(currentPaths) > 0 {
 		scanPaths := diffAddedPaths(prevOldPaths, body.OldPaths)
-		go s.backfillProjectForOldPaths(id, scanPaths)
+		if s.tryStartProjectCoverageRecompute(id) {
+			go s.backfillProjectForOldPaths(id, scanPaths)
+		} else {
+			log.Printf("project old_paths changed for %s; coverage recompute already in progress, skipping backfill", id)
+		}
 	}
 
 	writeSuccess(w, http.StatusOK, nil)
 }
 
 func (s *Server) backfillProjectForOldPaths(projectID string, paths []string) {
+	defer s.finishProjectCoverageRecompute(projectID)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
+	broadcast := func(state, message string) {
+		if s.ws == nil {
+			return
+		}
+		s.ws.broadcastEvent("job_status", jobStatusEvent{
+			JobType: "diff_recompute",
+			State:   state,
+			Message: message,
+		})
+	}
+
+	var lastProgress time.Time
+	var entriesProcessed int
+
 	if s.Agents != nil && len(s.Agents.Watchers()) > 0 && len(paths) > 0 {
-		entriesProcessed := s.scanWatchersSincePaths(ctx, time.Unix(0, 0), "", paths, nil)
+		broadcast("running", "Scanning conversation history for old paths...")
+		progress := func(filename string) {
+			now := time.Now()
+			if now.Sub(lastProgress) < 50*time.Millisecond {
+				return
+			}
+			lastProgress = now
+			broadcast("running", fmt.Sprintf("Scanning %s", filepath.Base(filename)))
+		}
+		entriesProcessed = s.scanWatchersSincePaths(ctx, time.Unix(0, 0), "", paths, progress)
 		log.Printf("project old_paths changed for %s; automatic path-filtered history scan processed %d entries across %d paths", projectID, entriesProcessed, len(paths))
 	}
 
-	if n, err := s.recomputeProjectCoverageAllBranches(ctx, projectID); err != nil {
-		log.Printf("project old_paths changed for %s; coverage recompute failed: %v", projectID, err)
-	} else if n > 0 {
-		log.Printf("project old_paths changed for %s; recomputed coverage on %d branch(es)", projectID, n)
+	broadcast("running", "Recomputing commit coverage...")
+	recomputeProgress := func(message string) {
+		now := time.Now()
+		if now.Sub(lastProgress) < 50*time.Millisecond {
+			return
+		}
+		lastProgress = now
+		broadcast("running", message)
 	}
+
+	recomputedBranches, _, err := s.recomputeProjectCoverageAllBranchesWithChangedPatterns(ctx, projectID, nil, recomputeProgress)
+	if err != nil {
+		broadcast("error", fmt.Sprintf("Coverage recompute failed for project %s", projectID))
+		log.Printf("project old_paths changed for %s; coverage recompute failed: %v", projectID, err)
+		return
+	}
+
+	var msg string
+	if entriesProcessed > 0 {
+		msg = fmt.Sprintf("Scanned %d conversation entries; recomputed coverage on %d branch(es)", entriesProcessed, recomputedBranches)
+	} else {
+		msg = fmt.Sprintf("Recomputed coverage on %d branch(es)", recomputedBranches)
+	}
+	broadcast("complete", msg)
+	log.Printf("project old_paths changed for %s; %s", projectID, msg)
 }
 
 func (s *Server) recomputeProjectCoverageAllBranches(ctx context.Context, projectID string) (int, error) {
