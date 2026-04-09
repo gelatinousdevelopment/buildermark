@@ -111,14 +111,14 @@
 
 <style>
 	.update-pill {
-		border-radius: 999px;
+		border-radius: 4px;
 		border: 0;
 		color: light-dark(#fff, var(--accent-color-ultralight));
 		cursor: pointer;
 		font-size: 0.8rem;
 		font-weight: 600;
 		height: 20px;
-		padding: 0 0.8rem;
+		padding: 0 0.6rem;
 		white-space: nowrap;
 	}
 

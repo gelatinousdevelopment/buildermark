@@ -45,14 +45,14 @@
 		display: inline-flex;
 		align-items: center;
 		background: var(--agent-tag-bg);
-		border-radius: 999px;
+		border-radius: 4px;
 		color: var(--agent-tag-fg);
 		font-family: var(--font-family-monospace);
 		font-size: 0.8rem;
 		gap: 0.25rem;
 		line-height: 1.2;
 		margin: -0.2rem 0;
-		padding: 0.15rem 0.5rem 0.1rem 0.5rem;
+		padding: 0.15rem 0.4rem 0.1rem 0.4rem;
 		white-space: nowrap;
 	}
 

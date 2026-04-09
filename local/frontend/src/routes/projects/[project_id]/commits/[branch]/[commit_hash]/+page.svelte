@@ -776,8 +776,8 @@
 
 	.ignored-pill {
 		display: inline-block;
-		padding: 0.3rem 0.9rem;
-		border-radius: 999px;
+		padding: 0.3rem 0.7rem;
+		border-radius: 5px;
 		background: var(--color-danger);
 		color: var(--color-background-content);
 		font-size: 0.9rem;

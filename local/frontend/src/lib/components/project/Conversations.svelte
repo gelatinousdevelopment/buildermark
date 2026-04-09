@@ -607,8 +607,8 @@
 	.files-tag {
 		display: inline-flex;
 		align-items: center;
-		padding: calc(0.2rem - var(--divider-width)) calc(0.6rem - var(--divider-width));
-		border-radius: 999px;
+		padding: calc(0.2rem - var(--divider-width)) calc(0.4rem - var(--divider-width));
+		border-radius: 4px;
 		background: var(--color-tag-background, #e8e8e8);
 		color: var(--color-tag-text, #555);
 		font-size: 0.75rem;

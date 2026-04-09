@@ -10,10 +10,6 @@
 	let notice: string | null = $state(null);
 	let busyKey: string | null = $state(null);
 	let initialized = $state(false);
-	let exampleCopied = $state(false);
-	let exampleCopyError: string | null = $state(null);
-
-	const exampleSkillCommand = '/rate-buildermark [0-5] [Optional note or feedback]';
 
 	const browserExtensions = [
 		{
@@ -81,17 +77,6 @@
 			busyKey = null;
 		}
 	}
-
-	async function copyExampleCommand() {
-		exampleCopyError = null;
-		try {
-			await navigator.clipboard.writeText(exampleSkillCommand);
-			exampleCopied = true;
-			setTimeout(() => (exampleCopied = false), 2000);
-		} catch (e) {
-			exampleCopyError = e instanceof Error ? e.message : 'Failed to copy the example command';
-		}
-	}
 </script>
 
 <div class="plugins limited-content-width inset-when-limited-content-width">
@@ -111,13 +96,7 @@
 			<div class="example-command">
 				<code>› /rate-buildermark <span class="faded">[0-5] [Optional note or feedback]</span></code
 				>
-				<button class="bordered tiny" type="button" onclick={copyExampleCommand}>
-					{exampleCopied ? 'Copied!' : 'Copy'}
-				</button>
 			</div>
-			{#if exampleCopyError}
-				<p class="error">{exampleCopyError}</p>
-			{/if}
 		</div>
 
 		{#if error}
