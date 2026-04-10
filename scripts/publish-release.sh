@@ -8,7 +8,7 @@
 # Usage:
 #   ./scripts/publish-release.sh <version>
 #   ./scripts/publish-release.sh 1.2.0
-#   ./scripts/publish-release.sh 1.2.0 --draft
+#   ./scripts/publish-release.sh 1.2.0 --prerelease
 #
 # By default, releases are created as drafts. Pass --publish to create a
 # public release.

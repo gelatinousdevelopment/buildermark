@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -18,16 +18,6 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>LSUIElement</key>
-	<true />
-	<key>SUFeedURL</key>
-	<string>https://buildermark.dev/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>ej6jDgZczuarlscgV2RMH0JZoFHZzokVys3/YfRelAY=</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -39,5 +29,15 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://buildermark.dev/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>ej6jDgZczuarlscgV2RMH0JZoFHZzokVys3/YfRelAY=</string>
 </dict>
 </plist>

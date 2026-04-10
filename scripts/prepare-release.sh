@@ -250,10 +250,23 @@ if [[ "${SKIP_BROWSER:-}" != "1" ]]; then
     if [[ -d "$EXT_DIST" ]]; then
         for ext_dir in "$EXT_DIST"/*/; do
             browser="$(basename "$ext_dir")"
+            if [[ "$browser" == "safari" ]]; then
+                continue
+            fi
             EXT_ZIP="$RELEASE_DIR/buildermark-$VERSION-browser-$browser.zip"
             (cd "$ext_dir" && zip -r -q "$EXT_ZIP" .)
             echo "  OK: $(basename "$EXT_ZIP")"
         done
+
+        SAFARI_APP_BUNDLE="$EXT_DIST/BuildermarkSafari.app"
+        if [[ -d "$SAFARI_APP_BUNDLE" ]]; then
+            SAFARI_ZIP="$RELEASE_DIR/buildermark-$VERSION-browser-safari.zip"
+            rm -f "$SAFARI_ZIP"
+            ditto -c -k --sequesterRsrc --keepParent "$SAFARI_APP_BUNDLE" "$SAFARI_ZIP"
+            echo "  OK: $(basename "$SAFARI_ZIP")"
+        else
+            echo "  Warning: Safari app bundle not found at $SAFARI_APP_BUNDLE" >&2
+        fi
     else
         echo "  Warning: browser extension dist not found at $EXT_DIST" >&2
     fi
