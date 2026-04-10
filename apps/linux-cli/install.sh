@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
-set -euo pipefail
+set -eu
 
 RELEASES_BASE_URL="https://buildermark.dev/release"
 INSTALL_DIR="${BUILDERMARK_INSTALL_DIR:-$HOME/.local/bin}"
@@ -39,29 +39,27 @@ detect_arch() {
 }
 
 normalize_version() {
-    local version="$1"
-    version="${version#v}"
+    version=$1
+    version=${version#v}
     printf '%s\n' "$version"
 }
 
 main() {
-    [[ "$(uname -s)" == "Linux" ]] || fail "this installer only supports Linux"
+    [ "$(uname -s)" = "Linux" ] || fail "this installer only supports Linux"
 
     require_tool curl
     require_tool tar
     require_tool mktemp
     require_tool install
 
-    local arch
     arch="$(detect_arch)"
 
-    local version_label="latest"
-    local download_url
-    if [[ -n "$DOWNLOAD_URL_OVERRIDE" ]]; then
+    version_label="latest"
+    download_url=""
+    if [ -n "$DOWNLOAD_URL_OVERRIDE" ]; then
         version_label="custom"
         download_url="$DOWNLOAD_URL_OVERRIDE"
-    elif [[ -n "$VERSION_OVERRIDE" ]]; then
-        local normalized_version
+    elif [ -n "$VERSION_OVERRIDE" ]; then
         normalized_version="$(normalize_version "$VERSION_OVERRIDE")"
         version_label="v$normalized_version"
         download_url="$RELEASES_BASE_URL/$normalized_version/buildermark-$normalized_version-linux-$arch.tar.gz"
@@ -75,12 +73,11 @@ main() {
     echo "Arch:    $arch"
     echo "Install: $BIN_PATH"
 
-    local temp_dir
     temp_dir="$(mktemp -d)"
     trap "rm -rf \"$temp_dir\"" EXIT
 
-    local archive_path="$temp_dir/buildermark.tar.gz"
-    local extracted_path="$temp_dir/buildermark"
+    archive_path="$temp_dir/buildermark.tar.gz"
+    extracted_path="$temp_dir/buildermark"
 
     step "Downloading archive"
     if ! curl -fL "$download_url" -o "$archive_path"; then
@@ -90,27 +87,26 @@ main() {
     step "Installing binary"
     mkdir -p "$INSTALL_DIR"
     tar -xzf "$archive_path" -C "$temp_dir"
-    [[ -f "$extracted_path" ]] || fail "archive did not contain buildermark"
+    [ -f "$extracted_path" ] || fail "archive did not contain buildermark"
     install -m 0755 "$extracted_path" "$BIN_PATH"
 
-    local installed_version
     installed_version="$("$BIN_PATH" version 2>/dev/null || true)"
 
     step "Installed"
-    if [[ -n "$installed_version" ]]; then
+    if [ -n "$installed_version" ]; then
         echo "$installed_version"
     else
         echo "Installed to $BIN_PATH"
     fi
 
-    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    if ! path_contains "$INSTALL_DIR"; then
         echo ""
         echo "Add Buildermark to your PATH if needed:"
         echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
     fi
 
-    local cli_cmd="buildermark"
-    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    cli_cmd="buildermark"
+    if ! path_contains "$INSTALL_DIR"; then
         cli_cmd="$BIN_PATH"
     fi
 
@@ -123,6 +119,17 @@ main() {
     echo "Update commands:"
     echo "  $cli_cmd update check"
     echo "  $cli_cmd update apply"
+}
+
+path_contains() {
+    case ":$PATH:" in
+        *":$1:"*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 main "$@"

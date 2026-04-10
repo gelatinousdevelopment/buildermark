@@ -48,7 +48,7 @@ the macOS checkout, runs the Linux build in Debian, copies the binaries back to
 ## Install
 
 ```bash
-curl -fsSL https://github.com/buildermark/buildermark/releases/latest/download/buildermark-install.sh | bash
+curl -fsSL https://github.com/buildermark/buildermark/releases/latest/download/buildermark-install.sh | sh
 ```
 
 The installer:
@@ -69,7 +69,7 @@ To install somewhere else:
 
 ```bash
 curl -fsSL https://github.com/buildermark/buildermark/releases/latest/download/buildermark-install.sh | \
-  env BUILDERMARK_INSTALL_DIR=/usr/local/bin bash
+  env BUILDERMARK_INSTALL_DIR=/usr/local/bin sh
 ```
 
 ## Usage
