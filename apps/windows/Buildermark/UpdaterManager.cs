@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Forms;
 using NetSparkleUpdater;
 using NetSparkleUpdater.SignatureVerifiers;
 
@@ -50,12 +51,19 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
 
     public bool AutomaticallyChecksForUpdates
     {
-        get => _updater.CheckServerFileName != null;
+        get => _updater.IsUpdateLoopRunning;
         set
         {
-            // NetSparkle handles auto-check via the loop configuration.
-            // Re-start the loop with the new setting.
-            _updater.StartLoop(value, true);
+            if (value)
+            {
+                if (!_updater.IsUpdateLoopRunning)
+                    _updater.StartLoop(true, true);
+            }
+            else
+            {
+                if (_updater.IsUpdateLoopRunning)
+                    _updater.StopLoop();
+            }
             OnPropertyChanged();
         }
     }
@@ -81,15 +89,18 @@ public sealed class UpdaterManager : INotifyPropertyChanged, IDisposable
         CanCheckForUpdates = false;
         try
         {
-            var updateInfo = await _updater.CheckForUpdatesQuietly();
-            if (updateInfo?.Status == NetSparkleUpdater.Enums.UpdateStatus.UpdateAvailable)
-            {
-                _updater.ShowUpdateNeededUI(updateInfo.Updates);
-            }
-            else
-            {
-                _updater.ShowUpdateNeededUI(null);
-            }
+            // CheckForUpdatesAtUserRequest shows the "Checking for updates..." dialog and
+            // then dispatches the appropriate UI through UIFactory for every outcome:
+            // update available, version up to date, or appcast download error.
+            await _updater.CheckForUpdatesAtUserRequest();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"An error occurred while checking for updates:\n\n{ex.Message}",
+                "Buildermark",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
         finally
         {
