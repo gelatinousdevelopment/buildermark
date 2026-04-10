@@ -4,18 +4,29 @@ package updater
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+func currentArtifactKey() string {
+	return fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+}
 
 func TestCLIUpdater_Check_HasUpdate(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(releaseResponse{
-			Version:     "2.0.0",
-			DownloadURL: "https://example.com/buildermark-2.0.0",
+			Version: "2.0.0",
+			Artifacts: map[string]releaseArtifact{
+				currentArtifactKey(): {
+					DownloadURL: "https://example.com/buildermark-2.0.0",
+					SHA256:      "abc123",
+				},
+			},
 		})
 	}))
 	defer ts.Close()
@@ -39,12 +50,20 @@ func TestCLIUpdater_Check_HasUpdate(t *testing.T) {
 	if result.CurrentVersion != "1.0.0" {
 		t.Errorf("Check() CurrentVersion = %q, want %q", result.CurrentVersion, "1.0.0")
 	}
+	if result.DownloadURL != "https://example.com/buildermark-2.0.0" {
+		t.Errorf("Check() DownloadURL = %q, want %q", result.DownloadURL, "https://example.com/buildermark-2.0.0")
+	}
 }
 
 func TestCLIUpdater_Check_NoUpdate(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(releaseResponse{
 			Version: "1.0.0",
+			Artifacts: map[string]releaseArtifact{
+				currentArtifactKey(): {
+					DownloadURL: "https://example.com/buildermark-1.0.0",
+				},
+			},
 		})
 	}))
 	defer ts.Close()
@@ -137,11 +156,16 @@ func TestCLIUpdater_Apply_EmptyURL(t *testing.T) {
 	}
 }
 
-func TestCLIUpdater_Check_ParsesQueryParams(t *testing.T) {
-	var gotQuery string
+func TestCLIUpdater_Check_MissingArtifact(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.RawQuery
-		json.NewEncoder(w).Encode(releaseResponse{Version: "1.0.0"})
+		json.NewEncoder(w).Encode(releaseResponse{
+			Version: "2.0.0",
+			Artifacts: map[string]releaseArtifact{
+				"some-other-platform": {
+					DownloadURL: "https://example.com/other",
+				},
+			},
+		})
 	}))
 	defer ts.Close()
 
@@ -151,28 +175,7 @@ func TestCLIUpdater_Check_ParsesQueryParams(t *testing.T) {
 		client:    ts.Client(),
 	}
 
-	u.Check()
-
-	if gotQuery == "" {
-		t.Error("Check() sent no query parameters")
+	if _, err := u.Check(); err == nil {
+		t.Error("Check() expected error for missing artifact, got nil")
 	}
-	// Should contain os, arch, and current version
-	for _, want := range []string{"os=", "arch=", "current=1.0.0"} {
-		if !containsSubstring(gotQuery, want) {
-			t.Errorf("Check() query %q missing %q", gotQuery, want)
-		}
-	}
-}
-
-func containsSubstring(s, sub string) bool {
-	return len(s) >= len(sub) && searchString(s, sub)
-}
-
-func searchString(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

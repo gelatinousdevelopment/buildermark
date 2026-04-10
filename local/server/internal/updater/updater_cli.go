@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultUpdateURL = "https://buildermark.dev/api/v1/releases/latest"
+	defaultUpdateURL = "https://buildermark.dev/release/latest/linux-update-latest.json"
 )
 
 // cliUpdater implements Updater for CLI builds.
@@ -32,14 +32,18 @@ func getUpdater(version string) Updater {
 	}
 }
 
-type releaseResponse struct {
-	Version     string `json:"version"`
+type releaseArtifact struct {
 	DownloadURL string `json:"downloadUrl"`
+	SHA256      string `json:"sha256"`
+}
+
+type releaseResponse struct {
+	Version   string                     `json:"version"`
+	Artifacts map[string]releaseArtifact `json:"artifacts"`
 }
 
 func (u *cliUpdater) Check() (*UpdateResult, error) {
-	url := fmt.Sprintf("%s?os=%s&arch=%s&current=%s", u.updateURL, runtime.GOOS, runtime.GOARCH, u.version)
-	resp, err := u.client.Get(url)
+	resp, err := u.client.Get(u.updateURL)
 	if err != nil {
 		return nil, fmt.Errorf("checking for updates: %w", err)
 	}
@@ -54,10 +58,16 @@ func (u *cliUpdater) Check() (*UpdateResult, error) {
 		return nil, fmt.Errorf("parsing update response: %w", err)
 	}
 
+	artifactKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+	artifact, ok := release.Artifacts[artifactKey]
+	if !ok {
+		return nil, fmt.Errorf("no update artifact for %s", artifactKey)
+	}
+
 	result := &UpdateResult{
 		CurrentVersion: u.version,
 		LatestVersion:  release.Version,
-		DownloadURL:    release.DownloadURL,
+		DownloadURL:    artifact.DownloadURL,
 		HasUpdate:      release.Version != u.version && release.Version != "",
 	}
 	return result, nil
