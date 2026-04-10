@@ -17,7 +17,7 @@
 #   SKIP_WINDOWS           - set to "1" to skip Windows VM build
 #   SKIP_LINUX             - set to "1" to skip Linux VM build
 #   SKIP_BROWSER           - set to "1" to skip browser extension build
-#   NOTARIZE               - set to "1" to notarize macOS DMGs
+#   SKIP_NOTARIZE          - set to "1" to skip macOS notarization (notarization is on by default)
 #
 
 set -euo pipefail
@@ -159,12 +159,7 @@ if [[ "${SKIP_MACOS:-}" != "1" ]]; then
             exit 1
         fi
 
-        # --- ZIP (for Sparkle auto-updates) ---
-        MACOS_ZIP="$RELEASE_DIR/Buildermark-$VERSION-macos-$ARCH.zip"
-        (cd "$(dirname "$MACOS_APP")" && zip -r -q "$MACOS_ZIP" "$(basename "$MACOS_APP")")
-        echo "  OK: $(basename "$MACOS_ZIP")"
-
-        # --- DMG (for direct download) ---
+        # --- DMG (for direct download and Sparkle auto-updates) ---
         MACOS_DMG="$RELEASE_DIR/Buildermark-$VERSION-macos-$ARCH.dmg"
         create-dmg --overwrite "$MACOS_APP" "$RELEASE_DIR"
 
@@ -179,14 +174,16 @@ if [[ "${SKIP_MACOS:-}" != "1" ]]; then
             exit 1
         fi
 
-        # --- Notarize (optional) ---
-        if [[ "${NOTARIZE:-}" == "1" ]]; then
+        # --- Notarize ---
+        if [[ "${SKIP_NOTARIZE:-}" != "1" ]]; then
             echo "  Submitting DMG to Apple for notarization ($ARCH)..."
             xcrun notarytool submit "$MACOS_DMG" \
                 --keychain-profile "$NOTARY_PROFILE" \
                 --wait
             xcrun stapler staple "$MACOS_DMG"
             echo "  Notarized and stapled: $(basename "$MACOS_DMG")"
+        else
+            echo "  Skipping notarization (SKIP_NOTARIZE=1) — DMG will trigger Gatekeeper warnings on other Macs"
         fi
 
         echo "  OK: $(basename "$MACOS_DMG")"
@@ -348,12 +345,12 @@ XMLHEADER
 
         # --- macOS items ---
         for arch in arm64 amd64; do
-            zip_file="$ver_dir/Buildermark-$ver-macos-$arch.zip"
-            if [[ -f "$zip_file" ]]; then
-                ZIP_LENGTH="$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")"
+            dmg_file="$ver_dir/Buildermark-$ver-macos-$arch.dmg"
+            if [[ -f "$dmg_file" ]]; then
+                DMG_LENGTH="$(stat -f%z "$dmg_file" 2>/dev/null || stat -c%s "$dmg_file" 2>/dev/null || echo "0")"
 
-                # Sign the ZIP with Sparkle's EdDSA key.
-                SIG_OUTPUT="$("$SIGN_UPDATE" "$zip_file" 2>/dev/null || echo "")"
+                # Sign the DMG with Sparkle's EdDSA key.
+                SIG_OUTPUT="$("$SIGN_UPDATE" "$dmg_file" 2>/dev/null || echo "")"
                 EDDSA_SIG="$(echo "$SIG_OUTPUT" | grep -oE 'sparkle:edSignature="[^"]*"' | sed 's/sparkle:edSignature="//;s/"$//' || echo "")"
 
                 # If sign_update outputs just the signature string:
@@ -361,7 +358,7 @@ XMLHEADER
                     EDDSA_SIG="$(echo "$SIG_OUTPUT" | head -1 | awk '{print $1}')"
                 fi
 
-                DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$ver/Buildermark-$ver-macos-$arch.zip"
+                DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$ver/Buildermark-$ver-macos-$arch.dmg"
 
                 cat >> "$APPCAST" <<XMLITEM
     <item>
@@ -373,13 +370,13 @@ XMLHEADER
       <description><![CDATA[$NOTES_CONTENT]]></description>
       <enclosure
         url="$DOWNLOAD_URL"
-        length="$ZIP_LENGTH"
-        type="application/octet-stream"
+        length="$DMG_LENGTH"
+        type="application/x-apple-diskimage"
         sparkle:edSignature="$EDDSA_SIG"
         sparkle:os="macos" />
     </item>
 XMLITEM
-                echo "  Signed: Buildermark-$ver-macos-$arch.zip"
+                echo "  Signed: Buildermark-$ver-macos-$arch.dmg"
             fi
         done
 

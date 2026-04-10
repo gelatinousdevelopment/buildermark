@@ -101,5 +101,87 @@ else
 fi
 cp "$SERVER_DIR/$SERVER_BINARY" "$APP_PATH/Contents/Resources/$SERVER_BINARY"
 
+# ---------------------------------------------------------------------------
+# 4. Re-sign the app to include the embedded server binary
+# ---------------------------------------------------------------------------
+#
+# Adding the server binary after `xcodebuild -exportArchive` invalidates the
+# bundle's code signature ("a sealed resource is missing or invalid"). On
+# other Macs, Gatekeeper reports this as either:
+#   - "Buildermark is damaged and can't be opened."
+#   - "Apple could not verify Buildermark is free of malware..."
+# Re-sign the helper binary first (with hardened runtime + timestamp, both
+# required for notarization), then re-sign the outer .app bundle so its
+# CodeResources is regenerated to include the new file. We deliberately do
+# NOT pass --deep so the nested Sparkle.framework signatures Xcode produced
+# are preserved.
+
+step "Re-signing app to include embedded server binary"
+
+# Loud failure handler — without this, any failed command in this section
+# exits silently because of `set -euo pipefail`, which is exactly what
+# happened the first time around.
+resign_failed() {
+    echo "" >&2
+    echo "ERROR: re-signing failed at line $1." >&2
+    echo "  App:           $APP_PATH" >&2
+    echo "  Helper binary: $APP_PATH/Contents/Resources/$SERVER_BINARY" >&2
+    echo "  Identity:      ${SIGN_IDENTITY:-<not yet detected>}" >&2
+    echo "" >&2
+    echo "  Most common causes:" >&2
+    echo "    - Keychain locked / Developer ID private key not accessible" >&2
+    echo "    - --timestamp could not reach Apple's timestamp server" >&2
+    echo "    - DEVELOPER_ID does not match any cert in the keychain" >&2
+    exit 1
+}
+trap 'resign_failed $LINENO' ERR
+
+# Detect the signing identity Xcode used so re-signing stays consistent.
+# Use a temp file instead of `codesign | awk ... exit` — that pipeline gives
+# codesign SIGPIPE under `set -o pipefail` and aborts the script silently.
+echo "  Reading existing signature from app bundle"
+CODESIGN_INFO_TMP="$(mktemp -t buildermark-codesign)"
+if ! codesign -dvvv "$APP_PATH" >"$CODESIGN_INFO_TMP" 2>&1; then
+    echo "  Error: 'codesign -dvvv $APP_PATH' failed:" >&2
+    sed 's/^/    /' "$CODESIGN_INFO_TMP" >&2
+    rm -f "$CODESIGN_INFO_TMP"
+    exit 1
+fi
+SIGN_IDENTITY="$(grep -m1 '^Authority=' "$CODESIGN_INFO_TMP" | sed 's/^Authority=//' || true)"
+rm -f "$CODESIGN_INFO_TMP"
+
+if [[ -z "$SIGN_IDENTITY" ]]; then
+    SIGN_IDENTITY="${DEVELOPER_ID:-Developer ID Application}"
+    echo "  No Authority found in existing signature; falling back to: $SIGN_IDENTITY"
+else
+    echo "  Detected signing identity: $SIGN_IDENTITY"
+fi
+
+ENTITLEMENTS="$MACOS_DIR/Buildermark/Buildermark.entitlements"
+if [[ ! -f "$ENTITLEMENTS" ]]; then
+    echo "  Error: entitlements file not found at $ENTITLEMENTS" >&2
+    exit 1
+fi
+
+echo "  Signing helper binary (hardened runtime + timestamp)"
+codesign --force \
+    --sign "$SIGN_IDENTITY" \
+    --options runtime \
+    --timestamp \
+    "$APP_PATH/Contents/Resources/$SERVER_BINARY"
+
+echo "  Re-signing outer .app bundle"
+codesign --force \
+    --sign "$SIGN_IDENTITY" \
+    --options runtime \
+    --timestamp \
+    --entitlements "$ENTITLEMENTS" \
+    "$APP_PATH"
+
+echo "  Verifying re-signed bundle"
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+trap - ERR
+
 step "Full build complete ($ARCH_LABEL)"
 echo "  App: $APP_PATH"
