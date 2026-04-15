@@ -44,6 +44,17 @@ normalize_version() {
     printf '%s\n' "$version"
 }
 
+fetch_latest_version() {
+    manifest_url="$RELEASES_BASE_URL/latest/linux-update-latest.json"
+    manifest="$(curl -fsSL "$manifest_url")" \
+        || fail "failed to fetch release manifest from $manifest_url"
+    version="$(printf '%s' "$manifest" \
+        | tr '\n' ' ' \
+        | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+    [ -n "$version" ] || fail "could not parse version from release manifest at $manifest_url"
+    printf '%s\n' "$version"
+}
+
 main() {
     [ "$(uname -s)" = "Linux" ] || fail "this installer only supports Linux"
 
@@ -64,7 +75,9 @@ main() {
         version_label="v$normalized_version"
         download_url="$RELEASES_BASE_URL/$normalized_version/buildermark-$normalized_version-linux-$arch.tar.gz"
     else
-        download_url="$RELEASES_BASE_URL/latest/buildermark-linux-$arch.tar.gz"
+        latest_version="$(fetch_latest_version)"
+        version_label="v$latest_version"
+        download_url="$RELEASES_BASE_URL/$latest_version/buildermark-$latest_version-linux-$arch.tar.gz"
     fi
 
     step "Resolving Buildermark release"

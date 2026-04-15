@@ -468,15 +468,6 @@ cp "$ROOT_DIR/apps/linux-cli/install.sh" "$LINUX_INSTALLER"
 chmod +x "$LINUX_INSTALLER"
 echo "  OK: $(basename "$LINUX_INSTALLER")"
 
-for arch in amd64 arm64; do
-    VERSIONED_TAR="$RELEASE_DIR/buildermark-$VERSION-linux-$arch.tar.gz"
-    LATEST_TAR="$RELEASE_DIR/buildermark-linux-$arch.tar.gz"
-    if [[ -f "$VERSIONED_TAR" ]]; then
-        cp "$VERSIONED_TAR" "$LATEST_TAR"
-        echo "  OK: $(basename "$LATEST_TAR")"
-    fi
-done
-
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
