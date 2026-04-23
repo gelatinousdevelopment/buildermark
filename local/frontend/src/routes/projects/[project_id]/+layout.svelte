@@ -188,8 +188,9 @@
 	}
 
 	.chart-area {
+		flex: 0 1 860px;
 		min-width: 0;
-		width: 860px;
+		max-width: 860px;
 	}
 
 	.project-header .details {

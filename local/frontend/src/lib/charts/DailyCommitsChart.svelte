@@ -502,7 +502,7 @@
 								<option value={days} selected={String(days) === selectedWindowDays}>{days}</option>
 							{/each}
 						</select>
-						<span>{collapseEmpty ? 'active days' : 'days'}</span>
+						<span>days</span>
 					</label>
 				{:else}
 					{endsToday ? 'last ' : ''}{collapseEmpty
@@ -625,7 +625,7 @@
 		flex-direction: row;
 		gap: 1rem;
 		align-items: stretch;
-		padding-bottom: 0.5rem;
+		padding-bottom: 8.5px;
 	}
 
 	.dc-key {
