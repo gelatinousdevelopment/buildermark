@@ -1,6 +1,21 @@
 import { settingsStore } from '$lib/stores/settings.svelte';
 import type { ProjectDetail, DailyCommitSummary } from '$lib/types';
 
+function trimToActiveDays(
+	summary: DailyCommitSummary[],
+	targetActive: number
+): DailyCommitSummary[] {
+	if (targetActive <= 0) return summary;
+	let activeCount = 0;
+	for (let i = summary.length - 1; i >= 0; i--) {
+		if (summary[i].linesTotal > 0) {
+			activeCount++;
+			if (activeCount >= targetActive) return summary.slice(i);
+		}
+	}
+	return summary;
+}
+
 let _project: ProjectDetail | null = $state(null);
 let _dailySummary: DailyCommitSummary[] = $state([]);
 let _branch: string = $state('');
@@ -12,6 +27,9 @@ export const projectLayoutData = {
 		return _project;
 	},
 	get dailySummary() {
+		if (settingsStore.commitsChartCollapseEmptyDays) {
+			return trimToActiveDays(_dailySummary, _dailyWindowDays);
+		}
 		return _dailySummary;
 	},
 	get branch() {
@@ -21,6 +39,12 @@ export const projectLayoutData = {
 		return _projectId;
 	},
 	get dailyWindowDays() {
+		return _dailyWindowDays;
+	},
+	get effectiveFetchDays() {
+		if (settingsStore.commitsChartCollapseEmptyDays) {
+			return Math.min(_dailyWindowDays * 3, 365);
+		}
 		return _dailyWindowDays;
 	},
 	setProject(projectId: string, project: ProjectDetail) {

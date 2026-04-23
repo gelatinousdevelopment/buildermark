@@ -9,6 +9,7 @@ export type Theme = 'system' | 'light' | 'dark';
 
 interface Settings {
 	commits_chart_scale_by_lines: boolean;
+	commits_chart_collapse_empty_days: boolean;
 	commits_chart_stretch_bars: boolean;
 	commits_chart_window_days: number;
 	activity_chart_count_answers: boolean;
@@ -29,6 +30,7 @@ interface Settings {
 
 const defaults: Settings = {
 	commits_chart_scale_by_lines: false,
+	commits_chart_collapse_empty_days: true,
 	commits_chart_stretch_bars: true,
 	commits_chart_window_days: 45,
 	activity_chart_count_answers: false,
@@ -73,6 +75,7 @@ function load(): Settings {
 function currentSettings(): Settings {
 	return {
 		commits_chart_scale_by_lines: _commitsChartScaleByLines,
+		commits_chart_collapse_empty_days: _commitsChartCollapseEmptyDays,
 		commits_chart_stretch_bars: _commitsChartStretchBars,
 		commits_chart_window_days: _commitsChartWindowDays,
 		activity_chart_count_answers: _activityChartCountAnswers,
@@ -125,6 +128,7 @@ function applyContentWidth(width: ContentWidth) {
 const initial = load();
 
 let _commitsChartScaleByLines = $state(initial.commits_chart_scale_by_lines);
+let _commitsChartCollapseEmptyDays = $state(initial.commits_chart_collapse_empty_days);
 let _commitsChartStretchBars = $state(initial.commits_chart_stretch_bars);
 let _commitsChartWindowDays = $state(initial.commits_chart_window_days);
 let _activityChartCountAnswers = $state(initial.activity_chart_count_answers);
@@ -152,6 +156,7 @@ if (browser) {
 		if (e.key !== STORAGE_KEY) return;
 		const updated = load();
 		_commitsChartScaleByLines = updated.commits_chart_scale_by_lines;
+		_commitsChartCollapseEmptyDays = updated.commits_chart_collapse_empty_days;
 		_commitsChartStretchBars = updated.commits_chart_stretch_bars;
 		_commitsChartWindowDays = updated.commits_chart_window_days;
 		_activityChartCountAnswers = updated.activity_chart_count_answers;
@@ -180,6 +185,13 @@ export const settingsStore = {
 	},
 	set commitsChartScaleByLines(v: boolean) {
 		_commitsChartScaleByLines = v;
+		save();
+	},
+	get commitsChartCollapseEmptyDays() {
+		return _commitsChartCollapseEmptyDays;
+	},
+	set commitsChartCollapseEmptyDays(v: boolean) {
+		_commitsChartCollapseEmptyDays = v;
 		save();
 	},
 	get commitsChartStretchBars() {

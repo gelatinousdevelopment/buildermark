@@ -41,6 +41,7 @@
 		maxWidth = undefined
 	}: Props = $props();
 	let scaleByLines = $derived(settingsStore.commitsChartScaleByLines);
+	let collapseEmpty = $derived(settingsStore.commitsChartCollapseEmptyDays && !!windowDays);
 	const stretchBars = true;
 	const popoverId = `dc-menu-${Math.random().toString(36).slice(2, 8)}`;
 	const DEFAULT_BAR_GAP_PX = $derived(window?.devicePixelRatio ? 1 / window?.devicePixelRatio : 1);
@@ -64,6 +65,7 @@
 		total: number;
 		segments: Segment[];
 		summary: DailyCommitSummary;
+		collapsedGap?: boolean;
 	}
 
 	interface KeySegment {
@@ -140,6 +142,37 @@
 			if (col.total > max) max = col.total;
 		}
 		return max;
+	});
+
+	let displayColumns = $derived.by((): ColumnDay[] => {
+		if (!collapseEmpty) return columns;
+		const result: ColumnDay[] = [];
+		let inEmptyRun = false;
+		for (const col of columns) {
+			if (col.total === 0) {
+				if (!inEmptyRun) {
+					result.push({ ...col, collapsedGap: true });
+					inEmptyRun = true;
+				}
+			} else {
+				result.push(col);
+				inEmptyRun = false;
+			}
+		}
+		return result;
+	});
+
+	let activeColumnCount = $derived(
+		collapseEmpty ? displayColumns.filter((c) => !c.collapsedGap).length : displayColumns.length
+	);
+	let collapsedGapCount = $derived(
+		collapseEmpty ? displayColumns.filter((c) => c.collapsedGap).length : 0
+	);
+	let collapsedWidth = $derived(collapsedGapCount * 3);
+
+	let gridTemplateCols = $derived.by(() => {
+		if (!collapseEmpty) return `repeat(${Math.max(displayColumns.length, 1)}, minmax(0, 1fr))`;
+		return displayColumns.map((col) => (col.collapsedGap ? '3px' : 'minmax(0, 1fr)')).join(' ');
 	});
 
 	function barScale(col: ColumnDay): number {
@@ -258,18 +291,21 @@
 	}
 
 	const denseBars = $derived.by(() => {
-		if (columns.length <= 0) return false;
-		const totalGapWidth = Math.max(0, columns.length - 1) * DEFAULT_BAR_GAP_PX;
-		const widthWithDefaultGap = Math.max(0, (chartWidth - totalGapWidth) / columns.length);
-		return widthWithDefaultGap <= 10;
+		const count = collapseEmpty ? activeColumnCount : displayColumns.length;
+		if (count <= 0) return false;
+		const totalGapWidth = Math.max(0, displayColumns.length - 1) * DEFAULT_BAR_GAP_PX;
+		const available = Math.max(0, chartWidth - totalGapWidth - collapsedWidth);
+		return available / count <= 10;
 	});
 
 	const barGapPx = $derived(denseBars ? 0 : DEFAULT_BAR_GAP_PX);
 
 	const effectiveBarWidth = $derived.by(() => {
-		if (columns.length <= 0) return FIXED_BAR_WIDTH_PX;
-		const totalGapWidth = Math.max(0, columns.length - 1) * barGapPx;
-		return Math.max(0, (chartWidth - totalGapWidth) / columns.length);
+		const count = collapseEmpty ? activeColumnCount : displayColumns.length;
+		if (count <= 0) return FIXED_BAR_WIDTH_PX;
+		const totalGapWidth = Math.max(0, displayColumns.length - 1) * barGapPx;
+		const available = Math.max(0, chartWidth - totalGapWidth - collapsedWidth);
+		return available / count;
 	});
 
 	const showDayNumbers = $derived(!denseBars && effectiveBarWidth > 12);
@@ -334,22 +370,37 @@
 				/>
 				Scale bars by line count
 			</label>
+			<label class="dc-menu-option">
+				<input
+					type="checkbox"
+					checked={settingsStore.commitsChartCollapseEmptyDays}
+					onchange={(e) =>
+						(settingsStore.commitsChartCollapseEmptyDays = (
+							e.currentTarget as HTMLInputElement
+						).checked)}
+				/>
+				Collapse empty days
+			</label>
 		</div>
 		<div class="dc-wrap" bind:this={scrollWrap}>
 			<div
 				class="dc-chart"
 				class:dc-chart-stretch={stretchBars}
-				style={`--dc-cols:${Math.max(columns.length, 1)};--dc-gap:${barGapPx}px;--dc-seg-gap:${barGapPx}px`}
+				style={stretchBars && collapseEmpty
+					? `grid-template-columns:${gridTemplateCols};--dc-gap:${barGapPx}px;--dc-seg-gap:${barGapPx}px`
+					: `--dc-cols:${Math.max(displayColumns.length, 1)};--dc-gap:${barGapPx}px;--dc-seg-gap:${barGapPx}px`}
 				bind:this={chartEl}
 			>
-				{#each columns as col (col.date)}
+				{#each displayColumns as col (col.date)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						class="dc-col"
-						class:dc-col-clickable={enableDateSelection && !!onDateSelect}
+						class:dc-col-clickable={enableDateSelection && !!onDateSelect && !col.collapsedGap}
 						class:dc-col-selected={selectedDate === col.date}
+						class:dc-col-collapsed={col.collapsedGap}
 						onclick={() => {
+							if (col.collapsedGap) return;
 							if (enableDateSelection && onDateSelect) {
 								onDateSelect(selectedDate === col.date ? null : col.date);
 							}
@@ -451,10 +502,12 @@
 								<option value={days} selected={String(days) === selectedWindowDays}>{days}</option>
 							{/each}
 						</select>
-						<span>days</span>
+						<span>{collapseEmpty ? 'active days' : 'days'}</span>
 					</label>
 				{:else}
-					{endsToday ? 'last ' : ''}{columns.length} day{columns.length === 1 ? '' : 's'}
+					{endsToday ? 'last ' : ''}{collapseEmpty
+						? `${activeColumnCount} active / ${columns.length}`
+						: columns.length} day{columns.length === 1 ? '' : 's'}
 				{/if}
 			</div>
 			{#if projectId && showMoreLink}
@@ -833,6 +886,19 @@
 
 	.dc-commit-link:hover {
 		text-decoration: underline;
+	}
+
+	.dc-col-collapsed {
+		max-width: 3px;
+		overflow: hidden;
+	}
+
+	.dc-col-collapsed .dc-date {
+		display: none;
+	}
+
+	.dc-col-collapsed .dc-bar-empty {
+		opacity: 0.4;
 	}
 
 	@media (max-width: 780px) {

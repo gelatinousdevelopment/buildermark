@@ -15,7 +15,7 @@
 	const projectId = $derived(page.params.project_id ?? '');
 	const order = $derived(page.url.searchParams.get('order') ?? settingsStore.sortOrder);
 	const selectedDate = $derived(projectDateFilterStore.selectedDate);
-	const dailyWindowDays = $derived(projectLayoutData.dailyWindowDays);
+	const dailyWindowDays = $derived(projectLayoutData.effectiveFetchDays);
 	const dailyWindowEnd = $derived.by(() => {
 		const now = referenceNowDate();
 		return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
