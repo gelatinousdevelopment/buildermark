@@ -73,7 +73,9 @@
 		pagination: import('$lib/types').ProjectCommitPagination;
 	}) {
 		commitPagination = data.pagination;
-		projectLayoutData.setCommitsData(projectId, data.dailySummary, data.branch);
+		if (!selectedDate) {
+			projectLayoutData.setCommitsData(projectId, data.dailySummary, data.branch);
+		}
 	}
 
 	function handleLoadMore(event: MouseEvent) {

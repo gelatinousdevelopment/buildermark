@@ -398,6 +398,7 @@
 						class="dc-col"
 						class:dc-col-clickable={enableDateSelection && !!onDateSelect && !col.collapsedGap}
 						class:dc-col-selected={selectedDate === col.date}
+						class:dc-col-dimmed={!!selectedDate && selectedDate !== col.date}
 						class:dc-col-collapsed={col.collapsedGap}
 						onclick={() => {
 							if (col.collapsedGap) return;
@@ -739,6 +740,10 @@
 
 	.dc-col-clickable {
 		cursor: pointer;
+	}
+
+	.dc-col-dimmed {
+		opacity: 0.1;
 	}
 
 	.dc-col-selected {
