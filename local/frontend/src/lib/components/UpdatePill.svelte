@@ -12,11 +12,7 @@
 	let isAvailable = $derived(status.state === 'available');
 	let isLinux = $derived(status.platform === 'linux');
 
-	const releaseUrl = $derived(
-		status.version
-			? `https://github.com/gelatinousdevelopment/buildermark/releases/tag/${status.version}`
-			: ''
-	);
+	const releaseUrl = `https://buildermark.dev/changelog`;
 
 	async function applyUpdate() {
 		applying = true;
