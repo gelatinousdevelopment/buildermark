@@ -8,9 +8,9 @@
     <ApplicationIcon>Resources\buildermark.ico</ApplicationIcon>
     <AssemblyName>Buildermark</AssemblyName>
     <RootNamespace>Buildermark</RootNamespace>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
     <Company>Gelatinous Development Studio</Company>
     <Product>Buildermark</Product>
     <Copyright>Copyright (c) 2026 Gelatinous Development Studio</Copyright>

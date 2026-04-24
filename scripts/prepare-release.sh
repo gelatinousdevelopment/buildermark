@@ -280,7 +280,6 @@ step "Extracting release notes"
 RELEASE_NOTES="$RELEASE_DIR/RELEASE_NOTES.md"
 awk -v ver="$VERSION" '
     /^## \[/ {
-        if (found) exit
         if (index($0, "[" ver "]")) { found=1 }
     }
     found { print }

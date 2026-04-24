@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-24
+
+### Added
+
+- Minimize empty columns on project over chart
+
+### Fixed
+
+- Windows app signing
+
 ## [1.0.0] - 2026-04-11
 
 ### Added
