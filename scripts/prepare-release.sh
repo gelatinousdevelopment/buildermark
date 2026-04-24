@@ -25,7 +25,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPTS_DIR="$ROOT_DIR/scripts"
 CHANGELOG="$ROOT_DIR/CHANGELOG.md"
-GITHUB_REPO="buildermark/buildermark"
+RELEASE_BASE_URL="https://buildermark.dev/release"
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -66,6 +66,104 @@ check_tool() {
         echo "  $2" >&2
         exit 1
     fi
+}
+
+extract_release_notes() {
+    local version="$1"
+    local changelog_file="$2"
+
+    awk -v ver="$version" '
+        /^## \[/ {
+            if (found) {
+                exit
+            }
+            if ($0 ~ "^## \\[" ver "\\] - ") {
+                found = 1
+            }
+        }
+        found { print }
+    ' "$changelog_file"
+}
+
+markdown_to_html() {
+    awk '
+        function escape_html(text) {
+            gsub(/&/, "\\&amp;", text)
+            gsub(/</, "\\&lt;", text)
+            gsub(/>/, "\\&gt;", text)
+            gsub(/"/, "\\&quot;", text)
+            return text
+        }
+
+        function flush_paragraph() {
+            if (paragraph != "") {
+                print "<p>" paragraph "</p>"
+                paragraph = ""
+            }
+        }
+
+        function flush_list() {
+            if (in_list) {
+                print "</ul>"
+                in_list = 0
+            }
+        }
+
+        {
+            line = $0
+            sub(/\r$/, "", line)
+
+            if (line ~ /^[[:space:]]*$/) {
+                flush_paragraph()
+                flush_list()
+                next
+            }
+
+            if (line ~ /^### /) {
+                flush_paragraph()
+                flush_list()
+                print "<h3>" escape_html(substr(line, 5)) "</h3>"
+                next
+            }
+
+            if (line ~ /^## /) {
+                flush_paragraph()
+                flush_list()
+                print "<h2>" escape_html(substr(line, 4)) "</h2>"
+                next
+            }
+
+            if (line ~ /^- /) {
+                flush_paragraph()
+                if (!in_list) {
+                    print "<ul>"
+                    in_list = 1
+                }
+                print "  <li>" escape_html(substr(line, 3)) "</li>"
+                next
+            }
+
+            flush_list()
+            line = escape_html(line)
+            if (paragraph == "") {
+                paragraph = line
+            } else {
+                paragraph = paragraph " " line
+            }
+        }
+
+        END {
+            flush_paragraph()
+            flush_list()
+        }
+    '
+}
+
+artifact_download_url() {
+    local version="$1"
+    local filename="$2"
+
+    printf '%s/%s/%s' "$RELEASE_BASE_URL" "$version" "$filename"
 }
 
 # ---------------------------------------------------------------------------
@@ -278,12 +376,7 @@ fi
 step "Extracting release notes"
 
 RELEASE_NOTES="$RELEASE_DIR/RELEASE_NOTES.md"
-awk -v ver="$VERSION" '
-    /^## \[/ {
-        if (index($0, "[" ver "]")) { found=1 }
-    }
-    found { print }
-' "$CHANGELOG" > "$RELEASE_NOTES"
+extract_release_notes "$VERSION" "$CHANGELOG" > "$RELEASE_NOTES"
 
 echo "  OK: RELEASE_NOTES.md"
 
@@ -333,8 +426,10 @@ XMLHEADER
 
         # Read release notes if available, escape for CDATA.
         NOTES_CONTENT=""
+        NOTES_HTML=""
         if [[ -f "$ver_notes" ]]; then
             NOTES_CONTENT="$(cat "$ver_notes")"
+            NOTES_HTML="$(printf '%s\n' "$NOTES_CONTENT" | markdown_to_html)"
         fi
 
         # Get the date from the changelog entry for this version.
@@ -357,7 +452,7 @@ XMLHEADER
                     EDDSA_SIG="$(echo "$SIG_OUTPUT" | head -1 | awk '{print $1}')"
                 fi
 
-                DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$ver/Buildermark-$ver-macos-$arch.dmg"
+                DOWNLOAD_URL="$(artifact_download_url "$ver" "Buildermark-$ver-macos-$arch.dmg")"
 
                 cat >> "$APPCAST" <<XMLITEM
     <item>
@@ -366,7 +461,7 @@ XMLHEADER
       <sparkle:shortVersionString>$ver</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
       <pubDate>$PUB_DATE</pubDate>
-      <description><![CDATA[$NOTES_CONTENT]]></description>
+      <description><![CDATA[$NOTES_HTML]]></description>
       <enclosure
         url="$DOWNLOAD_URL"
         length="$DMG_LENGTH"
@@ -391,7 +486,7 @@ XMLITEM
                     EDDSA_SIG="$(echo "$SIG_OUTPUT" | head -1 | awk '{print $1}')"
                 fi
 
-                DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/v$ver/Buildermark-$ver-windows-$runtime-Setup.exe"
+                DOWNLOAD_URL="$(artifact_download_url "$ver" "Buildermark-$ver-windows-$runtime-Setup.exe")"
 
                 cat >> "$APPCAST" <<XMLITEM
     <item>
@@ -399,7 +494,7 @@ XMLITEM
       <sparkle:version>$ver</sparkle:version>
       <sparkle:shortVersionString>$ver</sparkle:shortVersionString>
       <pubDate>$PUB_DATE</pubDate>
-      <description><![CDATA[$NOTES_CONTENT]]></description>
+      <description><![CDATA[$NOTES_HTML]]></description>
       <enclosure
         url="$DOWNLOAD_URL"
         length="$INSTALLER_LENGTH"
@@ -443,11 +538,11 @@ cat > "$LINUX_MANIFEST" <<MANIFEST
   "version": "$VERSION",
   "artifacts": {
     "linux-amd64": {
-      "downloadUrl": "https://github.com/$GITHUB_REPO/releases/download/$TAG/buildermark-$VERSION-linux-amd64.tar.gz",
+      "downloadUrl": "$(artifact_download_url "$VERSION" "buildermark-$VERSION-linux-amd64.tar.gz")",
       "sha256": "$LINUX_AMD64_SHA"
     },
     "linux-arm64": {
-      "downloadUrl": "https://github.com/$GITHUB_REPO/releases/download/$TAG/buildermark-$VERSION-linux-arm64.tar.gz",
+      "downloadUrl": "$(artifact_download_url "$VERSION" "buildermark-$VERSION-linux-arm64.tar.gz")",
       "sha256": "$LINUX_ARM64_SHA"
     }
   }
