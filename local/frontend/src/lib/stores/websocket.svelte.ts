@@ -1,5 +1,10 @@
 import { API_URL } from '$lib/config';
 import { env } from '$env/dynamic/public';
+import {
+	dismissInstalledUpdateStatus,
+	normalizeUpdateStatus,
+	type UpdateStatus
+} from '$lib/stores/updateStatus';
 
 const READ_ONLY = (env.PUBLIC_READ_ONLY ?? 'false') === 'true';
 
@@ -18,13 +23,7 @@ export type WSClients = {
 	notification: number;
 };
 
-export type UpdateStatus = {
-	state: 'available' | 'installed' | 'none';
-	version?: string;
-	previousVersion?: string;
-	platform?: string;
-	releaseNotesUrl?: string;
-};
+export type { UpdateStatus } from '$lib/stores/updateStatus';
 
 type WSMessage = {
 	type: string;
@@ -120,8 +119,12 @@ function handleMessage(msg: WSMessage) {
 	} else if (msg.type === 'ws_clients') {
 		_wsClients = msg.data as WSClients;
 	} else if (msg.type === 'update_status') {
-		_updateStatus = msg.data as UpdateStatus;
+		setUpdateStatus(msg.data as UpdateStatus);
 	}
+}
+
+function setUpdateStatus(status: UpdateStatus) {
+	_updateStatus = normalizeUpdateStatus(status);
 }
 
 function scheduleReconnect() {
@@ -167,7 +170,7 @@ function hydrateUpdateStatus() {
 		.then((r) => r.json())
 		.then((envelope) => {
 			if (envelope.ok && envelope.data) {
-				_updateStatus = envelope.data as UpdateStatus;
+				setUpdateStatus(envelope.data as UpdateStatus);
 			}
 		})
 		.catch(() => {});
@@ -175,6 +178,11 @@ function hydrateUpdateStatus() {
 
 function clearUpdateStatus() {
 	_updateStatus = { state: 'none' };
+}
+
+function dismissInstalledUpdate() {
+	dismissInstalledUpdateStatus(_updateStatus);
+	clearUpdateStatus();
 }
 
 function clearJob(jobType: string) {
@@ -208,5 +216,6 @@ export const websocketStore = {
 	disconnect,
 	waitForJob,
 	clearJob,
+	dismissInstalledUpdate,
 	clearUpdateStatus
 };

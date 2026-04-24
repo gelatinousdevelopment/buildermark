@@ -41,7 +41,7 @@
 	}
 
 	function dismiss() {
-		websocketStore.clearUpdateStatus();
+		websocketStore.dismissInstalledUpdate();
 	}
 
 	async function ignore() {
