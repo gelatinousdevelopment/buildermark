@@ -135,6 +135,7 @@ step "Collecting artifacts"
 ARTIFACTS=()
 for f in "$RELEASE_DIR"/*; do
     case "$(basename "$f")" in
+        APPCAST_RELEASE_NOTES.md) continue ;;
         CHANGELOG.md)             continue ;;
         GITHUB_RELEASE_NOTES.md)  continue ;;
         RELEASE_NOTES.md)         continue ;;

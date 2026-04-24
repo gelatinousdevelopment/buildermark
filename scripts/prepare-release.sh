@@ -379,9 +379,13 @@ cp "$CHANGELOG" "$RELEASE_DIR/CHANGELOG.md"
 echo "  OK: CHANGELOG.md"
 
 RELEASE_NOTES="$RELEASE_DIR/RELEASE_NOTES.md"
-extract_release_notes "$VERSION" "$CHANGELOG" > "$RELEASE_NOTES"
-
+cp "$CHANGELOG" "$RELEASE_NOTES"
 echo "  OK: RELEASE_NOTES.md"
+
+APPCAST_RELEASE_NOTES="$RELEASE_DIR/APPCAST_RELEASE_NOTES.md"
+extract_release_notes "$VERSION" "$CHANGELOG" > "$APPCAST_RELEASE_NOTES"
+
+echo "  OK: APPCAST_RELEASE_NOTES.md"
 
 # ---------------------------------------------------------------------------
 # Generate checksums
@@ -425,7 +429,7 @@ XMLHEADER
     for ver in $(ls "$ROOT_DIR/release" 2>/dev/null | sort -V -r); do
         ver_dir="$ROOT_DIR/release/$ver"
         [[ -d "$ver_dir" ]] || continue
-        ver_notes="$ver_dir/RELEASE_NOTES.md"
+        ver_notes="$ver_dir/APPCAST_RELEASE_NOTES.md"
 
         # Read release notes if available, escape for CDATA.
         NOTES_CONTENT=""
