@@ -109,22 +109,22 @@ fi
 
 step "Preparing release notes"
 
-RELEASE_NOTES="$RELEASE_DIR/RELEASE_NOTES.md"
+GITHUB_RELEASE_NOTES="$RELEASE_DIR/GITHUB_RELEASE_NOTES.md"
 
 if [[ ! -f "$CHANGELOG" ]]; then
     echo "Error: CHANGELOG.md not found at $CHANGELOG" >&2
     exit 1
 fi
 
-extract_release_notes "$VERSION" "$CHANGELOG" > "$RELEASE_NOTES"
+extract_release_notes "$VERSION" "$CHANGELOG" > "$GITHUB_RELEASE_NOTES"
 
-if [[ ! -s "$RELEASE_NOTES" ]]; then
+if [[ ! -s "$GITHUB_RELEASE_NOTES" ]]; then
     echo "Error: No changelog entry found for version $VERSION in $CHANGELOG" >&2
     exit 1
 fi
 
 echo "  Generated release notes from: $CHANGELOG"
-echo "  Output: $RELEASE_NOTES"
+echo "  Output: $GITHUB_RELEASE_NOTES"
 
 # ---------------------------------------------------------------------------
 # Collect artifacts (exclude metadata files from upload)
@@ -135,6 +135,8 @@ step "Collecting artifacts"
 ARTIFACTS=()
 for f in "$RELEASE_DIR"/*; do
     case "$(basename "$f")" in
+        CHANGELOG.md)             continue ;;
+        GITHUB_RELEASE_NOTES.md)  continue ;;
         RELEASE_NOTES.md)         continue ;;
         checksums-sha256.txt)     continue ;;
         appcast.xml)              continue ;;
@@ -167,7 +169,7 @@ step "Creating GitHub release: $TAG"
 
 gh release create "$TAG" \
     --title "Buildermark $TAG" \
-    --notes-file "$RELEASE_NOTES" \
+    --notes-file "$GITHUB_RELEASE_NOTES" \
     $DRAFT \
     $PRERELEASE \
     "${ARTIFACTS[@]}"

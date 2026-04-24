@@ -375,6 +375,9 @@ fi
 
 step "Extracting release notes"
 
+cp "$CHANGELOG" "$RELEASE_DIR/CHANGELOG.md"
+echo "  OK: CHANGELOG.md"
+
 RELEASE_NOTES="$RELEASE_DIR/RELEASE_NOTES.md"
 extract_release_notes "$VERSION" "$CHANGELOG" > "$RELEASE_NOTES"
 
